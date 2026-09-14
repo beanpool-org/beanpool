@@ -14,16 +14,22 @@
  *   2. Once a human genesis member is seeded, getAdminPubkey() returns their public key.
  *   3. When multiple genesis members exist, getAdminPubkey() deterministically returns the
  *      first-seeded genesis member (ORDER BY rowid ASC).
- *   4. Admin override capabilities (canOperate, canOperateTreasury) succeed for the real genesis
- *      pubkey and fail for 'SYSTEM'.
+ *   4. Admin override capabilities succeed for the real genesis pubkey and fail for 'SYSTEM'
+ *      and empty string '' (both on a node with no genesis member and on a node with one).
  */
 
 import {
     initStateEngine,
     getAdminPubkey,
+    isAdminPubkey,
     seedGenesisMember,
     canOperate,
     canOperateTreasury,
+    canVouch,
+    keeperOf,
+    hasListedOffer,
+    hasLiveOffer,
+    liveOfferCount,
     createTreasury,
     adminSetUserStatus,
 } from './state-engine.js';
@@ -59,6 +65,18 @@ async function main() {
     // so any non-empty sentinel grants admin to whoever presents that same literal as their actor.
     assert(adminBeforeHuman === '', 'getAdminPubkey() returns an empty string — not a self-matching sentinel — when no human genesis member exists');
 
+    // Negative assertions for empty actor string on a fresh node (no human genesis member):
+    const initialTreasuryRow = db.prepare("SELECT public_key FROM members WHERE is_treasury = 1 LIMIT 1").get() as any;
+    const initialTreasury = initialTreasuryRow?.public_key || 'test_initial_treasury';
+    assert(canOperate('') === false, "canOperate('') must NOT grant admin override when no active admin exists");
+    assert(canOperateTreasury('', initialTreasury) === false, "canOperateTreasury('') must NOT grant admin override when no active admin exists");
+    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when no active admin exists");
+    assert(keeperOf('').length === 0, "keeperOf('') must return empty array when no active admin exists");
+    assert(hasListedOffer('') === false, "hasListedOffer('') must return false when no active admin exists");
+    assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when no active admin exists");
+    assert(liveOfferCount('') === 0, "liveOfferCount('') must return 0 when no active admin exists");
+    assert(isAdminPubkey('') === false, "isAdminPubkey('') must return false when no active admin exists");
+
     // 2. Seed first human genesis member
     const alicePubkey = 'pubkey_alice_genesis_0001';
     seedGenesisMember(alicePubkey, 'Alice');
@@ -83,6 +101,12 @@ async function main() {
 
     assert(canOperate(alicePubkey) === true, 'real genesis admin has canOperate override');
     assert(canOperateTreasury(alicePubkey, farmPubkey) === true, 'real genesis admin has canOperateTreasury override');
+    assert(canVouch(alicePubkey) === true, 'real genesis admin has canVouch override');
+    assert(keeperOf(alicePubkey).includes(farmPubkey), 'real genesis admin has keeperOf override');
+    assert(hasListedOffer(alicePubkey) === true, 'real genesis admin has hasListedOffer override');
+    assert(hasLiveOffer(alicePubkey) === true, 'real genesis admin has hasLiveOffer override');
+    assert(liveOfferCount(alicePubkey) > 0, 'real genesis admin has liveOfferCount override');
+    assert(isAdminPubkey(alicePubkey) === true, 'real genesis admin is recognized by isAdminPubkey');
 
     assert(canOperate('SYSTEM') === false, 'SYSTEM does not hold canOperate override');
     assert(canOperateTreasury('SYSTEM', farmPubkey) === false, 'SYSTEM does not hold canOperateTreasury override');
@@ -90,6 +114,16 @@ async function main() {
     const nonAdminPubkey = 'pubkey_plain_member_0003';
     assert(canOperate(nonAdminPubkey) === false, 'regular member does not hold admin canOperate override');
     assert(canOperateTreasury(nonAdminPubkey, farmPubkey) === false, 'regular member does not hold admin canOperateTreasury override');
+
+    // Negative assertions for empty actor string on a node WITH an active genesis member:
+    assert(canOperate('') === false, "canOperate('') must NOT grant admin override when an active admin exists");
+    assert(canOperateTreasury('', farmPubkey) === false, "canOperateTreasury('') must NOT grant admin override when an active admin exists");
+    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when an active admin exists");
+    assert(keeperOf('').length === 0, "keeperOf('') must return empty array when an active admin exists");
+    assert(hasListedOffer('') === false, "hasListedOffer('') must return false when an active admin exists");
+    assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when an active admin exists");
+    assert(liveOfferCount('') === 0, "liveOfferCount('') must return 0 when an active admin exists");
+    assert(isAdminPubkey('') === false, "isAdminPubkey('') must return false when an active admin exists");
 
     // 5. Admin lifecycle and status rotation (active vs pruned/disabled)
     // When founding admin Alice is disabled, getAdminPubkey() advances to Bob:
@@ -99,6 +133,16 @@ async function main() {
     // When Bob is pruned as well, getAdminPubkey() returns '' (no active genesis member):
     adminSetUserStatus(bobPubkey, 'pruned');
     assert(getAdminPubkey() === '', 'getAdminPubkey() returns empty string when all genesis members are inactive');
+
+    // Negative assertions for empty actor when all genesis members are inactive:
+    assert(canOperate('') === false, "canOperate('') must NOT grant admin override when all genesis members are inactive");
+    assert(canOperateTreasury('', farmPubkey) === false, "canOperateTreasury('') must NOT grant admin override when all genesis members are inactive");
+    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when all genesis members are inactive");
+    assert(keeperOf('').length === 0, "keeperOf('') must return empty array when all genesis members are inactive");
+    assert(hasListedOffer('') === false, "hasListedOffer('') must return false when all genesis members are inactive");
+    assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when all genesis members are inactive");
+    assert(liveOfferCount('') === 0, "liveOfferCount('') must return 0 when all genesis members are inactive");
+    assert(isAdminPubkey('') === false, "isAdminPubkey('') must return false when all genesis members are inactive");
 
     // When Bob is re-activated, getAdminPubkey() returns Bob:
     adminSetUserStatus(bobPubkey, 'active');

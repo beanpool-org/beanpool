@@ -15,7 +15,7 @@
 import {
     initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
-    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
+    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance, seedGenesisMember,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -47,6 +47,7 @@ const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
 function main() {
     console.log('Running Elder-vouch + covenant test...\n');
     initStateEngine();
+    seedGenesisMember('genesis_admin', 'Admin');
     const admin = getAdminPubkey();
 
     // ── 1. canVouch capability (admin-granted, never tier-derived) ──

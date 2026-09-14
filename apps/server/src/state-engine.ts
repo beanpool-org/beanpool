@@ -1047,11 +1047,10 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     const inviterKey = member?.invitedBy;
     if (!inviterKey || inviterKey === targetPubkey) return null;
 
-    const adminKey = getAdminPubkey();
     if (inviterKey === 'genesis') {
         return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
-    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+    if (inviterKey === 'SYSTEM' || isAdminPubkey(inviterKey)) {
         return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
     const inviter = getMember(inviterKey);
@@ -1683,17 +1682,17 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
  * The system admin is exempt — it acts at the system level, not as a participant.
  */
 export function hasListedOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     return hasListedOfferEngine(db, publicKey);
 }
 
 export function hasLiveOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     return hasLiveOfferEngine(db, publicKey);
 }
 
 export function liveOfferCount(publicKey: string): number {
-    if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
+    if (isAdminPubkey(publicKey)) return OFFER_BANDS.length - 1;
     return liveOfferCountEngine(db, publicKey);
 }
 
@@ -1710,7 +1709,7 @@ export function usableFloor(publicKey: string): number {
  * set via adminSetVoucher), plus the system admin who always holds it.
  */
 export function canVouch(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_vouch;
 }
@@ -1728,7 +1727,7 @@ export function canVouch(publicKey: string): boolean {
  * Distinct from the 'Steward' tier (a cosmetic badge) and from node role (replication topology).
  */
 export function canOperate(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_operate;
 }
@@ -1744,7 +1743,7 @@ export function canOperate(publicKey: string): boolean {
  * The system admin retains a node-wide override — they create the enterprises in the first place.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     if (!canOperate(publicKey)) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
@@ -1759,7 +1758,7 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
  * The admin holds a node-wide override, so they get every treasury.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (publicKey === getAdminPubkey()) {
+    if (isAdminPubkey(publicKey)) {
         return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
             .map(r => r.public_key);
     }
@@ -1864,7 +1863,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
-    const isAdmin = actorPubkey === getAdminPubkey();
+    const isAdmin = isAdminPubkey(actorPubkey);
     if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
@@ -2627,12 +2626,21 @@ export function getCommunityHealth(): CommunityHealth {
 // ===================== ADMIN CONTROLS =====================
 
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND public_key != '' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
     // Empty string, not 'system', when a node has no human admin. Every override site is
-    // `publicKey === getAdminPubkey()`, so a placeholder return value GRANTS ADMIN to anyone
-    // presenting that same literal as their actor — the old 'system' fallback matched itself.
-    // '' can never equal a public key, and routes reject a missing actor before they get here.
-    return row ? row.public_key : '';
+    // guarded via isAdminPubkey() so an empty admin key can never match an empty actor.
+    return (row?.public_key && typeof row.public_key === 'string') ? row.public_key.trim() : '';
+}
+
+/**
+ * Check whether a public key belongs to an active genesis administrator.
+ * Guards against the empty-string sentinel hazard: an empty or missing public key
+ * must never match an empty getAdminPubkey() fallback.
+ */
+export function isAdminPubkey(publicKey: string): boolean {
+    if (!publicKey || typeof publicKey !== 'string') return false;
+    const admin = getAdminPubkey();
+    return Boolean(admin && publicKey === admin);
 }
 
 /**

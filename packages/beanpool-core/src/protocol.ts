@@ -237,7 +237,7 @@ export function formatTimeEquivalent(beans: number): string {
 export const SYNTHETIC_ACCOUNT_PREFIXES = ['escrow_', 'project_', 'bridge_'] as const;
 
 /** Reserved exact account ids. */
-export const SYNTHETIC_ACCOUNT_IDS = ['COMMONS_POOL', 'SYSTEM', 'genesis'] as const;
+export const SYNTHETIC_ACCOUNT_IDS = ['COMMONS_POOL', 'SYSTEM', 'system', 'genesis'] as const;
 
 /**
  * Is this account id a synthetic (non-person) account?

@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
+    -- Enterprise Credit Model (Rules 6 & 7)
+    earned_surplus REAL DEFAULT 0,
+    working_capital_ceiling REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
@@ -48,6 +51,7 @@ CREATE TABLE IF NOT EXISTS members (
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
+CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (
@@ -99,6 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL;
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -142,8 +147,24 @@ CREATE TABLE IF NOT EXISTS posts (
     -- addresses: a callsign is a peer's own mutable label and an address is operator config that changes
     -- when a host moves, while the peer id is the thing the trust relationship and the bridge are keyed on.
     reach_peers TEXT,
+    created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL,
+    -- Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
+    poll_options TEXT,
+    poll_closes_at DATETIME,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    voter_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    option_id TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, voter_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
+
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
 -- otherwise dominate a full index for no benefit.
@@ -162,6 +183,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_reach ON posts(created_at DESC)
     WHERE status = 'active' AND reach != 'local' AND origin_node IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by);
 CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
 CREATE INDEX IF NOT EXISTS idx_posts_updated_at ON posts(updated_at);
 
@@ -210,6 +232,8 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON mark
 -- case, a cache MISS is the expensive path and is worth making cheap.
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status ON marketplace_transactions(buyer_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status ON marketplace_transactions(seller_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -684,6 +708,41 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
+
+-- 22. Node owner and admin roles (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+-- Coordination and attribution record for authority over the node machine. Replaces the inferred
+-- getAdminPubkey() mechanism with explicit role assignments.
+--
+-- role CHECK IN ('owner', 'admin').
+-- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
+CREATE TABLE IF NOT EXISTS node_roles (
+    member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
+    granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    granted_by    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
+
+-- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
+-- A keeper payment refused by Rule 5 (in deficit) or Rule 6 (capped by earned surplus)
+-- is recorded here and paid automatically the moment the enterprise can legitimately pay
+-- (positive balance AND sufficient earned surplus).
+CREATE TABLE IF NOT EXISTS deferred_wage_claims (
+    id                TEXT PRIMARY KEY,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
+    transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
+    amount            REAL NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    paid_at           DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
+ON deferred_wage_claims(transaction_id)
+WHERE transaction_id IS NOT NULL AND status IN ('pending', 'paid');
+CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
 
 -- 21. Cross-node settlements (#104) — the durable state machine behind charge-home settlement.
 --

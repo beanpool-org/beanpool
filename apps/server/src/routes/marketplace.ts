@@ -12,6 +12,8 @@ import {
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
+    canOperateTreasury,
+    closePoll, votePoll,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -22,6 +24,36 @@ import type { RouteDeps } from './types.js';
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+
+    const isTreasury = (pk: string): boolean =>
+        !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
+
+    /**
+     * Authenticated actor authorization check.
+     * The actor must come from the verified session (ctx.state.actor).
+     * A body-supplied identity is accepted only when the actor is that identity,
+     * or is a keeper entitled to act for it (via canOperateTreasury for enterprises).
+     */
+    function assertActorEntitled(ctx: any, targetPubkey: string): boolean {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return false;
+        }
+        if (actor === targetPubkey) {
+            return true;
+        }
+        if (isTreasury(targetPubkey) && canOperateTreasury(actor, targetPubkey)) {
+            return true;
+        }
+        ctx.status = 403;
+        ctx.body = { error: isTreasury(targetPubkey)
+            ? 'You are not an authorized keeper of this enterprise'
+            : 'Not authorized to act on behalf of this identity'
+        };
+        return false;
+    }
 
 // ===================== MARKETPLACE API (PUBLIC) =====================
 
@@ -122,17 +154,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
         return;
     }
+    if (!assertActorEntitled(ctx, authorPublicKey)) return;
     try {
         const post = createPost(
             type, category || 'other', title, description || '',
-            Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', (ctx.state.actor as string) || authorPublicKey,
+            Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
             photos,
@@ -142,7 +175,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers }
+            { reach, reachPeers, pollOptions, durationDays }
         );
         if (!post) {
             ctx.status = 400;
@@ -168,7 +201,8 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             ctx.body = { error: 'id and authorPublicKey are required' };
             return;
         }
-        const removed = removePost(id, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const removed = removePost(id, authorPublicKey);
         if (removed) {
             syncPulseMarketplaceGate();
         }
@@ -187,7 +221,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             ctx.body = { error: 'id and authorPublicKey are required' };
             return;
         }
-        const post = updatePost(id, (ctx.state.actor as string) || authorPublicKey, updates);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const post = updatePost(id, authorPublicKey, updates);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };
@@ -197,6 +232,134 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to update post' };
+    }
+});
+
+// ===================== POLLS API =====================
+
+router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
+    try {
+        const { id } = ctx.params;
+        const { optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            return;
+        }
+        if (!id || !optionId) {
+            ctx.status = 400;
+            ctx.body = { error: 'id and optionId are required' };
+            return;
+        }
+        const voter = actor;
+        const sig = signature;
+        const result = votePoll(id, voter, optionId, sig);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to record vote' };
+    }
+});
+
+router.post('/api/marketplace/polls/vote', async (ctx) => {
+    try {
+        const { postId, id, optionId, voterPublicKey, voterPubkey, signature } = (ctx as any).requestBody || {};
+        const targetId = postId || id;
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            return;
+        }
+        if (!targetId || !optionId) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId and optionId are required' };
+            return;
+        }
+        const voter = actor;
+        const sig = signature;
+        const result = votePoll(targetId, voter, optionId, sig);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to record vote' };
+    }
+});
+
+router.post('/api/marketplace/posts/:id/close', async (ctx) => {
+    try {
+        const { id } = ctx.params;
+        const { authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot close poll on behalf of another member' };
+            return;
+        }
+        if (!id) {
+            ctx.status = 400;
+            ctx.body = { error: 'id is required' };
+            return;
+        }
+        const post = closePoll(id, actor);
+        if (!post) {
+            ctx.status = 404;
+            ctx.body = { error: 'Poll not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, post };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to close poll' };
+    }
+});
+
+router.post('/api/marketplace/polls/close', async (ctx) => {
+    try {
+        const { postId, id, authorPublicKey, authorPubkey } = (ctx as any).requestBody || {};
+        const targetId = postId || id;
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot close poll on behalf of another member' };
+            return;
+        }
+        if (!targetId) {
+            ctx.status = 400;
+            ctx.body = { error: 'postId is required' };
+            return;
+        }
+        const post = closePoll(targetId, actor);
+        if (!post) {
+            ctx.status = 404;
+            ctx.body = { error: 'Poll not found or unauthorized' };
+            return;
+        }
+        ctx.body = { success: true, post };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to close poll' };
     }
 });
 
@@ -210,8 +373,10 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             ctx.body = { error: 'postId and buyerPublicKey are required' };
             return;
         }
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        const actor = ctx.state?.actor as string | undefined;
         const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = acceptPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
+        const tx = acceptPost(postId, buyerPublicKey, parsedHours, actor ? { authSigner: actor } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -230,8 +395,9 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
             ctx.body = { error: 'postId and buyerPublicKey are required' };
             return;
         }
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = requestPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
+        const tx = requestPost(postId, buyerPublicKey, parsedHours);
         if (!tx) throw new Error('Cannot request — post not found or unauthorized');
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
@@ -247,7 +413,14 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
             return;
         }
-        const tx = approvePostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const actor = ctx.state?.actor as string;
+        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot approve — request not found or unauthorized' };
+            return;
+        }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to approve request');
@@ -262,7 +435,8 @@ router.post('/api/marketplace/transactions/reject', async (ctx) => {
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
             return;
         }
-        const tx = rejectPostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const tx = rejectPostRequest(transactionId, authorPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot reject — request not found or unauthorized' };
@@ -282,7 +456,8 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
             ctx.body = { error: 'transactionId and buyerPublicKey are required' };
             return;
         }
-        const tx = cancelPostRequest(transactionId, (ctx.state.actor as string) || buyerPublicKey);
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        const tx = cancelPostRequest(transactionId, buyerPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot cancel — request not found or unauthorized' };
@@ -295,15 +470,18 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
 });
 
 router.post('/api/marketplace/transactions/complete', async (ctx) => {
-    const { transactionId, confirmerPublicKey, finalHours } = (ctx as any).requestBody || {};
+    const { transactionId, confirmerPublicKey, finalHours, hours } = (ctx as any).requestBody || {};
     if (!transactionId || !confirmerPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'transactionId and confirmerPublicKey are required' };
         return;
     }
-    const parsedFinalHours = finalHours != null ? Number(finalHours) : undefined;
+    if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
+    const rawHours = finalHours !== undefined ? finalHours : hours;
+    const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
     try {
-        const tx = completePostTransaction(transactionId, (ctx.state.actor as string) || confirmerPublicKey, parsedFinalHours);
+        const actor = ctx.state?.actor as string;
+        const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot complete — transaction not found or not authorized' };
@@ -312,7 +490,11 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
-        ctx.status = 400;
+        const rawCode = e?.status ?? e?.statusCode;
+        const statusCode = typeof rawCode === 'number' && Number.isInteger(rawCode) && rawCode >= 400 && rawCode <= 599
+            ? rawCode
+            : 400;
+        ctx.status = statusCode;
         ctx.body = { error: e.message || 'Escrow release failed' };
     }
 });
@@ -325,7 +507,8 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             ctx.body = { error: 'transactionId and cancellerPublicKey are required' };
             return;
         }
-        const tx = cancelPostTransaction(transactionId, (ctx.state.actor as string) || cancellerPublicKey);
+        if (!assertActorEntitled(ctx, cancellerPublicKey)) return;
+        const tx = cancelPostTransaction(transactionId, cancellerPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
@@ -346,7 +529,8 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
             ctx.body = { error: 'postId and authorPublicKey are required' };
             return;
         }
-        const success = pausePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const success = pausePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
         }
@@ -365,7 +549,8 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
             ctx.body = { error: 'postId and authorPublicKey are required' };
             return;
         }
-        const success = resumePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const success = resumePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
         }
@@ -384,10 +569,23 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.body = { error: 'publicKey query parameter is required' };
         return;
     }
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
-        ctx.status = 403;
-        ctx.body = { error: 'You may only view your own marketplace transactions' };
-        return;
+    if (ENFORCE_READ_AUTH) {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        const isSelf = actor === publicKey;
+        const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+        if (!isSelf && !isAuthorizedKeeper) {
+            ctx.status = 403;
+            ctx.body = { error: isTreasury(publicKey)
+                ? 'You are not authorized to view transactions for this enterprise'
+                : 'You may only view your own marketplace transactions'
+            };
+            return;
+        }
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

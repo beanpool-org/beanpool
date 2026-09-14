@@ -14,9 +14,23 @@ import { getMemberTrustProfile } from './trust.js';
 
 type Db = Database.Database;
 
+export interface PollOption {
+    id: string;
+    text: string;
+    votes?: number;
+    percentage?: number;
+}
+
+export interface PollVoteRecord {
+    voterPubkey: string;
+    voterCallsign?: string;
+    optionId: string;
+    createdAt: string;
+}
+
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -47,6 +61,12 @@ export interface MarketplacePost {
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
+    createdBy?: string;
+    pollOptions?: PollOption[];
+    pollClosesAt?: string;
+    totalVotes?: number;
+    userVotedOptionId?: string;
+    pollVotes?: PollVoteRecord[];
 }
 
 export interface PostFilter {
@@ -189,7 +209,10 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
             ? (row.author_avatar.startsWith('bundled://')
                 ? row.author_avatar
                 : `/api/avatar/${row.author_pubkey}?size=thumb`)
-            : null
+            : null,
+        createdBy: row.created_by || undefined,
+        pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
+        pollClosesAt: row.poll_closes_at || undefined
     };
 }
 
@@ -250,8 +273,8 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
             query += selfView
-                ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
-                : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+                ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
+                : " AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))";
         }
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
@@ -277,6 +300,10 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
             query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
+            // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
+            if (filter.type !== 'poll') {
+                query += " AND p.type != 'poll'";
+            }
         }
     }
 
@@ -305,6 +332,30 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         photosByPost.get(p.post_id)!.push(p);
     }
 
+    // Community Polls: batch fetch votes for all poll rows
+    const pollRows = rows.filter(r => r.type === 'poll');
+    const pollVotesByPost = new Map<string, any[]>();
+    if (pollRows.length > 0) {
+        try {
+            const pollIds = pollRows.map(r => r.id);
+            const votes = selectInChunks(db, pollIds, ph => `
+                SELECT pv.post_id, pv.voter_pubkey, pv.option_id, pv.created_at, m.callsign as voter_callsign
+                FROM poll_votes pv
+                LEFT JOIN members m ON pv.voter_pubkey = m.public_key
+                WHERE pv.post_id IN (${ph})
+                ORDER BY pv.created_at ASC
+            `);
+            for (const v of votes as any[]) {
+                if (!pollVotesByPost.has(v.post_id)) {
+                    pollVotesByPost.set(v.post_id, []);
+                }
+                pollVotesByPost.get(v.post_id)!.push(v);
+            }
+        } catch {
+            // Safe fallback if poll_votes table does not exist in testing handle
+        }
+    }
+
     // #143 step 4. `reachPeers` names WHICH NEIGHBOURING COMMUNITIES a member singled out, and that is the
     // poster's business, not the board's — in a community small enough to know everyone, "she offers this to
     // Gippsland but not to Castlemaine" is socially loaded in a way the listing itself is not. This board is
@@ -316,9 +367,43 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     // `reach` itself stays. It is a property of the listing rather than a fact about third parties, and the
     // cached copy a peer stores needs to be 'local' for loop prevention to hold.
     const viewer = filter?.viewerPubkey;
+    const nowIso = new Date().toISOString();
     return rows.map(r => {
         const post = rowToPost(db, r, photosByPost);
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+
+        if (post.type === 'poll') {
+            // Check auto-close if expired (projected in memory; DB writes handled in write paths/hygiene)
+            if (post.pollClosesAt && post.pollClosesAt <= nowIso && post.status === 'active') {
+                post.status = 'completed';
+            }
+            const votes = pollVotesByPost.get(post.id) || [];
+            const totalVotes = votes.length;
+            post.totalVotes = totalVotes;
+            const voteCounts = new Map<string, number>();
+            let userVotedOptionId: string | undefined;
+            for (const v of votes) {
+                voteCounts.set(v.option_id, (voteCounts.get(v.option_id) || 0) + 1);
+                if (viewer && v.voter_pubkey === viewer) {
+                    userVotedOptionId = v.option_id;
+                }
+            }
+            post.userVotedOptionId = userVotedOptionId;
+            if (post.pollOptions) {
+                post.pollOptions = post.pollOptions.map((opt: any) => {
+                    const count = voteCounts.get(opt.id) || 0;
+                    const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                    return { ...opt, votes: count, percentage };
+                });
+            }
+            post.pollVotes = votes.map((v: any) => ({
+                voterPubkey: v.voter_pubkey,
+                voterCallsign: v.voter_callsign || 'Anonymous',
+                optionId: v.option_id,
+                createdAt: v.created_at
+            }));
+        }
+
         return post;
     });
 }
@@ -342,6 +427,9 @@ export function getPostCount(db: Db, filter?: { type?: string; category?: string
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
             query += ` AND rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
+            if (filter?.type !== 'poll') {
+                query += " AND type != 'poll'";
+            }
         }
     }
 

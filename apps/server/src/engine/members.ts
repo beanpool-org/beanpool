@@ -2,7 +2,7 @@
 //
 // Bridges the database storage layer with server singletons and broadcasts.
 
-import { db } from '../db/db.js';
+import { db, seedNodeRolesFromGenesis } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
@@ -22,6 +22,13 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(adminPublicKey) as any;
     if (existing) {
         db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
+        if (adminPublicKey !== 'SYSTEM') {
+            seedNodeRolesFromGenesis();
+            db.prepare(
+                `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
+                 VALUES (?, 'owner', 'genesis')`
+            ).run(adminPublicKey);
+        }
         return getMember(db, adminPublicKey)!;
     }
 
@@ -33,6 +40,13 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     })();
 
     ledger.initializeGenesisAccount(adminPublicKey);
+    if (adminPublicKey !== 'SYSTEM') {
+        seedNodeRolesFromGenesis();
+        db.prepare(
+            `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
+             VALUES (?, 'owner', 'genesis')`
+        ).run(adminPublicKey);
+    }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
     return getMember(db, adminPublicKey)!;
 }

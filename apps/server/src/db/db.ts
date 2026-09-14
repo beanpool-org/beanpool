@@ -19,6 +19,49 @@ const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`)
 // Initialize Database connection
 export const db: Database.Database = new Database(DB_PATH);
 
+const pendingPostCommitHooks: (() => void)[] = [];
+
+export function afterTransactionCommit(fn: () => void): void {
+    if (!(db as any).inTransaction) {
+        fn();
+    } else {
+        pendingPostCommitHooks.push(fn);
+    }
+}
+
+function wrapTxnFn(origFn: any) {
+    if (typeof origFn !== 'function') return origFn;
+    const wrapped = function (this: any, ...args: any[]) {
+        const isOuter = !(db as any).inTransaction;
+        const hookCountBefore = pendingPostCommitHooks.length;
+        try {
+            const res = origFn.apply(this, args);
+            if (isOuter && pendingPostCommitHooks.length > 0) {
+                const hooks = pendingPostCommitHooks.splice(0, pendingPostCommitHooks.length);
+                for (const hook of hooks) {
+                    try { hook(); } catch (e) { console.error('[DB] Post-commit hook failed:', e); }
+                }
+            }
+            return res;
+        } catch (err) {
+            pendingPostCommitHooks.length = hookCountBefore;
+            throw err;
+        }
+    };
+    return wrapped;
+}
+
+const origTransaction = db.transaction.bind(db);
+db.transaction = function (fn: any) {
+    const txn = origTransaction(fn);
+    const wrapped: any = wrapTxnFn(txn);
+    wrapped.default = wrapTxnFn(txn.default);
+    wrapped.deferred = wrapTxnFn(txn.deferred);
+    wrapped.immediate = wrapTxnFn(txn.immediate);
+    wrapped.exclusive = wrapTxnFn(txn.exclusive);
+    return wrapped;
+} as any;
+
 // A2-1: the in-memory LedgerManager (in state-engine) is the source of truth for
 // balance checks — getBalance/transfer read it, and transfer writes it back over
 // the accounts table. A few crowdfund operations below mutate accounts.balance
@@ -195,6 +238,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN search_keywords TEXT DEFAULT ''`).run(); } catch { }
     // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
+    // Enterprise Credit Model (Rules 6 & 7)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
@@ -271,6 +317,17 @@ export function initSchema() {
     // Step 7: recovery share replication audit column
     try { db.prepare(`ALTER TABLE sync_audit_log ADD COLUMN recovery_shares_imported INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN kdf_params TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN created_by TEXT REFERENCES members(public_key) ON DELETE SET NULL`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_posts_created_by ON posts(created_by)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC)`).run(); } catch { }
+
+    // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
+    try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
+    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
@@ -358,6 +415,63 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
+
+    // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus for pre-existing enterprises
+    // from historical completed external sales. Gated behind node_config so it runs strictly once
+    // and never resets legitimately spent surplus on server reboot ("infinite wage glitch").
+    try {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET earned_surplus = MAX(0, COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE seller_pubkey = members.public_key AND status = 'completed'
+                      AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0) - COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE buyer_pubkey = members.public_key AND status = 'completed'
+                      AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0))
+                WHERE is_treasury = 1
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
+        }
+    } catch (e) {
+        console.error('[DB] Failed to backfill earned_surplus:', e);
+    }
+
+    // Migration: Replace table-wide transaction_id UNIQUE on deferred_wage_claims with partial unique index
+    try {
+        const tableSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='deferred_wage_claims'").get() as any)?.sql || '';
+        if (tableSql.includes('transaction_id    TEXT UNIQUE') || tableSql.includes('transaction_id TEXT UNIQUE')) {
+            db.exec(`
+                CREATE TABLE deferred_wage_claims_new (
+                    id                TEXT PRIMARY KEY,
+                    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
+                    transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
+                    amount            REAL NOT NULL,
+                    status            TEXT NOT NULL DEFAULT 'pending',
+                    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    paid_at           DATETIME
+                );
+                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims;
+                DROP TABLE deferred_wage_claims;
+                ALTER TABLE deferred_wage_claims_new RENAME TO deferred_wage_claims;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
+                ON deferred_wage_claims(transaction_id)
+                WHERE transaction_id IS NOT NULL AND status IN ('pending', 'paid');
+                CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
+                CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
+            `);
+        }
+    } catch (e) {
+        console.error('[DB] Failed to rebuild deferred_wage_claims schema:', e);
+    }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta
@@ -377,6 +491,7 @@ export function initSchema() {
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
+    seedNodeRolesFromGenesis();
 
     try {
         seedPricingGuideIfEmpty(false, db);
@@ -421,6 +536,56 @@ export function seedTreasuryOperatorsFromLegacyFlag(): number {
         return written;
     } catch (e) {
         console.error('[DB] ⚠️  Could not seed treasury_operators from can_operate. Existing keepers may need re-assigning per enterprise.', e);
+        return 0;
+    }
+}
+
+/**
+ * #node-roles — seed the node_roles table from legacy genesis members.
+ * (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2)
+ *
+ * On boot, if `node_roles` is empty, seed it from today's de-facto admin: the genesis member(s),
+ * EXCLUDING the 'SYSTEM' row. If there are several genesis members, seed them all as 'owner' and
+ * log loudly which ones. If there are NONE, log a loud warning and leave the table empty rather
+ * than inventing an owner.
+ *
+ * Make it idempotent — it runs on every boot. Guarded on the table being EMPTY rather than on
+ * individual rows: once an owner has been removed or appointed, re-running must not resurrect
+ * what was removed.
+ *
+ * @returns how many rows were written (0 when it was a no-op)
+ */
+export function seedNodeRolesFromGenesis(): number {
+    try {
+        const genesisMembers = db.prepare(
+            `SELECT public_key, callsign FROM members
+             WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND status = 'active'
+               AND public_key NOT IN (SELECT member_pubkey FROM node_roles)
+             ORDER BY rowid ASC`
+        ).all() as { public_key: string; callsign: string }[];
+
+        if (!genesisMembers.length) {
+            const currentRoles = (db.prepare(`SELECT COUNT(*) as c FROM node_roles`).get() as any)?.c || 0;
+            if (currentRoles === 0) {
+                console.warn('[DB] ⚠️  No genesis member found to seed node_roles! node_roles left empty. Node has no owner until one is enrolled.');
+            }
+            return 0;
+        }
+
+        const ins = db.prepare(
+            `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
+             VALUES (?, 'owner', 'migration:genesis')`
+        );
+        db.transaction(() => {
+            for (const g of genesisMembers) {
+                ins.run(g.public_key);
+            }
+        })();
+
+        console.log(`👑 Node roles seeded: ${genesisMembers.length} genesis member(s) granted 'owner': ${genesisMembers.map(g => `${g.callsign} (${g.public_key})`).join(', ')}`);
+        return genesisMembers.length;
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not seed node_roles from genesis members:', e);
         return 0;
     }
 }

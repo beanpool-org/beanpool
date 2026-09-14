@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep } from '../utils/db';
+import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -22,6 +22,9 @@ export default function TreasuryDetailScreen() {
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
+    const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
+    const [hourlyDealPrompt, setHourlyDealPrompt] = useState<any | null>(null);
+    const [hourlyDealHours, setHourlyDealHours] = useState('');
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -132,6 +135,81 @@ export default function TreasuryDetailScreen() {
         }
     };
 
+    const handleApproveBid = async (txId: string) => {
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
+        setActionState({ id: txId, type: 'approve' });
+        try {
+            await treasuryApprove(treasuryKey, txId);
+            Alert.alert('Bid Approved ✅', 'Funds locked in trust successfully.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Approve Failed', e.message || 'Could not approve bid.');
+        } finally {
+            setActionState(null);
+        }
+    };
+
+    const handleRejectBid = (txId: string) => {
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
+        Alert.alert(
+            'Decline Bid?',
+            'Are you sure you want to decline this request? The member will be notified.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Decline',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setActionState({ id: txId, type: 'reject' });
+                        try {
+                            await treasuryReject(treasuryKey, txId);
+                            Alert.alert('Bid Declined', 'The request has been declined.');
+                            load();
+                        } catch (e: any) {
+                            Alert.alert('Decline Failed', e.message || 'Could not decline bid.');
+                        } finally {
+                            setActionState(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleCompleteDeal = (d: any) => {
+        const treasuryKey = params.publicKey;
+        if (!treasuryKey) return;
+        if (d.price_type && d.price_type !== 'fixed') {
+            setHourlyDealHours(d.hours ? String(d.hours) : '1');
+            setHourlyDealPrompt(d);
+            return;
+        }
+        Alert.alert(
+            'Release Payment?',
+            `Are you sure you want to release ${d.credits} 🫘 to ${d.peer_callsign || 'the member'}? This cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Release Payment',
+                    onPress: async () => {
+                        setActionState({ id: d.id, type: 'complete' });
+                        try {
+                            await treasuryComplete(treasuryKey, d.id);
+                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                            load();
+                        } catch (e: any) {
+                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                        } finally {
+                            setActionState(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const formatTime = (t: any) => {
         try {
             const d = new Date(typeof t === 'number' ? t : String(t));
@@ -142,6 +220,11 @@ export default function TreasuryDetailScreen() {
 
     const posts: any[] = detail?.posts || [];
     const flow: any[] = detail?.flow || [];
+    const pendingBids: any[] = detail?.pendingBids || [];
+    const activeDeals: any[] = detail?.activeDeals || [];
+    const deferredClaims: any[] = detail?.deferredClaims || [];
+    const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
+    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -189,6 +272,43 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.metaValue}>{detail.liveOffers ?? 0}</Text>
                                 </View>
                             </View>
+                            <View style={styles.balanceMetaRow}>
+                                <View style={styles.metaBox}>
+                                    <Text style={styles.metaLabel}>Earned surplus</Text>
+                                    <Text style={styles.metaValue}>{detail.earnedSurplus ?? 0} 🫘</Text>
+                                </View>
+                                <View style={styles.metaBox}>
+                                    <Text style={styles.metaLabel}>Capital ceiling</Text>
+                                    <Text style={styles.metaValue}>{detail.workingCapitalCeiling != null ? `${detail.workingCapitalCeiling} 🫘` : 'Uncapped'}</Text>
+                                </View>
+                            </View>
+                            {balance < 0 && (
+                                <View
+                                    accessible={true}
+                                    accessibilityRole="alert"
+                                    accessibilityLabel={`Warning: Operator eats last. This enterprise is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.`}
+                                    style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
+                                >
+                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
+                                        ⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                    </Text>
+                                </View>
+                            )}
+                            {pendingClaims.length > 0 && (
+                                <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                                            Pending Wage Claims ({pendingClaims.length})
+                                        </Text>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid }}>
+                                            {pendingClaimsTotal} 🫘
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
+                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
+                                    </Text>
+                                </View>
+                            )}
                         </View>
 
                         {/* Operator controls */}
@@ -240,6 +360,87 @@ export default function TreasuryDetailScreen() {
                                         )}
                                     </Pressable>
                                 </View>
+
+                                {pendingBids.length > 0 && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>PENDING BIDS ON NEEDS ({pendingBids.length})</Text>
+                                        {pendingBids.map((b) => (
+                                            <View key={b.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{b.post_title}</Text>
+                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                    Bid by <Text style={{ fontWeight: '700', color: colors.text.body }}>{b.peer_callsign || 'Member'}</Text> · {b.credits} 🫘
+                                                </Text>
+                                                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                                                    <Pressable
+                                                        style={[styles.opBtn, { minHeight: 44, paddingVertical: 8, justifyContent: 'center' }]}
+                                                        disabled={actionState?.id === b.id}
+                                                        onPress={() => handleApproveBid(b.id)}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        {actionState?.id === b.id && actionState?.type === 'approve' ? (
+                                                            <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                        ) : (
+                                                            <Text style={styles.opBtnText}>Approve Bid ({b.credits} 🫘)</Text>
+                                                        )}
+                                                    </Pressable>
+                                                    <Pressable
+                                                        style={[styles.sweepBtn, { minHeight: 44, height: 44, paddingHorizontal: 16 }]}
+                                                        disabled={actionState?.id === b.id}
+                                                        onPress={() => handleRejectBid(b.id)}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        {actionState?.id === b.id && actionState?.type === 'reject' ? (
+                                                            <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
+                                                        ) : (
+                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                        )}
+                                                    </Pressable>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {activeDeals.length > 0 && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.brand.primary, paddingTop: 12 }}>
+                                        <Text style={[styles.opTitle, { marginBottom: 8 }]}>ACTIVE DEALS ({activeDeals.length})</Text>
+                                        {activeDeals.map((d) => (
+                                            <View key={d.id} style={{ backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                                <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.heading }}>{d.post_title}</Text>
+                                                <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
+                                                    {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || 'Member'}</Text> · {d.credits} 🫘 in escrow
+                                                </Text>
+                                                <View style={{ marginTop: 10 }}>
+                                                    {d.action_required === 'fulfill' ? (
+                                                        <Pressable
+                                                            style={[styles.sweepBtn, { minHeight: 44, height: 44 }]}
+                                                            onPress={() => router.push({ pathname: '/post/[id]', params: { id: d.post_id, txId: d.id } })}
+                                                            accessibilityRole="button"
+                                                        >
+                                                            <Text style={[styles.sweepBtnText, { color: colors.text.secondary }]}>
+                                                                Fulfill Deal · Awaiting Customer Release
+                                                            </Text>
+                                                        </Pressable>
+                                                    ) : (
+                                                        <Pressable
+                                                            style={[styles.opBtn, { backgroundColor: colors.feedback.success.solid, minHeight: 44, paddingVertical: 8 }]}
+                                                            disabled={actionState?.id === d.id}
+                                                            onPress={() => handleCompleteDeal(d)}
+                                                            accessibilityRole="button"
+                                                        >
+                                                            {actionState?.id === d.id && actionState?.type === 'complete' ? (
+                                                                <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                            ) : (
+                                                                <Text style={styles.opBtnText}>Release Payment ({d.credits} 🫘)</Text>
+                                                            )}
+                                                        </Pressable>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
                                 <Text style={styles.opHint}>
                                     Post the treasury's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
@@ -251,7 +452,7 @@ export default function TreasuryDetailScreen() {
                         {posts.length === 0 ? (
                             <Text style={styles.emptyNote}>No live listings yet.</Text>
                         ) : posts.map((p) => (
-                            <View key={p.id} style={styles.listingCard}>
+                            <Pressable key={p.id} style={styles.listingCard} onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })} accessibilityRole="button">
                                 <View style={styles.listingTopRow}>
                                     <View style={[styles.typeBadge, p.type === 'offer' ? styles.typeBadgeOffer : styles.typeBadgeNeed]}>
                                         <Text style={[styles.typeBadgeText, { color: p.type === 'offer' ? colors.brand.primary : colors.text.secondary }]}>{p.type}</Text>
@@ -266,7 +467,7 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.listingPrice}>{p.credits} 🫘</Text>
                                 </View>
                                 {!!p.description && <Text style={styles.listingDesc} numberOfLines={2}>{p.description}</Text>}
-                            </View>
+                            </Pressable>
                         ))}
 
                         {/* Recent activity */}
@@ -289,6 +490,66 @@ export default function TreasuryDetailScreen() {
                         ))}
                     </ScrollView>
                 </KeyboardAvoidingView>
+            )}
+
+            {hourlyDealPrompt && (
+                <Modal visible transparent animationType="fade" onRequestClose={() => setHourlyDealPrompt(null)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                        <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, borderWidth: 1, borderColor: colors.border.default }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
+                                Confirm Hours Worked
+                            </Text>
+                            <Text style={{ fontSize: 13, color: colors.text.secondary, marginBottom: 14 }}>
+                                Enter actual hours worked for "{hourlyDealPrompt.post_title}":
+                            </Text>
+                            <TextInput
+                                style={{ height: 44, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, color: colors.text.body, marginBottom: 16 }}
+                                value={hourlyDealHours}
+                                onChangeText={setHourlyDealHours}
+                                keyboardType="numeric"
+                                placeholder="e.g. 2.5"
+                                placeholderTextColor={colors.text.muted}
+                                autoFocus
+                            />
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <Pressable
+                                    style={{ flex: 1, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}
+                                    onPress={() => setHourlyDealPrompt(null)}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={{ color: colors.text.body, fontWeight: '700' }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={{ flex: 1, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: colors.feedback.success.solid }}
+                                    accessibilityRole="button"
+                                    onPress={async () => {
+                                        const parsed = Number(hourlyDealHours);
+                                        if (isNaN(parsed) || parsed <= 0) {
+                                            Alert.alert('Invalid Hours', 'Please enter a valid positive number of hours.');
+                                            return;
+                                        }
+                                        const deal = hourlyDealPrompt;
+                                        const treasuryKey = params.publicKey;
+                                        setHourlyDealPrompt(null);
+                                        if (!treasuryKey) return;
+                                        setActionState({ id: deal.id, type: 'complete' });
+                                        try {
+                                            await treasuryComplete(treasuryKey, deal.id, parsed);
+                                            Alert.alert('Payment Released ✅', 'The beans have been paid to the member.');
+                                            load();
+                                        } catch (e: any) {
+                                            Alert.alert('Release Failed', e.message || 'Could not release payment.');
+                                        } finally {
+                                            setActionState(null);
+                                        }
+                                    }}
+                                >
+                                    <Text style={{ color: colors.text.inverse, fontWeight: '800' }}>Release Payment</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
             )}
         </SafeAreaView>
     );

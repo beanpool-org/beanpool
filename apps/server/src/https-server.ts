@@ -65,7 +65,7 @@ import {
     getFriends, addFriend, removeFriend,
     adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
-    getAdminPubkey, recordActivity,
+    recordActivity,
     markConversationRead, getUnreadCounts,
     createProject, updateProject, deleteProject, voteForProject, createVotingRound, closeVotingRound,
     getProjects, getAllProjects, getVotingRounds, getActiveRound, getCommonsBalance, getGovernanceCredits,
@@ -784,17 +784,24 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path === '/api/invite/redeem-offline' ||
             ctx.path === '/api/recovery/sso/github-exchange';
 
-        if ((!isMutatingApi && !isGatedRead) || isBypassed) {
+        if (isBypassed) {
             return await next();
         }
 
         const pubKeyHex = ctx.get('X-Public-Key');
         const signatureBase64 = ctx.get('X-Signature');
 
-        if (!pubKeyHex || !signatureBase64) {
-            ctx.status = 401;
-            ctx.body = { error: 'Missing cryptographic signature headers' };
-            return;
+        if (!isMutatingApi && !isGatedRead) {
+            // Optional read auth: if signature headers are provided, verify them to populate ctx.state.actor
+            if (!pubKeyHex || !signatureBase64) {
+                return await next();
+            }
+        } else {
+            if (!pubKeyHex || !signatureBase64) {
+                ctx.status = 401;
+                ctx.body = { error: 'Missing cryptographic signature headers' };
+                return;
+            }
         }
 
         // X-1 / X-1b: every signed request MUST use the replay-proof scheme —

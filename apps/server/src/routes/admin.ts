@@ -15,7 +15,7 @@ import {
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getAdminPubkey,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
     canVouch,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -587,7 +587,11 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
 
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const adminPubkey = getAdminPubkey();
+    const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) {
+        ctx.body = { conversations: [], adminPubkey: '' };
+        return;
+    }
     const convs = getConversationsByMember(adminPubkey);
     // Also grab any legacy 'system' conversations.
     // Use a Set for O(N) dedup instead of an O(N^2) nested .find().
@@ -629,13 +633,26 @@ router.post('/api/local/admin/commons/round', async (ctx) => {
             ctx.body = { error: 'projectIds and closesAt required' };
             return;
         }
-        const round = createVotingRound(getAdminPubkey(), projectIds, closesAt);
+        const signedActor = (ctx.state as any)?.actor;
+        if (signedActor && !isAdminPubkey(signedActor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only an active node admin may create a voting round' };
+            return;
+        }
+        const creatorKey = signedActor || getFirstNodeAdminPubkey() || getAdminPubkey();
+        if (!creatorKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'No genesis admin configured' };
+            return;
+        }
+        const round = createVotingRound(creatorKey, projectIds, closesAt);
         if (!round) {
             ctx.status = 400;
             ctx.body = { error: 'Failed — another round may be open, or not admin' };
             return;
         }
         ctx.body = { success: true, round };
+        return;
     } else if (action === 'close') {
         if (!roundId) {
             ctx.status = 400;
@@ -861,6 +878,77 @@ router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
         }
         ctx.status = 500;
         ctx.body = { error: e?.message || 'Failed to remove channel' };
+    }
+});
+
+// ===================== NODE ROLES MANAGEMENT =====================
+// docs/admin-surface.md §1, §5; docs/the-commons.md §9.2
+// Manage explicit node owner and admin role assignments.
+// Gated by checkAdminAuth.
+
+router.get('/api/local/admin/node-roles', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const roles = listNodeRoles();
+    ctx.body = { success: true, roles };
+});
+
+router.post('/api/local/admin/node-roles', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || {};
+    const targetPubkey = body.pubkey || body.publicKey || body.member_pubkey;
+    const role = body.role;
+
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    if (!targetPubkey || !role) {
+        ctx.status = 400;
+        ctx.body = { error: 'pubkey and role are required' };
+        return;
+    }
+    if (role !== 'owner' && role !== 'admin') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        return;
+    }
+
+    try {
+        grantNodeRole(targetPubkey, role, effectiveActor);
+        ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to grant node role';
+        ctx.status = msg.includes('Only an owner') ? 403 : (msg === 'Member not found' ? 404 : 400);
+        ctx.body = { error: msg };
+    }
+});
+
+router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey, role } = ctx.params;
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    if (role !== 'owner' && role !== 'admin') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        return;
+    }
+
+    try {
+        const currentRole = nodeRoleOf(pubkey);
+        if (currentRole !== role) {
+            ctx.status = 404;
+            ctx.body = { error: `Member ${pubkey} does not hold role '${role}'` };
+            return;
+        }
+        revokeNodeRole(pubkey, role as MemberNodeRole, effectiveActor);
+        ctx.body = { success: true, message: `Revoked ${role} role from ${pubkey}` };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to revoke node role';
+        ctx.status = msg.includes('Only an owner') ? 403 : 400;
+        ctx.body = { error: msg };
     }
 });
 

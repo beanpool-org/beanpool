@@ -431,7 +431,9 @@ is identical.
 
 Each enterprise declares the working capital its purpose actually requires. Below the ceiling it
 holds freely and stays decay-exempt, because saving toward a real pump or a new coop is legitimate.
-**Above the ceiling, surplus sweeps to the Commons automatically** — no keeper decision involved.
+**Above the ceiling, earned surplus sweeps to the Commons automatically** — no keeper decision involved.
+The sweep takes only earned surplus, never grant money: `sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))`.
+Grants, pledges and gifts raise balance, never earned surplus, and are never swept.
 
 The ceiling is set at creation and changed only by a **Decision**, never by the enterprise's own
 keepers. Otherwise the first response to hitting it is to raise it.
@@ -1241,6 +1243,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Paying keepers | **only out of profit**, never out of credit (Rule 5) |
 | Grants as wages | **no** — capped by earned surplus (Rule 6) |
 | Hoarding | surplus above a **working-capital ceiling** sweeps automatically (Rule 7) |
+| Rule 7 ceiling sweep | **takes only earned surplus, never grant money** — `sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))`; grants/pledges/gifts raise balance, not earned surplus, and are never swept |
 | Creating an enterprise | **no fee**. The standing gate is enough, and a member at their floor could not pay one |
 | Enterprises kept per member | **3** |
 | Can an enterprise vote? | **Never.** It is a balance sheet, not a person. Make it deliberate and write it down |

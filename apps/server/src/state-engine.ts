@@ -7,7 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -20,6 +20,28 @@ import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
+import {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+} from './engine/node-roles.js';
+export {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+};
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -104,6 +126,7 @@ import {
     type SyncRecoveryRequest,
     type SyncRecoveryApproval,
     type SyncMarketplaceTransaction,
+    type SyncPollVote,
     type SyncPayload
 } from '@beanpool/engine';
 import {
@@ -117,6 +140,8 @@ import {
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
+    closePoll as closePollEngine,
+    votePoll as votePollEngine,
     adminDeletePost as adminDeletePostEngine,
     adminBulkDeletePosts as adminBulkDeletePostsEngine
 } from './engine/posts.js';
@@ -602,7 +627,7 @@ export function runMarketplaceHygiene(): void {
     for (const row of stale) {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
-        const requesterPubkey = post && post.type !== 'offer' ? row.seller_pubkey : row.buyer_pubkey;
+        const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
         dispatchPushNotification(
             [requesterPubkey, post?.author_pubkey].filter(Boolean),
             'SYSTEM',
@@ -1190,7 +1215,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
@@ -1219,6 +1244,8 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
         isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
+        // nodeRole: explicit owner/admin role (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+        nodeRole: nodeRoleOf(publicKey),
     };
 }
 
@@ -1245,7 +1272,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature: string; payload: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -1347,6 +1374,13 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
     persistDecayEvents();
     persistCommonsBalance();
+
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
@@ -1461,7 +1495,9 @@ export function settleDemurrage(publicKeys: string[]): void {
  */
 export function conservingTransaction<T>(fn: () => T): T {
     // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
-    persistDecayEvents();
+    if (!(db as any).inTransaction) {
+        persistDecayEvents();
+    }
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
@@ -1525,7 +1561,7 @@ export function moveToCommons(
     // becoming a back door around `transfer()`'s send gate and floor policy. A prune is different in kind —
     // an admin action on a member being removed, taking a positive balance to exactly zero — so the gate is
     // moot rather than bypassed. Anything else moving a member's value belongs in `transfer()`.
-    opts?: { allowMemberDebit?: boolean },
+    opts?: { allowMemberDebit?: boolean; authSigner?: string },
 ): Transaction | null {
     const synthetic = isSyntheticAccount(from);
     const treasury = !synthetic
@@ -1534,31 +1570,36 @@ export function moveToCommons(
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
     if (amount <= 0) return null;
-    // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
-    // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
-    if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from, to: 'COMMONS_POOL', amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    return conservingTransaction(() => {
+        // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
+        // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+        if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const fromAcc = ledger.getAccount(from);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+        const txn: Transaction = {
+            id: crypto.randomUUID(),
+            from, to: 'COMMONS_POOL', amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
+        );
 
-    persistDecayEvents();
-    persistCommonsBalance();   // must come last — it is what makes the credit durable
-    return txn;
+        const fromAcc = ledger.getAccount(from);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the credit durable
+        return txn;
+    });
 }
 
 /**
@@ -1610,6 +1651,14 @@ export function payFromCommons(
     // them and this must too (review finding).
     persistDecayEvents();
     persistCommonsBalance();
+
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
+
     return txn;
 }
 
@@ -1740,10 +1789,14 @@ export function canOperate(publicKey: string): boolean {
  * per-enterprise assignments. adminAssignTreasuryOperator sets the flag automatically, so a row can
  * never be silently inert.
  *
- * The system admin retains a node-wide override — they create the enterprises in the first place.
+ * Gated for SPENDING operations: post offer, post need, approve a bid, complete and pay, sweep the balance,
+ * and fund a federation commission.
+ * NO admin bypass: requires a real treasury_operators row, exactly as for anyone else.
+ *
+ * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
+ * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (isAdminPubkey(publicKey)) return true;
     if (!canOperate(publicKey)) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
@@ -1752,16 +1805,25 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
 }
 
 /**
+ * May this actor perform REPAIR AND MODERATION actions on this enterprise?
+ * Covers non-spending administrative actions: pausing an enterprise, unbinding a keeper,
+ * archiving an abandoned enterprise, taking down a listing.
+ *
+ * The node admin IS allowed here (break-glass repair / moderation authority), as is any
+ * legitimate keeper of the enterprise.
+ */
+export function canAdministerTreasury(publicKey: string, treasuryPubkey: string): boolean {
+    if (isAdminPubkey(publicKey)) return true;
+    return canOperateTreasury(publicKey, treasuryPubkey);
+}
+
+/**
  * Which enterprises does this member keep? Drives the Commons tab's per-enterprise controls —
  * the client needs the list, not a boolean, to know which cards get an operate panel.
  *
- * The admin holds a node-wide override, so they get every treasury.
+ * No admin bypass: an admin sees only the enterprises they have explicitly been appointed to keep.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (isAdminPubkey(publicKey)) {
-        return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
-            .map(r => r.public_key);
-    }
     if (!canOperate(publicKey)) return [];
     return (db.prepare(
         "SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?"
@@ -1874,9 +1936,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 }
 
 export function createPost(
-    type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
+    type: 'offer' | 'need' | 'poll', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown }
+    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string; pollOptions?: Array<{ id: string; text: string }>; durationDays?: number }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }
@@ -1889,10 +1951,157 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost>): MarketplacePost | null {
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
     return updatePostEngine(broadcast, id, authorPublicKey, updates);
 }
 
+/**
+ * Process pending deferred wage claims for an enterprise (docs/the-commons.md §2.4 Rule 6).
+ * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
+ */
+export function processDeferredWageClaims(enterprisePubkey: string): number {
+    let paidCount = 0;
+    const claims = db.prepare(`
+        SELECT * FROM deferred_wage_claims
+        WHERE enterprise_pubkey = ? AND status = 'pending'
+        ORDER BY created_at ASC
+    `).all(enterprisePubkey) as any[];
+
+    for (const claim of claims) {
+        if (claim.transaction_id) {
+            const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+            if (!tx || tx.status === 'cancelled' || tx.status === 'rejected') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
+        if (claim.post_id) {
+            const post = db.prepare('SELECT status FROM posts WHERE id = ?').get(claim.post_id) as any;
+            if (!post || post.status === 'cancelled') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
+
+        const { balance } = getBalance(enterprisePubkey);
+        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+
+        // Condition: positive balance AND sufficient earned surplus (Rule 5 & Rule 6)
+        if (balance >= claim.amount && earnedSurplus >= claim.amount && balance - claim.amount >= 0) {
+            let success = false;
+            try {
+                success = conservingTransaction(() => {
+                    const memo = `Deferred wage claim payout for ${claim.post_id || 'keeper work'}`;
+                    const txn = transfer(enterprisePubkey, claim.keeper_pubkey, claim.amount, memo, 'escrow', false);
+                    if (!txn) return false;
+
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                        .run(claim.amount, enterprisePubkey);
+                    db.prepare("UPDATE deferred_wage_claims SET status = 'paid', paid_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                        .run(claim.id);
+
+                    if (claim.transaction_id) {
+                        const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+                        if (tx?.status === 'completed') {
+                            // Extra hours adjustment: base hold was already completed, increment credits by deferred diff
+                            db.prepare("UPDATE marketplace_transactions SET credits = credits + ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                                .run(claim.amount, claim.transaction_id);
+                        } else {
+                            db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
+                                .run(claim.transaction_id);
+                        }
+                    }
+                    if (claim.post_id) {
+                        db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
+                            .run(claim.post_id);
+                    }
+                    return true;
+                });
+            } catch (err) {
+                console.error(`[DeferredClaims] Failed to pay claim ${claim.id}:`, err);
+                success = false;
+            }
+
+            if (success) {
+                paidCount++;
+                try {
+                    broadcast({
+                        type: 'deferred_wage_paid',
+                        claimId: claim.id,
+                        enterprise: enterprisePubkey,
+                        keeper: claim.keeper_pubkey,
+                        amount: claim.amount,
+                    });
+                } catch { }
+            }
+        }
+    }
+    return paidCount;
+}
+
+/**
+ * Automatically sweeps balance above working capital ceiling to COMMONS_POOL (docs/the-commons.md §2.4 Rule 7).
+ * Enterprises are decay-exempt; without a ceiling they accumulate indefinitely while members demur.
+ * When balance exceeds ceiling, the excess sweeps to COMMONS_POOL via moveToCommons inside a conservingTransaction.
+ */
+export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
+    const row = db.prepare('SELECT working_capital_ceiling, is_treasury, earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (row?.is_treasury === 1 && row.working_capital_ceiling !== null && row.working_capital_ceiling !== undefined) {
+        const ceiling = Number(row.working_capital_ceiling);
+        if (ceiling >= 0) {
+            const { balance } = getBalance(enterprisePubkey);
+            const earnedSurplus = Math.max(0, Number(row.earned_surplus ?? 0));
+            // THE SWEEP TAKES ONLY EARNED SURPLUS, NEVER GRANT MONEY (docs/the-commons.md §2.4 Rule 7).
+            // sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))
+            const excess = Math.round(Math.max(0, Math.min(balance - ceiling, earnedSurplus)) * 100) / 100;
+            if (excess > 0) {
+                let sweptTxn: Transaction | null = null;
+                try {
+                    sweptTxn = conservingTransaction(() => {
+                        const txn = moveToCommons(
+                            enterprisePubkey,
+                            excess,
+                            `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
+                        );
+                        db.prepare('UPDATE members SET earned_surplus = MAX(0, COALESCE(earned_surplus, 0) - ?) WHERE public_key = ?')
+                            .run(excess, enterprisePubkey);
+                        return txn;
+                    });
+                } catch (err) {
+                    console.error(`[EnterpriseCeiling] Failed to sweep ${excess} beans from ${enterprisePubkey}:`, err);
+                }
+                if (sweptTxn) {
+                    try {
+                        broadcast({
+                            type: 'enterprise_ceiling_swept',
+                            enterprise: enterprisePubkey,
+                            amount: excess,
+                            ceiling,
+                        });
+                    } catch { }
+                    return excess;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+export { recordDeferredWageClaim } from './engine/escrow.js';
+
+export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
+    return closePollEngine(broadcast, postId, authorPublicKey);
+}
+
+export function votePoll(
+    postId: string,
+    voterPublicKey: string,
+    optionId: string,
+    signature?: string
+): { success: boolean; post: MarketplacePost } {
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+}
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 function getEscrowCb() {
@@ -1904,7 +2113,11 @@ function getEscrowCb() {
         dispatchPushNotification,
         getBalance,
         floorLockedError,
-        SystemMessageType
+        SystemMessageType,
+        canOperateTreasury,
+        conservingTransaction,
+        processDeferredWageClaims,
+        sweepEnterpriseCeiling,
     };
 }
 
@@ -1912,8 +2125,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
@@ -1924,12 +2137,12 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
-    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
 
-export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours);
+export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
+    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
@@ -2053,6 +2266,7 @@ export type {
     SyncRecoveryRequest,
     SyncRecoveryApproval,
     SyncMarketplaceTransaction,
+    SyncPollVote,
     SyncPayload,
     ImportResult,
     NodeRole
@@ -2247,6 +2461,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         if (suspendUser && report.target_pubkey) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
+            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
             bumpMembersVersion();
@@ -2625,6 +2840,9 @@ export function getCommunityHealth(): CommunityHealth {
 
 // ===================== ADMIN CONTROLS =====================
 
+/**
+ * @deprecated Replaced by explicit node_roles. Use getFirstNodeAdminPubkey() or isNodeAdmin().
+ */
 export function getAdminPubkey(): string {
     const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND public_key != '' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
     // Empty string, not 'system', when a node has no human admin. Every override site is
@@ -2633,16 +2851,16 @@ export function getAdminPubkey(): string {
 }
 
 /**
- * Check whether a public key belongs to an active genesis administrator.
+ * Check whether a public key belongs to an active genesis administrator or holds a node admin/owner role.
  * Guards against the empty-string sentinel hazard: an empty or missing public key
  * must never match an empty getAdminPubkey() fallback.
  */
 export function isAdminPubkey(publicKey: string): boolean {
     if (!publicKey || typeof publicKey !== 'string') return false;
+    if (isNodeAdmin(publicKey)) return true;
     const admin = getAdminPubkey();
     return Boolean(admin && publicKey === admin);
 }
-
 /**
  * Write the status row only, with no broadcast.
  *
@@ -2655,6 +2873,9 @@ export function isAdminPubkey(publicKey: string): boolean {
  */
 export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    if (status !== 'active') {
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+    }
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
@@ -2743,7 +2964,8 @@ export function createTreasury(
     // no operator present to choose a picture. The Commons card already falls back to a glyph on a blank
     // avatar, so an avatarless enterprise renders fine. Opt-in rather than dropping the guard, which stays
     // as it was for every operator-created treasury.
-    opts: { systemCreated?: boolean } = {},
+    // opts.workingCapitalCeiling sets Rule 7 ceiling (docs/the-commons.md §2.4).
+    opts: { systemCreated?: boolean; workingCapitalCeiling?: number | null } = {},
 ): { publicKey: string } {
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
@@ -2756,6 +2978,14 @@ export function createTreasury(
         throw new Error('That name is already taken');
     }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
+    let ceiling: number | null = null;
+    if (opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null) {
+        const num = Number(opts.workingCapitalCeiling);
+        if (!Number.isFinite(num) || num < 0) {
+            throw new Error('Working capital ceiling must be a non-negative finite number or null');
+        }
+        ceiling = num;
+    }
 
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
@@ -2767,9 +2997,10 @@ export function createTreasury(
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line);
+        // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling);
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
     })();
@@ -2783,10 +3014,21 @@ export function createTreasury(
 }
 
 export function adminDeletePost(postId: string) {
-    return adminDeletePostEngine(broadcast, postId, transfer);
+    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
 }
 
 export function adminPruneUser(publicKey: string) {
+    if (isNodeOwner(publicKey)) {
+        const ownerCount = (db.prepare(
+            `SELECT COUNT(*) as c FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+        ).get(publicKey) as any)?.c || 0;
+        if (ownerCount === 0) {
+            throw new Error('Cannot prune the sole node owner; appoint another owner first');
+        }
+    }
+
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
     // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
     // them — `adminSetUserStatus` and the posts cancellation. If either throws, SQLite rolls the rows back
@@ -2824,6 +3066,7 @@ export function adminPruneUser(publicKey: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
         // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
@@ -2832,6 +3075,7 @@ export function adminPruneUser(publicKey: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -2857,6 +3101,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     }
     if (member.status === 'pruned') {
         return { ok: true, message: 'Account is already pruned' };
+    }
+
+    if (isNodeOwner(publicKey)) {
+        const ownerCount = (db.prepare(
+            `SELECT COUNT(*) as c FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+        ).get(publicKey) as any)?.c || 0;
+        if (ownerCount === 0) {
+            throw new Error('Cannot purge the sole node owner; appoint another owner first');
+        }
     }
 
     // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records
@@ -2917,7 +3172,14 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE public_key = ?
         `).run(now, now, publicKey);
 
-        // 5. Cancel active/pending listings
+        // 5. Close active polls immediately, retaining votes; cancel active/pending offers/needs
+        db.prepare(`
+            UPDATE posts 
+            SET status = 'completed', 
+                active = 0, 
+                updated_at = ? 
+            WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'
+        `).run(now, publicKey);
         db.prepare(`
             UPDATE posts 
             SET status = 'cancelled', 
@@ -2951,6 +3213,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
 
     broadcast({ type: 'profile_updated', publicKey });
@@ -2984,8 +3247,10 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     }
 }
 
-export function adminSendMessage(targetPubkey: string, body: string) {
-    const adminPubkey = getAdminPubkey();
+export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
+    let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) throw new Error('No genesis admin configured');
+    if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3215,8 +3480,7 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    const admin = getMember(adminPubkey);
-    if (!admin || (admin.invitedBy !== 'genesis' && admin.invitedBy !== null && admin.invitedBy !== undefined) || getActiveRound()) return null;
+    if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
 
     const projects = getAllProjects();
     for (const pid of projectIds) {
@@ -3311,6 +3575,8 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
+            // Community-voted project grants are capital grants (raise balance, never earned_surplus).
+            // Under Rule 7 (docs/the-commons.md §2.4), sweeps take only earned surplus, never grant money.
         } else {
             winner.status = 'proposed';
         }
@@ -3507,7 +3773,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

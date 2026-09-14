@@ -12,7 +12,7 @@ import {
     getCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
+    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getCommunityHealth,
     seedGenesisMember,
@@ -724,10 +724,12 @@ router.get('/api/community/members', async (ctx) => {
     }
 
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
     const members = getMembers()
         .filter(m => !m.isTreasury)
         .map(m => ({
             ...m,
+            nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             avatarUrl: m.avatarUrl
                 ? (m.avatarUrl.startsWith('bundled://')
                     ? m.avatarUrl
@@ -1339,10 +1341,12 @@ router.get('/api/members', async (ctx) => {
         );
     }
 
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
     const members = allMembers.map(m => ({
         publicKey: m.publicKey,
         callsign: m.callsign,
         joinedAt: m.joinedAt,
+        nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
         avatarUrl: m.avatarUrl
             ? (m.avatarUrl.startsWith('bundled://')
                 ? m.avatarUrl

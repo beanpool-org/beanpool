@@ -60,7 +60,9 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const [showNewPost, setShowNewPost] = useState(false);
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
-    const [newPostType, setNewPostType] = useState<'offer' | 'need'>('need');
+    const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll'>('need');
+    const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+    const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
@@ -423,6 +425,50 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
     // Create a new post from the map
     async function handleCreatePost() {
+        if (newPostType === 'poll') {
+            const errors = new Set<string>();
+            if (!newPostTitle.trim()) errors.add('title');
+            const cleanOptions = pollOptions.map(o => o.trim());
+            if (cleanOptions.some(o => !o)) {
+                errors.add('options_empty');
+            }
+            const validOptions = cleanOptions.filter(Boolean);
+            const uniqueOptions = new Set(validOptions.map(o => o.toLowerCase()));
+            if (uniqueOptions.size !== validOptions.length) {
+                errors.add('options_duplicate');
+            }
+            if (validOptions.length < 2 || validOptions.length > 4) errors.add('options');
+            setValidationErrors(errors);
+            if (errors.size > 0) return;
+
+            setPosting(true);
+            try {
+                await createMarketplacePost({
+                    type: 'poll',
+                    category: 'community',
+                    title: newPostTitle.trim(),
+                    description: newPostDescription.trim(),
+                    credits: 0,
+                    priceType: 'fixed',
+                    authorPublicKey: identity.publicKey || '',
+                    repeatable: false,
+                    pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
+                    durationDays: pollDurationDays,
+                });
+                setNewPostTitle('');
+                setNewPostDescription('');
+                setPollOptions(['', '']);
+                setPollDurationDays(7);
+                setShowNewPost(false);
+                refreshPosts();
+                if (onNavigate) onNavigate('marketplace');
+            } catch (e: any) {
+                alert(e.message || 'Failed to create poll.');
+            }
+            setPosting(false);
+            return;
+        }
+
         // Validate all fields
         const errors = new Set<string>();
         if (!newPostTitle.trim()) errors.add('title');
@@ -565,7 +611,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         markersRef.current.clearLayers();
 
         posts
-            .filter(post => (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey))
+            .filter(post => post.type !== 'poll' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey))
             .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
@@ -857,300 +903,430 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
                 {/* Type toggle */}
                 <div className="flex gap-2 mb-4">
-                    {(['offer', 'need'] as const).map(t => (
-                        <button key={t} onClick={() => setNewPostType(t)} className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
-                            newPostType === t
-                                ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]')
-                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
-                        }`}>
-                            {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
+                    {(['offer', 'need', 'poll'] as const).map(t => (
+                        <button
+                            key={t}
+                            type="button"
+                            aria-pressed={newPostType === t}
+                            onClick={() => { setNewPostType(t); setValidationErrors(new Set()); }}
+                            className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
+                                newPostType === t
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                            }`}
+                        >
+                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : '🗳️ Poll'}
                         </button>
                     ))}
                 </div>
 
-                {needBlocked && (
-                    <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 text-sm">
-                        <p className="font-bold mb-1">💡 Contributions First</p>
-                        <p className="text-[13px] leading-snug">
-                            BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🔵 Offer</span> above. (Or ask an Elder to vouch for you.)
-                        </p>
-                    </div>
-                )}
-
-                {/* Category */}
-                <select
-                    value={newPostCategory}
-                    onChange={e => setNewPostCategory(e.target.value)}
-                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
-                >
-                    {MARKETPLACE_CATEGORIES.map(c => (
-                        <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
-                    ))}
-                </select>
-
-                {/* Location picker */}
-                <div className="flex gap-2 mb-2">
-                    <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
-                        validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                        : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
-                    }`}>
-                        <span className="text-xl leading-none">📍</span> My location
-                    </button>
-                    <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
-                        validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                        : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
-                    }`}>
-                        <span className="text-xl leading-none">📌</span> Drop a pin
-                    </button>
-                </div>
-                {pinDropMode && postLat == null && (
-                    <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
-                        Tap the map to place your pin
-                    </p>
-                )}
-                {postLat != null && postLng != null && (
-                    <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
-                        ✓ Location set
-                    </p>
-                )}
-
-                {/* Title + Credits */}
-                <div className="flex gap-2 mb-3">
-                    <input
-                        placeholder="What do you need/offer?"
-                        value={newPostTitle}
-                        onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
-                        className={`flex-1 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all ${
-                            validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
-                        }`}
-                    />
-                    <input
-                        placeholder="B"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={newPostCredits}
-                        onChange={e => { setNewPostCredits(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
-                        className={`w-20 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm text-center font-bold tracking-tight transition-all ${
-                            validationErrors.has('credits') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
-                        }`}
-                    />
-                    <select
-                        value={newPostPriceType}
-                        onChange={e => setNewPostPriceType(e.target.value as 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly')}
-                        className="w-24 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[14px] font-semibold focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 cursor-pointer appearance-auto"
-                    >
-                        <option value="fixed">Total</option>
-                        <option value="hourly">/ Hr</option>
-                        <option value="daily">/ Dy</option>
-                        <option value="weekly">/ Wk</option>
-                        <option value="monthly">/ Mo</option>
-                    </select>
-                </div>
-
-                <p 
-                    onClick={() => setShowCommonsInfo(true)}
-                    className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
-                >
-                    {(() => {
-                        const parsed = parseFloat(newPostCredits);
-                        if (!isNaN(parsed) && parsed > 0) {
-                            const net = Math.round(parsed * 0.985 * 100) / 100;
-                            return `1.5% fee: ${newPostType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;
-                        }
-                        return '1.5% transaction fee funds community projects & solvency. ';
-                    })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
-                    <span className="text-emerald-600 dark:text-emerald-500 font-bold ml-1">(100% community owned)</span>
-                </p>
-
-                {/* Repeatable toggle */}
-                <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1 mb-1">
-                    <input
-                        type="checkbox"
-                        checked={newPostRepeatable}
-                        onChange={e => setNewPostRepeatable(e.target.checked)}
-                        className="w-5 h-5 rounded border-nature-300 text-blue-600 focus:ring-blue-500 shadow-sm accent-blue-600 cursor-pointer transition-all"
-                    />
-                    🔁 Repeatable — keep listing active for ongoing bookings
-                </label>
-
-                {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
-                    moment of ticking is where the rule actually lands. No amount field by design:
-                    the app can escrow beans, not cash, and a figure would imply it settles money it
-                    never touches. */}
-                <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1">
-                    <input
-                        type="checkbox"
-                        checked={newPostCashAlsoNeeded}
-                        onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
-                        className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
-                    />
-                    💸 Cash also needed — for fuel or materials
-                </label>
-                {newPostCashAlsoNeeded && (
-                    <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
-                        Cash is for fuel and consumables you paid for — <strong>not your time, not your tools</strong>.
-                        At cost, no markup. Agree the details in chat; the app never handles the money.
-                    </p>
-                )}
-
-                {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
-                    trading partners: a reach chooser on a node with no peers is a decision about nothing.
-                    Default stays "Stays here", because a member who has never heard of federation has not
-                    agreed to their listing appearing somewhere else.
-
-                    THE COPY IS ABOUT TRAVEL, NOT VISIBILITY, and that distinction is the whole point. This
-                    read "Who can see this?" over a "Just here" button, which promises more than the code
-                    keeps: reach decides what this node hands a PEER that asks over libp2p, and every board
-                    has always been a public HTTPS read, so anyone with the node's URL can list every active
-                    listing regardless. That is by design (Rule 9 — reach is a discovery filter, not an
-                    access control), so the honest fix is the words, not a guarantee we cannot make. */}
-                {reachablePeerList.length > 0 && (
-                    <div className="py-2 px-1">
-                        <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Where does this travel?</label>
-                        {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
-                            (review suggestion, departed from deliberately): a radiogroup promises arrow-key
-                            navigation between options, and implementing the role without the keys leaves a
-                            screen-reader user told "1 of 3" by a control that does not respond to arrows.
-                            A labelled group of pressed-state buttons is complete exactly as written. */}
-                        <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
-                            {([
-                                { value: 'local' as const, label: '🏠 Stays here' },
-                                { value: 'peers' as const, label: '🤝 Chosen' },
-                                { value: 'everywhere' as const, label: '🌏 Everywhere' },
-                            ]).map(opt => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => setNewPostReach(opt.value)}
-                                    aria-pressed={newPostReach === opt.value}
-                                    className={`flex-1 text-xs font-medium rounded-xl px-2 py-2.5 border transition-all min-h-[44px] ${
-                                        newPostReach === opt.value
-                                            ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500 shadow-sm'
-                                            : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
-                                    }`}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
+                {newPostType === 'poll' ? (
+                    <div className="space-y-4 mb-4">
+                        <div>
+                            <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
+                                Question
+                            </label>
+                            <input
+                                placeholder="What should our community decide?"
+                                value={newPostTitle}
+                                onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-purple-300 shadow-sm transition-all ${
+                                    validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
+                                }`}
+                            />
                         </div>
-                        {newPostReach === 'peers' && (
-                            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Communities this listing is aimed at">
-                                {reachablePeerList.map(p => {
-                                    const on = newPostReachPeers.includes(p.peerId);
-                                    return (
+
+                        <div>
+                            <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
+                                Background / Context (Optional)
+                            </label>
+                            <textarea
+                                placeholder="Add context or notes for members..."
+                                value={newPostDescription}
+                                onChange={e => setNewPostDescription(e.target.value)}
+                                rows={2}
+                                className="w-full py-2.5 px-3.5 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
+                                Options (2–4)
+                            </label>
+                            <div className="space-y-2">
+                                {pollOptions.map((opt, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center">
+                                        <span className="w-6 text-center text-sm font-bold text-nature-500">{idx + 1}.</span>
+                                        <input
+                                            placeholder={`Option ${idx + 1}`}
+                                            value={opt}
+                                            maxLength={80}
+                                            onChange={e => {
+                                                const next = [...pollOptions];
+                                                next[idx] = e.target.value;
+                                                setPollOptions(next);
+                                                setValidationErrors(prev => { const n = new Set(prev); n.delete('options'); return n; });
+                                            }}
+                                            className="flex-1 py-2.5 px-3.5 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                        />
+                                        {pollOptions.length > 2 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                                                className="text-nature-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
+                                                title="Remove option"
+                                                aria-label={`Remove option ${idx + 1}`}
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            {pollOptions.length < 4 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPollOptions([...pollOptions, ''])}
+                                    className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
+                                >
+                                    + Add option
+                                </button>
+                            )}
+                            {validationErrors.has('options_empty') && (
+                                <p className="text-red-500 text-xs mt-1">Please fill or remove blank options.</p>
+                            )}
+                            {validationErrors.has('options_duplicate') && (
+                                <p className="text-red-500 text-xs mt-1">Options must be distinct.</p>
+                            )}
+                            {validationErrors.has('options') && (
+                                <p className="text-red-500 text-xs mt-1">Please provide at least 2 non-empty options.</p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
+                                Duration
+                            </label>
+                            <div className="flex gap-2">
+                                {([3, 7, 14] as const).map(days => (
+                                    <button
+                                        key={days}
+                                        type="button"
+                                        aria-pressed={pollDurationDays === days}
+                                        onClick={() => setPollDurationDays(days)}
+                                        className={`flex-1 min-h-[44px] py-2 rounded-xl border text-sm font-semibold transition-all ${
+                                            pollDurationDays === days
+                                                ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300'
+                                        }`}
+                                    >
+                                        {days} Days
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-purple-800 dark:text-purple-300">
+                            <p className="font-bold mb-0.5">🗳️ Transparent Village Polling</p>
+                            <p className="m-0 leading-relaxed">
+                                Votes are signed and publicly visible to all community members. Open accountability creates trust.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {needBlocked && (
+                            <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 text-sm">
+                                <p className="font-bold mb-1">💡 Contributions First</p>
+                                <p className="text-[13px] leading-snug">
+                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🔵 Offer</span> above. (Or ask an Elder to vouch for you.)
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Category */}
+                        <select
+                            value={newPostCategory}
+                            onChange={e => setNewPostCategory(e.target.value)}
+                            className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                        >
+                            {MARKETPLACE_CATEGORIES.map(c => (
+                                <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+                            ))}
+                        </select>
+
+                        {/* Location picker */}
+                        <div className="flex gap-2 mb-2">
+                            <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
+                                validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
+                                : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                            }`}>
+                                <span className="text-xl leading-none">📍</span> My location
+                            </button>
+                            <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
+                                validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
+                                : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                            }`}>
+                                <span className="text-xl leading-none">📌</span> Drop a pin
+                            </button>
+                        </div>
+                        {pinDropMode && postLat == null && (
+                            <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
+                                Tap the map to place your pin
+                            </p>
+                        )}
+                        {postLat != null && postLng != null && (
+                            <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
+                                ✓ Location set
+                            </p>
+                        )}
+
+                        {/* Title + Credits */}
+                        <div className="flex gap-2 mb-3">
+                            <input
+                                placeholder="What do you need/offer?"
+                                value={newPostTitle}
+                                onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
+                                className={`flex-1 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all ${
+                                    validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
+                                }`}
+                            />
+                            <input
+                                placeholder="B"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={newPostCredits}
+                                onChange={e => { setNewPostCredits(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
+                                className={`w-20 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm text-center font-bold tracking-tight transition-all ${
+                                    validationErrors.has('credits') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
+                                }`}
+                            />
+                            <select
+                                value={newPostPriceType}
+                                onChange={e => setNewPostPriceType(e.target.value as 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly')}
+                                className="w-24 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[14px] font-semibold focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 cursor-pointer appearance-auto"
+                            >
+                                <option value="fixed">Total</option>
+                                <option value="hourly">/ Hr</option>
+                                <option value="daily">/ Dy</option>
+                                <option value="weekly">/ Wk</option>
+                                <option value="monthly">/ Mo</option>
+                            </select>
+                        </div>
+
+                        <p 
+                            onClick={() => setShowCommonsInfo(true)}
+                            className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
+                        >
+                            {(() => {
+                                const parsed = parseFloat(newPostCredits);
+                                if (!isNaN(parsed) && parsed > 0) {
+                                    const net = Math.round(parsed * 0.985 * 100) / 100;
+                                    return `1.5% fee: ${newPostType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;
+                                }
+                                return '1.5% transaction fee funds community projects & solvency. ';
+                            })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
+                            <span className="text-emerald-600 dark:text-emerald-500 font-bold ml-1">(100% community owned)</span>
+                        </p>
+
+                        {/* Repeatable toggle */}
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1 mb-1">
+                            <input
+                                type="checkbox"
+                                checked={newPostRepeatable}
+                                onChange={e => setNewPostRepeatable(e.target.checked)}
+                                className="w-5 h-5 rounded border-nature-300 text-blue-600 focus:ring-blue-500 shadow-sm accent-blue-600 cursor-pointer transition-all"
+                            />
+                            🔁 Repeatable — keep listing active for ongoing bookings
+                        </label>
+
+                        {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
+                            moment of ticking is where the rule actually lands. No amount field by design:
+                            the app can escrow beans, not cash, and a figure would imply it settles money it
+                            never touches. */}
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1">
+                            <input
+                                type="checkbox"
+                                checked={newPostCashAlsoNeeded}
+                                onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
+                                className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
+                            />
+                            💸 Cash also needed — for fuel or materials
+                        </label>
+                        {newPostCashAlsoNeeded && (
+                            <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
+                                Cash is for fuel and consumables you paid for — <strong>not your time, not your tools</strong>.
+                                At cost, no markup. Agree the details in chat; the app never handles the money.
+                            </p>
+                        )}
+
+                        {/* #143 step 4 — how far this listing travels. Shown ONLY when this community actually has
+                            trading partners: a reach chooser on a node with no peers is a decision about nothing.
+                            Default stays "Stays here", because a member who has never heard of federation has not
+                            agreed to their listing appearing somewhere else.
+
+                            THE COPY IS ABOUT TRAVEL, NOT VISIBILITY, and that distinction is the whole point. This
+                            read "Who can see this?" over a "Just here" button, which promises more than the code
+                            keeps: reach decides what this node hands a PEER that asks over libp2p, and every board
+                            has always been a public HTTPS read, so anyone with the node's URL can list every active
+                            listing regardless. That is by design (Rule 9 — reach is a discovery filter, not an
+                            access control), so the honest fix is the words, not a guarantee we cannot make. */}
+                        {reachablePeerList.length > 0 && (
+                            <div className="py-2 px-1">
+                                <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Where does this travel?</label>
+                                {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
+                                    (review suggestion, departed from deliberately): a radiogroup promises arrow-key
+                                    navigation between options, and implementing the role without the keys leaves a
+                                    screen-reader user told "1 of 3" by a control that does not respond to arrows.
+                                    A labelled group of pressed-state buttons is complete exactly as written. */}
+                                <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
+                                    {([
+                                        { value: 'local' as const, label: '🏠 Stays here' },
+                                        { value: 'peers' as const, label: '🤝 Chosen' },
+                                        { value: 'everywhere' as const, label: '🌏 Everywhere' },
+                                    ]).map(opt => (
                                         <button
-                                            key={p.peerId}
+                                            key={opt.value}
                                             type="button"
-                                            onClick={() => setNewPostReachPeers(prev =>
-                                                on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
-                                            aria-pressed={on}
-                                            className={`text-xs rounded-full px-3 py-2 border transition-all min-h-[36px] ${
-                                                on
-                                                    ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500'
+                                            onClick={() => setNewPostReach(opt.value)}
+                                            aria-pressed={newPostReach === opt.value}
+                                            className={`flex-1 text-xs font-medium rounded-xl px-2 py-2.5 border transition-all min-h-[44px] ${
+                                                newPostReach === opt.value
+                                                    ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500 shadow-sm'
                                                     : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
                                             }`}
                                         >
-                                            {on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}
+                                            {opt.label}
                                         </button>
-                                    );
-                                })}
+                                    ))}
+                                </div>
+                                {newPostReach === 'peers' && (
+                                    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Communities this listing is aimed at">
+                                        {reachablePeerList.map(p => {
+                                            const on = newPostReachPeers.includes(p.peerId);
+                                            return (
+                                                <button
+                                                    key={p.peerId}
+                                                    type="button"
+                                                    onClick={() => setNewPostReachPeers(prev =>
+                                                        on ? prev.filter(x => x !== p.peerId) : [...prev, p.peerId])}
+                                                    aria-pressed={on}
+                                                    className={`text-xs rounded-full px-3 py-2 border transition-all min-h-[36px] ${
+                                                        on
+                                                            ? 'bg-nature-700 dark:bg-nature-600 text-white border-nature-700 dark:border-nature-500'
+                                                            : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
+                                                    }`}
+                                                >
+                                                    {on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                                {/* "Chosen" with nothing ticked is a real dead end — the listing silently stays home —
+                                    so it reads as a warning rather than as neutral help text. Not a blocking error:
+                                    staying home is a valid outcome, and refusing the post would be worse than
+                                    honouring the safe default. */}
+                                <p className={`text-[13px] leading-snug mt-1.5 ${
+                                    newPostReach === 'peers' && newPostReachPeers.length === 0
+                                        ? 'text-amber-600 dark:text-amber-400 font-medium'
+                                        : 'text-nature-500 dark:text-nature-400'
+                                }`}>
+                                    {newPostReach === 'local'
+                                        ? 'Stays on this community\'s board.'
+                                        : newPostReach === 'everywhere'
+                                            ? 'Appears on the board of every community you trade with, and they can buy it.'
+                                            : newPostReachPeers.length > 0
+                                                ? 'Appears on the board of the communities you ticked.'
+                                                : '⚠️ Tick at least one community, or it stays here.'}
+                                </p>
                             </div>
                         )}
-                        {/* "Chosen" with nothing ticked is a real dead end — the listing silently stays home —
-                            so it reads as a warning rather than as neutral help text. Not a blocking error:
-                            staying home is a valid outcome, and refusing the post would be worse than
-                            honouring the safe default. */}
-                        <p className={`text-[13px] leading-snug mt-1.5 ${
-                            newPostReach === 'peers' && newPostReachPeers.length === 0
-                                ? 'text-amber-600 dark:text-amber-400 font-medium'
-                                : 'text-nature-500 dark:text-nature-400'
-                        }`}>
-                            {newPostReach === 'local'
-                                ? 'Stays on this community\'s board.'
-                                : newPostReach === 'everywhere'
-                                    ? 'Appears on the board of every community you trade with, and they can buy it.'
-                                    : newPostReachPeers.length > 0
-                                        ? 'Appears on the board of the communities you ticked.'
-                                        : '⚠️ Tick at least one community, or it stays here.'}
-                        </p>
-                    </div>
+
+                        {/* Description */}
+                        <textarea
+                            placeholder="Describe what you need/offer..."
+                            value={newPostDescription}
+                            onChange={e => { setNewPostDescription(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('description'); return n; }); }}
+                            rows={2}
+                            className={`w-full mb-4 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[90px] resize-y transition-all ${
+                                validationErrors.has('description') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
+                            }`}
+                        />
+
+                        {/* Photos */}
+                        <div className="mb-5">
+                            <div className="flex gap-2 flex-wrap items-center">
+                                {newPostPhotos.map((photo, i) => (
+                                    <div key={i} className="relative">
+                                        <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                                        <button
+                                            onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
+                                            aria-label="Remove photo"
+                                            className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                ))}
+                                {newPostPhotos.length < 5 && (
+                                    <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
+                                        📷
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = () => {
+                                                    const img = new Image();
+                                                    img.onload = () => {
+                                                        const canvas = document.createElement('canvas');
+                                                        const MAX = 800;
+                                                        let w = img.width, h = img.height;
+                                                        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+                                                        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+                                                        canvas.width = w; canvas.height = h;
+                                                        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                                                        setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
+                                                    };
+                                                    img.src = reader.result as string;
+                                                };
+                                                reader.readAsDataURL(file);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                )}
+                            </div>
+                            <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
+                                {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? '(at least 1 required)' : ''}
+                            </p>
+                        </div>
+                    </>
                 )}
-
-                {/* Description */}
-                <textarea
-                    placeholder="Describe what you need/offer..."
-                    value={newPostDescription}
-                    onChange={e => { setNewPostDescription(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('description'); return n; }); }}
-                    rows={2}
-                    className={`w-full mb-4 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[90px] resize-y transition-all ${
-                        validationErrors.has('description') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
-                    }`}
-                />
-
-                {/* Photos */}
-                <div className="mb-5">
-                    <div className="flex gap-2 flex-wrap items-center">
-                        {newPostPhotos.map((photo, i) => (
-                            <div key={i} className="relative">
-                                <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
-                                <button
-                                    onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
-                                    aria-label="Remove photo"
-                                    className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        ))}
-                        {newPostPhotos.length < 5 && (
-                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
-                                📷
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        const reader = new FileReader();
-                                        reader.onload = () => {
-                                            const img = new Image();
-                                            img.onload = () => {
-                                                const canvas = document.createElement('canvas');
-                                                const MAX = 800;
-                                                let w = img.width, h = img.height;
-                                                if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
-                                                else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
-                                                canvas.width = w; canvas.height = h;
-                                                canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                                                setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
-                                            };
-                                            img.src = reader.result as string;
-                                        };
-                                        reader.readAsDataURL(file);
-                                        e.target.value = '';
-                                    }}
-                                />
-                            </label>
-                        )}
-                    </div>
-                    <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
-                        {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? '(at least 1 required)' : ''}
-                    </p>
-                </div>
 
                 <button
                     onClick={handleCreatePost}
-                    disabled={needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0}
+                    disabled={
+                        newPostType === 'poll'
+                            ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
+                            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0)
+                    }
                     className={`w-full p-3 rounded-xl font-semibold transition-all ${
-                        needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0
+                        (newPostType === 'poll'
+                            ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
+                            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0))
                             ? 'bg-oat-200 text-oat-500 cursor-not-allowed'
-                            : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md'
+                            : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >
                     {posting ? 'Posting...' :
+                     newPostType === 'poll' ? '🗳️ Create Poll' :
                      needBlocked ? '🔵 List an Offer first to post Needs' :
                      postLat == null ? '📍 Map location required' :
                      !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' ? '✏️ Fill required fields' :

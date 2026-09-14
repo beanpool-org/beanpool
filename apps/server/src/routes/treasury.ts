@@ -12,10 +12,11 @@
 
 import Router from '@koa/router';
 import {
-    createTreasury, adminSetOperator, canOperateTreasury,
+    createTreasury, adminSetOperator, canOperateTreasury, canAdministerTreasury,
     treasuryKeepers, adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    createPost, approvePostRequest, completePostTransaction,
+    createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
     getBalance, moveToCommons, conservingTransaction,
+    sweepEnterpriseCeiling,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -84,9 +85,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'You are not a keeper of this enterprise' };
             return null;
         }
-        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member" — the admin
-        // override in canOperateTreasury does not require the admin to hold a member row, and reading a
-        // missing status as inactive would lock them out of their own node.
+        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
         const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
@@ -104,7 +103,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Public transparency reads ------------------------------------------------------
     router.get('/api/treasuries', async (ctx) => {
         const rows = db.prepare(
-            "SELECT public_key, callsign, avatar_url, earned_credit FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
+            "SELECT public_key, callsign, avatar_url, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -128,6 +127,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                             : `/api/avatar/${r.public_key}?size=thumb`)
                         : null,
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
+                    earnedSurplus: r.earned_surplus ?? 0,
+                    workingCapitalCeiling: r.working_capital_ceiling ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
@@ -139,7 +140,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     router.get('/api/treasury/:treasury', async (ctx) => {
         const { treasury } = ctx.params;
-        const m = db.prepare('SELECT callsign, avatar_url FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const posts = db.prepare(
@@ -150,6 +151,41 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ).all(treasury, treasury) as any[]).map(f => ({
             amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
         }));
+        // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
+        const actor = ctx.state?.actor;
+        const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+
+        // PR #775 review: Sensitive worker wage history (keeper_pubkey, transaction_id, historical payouts)
+        // must not leak to unauthenticated / non-operator clients. Public view only sees pending claims without worker identifiers.
+        const deferredClaims = isOperator ? (db.prepare(
+            "SELECT id, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims WHERE enterprise_pubkey=? ORDER BY created_at ASC LIMIT 50"
+        ).all(treasury) as any[]) : (db.prepare(
+            "SELECT id, amount, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
+        ).all(treasury) as any[]);
+
+        const pendingBids = isOperator ? (db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
+            WHERE (t.buyer_pubkey = ? OR t.seller_pubkey = ?) AND t.status = 'requested'
+            ORDER BY t.created_at DESC
+            LIMIT 50
+        `).all(treasury, treasury, treasury) as any[]) : [];
+        const activeDeals = isOperator ? (db.prepare(`
+            SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
+                   p.title as post_title, p.type as post_type, p.price_type,
+                   m.callsign as peer_callsign, m.avatar_url as peer_avatar,
+                   CASE WHEN t.buyer_pubkey = ? THEN 'pay' ELSE 'fulfill' END as action_required
+            FROM marketplace_transactions t
+            JOIN posts p ON t.post_id = p.id
+            LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
+            WHERE (t.buyer_pubkey = ? OR t.seller_pubkey = ?) AND t.status = 'pending'
+            ORDER BY t.created_at DESC
+            LIMIT 50
+        `).all(treasury, treasury, treasury, treasury) as any[]) : [];
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             avatar: m.avatar_url
@@ -158,7 +194,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
-            liveOffers: b.liveOffers, posts, flow,
+            liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
+            earnedSurplus: m.earned_surplus ?? 0,
+            workingCapitalCeiling: m.working_capital_ceiling ?? null,
+            deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
@@ -170,11 +209,38 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Admin (password-gated) ---------------------------------------------------------
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const { name, avatar, creditLine } = (ctx as any).requestBody || {};
+        const { name, avatar, creditLine, workingCapitalCeiling } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         try {
-            ctx.body = { success: true, ...createTreasury(String(name), String(avatar), Number(creditLine) || 0) };
+            ctx.body = {
+                success: true,
+                ...createTreasury(
+                    String(name),
+                    String(avatar),
+                    Number(creditLine) || 0,
+                    { workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null }
+                ),
+            };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }
+    });
+
+    // docs/the-commons.md §2.4 Rule 7: Working capital ceiling is set at creation and
+    // changed only by Decision (§3.6 — admin-only editable for now, with a code comment explaining
+    // that it moves by community Decision once that engine exists).
+    router.post('/api/local/admin/treasury/:treasury/ceiling', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const { ceiling } = (ctx as any).requestBody || {};
+        const parsedCeiling = ceiling === null || ceiling === undefined || ceiling === '' ? null : Number(ceiling);
+        if (parsedCeiling !== null && (!Number.isFinite(parsedCeiling) || parsedCeiling < 0)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Ceiling must be a non-negative finite number or null' };
+            return;
+        }
+        db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(parsedCeiling, treasury);
+        sweepEnterpriseCeiling(treasury);
+        ctx.body = { success: true, workingCapitalCeiling: parsedCeiling };
     });
 
     // Master switch per member: may they steward anything at all. Retained for the fleet manager,
@@ -254,11 +320,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Post the treasury's recurring Offer (e.g. "a dozen eggs"). Defaults repeatable=true.
     router.post('/api/treasury/:treasury/offer', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -268,11 +335,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // live Offer (the offer covenant) before it can run the need at a deficit.
     router.post('/api/treasury/:treasury/need', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const b = (ctx as any).requestBody || {};
         if (!b.title || !b.category) { ctx.status = 400; ctx.body = { error: 'title and category are required' }; return; }
         try {
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
@@ -281,34 +349,62 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Approve a bid on the treasury's Need — funds escrow from the treasury (its credit line).
     router.post('/api/treasury/:treasury/approve', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const { transactionId } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = approvePostRequest(String(transactionId), treasury);
+            const tx = approvePostRequest(String(transactionId), treasury, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not approve (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Release escrow on a treasury Need it is the buyer of (e.g. pay the tender on completion).
     // Egg *sales* are released by the buyer through the normal marketplace route, not here.
     router.post('/api/treasury/:treasury/complete', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const { transactionId, finalHours, hours } = (ctx as any).requestBody || {};
+        if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
+        const rawHours = finalHours !== undefined ? finalHours : hours;
+        const parsedHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+        try {
+            const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
+            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
+            ctx.body = { success: true, transaction: tx };
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
+    });
+
+    // Reject a bid on the treasury's Need
+    router.post('/api/treasury/:treasury/reject', async (ctx) => {
+        const { treasury } = ctx.params;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const { transactionId } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
         try {
-            const tx = completePostTransaction(String(transactionId), treasury);
-            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
+            const tx = rejectPostRequest(String(transactionId), treasury);
+            if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not reject (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Sweep surplus from the treasury into the shared Commons pool.
     router.post('/api/treasury/:treasury/sweep', async (ctx) => {
         const { treasury } = ctx.params;
-        if (!requireOperator(ctx, treasury)) return;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
         const amt = Number((ctx as any).requestBody?.amount);
         if (!amt || amt <= 0) { ctx.status = 400; ctx.body = { error: 'amount must be positive' }; return; }
         if (amt > getBalance(treasury).balance) { ctx.status = 400; ctx.body = { error: 'Cannot sweep more than the treasury holds' }; return; }
@@ -330,7 +426,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         let ok;
         try {
             ok = conservingTransaction(() =>
-                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`));
+                moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, { authSigner: actor }));
         } catch (e: any) {
             const invariant = /moveToCommons is for/.test(e?.message || '');
             console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);

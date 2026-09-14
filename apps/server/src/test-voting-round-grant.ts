@@ -8,7 +8,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-voting-round-grant.ts
  */
 import {
-    initStateEngine, createProject, createVotingRound, closeVotingRound, getBalance,
+    initStateEngine, createProject, createVotingRound, closeVotingRound, getBalance, grantNodeRole,
 } from './state-engine.js';
 import { setCommonsBalance } from '@beanpool/core';
 import { db } from './db/db.js';
@@ -29,10 +29,11 @@ async function main() {
     initStateEngine();
     setCommonsBalance(1000);
 
-    const admin = 'admin-' + Date.now();      // invited_by NULL → eligible round creator
+    const admin = 'admin-' + Date.now();
     const prop1 = 'p1-' + Date.now();
     const prop2 = 'p2-' + Date.now();
     [admin, prop1, prop2].forEach(seedMember);
+    grantNodeRole(admin, 'owner');
 
     const winnerProj = createProject(prop1, 'High-weight project', 'desc', 100);
     const loserProj = createProject(prop2, 'Many-cheap-votes project', 'desc', 100);

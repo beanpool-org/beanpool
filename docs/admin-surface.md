@@ -90,6 +90,15 @@ A flip-day locks the operator out of their own machine.
 4. **Demote** the password to break-glass-only, per §2.2.
 5. **Rotate** whatever password remains as part of the pre-launch secret sweep.
 
+### 2.5 Interim rule: password authentication as owner-level action
+
+Until key-based admin auth ships, password-authenticated admin routes follow an interim rule (controller decision, 2026-09-14):
+- A password-authenticated call to an admin route is by definition an OWNER-level action, because in the agreed model only owners hold the password.
+- Never read an actor identity from the request body or headers.
+- When `ctx.state.actor` is absent on a password-authenticated admin route, treat the caller as owner and record `granted_by = 'owner:password'`.
+- When a signed actor IS present (via cryptographic session or signature), use it and enforce owner-only for owner grants.
+- The same rule applies to voting-round creation (`POST /api/local/admin/commons/round`): bind round creation to the cryptographically verified actor (`ctx.state.actor`), or fall back to the active node admin/owner if unpopulated under password auth; never accept an unauthenticated `adminPubkey` in the request body.
+
 ---
 
 ## 3. Where admin work happens

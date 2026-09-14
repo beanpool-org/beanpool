@@ -22,9 +22,10 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, adminSetOperator,
-    canOperateTreasury, keeperOf, treasuryKeepers,
+    canOperateTreasury, canAdministerTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    getBalance,
+    getBalance, adminSetUserStatus, adminDeletePost, getAdminPubkey,
+    transfer, createPost,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
@@ -40,7 +41,7 @@ function assert(cond: boolean, msg: string): void {
 function makeIdentity(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -87,6 +88,73 @@ async function main() {
     const offer = { title: 'Dozen eggs', category: 'food', credits: 12 };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
     assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
+    const offerRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(own.body.post.id) as any;
+    assert(offerRow?.created_by === doone.pubKeyHex, 'offer post created_by records acting operator');
+
+    // Keeper posts a Need, worker bids, keeper approves and completes — verifying audit trail
+    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20 });
+    assert(needRes.status === 200, `keeper posts a Need on enterprise (got ${needRes.status})`);
+    const needRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(needRes.body.post.id) as any;
+    assert(needRow?.created_by === doone.pubKeyHex, 'need post created_by records acting operator');
+
+    const reqRes = await signedFetch('POST', `/api/marketplace/posts/request`, river, { postId: needRes.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(reqRes.status === 200, `worker bids on enterprise Need (got ${reqRes.status} ${reqRes.error ?? ''})`);
+    const dealTxId = reqRes.body.transaction.id;
+
+    // Verify treasury detail exposes pendingBids and activeDeals to operator, but hides them on unauthenticated read
+    const unauthBeforeApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthBeforeApprove.pendingBids) && unauthBeforeApprove.pendingBids.length === 0, 'public read hides pending bids');
+    const detailBeforeApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailBeforeApprove.pendingBids?.some((b: any) => b.id === dealTxId), 'detail exposes pending bid on need to keeper');
+
+    const approveRes = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: dealTxId });
+    assert(approveRes.status === 200, `keeper approves bid on enterprise Need (got ${approveRes.status})`);
+    const escrowTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(eggs, `escrow_${dealTxId}`) as any;
+    assert(escrowTxRow?.auth_signer === doone.pubKeyHex, 'escrow hold transaction auth_signer records acting operator');
+
+    const unauthAfterApprove = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(unauthAfterApprove.activeDeals) && unauthAfterApprove.activeDeals.length === 0, 'public read hides active deals');
+    const detailAfterApprove = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(detailAfterApprove.activeDeals?.some((d: any) => d.id === dealTxId), 'detail exposes active deal on need to keeper');
+
+    const completeRes = await signedFetch('POST', `/api/treasury/${eggs}/complete`, doone, { transactionId: dealTxId });
+    assert(completeRes.status === 200, `keeper completes deal on enterprise Need (got ${completeRes.status})`);
+    const payoutTxRow = db.prepare('SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey=?').get(`escrow_${dealTxId}`, river.pubKeyHex) as any;
+    assert(payoutTxRow?.auth_signer === doone.pubKeyHex, 'escrow payout transaction auth_signer records acting operator');
+
+    // Sweep test with audit trail
+    // Give eggs a positive balance to sweep via genesis transfer
+    transfer('genesis', eggs, 50, 'seed test', 'direct', true);
+    const sweepRes = await signedFetch('POST', `/api/treasury/${eggs}/sweep`, doone, { amount: 15 });
+    assert(sweepRes.status === 200, `keeper sweeps surplus from enterprise (got ${sweepRes.status})`);
+    const sweepTxRow = db.prepare("SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' ORDER BY timestamp DESC LIMIT 1").get(eggs) as any;
+    assert(sweepTxRow?.auth_signer === doone.pubKeyHex, 'sweep transaction auth_signer records acting operator');
+
+    // Privacy gating on deferred wage claims:
+    // Insert 1 pending claim and 1 paid claim with sensitive keeper details
+    db.prepare(`
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at)
+        VALUES ('claim-priv-pending', ?, ?, 'post-priv-1', 'tx-priv-1', 25.0, 'pending', '2026-09-14T00:00:00Z', NULL),
+               ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', 50.0, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
+    `).run(eggs, doone.pubKeyHex, eggs, doone.pubKeyHex);
+
+    const pubDetail = await fetch(`${BASE}/api/treasury/${eggs}`).then(r => r.json()) as any;
+    assert(Array.isArray(pubDetail.deferredClaims), 'public read returns deferredClaims array');
+    assert(pubDetail.deferredClaims.length === 1, 'public read only sees pending claims, NOT historical paid claims');
+    assert(pubDetail.deferredClaims[0].id === 'claim-priv-pending', 'public read sees pending claim id');
+    assert(pubDetail.deferredClaims[0].amount === 25.0, 'public read sees pending claim amount');
+    assert(pubDetail.deferredClaims[0].status === 'pending', 'public read sees pending claim status');
+    assert(pubDetail.deferredClaims[0].created_at !== undefined, 'public read sees pending claim created_at');
+    assert(pubDetail.deferredClaims[0].keeper_pubkey === undefined, 'public read hides sensitive keeper_pubkey');
+    assert(pubDetail.deferredClaims[0].transaction_id === undefined, 'public read hides sensitive transaction_id');
+    assert(pubDetail.deferredClaims[0].post_id === undefined, 'public read hides post_id');
+
+    // Operator read sees all claims including sensitive keeper details and historical payouts
+    const opDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    assert(Array.isArray(opDetail.deferredClaims) && opDetail.deferredClaims.length === 2, 'operator sees all claims including paid');
+    const opPending = opDetail.deferredClaims.find((c: any) => c.id === 'claim-priv-pending');
+    assert(opPending?.keeper_pubkey === doone.pubKeyHex, 'operator sees keeper_pubkey on claims');
+    assert(opPending?.transaction_id === 'tx-priv-1', 'operator sees transaction_id on claims');
 
     for (const [route, payload] of [
         ['offer', offer],
@@ -166,6 +234,221 @@ async function main() {
     const again = seedTreasuryOperatorsFromLegacyFlag();
     assert(again === 0, `migration is a no-op once the table is non-empty (wrote ${again})`);
     assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a pruned binding STAYS pruned across re-runs');
+
+    // ── 8. Admin cannot SPEND an enterprise's money; administration/moderation preserved ──
+    const admin = makeIdentity('genesis-admin');
+    db.prepare("UPDATE members SET invited_by = 'genesis' WHERE public_key = ?").run(admin.pubKeyHex);
+    assert(getAdminPubkey() === admin.pubKeyHex, 'genesis-admin is recognized as node admin');
+
+    // Admin without binding cannot spend:
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'admin without binding cannot operate Eggs treasury');
+    assert(canAdministerTreasury(admin.pubKeyHex, eggs) === true, 'admin CAN administer Eggs treasury (repair / moderation)');
+    assert(keeperOf(admin.pubKeyHex).length === 0, 'admin without binding keeps no enterprises');
+
+    // Refused on all 5 spending routes on live server:
+    for (const [route, payload] of [
+        ['offer', { title: 'Admin eggs', category: 'food', credits: 10 }],
+        ['need', { title: 'Admin need', category: 'food', credits: 20 }],
+        ['approve', { transactionId: 'any-id' }],
+        ['complete', { transactionId: 'any-id' }],
+        ['sweep', { amount: 1 }],
+    ] as Array<[string, any]>) {
+        const r = await signedFetch('POST', `/api/treasury/${eggs}/${route}`, admin, payload);
+        assert(r.status === 403, `admin without keeper binding is REFUSED on /api/treasury/:treasury/${route} (got ${r.status} ${r.error ?? ''})`);
+    }
+
+    // Repair and moderation actions succeed for admin:
+    adminSetUserStatus(eggs, 'disabled');
+    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10 });
+    assert(pausedOffer.status === 403 && Boolean(pausedOffer.error?.startsWith('This enterprise has been closed')), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
+    adminSetUserStatus(eggs, 'active');
+    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10 });
+    assert(unpausedOffer.status === 200, 'unpausing enterprise restores keeper operations');
+
+    // Admin legitimately appointed to keep an enterprise:
+    adminAssignTreasuryOperator(eggs, admin.pubKeyHex, 'admin');
+    const bindingRow = db.prepare('SELECT granted_by FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?').get(admin.pubKeyHex, eggs) as any;
+    assert(bindingRow?.granted_by === 'admin', 'admin appointment recorded with granted_by = admin in treasury_operators');
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === true, 'appointed admin can now operate Eggs');
+    assert(keeperOf(admin.pubKeyHex).includes(eggs), 'appointed admin lists Eggs in keeperOf');
+
+    // Appointed admin can now spend:
+    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', credits: 15 });
+    assert(adminOffer.status === 200, `appointed admin can post offer (got ${adminOffer.status})`);
+    if (adminOffer.body?.post?.id) {
+        const deleted = adminDeletePost(adminOffer.body.post.id);
+        assert(deleted === true, 'admin can take down / delete listing');
+        const postRow = db.prepare('SELECT status, active FROM posts WHERE id = ?').get(adminOffer.body.post.id) as any;
+        assert(postRow?.status === 'cancelled' && postRow?.active === 0, 'listing is cancelled after admin takedown');
+    }
+
+    // Revoking removes spending again:
+    adminRevokeTreasuryOperator(eggs, admin.pubKeyHex);
+    assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'revoking admin appointment removes spending authority');
+    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15 });
+    assert(afterRevokeOffer.status === 403, `revoked admin is REFUSED again on spend route (got ${afterRevokeOffer.status})`);
+
+    // ── 9. Two-person rule & self-dealing guard for enterprise Needs ───────────
+    const bakery = createTreasury('CommunityBakery', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const alice = makeIdentity('alice');
+    const bob = makeIdentity('bob');
+
+    adminAssignTreasuryOperator(bakery, alice.pubKeyHex, 'admin');
+
+    // Keeper Alice posts Offer then Need for Bakery
+    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', credits: 8 });
+    assert(bakeryOffer.status === 200, 'Alice posts offer on Bakery');
+    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30 });
+    assert(bakeryNeed.status === 200, 'Alice posts need on Bakery');
+
+    // Under Rules 5 & 6 (PR #775), enterprises cannot borrow into credit to pay keepers;
+    // keeper wages require positive balance and earned surplus. Seed Bakery with surplus
+    // so the two-person rule approval/completion workflow can be exercised.
+    transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
+
+    // Keeper Alice bids on the need from her personal account
+    const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
+    assert(aliceBid.status === 200, 'Alice bids on Bakery need from personal account');
+    const selfDealTxId = aliceBid.body.transaction.id;
+
+    // Keeper Alice tries to approve her own bid -> REFUSED (403, friendly copy)
+    const selfApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, alice, { transactionId: selfDealTxId });
+    assert(selfApprove.status === 403, `Alice approving own bid is REFUSED 403 (got ${selfApprove.status})`);
+    assert(selfApprove.error === 'Another keeper of CommunityBakery needs to approve this — you cannot approve a job you are being paid for.',
+        `friendly refusal on self-approve: "${selfApprove.error}"`);
+
+    // Appoint Bob as second keeper: Bob approves Alice's bid -> SUCCEEDS
+    adminAssignTreasuryOperator(bakery, bob.pubKeyHex, 'admin');
+    const bobApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, bob, { transactionId: selfDealTxId });
+    assert(bobApprove.status === 200, `second keeper Bob approves Alice's bid (got ${bobApprove.status})`);
+
+    // Keeper Alice tries to complete and pay herself -> REFUSED (403, friendly copy)
+    const selfComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, alice, { transactionId: selfDealTxId });
+    assert(selfComplete.status === 403, `Alice completing deal paying herself is REFUSED 403 (got ${selfComplete.status})`);
+    assert(selfComplete.error === 'Another keeper of CommunityBakery needs to complete this — you cannot complete a job you are being paid for.',
+        `friendly refusal on self-complete: "${selfComplete.error}"`);
+
+    // Keeper Bob completes and pays Alice -> SUCCEEDS
+    const bobComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, bob, { transactionId: selfDealTxId });
+    assert(bobComplete.status === 200, `second keeper Bob completes deal paying Alice (got ${bobComplete.status})`);
+    // Alice receives payout (30 minus 1.5% fee = 29.55)
+    assert(getBalance(alice.pubKeyHex).balance === 29.55, 'Alice received payment minus fee');
+
+    // Single-keeper enterprise: sole keeper cannot approve own bid -> REFUSED
+    const solo = createTreasury('SoloEnterprise', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const charlie = makeIdentity('charlie');
+    adminAssignTreasuryOperator(solo, charlie.pubKeyHex, 'admin');
+    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', credits: 10 });
+    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', credits: 20 });
+    const soloBid = await signedFetch('POST', '/api/marketplace/posts/request', charlie, { postId: soloNeed.body.post.id, buyerPublicKey: charlie.pubKeyHex });
+    const soloApprove = await signedFetch('POST', `/api/treasury/${solo}/approve`, charlie, { transactionId: soloBid.body.transaction.id });
+    assert(soloApprove.status === 403, `single keeper cannot approve own bid (got ${soloApprove.status})`);
+    assert(soloApprove.error === 'Another keeper of SoloEnterprise needs to approve this — you cannot approve a job you are being paid for.',
+        'single keeper gets friendly copy naming enterprise');
+
+    // Non-enterprise deals (peer to peer) are UNTOUCHED by this rule:
+    transfer('genesis', charlie.pubKeyHex, 100, 'seed charlie for escrow', 'direct', true);
+    createPost('offer', 'help', 'Charlie gardening', 'Garden help', 10, 'fixed', charlie.pubKeyHex);
+    const peerNeed = createPost('need', 'help', 'Help Charlie move', 'Moving boxes', 15, 'fixed', charlie.pubKeyHex);
+    assert(peerNeed !== null, 'Charlie creates personal need');
+    const dave = makeIdentity('dave');
+    const daveBid = await signedFetch('POST', '/api/marketplace/posts/request', dave, { postId: peerNeed!.id, buyerPublicKey: dave.pubKeyHex });
+    assert(daveBid.status === 200, 'Dave bids on Charlie personal need');
+    const peerApprove = await signedFetch('POST', '/api/marketplace/transactions/approve', charlie, { transactionId: daveBid.body.transaction.id, authorPublicKey: charlie.pubKeyHex });
+    assert(peerApprove.status === 200, `peer-to-peer personal need approval succeeds (got ${peerApprove.status})`);
+    const peerComplete = await signedFetch('POST', '/api/marketplace/transactions/complete', charlie, { transactionId: daveBid.body.transaction.id, confirmerPublicKey: charlie.pubKeyHex });
+    assert(peerComplete.status === 200, `peer-to-peer personal need completion succeeds (got ${peerComplete.status})`);
+
+    // ── 8. Active deals on enterprise Offers (sales) visible to operator ────────────
+    transfer('genesis', river.pubKeyHex, 50, 'seed river for offer purchase', 'direct', true);
+    createPost('offer', 'help', 'River gardening', 'Garden help', 10, 'fixed', river.pubKeyHex);
+    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', credits: 12 });
+    assert(freshOffer.status === 200, 'keeper posts fresh offer for sale test');
+    const riverOfferReq = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: freshOffer.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(riverOfferReq.status === 200, `buyer requests enterprise offer (got ${riverOfferReq.status} ${riverOfferReq.error ?? ''})`);
+    const offerTxId = riverOfferReq.body.transaction.id;
+    const dooneOfferApprove = await signedFetch('POST', `/api/treasury/${eggs}/approve`, doone, { transactionId: offerTxId });
+    assert(dooneOfferApprove.status === 200, 'keeper approves request on enterprise offer');
+    const eggsDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, doone)).body;
+    const activeOfferDeal = eggsDetail.activeDeals?.find((d: any) => d.id === offerTxId);
+    assert(!!activeOfferDeal, 'operator view exposes active deal on enterprise offer');
+    assert(activeOfferDeal?.action_required === 'fulfill', 'active deal on offer has action_required = fulfill');
+    assert(activeOfferDeal?.peer_callsign === 'riverbend', 'peer callsign resolved to buyer');
+
+    // ── 9. CAS guard on rejectPostRequest ──────────────────────────────────────────
+    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', credits: 18 });
+    assert(rejNeed.status === 200, 'keeper posts fresh need for reject test');
+    const rejNeedRes = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: rejNeed.body.post.id, buyerPublicKey: river.pubKeyHex });
+    assert(rejNeedRes.status === 200, 'worker requests enterprise need for reject test');
+    const rejTxId = rejNeedRes.body.transaction.id;
+    const firstReject = await signedFetch('POST', `/api/treasury/${eggs}/reject`, doone, { transactionId: rejTxId });
+    assert(firstReject.status === 200, 'first rejection succeeds');
+    const secondReject = await signedFetch('POST', `/api/treasury/${eggs}/reject`, doone, { transactionId: rejTxId });
+    assert(secondReject.status === 400, 'duplicate reject blocked by CAS guard');
+
+    // ── 10. posts.created_by carried through sync export/import/delta & restore ───
+    const { exportSyncState: exportEngine } = await import('@beanpool/engine');
+    const fullSync = exportEngine(db, 'primary-node');
+    assert(Array.isArray(fullSync.posts), 'exportSyncState includes posts');
+    const exportedOffer = fullSync.posts?.find(p => p.id === freshOffer.body.post.id);
+    assert(exportedOffer?.createdBy === doone.pubKeyHex, 'exportSyncState exports createdBy for offer');
+    const exportedNeed = fullSync.posts?.find(p => p.id === rejNeed.body.post.id);
+    assert(exportedNeed?.createdBy === doone.pubKeyHex, 'exportSyncState exports createdBy for need');
+
+    const pastSince = new Date(Date.now() - 3600000).toISOString();
+    const deltaSync = exportEngine(db, 'primary-node', pastSince);
+    const deltaOffer = deltaSync.posts?.find(p => p.id === freshOffer.body.post.id);
+    assert(deltaOffer?.createdBy === doone.pubKeyHex, 'delta sync exports createdBy for offer');
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const Database = (await import('better-sqlite3')).default;
+
+    // Secondary replica state import & restore
+    const replicaDb = new Database(':memory:');
+    const schemaSql = fs.readFileSync(path.join(thisDir, 'db', 'schema.sql'), 'utf-8');
+    replicaDb.exec(schemaSql);
+    const allMembers = db.prepare('SELECT * FROM members').all() as any[];
+    for (const m of allMembers) {
+        replicaDb.prepare(`
+            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at)
+            VALUES (?, ?, ?, ?)
+        `).run(m.public_key, m.callsign, m.avatar_url, m.joined_at || new Date().toISOString());
+    }
+    for (const rp of fullSync.posts ?? []) {
+        replicaDb.prepare(`
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits,
+            rp.authorPublicKey, rp.createdAt, rp.active ? 1 : 0, rp.status,
+            rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null,
+            rp.originNode || 'node', rp.priceType || 'fixed',
+            rp.acceptedBy || null, rp.acceptedAt || null,
+            rp.pendingTransactionId || null, rp.completedAt || null,
+            rp.updatedAt || rp.createdAt, rp.createdBy ?? null
+        );
+    }
+    const replicaRestoredPost = replicaDb.prepare('SELECT created_by FROM posts WHERE id = ?').get(freshOffer.body.post.id) as any;
+    assert(replicaRestoredPost?.created_by === doone.pubKeyHex, 'replica restore preserves posts.created_by');
+    replicaDb.close();
+
+    // File backup & restore via writeDbSnapshot
+    const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
+    const tmpSnapFile = path.join(process.cwd(), `tmp-keepership-backup-${Date.now()}.db`);
+    try {
+        writeDbSnapshot(tmpSnapFile);
+        assert(fs.existsSync(tmpSnapFile), 'Snapshot file created via writeDbSnapshot');
+        const restoredSnapDb = new Database(tmpSnapFile, { readonly: true });
+        const snapPost = restoredSnapDb.prepare('SELECT created_by FROM posts WHERE id = ?').get(freshOffer.body.post.id) as any;
+        assert(snapPost?.created_by === doone.pubKeyHex, 'atomic snapshot restore preserves posts.created_by');
+        restoredSnapDb.close();
+    } finally {
+        if (fs.existsSync(tmpSnapFile)) fs.unlinkSync(tmpSnapFile);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

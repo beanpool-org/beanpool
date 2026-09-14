@@ -42,6 +42,7 @@ import {
     closeVotingRound,
     adminSetVoucher,
     vouchMember,
+    adminPruneUser,
 } from './state-engine.js';
 import { db, seedNodeRolesFromGenesis } from './db/db.js';
 import Koa from 'koa';
@@ -190,6 +191,22 @@ async function main() {
     // Re-grant Dave as admin for subsequent override checks
     grantNodeRole('dave', 'admin', 'gen_alice');
 
+    // ── Regression (Finding 4): Exactly ONE node role per member, promotion & demotion ──
+    // 1. Promote admin Dave to owner -> replaces admin row with owner row
+    grantNodeRole('dave', 'owner', 'gen_alice');
+    assert(nodeRoleOf('dave') === 'owner', "Promoting Dave to owner sets nodeRoleOf to 'owner'");
+    assert(isNodeOwner('dave') === true, 'Dave is now an owner');
+    assert(db.prepare("SELECT COUNT(*) AS c FROM node_roles WHERE member_pubkey = 'dave'").pluck().get() === 1, 'Dave holds exactly 1 row after promotion');
+    assert(listNodeRoles().filter(r => r.member_pubkey === 'dave').length === 1, 'Dave appears exactly once in listNodeRoles');
+
+    // 2. Demote owner Dave back to admin -> replaces owner row with admin row, stripping owner privileges
+    grantNodeRole('dave', 'admin', 'gen_alice');
+    assert(nodeRoleOf('dave') === 'admin', "Demoting Dave to admin sets nodeRoleOf to 'admin'");
+    assert(isNodeOwner('dave') === false, 'Dave is NO LONGER an owner after demotion');
+    assert(isNodeAdmin('dave') === true, 'Dave is still an admin after demotion');
+    assert(db.prepare("SELECT COUNT(*) AS c FROM node_roles WHERE member_pubkey = 'dave'").pluck().get() === 1, 'Dave holds exactly 1 row after demotion');
+    assert(listNodeRoles().filter(r => r.member_pubkey === 'dave').length === 1, 'Dave appears exactly once in listNodeRoles after demotion');
+
     // ── 6. Last owner removal protection ──
     // Currently owners: gen_alice, gen_bob, charlie (3 owners)
     // Remove gen_bob: allowed because 2 owners remain
@@ -203,6 +220,10 @@ async function main() {
     // Now only 1 owner remains (gen_alice)
     throws(() => revokeNodeRole('gen_alice', 'owner', 'gen_alice'), 'Cannot remove the last owner', 'Cannot remove the last owner');
     assert(isNodeOwner('gen_alice') === true, 'Alice is STILL an owner');
+
+    // Demoting the last owner to admin is also blocked
+    throws(() => grantNodeRole('gen_alice', 'admin', 'gen_alice'), 'Cannot remove the last owner', 'Demoting the last owner to admin throws');
+    assert(isNodeOwner('gen_alice') === true, 'Alice is STILL an owner after blocked demotion');
 
     // Regression (Finding 3): Revoking owner from a non-owner on a single-owner node does NOT throw "Cannot remove the last owner"
     revokeNodeRole('plain_user', 'owner', 'gen_alice');
@@ -413,6 +434,16 @@ async function main() {
         assert(aliceInList && aliceInList.nodeRole === 'owner', "Alice has nodeRole 'owner' in /api/community/members");
         assert(daveInList && daveInList.nodeRole === 'admin', "Dave has nodeRole 'admin' in /api/community/members");
         assert(plainInList && plainInList.nodeRole === null, "Plain has nodeRole null in /api/community/members");
+
+        // ── 11. Pruned account privilege revocation ──
+        seedMember('pruned_target', 'PrunedMember');
+        grantNodeRole('pruned_target', 'admin', 'gen_alice');
+        assert(nodeRoleOf('pruned_target') === 'admin', 'Target is admin before prune');
+        adminPruneUser('pruned_target');
+        assert(nodeRoleOf('pruned_target') === null, 'Pruned member has nodeRoleOf = null');
+        assert(isNodeAdmin('pruned_target') === false, 'Pruned member has isNodeAdmin = false');
+        assert(isNodeOwner('pruned_target') === false, 'Pruned member has isNodeOwner = false');
+        throws(() => grantNodeRole('pruned_target', 'admin', 'gen_alice'), 'Pruned accounts cannot hold a node role', 'Cannot grant role to pruned account');
 
     } finally {
         server.close();

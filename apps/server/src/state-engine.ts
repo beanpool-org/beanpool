@@ -2838,6 +2838,7 @@ export function adminPruneUser(publicKey: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -2957,6 +2958,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
 
     broadcast({ type: 'profile_updated', publicKey });

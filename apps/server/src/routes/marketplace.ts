@@ -352,8 +352,9 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        const actor = ctx.state?.actor as string | undefined;
         const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = acceptPost(postId, buyerPublicKey, parsedHours);
+        const tx = acceptPost(postId, buyerPublicKey, parsedHours, actor ? { authSigner: actor } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }

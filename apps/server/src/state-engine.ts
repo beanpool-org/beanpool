@@ -2137,8 +2137,8 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
-    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
 
 export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {

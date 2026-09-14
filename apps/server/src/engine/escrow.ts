@@ -407,7 +407,8 @@ export function acceptPost(
     cb: EscrowCallbacks,
     postId: string,
     buyerPublicKey: string,
-    hours?: number
+    hours?: number,
+    opts?: { authSigner?: string }
 ): MarketplaceTransaction {
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
@@ -446,6 +447,18 @@ export function acceptPost(
 
     const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+
+    // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
+    // When an enterprise accepts an Offer, the acting keeper cannot accept their own personal offer on behalf of the enterprise.
+    if (isEnterprisePayer && opts?.authSigner && opts.authSigner === post.authorPublicKey) {
+        const name = buyerMember?.callsign?.trim() || 'this enterprise';
+        const err: any = new Error(`Another keeper of ${name} needs to approve this — you cannot approve a job you are being paid for.`);
+        err.status = 403;
+        err.statusCode = 403;
+        err.code = 'TWO_PERSON_RULE';
+        throw err;
+    }
+
     const isPayeeKeeper = isEnterprisePayer && Boolean(
         db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
             .get(buyerPublicKey, post.authorPublicKey)
@@ -509,7 +522,15 @@ export function acceptPost(
 
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${tx.id}`);
 
-        const escrowResult = cb.transfer(buyerPublicKey, `escrow_${tx.id}`, finalCredits, `Escrow hold for offer ${post.id}`, 'escrow', true);
+        const escrowResult = cb.transfer(
+            buyerPublicKey,
+            `escrow_${tx.id}`,
+            finalCredits,
+            `Escrow hold for offer ${post.id}`,
+            'escrow',
+            true,
+            (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
+        );
         if (!escrowResult) throw new Error('Failed to lock funds in escrow — insufficient balance or ledger error');
 
         if (isPayeeKeeper) {

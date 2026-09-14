@@ -358,24 +358,32 @@ async function main() {
     `).run(eggCustomer, liveEggs, eggCustomer, liveEggs);
     // Give LiveCommunityEggs balance
     transfer('genesis', liveEggs, 24, 'Fund egg revenue', 'direct', true);
-    // Explicitly reset earned_surplus to 0 to simulate pre-migration state
+    // Explicitly reset earned_surplus to 0 and remove migration key to simulate pre-migration state
     db.prepare('UPDATE members SET earned_surplus = 0 WHERE public_key = ?').run(liveEggs);
+    db.prepare("DELETE FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").run();
     assert(surplusOf(liveEggs) === 0, 'LiveCommunityEggs starts with 0 earned surplus before backfill');
 
-    // Run the migration backfill query
-    db.prepare(`
-        UPDATE members
-        SET earned_surplus = MAX(0, COALESCE((
-            SELECT SUM(credits) FROM marketplace_transactions
-            WHERE seller_pubkey = members.public_key AND status = 'completed'
-              AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-        ), 0) - COALESCE((
-            SELECT SUM(credits) FROM marketplace_transactions
-            WHERE buyer_pubkey = members.public_key AND status = 'completed'
-              AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-        ), 0))
-        WHERE is_treasury = 1 AND (earned_surplus IS NULL OR earned_surplus = 0)
-    `).run();
+    // Run the migration backfill query (first boot)
+    const runMigration = () => {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET earned_surplus = MAX(0, COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE seller_pubkey = members.public_key AND status = 'completed'
+                      AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0) - COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE buyer_pubkey = members.public_key AND status = 'completed'
+                      AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0))
+                WHERE is_treasury = 1
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
+        }
+    };
+    runMigration();
 
     assert(surplusOf(liveEggs) === 24, 'LiveCommunityEggs earned_surplus accurately backfilled to 24 Beans from historical sales');
 
@@ -387,6 +395,10 @@ async function main() {
     const approveKeeperWage = approvePostRequest(keeperWageBid.id, liveEggs, { authSigner: eggKeeper2 });
     assert(approveKeeperWage !== null, 'Keepers are no longer stranded — backfilled surplus allows keeper wage approval');
     assert(surplusOf(liveEggs) === 9, 'Surplus decrements to 9 (24 - 15) after keeper wage approval');
+
+    // Simulate server reboot / node restart: runMigration() should be a NO-OP and NOT re-inflate spent surplus!
+    runMigration();
+    assert(surplusOf(liveEggs) === 9, 'Server reboot does NOT resurrect spent surplus to all-time sales (infinite wage glitch prevented)');
 
     // ─────────────────────────────────────────────────────────────────────────────
     // REGRESSION TEST 3: Escrow stranding prevention on hourly adjustment

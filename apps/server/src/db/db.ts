@@ -240,22 +240,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
     // Enterprise Credit Model (Rules 6 & 7)
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
-    try {
-        // Backfill earned_surplus for existing live enterprises (e.g. Community Eggs) from historical sales
-        db.prepare(`
-            UPDATE members
-            SET earned_surplus = MAX(0, COALESCE((
-                SELECT SUM(credits) FROM marketplace_transactions
-                WHERE seller_pubkey = members.public_key AND status = 'completed'
-                  AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-            ), 0) - COALESCE((
-                SELECT SUM(credits) FROM marketplace_transactions
-                WHERE buyer_pubkey = members.public_key AND status = 'completed'
-                  AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
-            ), 0))
-            WHERE is_treasury = 1 AND (earned_surplus IS NULL OR earned_surplus = 0)
-        `).run();
-    } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
@@ -434,6 +418,31 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_treasury_operators_member_treasury ON treasury_operators(member_pubkey, treasury_pubkey)`).run(); } catch { }
+
+    // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus for pre-existing enterprises
+    // from historical completed external sales. Gated behind node_config so it runs strictly once
+    // and never resets legitimately spent surplus on server reboot ("infinite wage glitch").
+    try {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_earned_surplus_backfilled_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET earned_surplus = MAX(0, COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE seller_pubkey = members.public_key AND status = 'completed'
+                      AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0) - COALESCE((
+                    SELECT SUM(credits) FROM marketplace_transactions
+                    WHERE buyer_pubkey = members.public_key AND status = 'completed'
+                      AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+                ), 0))
+                WHERE is_treasury = 1
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_earned_surplus_backfilled_v1', '1')").run();
+        }
+    } catch (e) {
+        console.error('[DB] Failed to backfill earned_surplus:', e);
+    }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta

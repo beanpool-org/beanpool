@@ -914,6 +914,12 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     }
 
     try {
+        const currentRole = nodeRoleOf(pubkey);
+        if (currentRole !== role) {
+            ctx.status = 404;
+            ctx.body = { error: `Member ${pubkey} does not hold role '${role}'` };
+            return;
+        }
         revokeNodeRole(pubkey, role as MemberNodeRole, effectiveActor);
         ctx.body = { success: true, message: `Revoked ${role} role from ${pubkey}` };
     } catch (e: any) {

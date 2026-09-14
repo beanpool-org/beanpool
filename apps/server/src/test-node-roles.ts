@@ -424,6 +424,13 @@ async function main() {
         assert(delLastOwner.status === 400, 'DELETE last owner returns 400');
         assert(isNodeOwner('gen_alice') === true, 'Alice cannot be deleted as last owner');
 
+        // DELETE role member does not hold -> 404
+        const delUnheld = await fetch(`${base}/api/local/admin/node-roles/plain_user/owner`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
+        });
+        assert(delUnheld.status === 404, 'DELETE unheld role returns 404');
+
         // Community members read path exposes nodeRole
         const memRes = await fetch(`${base}/api/community/members`);
         assert(memRes.status === 200, 'GET /api/community/members returns 200');

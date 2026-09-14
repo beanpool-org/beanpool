@@ -2145,10 +2145,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
                 }
 
-                // Radius filter: polls have null coordinates and never pin to map
+                // Radius filter: polls have null coordinates and never pin to map; allow when viewing polls tab
                 if (radiusSettings) {
                     filtered = filtered.filter(p => {
-                        if (p.type === 'poll') return false;
+                        if (p.type === 'poll') return typeFilter === 'poll';
                         if (p.lat == null || p.lng == null) return false;
                         const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
                         return dist <= radiusSettings.radiusKm;
@@ -2182,7 +2182,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
                     const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
-                    return !isPulse && p.status === 'active';
+                    return !isPulse && p.type !== 'poll' && p.status === 'active';
                 }).length;
                 if (realMemberListingsCount >= 2) {
                     filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));

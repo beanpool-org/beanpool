@@ -248,38 +248,86 @@ async function main() {
     assert(ceilingOf(cider) === 100, 'CommunityCider initialized with working_capital_ceiling = 100');
     assert(bal(cider) === 0, 'CommunityCider starts at 0 balance');
 
-    // Transfer 80 beans to Cider (under ceiling 100) -> no sweep
+    // Transfer 80 beans to Cider (under ceiling 100) -> capital/gift raises balance, not earned_surplus
     transfer('genesis', cider, 80, 'Seed cider coop', 'direct', true);
     assert(bal(cider) === 80, 'CommunityCider holds 80 beans (below 100 ceiling, no sweep)');
+    assert(surplusOf(cider) === 0, 'Direct transfer is capital/gift and does not increase earned_surplus');
 
-    // Transfer another 50 beans to Cider (80 + 50 = 130 > 100) -> excess 30 sweeps automatically!
+    // Transfer another 50 beans to Cider (80 + 50 = 130 > 100) -> capital/gift is NEVER swept!
     transfer('genesis', cider, 50, 'Additional capital', 'direct', true);
-    assert(bal(cider) === 100, 'CommunityCider balance automatically capped at ceiling 100 (30 swept to Commons)');
+    assert(bal(cider) === 130, 'CommunityCider holds 130 beans: grants and capital raise balance, not earned_surplus, and are never swept');
+    assert(surplusOf(cider) === 0, 'CommunityCider earned surplus remains 0');
 
-    // Complete a sale on Cider: sells cider for 40 beans
+    // Complete a sale on Cider: sells cider for 40 beans (net 39.40)
     createPost('offer', 'drinks', 'Apple cider 6-pack', 'Fresh pressed', 40, 'fixed', cider, undefined, undefined, undefined, true);
     const ciderOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(cider) as any;
     const charlieCiderBid = requestPost(ciderOffer.id, customerCharlie);
     approvePostRequest(charlieCiderBid.id, cider);
     completePostTransaction(charlieCiderBid.id, customerCharlie);
 
-    // Sale of 40 beans nets 39.40. Since balance was at 100, the full net proceeds of 39.40 sweep to Commons!
-    assert(bal(cider) === 100, 'After sale, balance above ceiling immediately sweeps to Commons, leaving balance at 100');
+    // Sale of 40 beans nets 39.40 to balance and 40 earned surplus. Since balance was 130 (> ceiling 100),
+    // sweepable = min(balance - ceiling, earned_surplus) = min(169.40 - 100, 40) = 40 sweeps to Commons!
+    // Balance becomes 130 + 39.40 - 40 = 129.40.
+    assert(bal(cider) === 129.40, 'After sale, excess earned surplus immediately sweeps to Commons, leaving balance at 129.40');
+    assert(surplusOf(cider) === 0, 'Swept earned surplus is decremented from earned_surplus');
 
-    // Admin updates ceiling: lowers ceiling to 60
+    // Admin updates ceiling: lowers ceiling to 60. Since earned_surplus is 0, nothing sweeps from capital!
     db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(60, cider);
-    const { sweepEnterpriseCeiling } = await import('./state-engine.js');
-    const sweptAmount = sweepEnterpriseCeiling(cider);
-    assert(sweptAmount === 40, 'Admin lowering ceiling sweeps excess (100 - 60 = 40) to Commons');
-    assert(bal(cider) === 60, 'CommunityCider balance reduced to new ceiling of 60');
+    const { sweepEnterpriseCeiling, closeVotingRound } = await import('./state-engine.js');
+    const sweptAmountNoSurplus = sweepEnterpriseCeiling(cider);
+    assert(sweptAmountNoSurplus === 0, 'Lowering ceiling does not sweep capital when earned_surplus is 0');
+    assert(bal(cider) === 129.40, 'CommunityCider balance remains 129.40');
+
+    // Now give Cider 50 earned surplus: lowering ceiling to 60 sweeps min(129.40 - 60, 50) = 50!
+    db.prepare('UPDATE members SET earned_surplus = 50 WHERE public_key = ?').run(cider);
+    const sweptWithSurplus = sweepEnterpriseCeiling(cider);
+    assert(sweptWithSurplus === 50, 'Admin lowering ceiling sweeps earned surplus (50) to Commons');
+    assert(bal(cider) === 79.40, 'CommunityCider balance reduced to 79.40 (129.40 - 50)');
+    assert(surplusOf(cider) === 0, 'CommunityCider earned surplus decremented to 0');
 
     // Batch/nested transaction sweeps via afterTransactionCommit (Rule 7 post-commit hook)
     const { publicKey: batchCider } = createTreasury('BatchCider', AVATAR, 100, { workingCapitalCeiling: 50 });
+    db.prepare('UPDATE members SET earned_surplus = 40 WHERE public_key = ?').run(batchCider);
     db.transaction(() => {
         transfer('genesis', batchCider, 30, 'Batch 1', 'direct', true);
-        transfer('genesis', batchCider, 40, 'Batch 2', 'direct', true); // Total 70 > ceiling 50
+        transfer('genesis', batchCider, 40, 'Batch 2', 'direct', true); // Total 70 > ceiling 50, surplus 40 -> sweeps 20
     })();
     assert(bal(batchCider) === 50, 'Enterprise swept to ceiling of 50 post-commit after batch transfers inside db.transaction');
+    assert(surplusOf(batchCider) === 20, 'Earned surplus decremented to 20 after 20 swept to Commons');
+
+    // Verify closeVotingRound does NOT sweep community project grants to enterprises
+    console.log('\n── Rule 7: Community project grant to enterprise is never swept ──');
+    const { publicKey: grantEnterprise } = createTreasury('GrantFarm', AVATAR, 100, { workingCapitalCeiling: 100 });
+    const grantKeeper = 'grant-keeper-000000000000000000000000000099';
+    seedMember(grantKeeper, 'GrantKeeper');
+    assignKeeper(grantEnterprise, grantKeeper);
+    assert(bal(grantEnterprise) === 0, 'GrantFarm starts at 0 balance');
+    const { moveToCommons } = await import('./state-engine.js');
+    moveToCommons('genesis', 500, 'Fund commons for grant test');
+    const projectsConfig = [{
+        id: 'proj-enterprise-farm-grant',
+        title: 'Solar pump for farm',
+        description: 'New water pump',
+        proposerPubkey: grantEnterprise,
+        requestedAmount: 500,
+        status: 'active',
+        votes: [{ pubkey: 'genesis', weight: 10, creditsUsed: 100 }],
+        createdAt: new Date().toISOString(),
+    }];
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('commons_projects', ?)`).run(JSON.stringify(projectsConfig));
+    const roundConfig = [{
+        id: 'round-farm-grant',
+        projectIds: ['proj-enterprise-farm-grant'],
+        closesAt: new Date(Date.now() - 1000).toISOString(),
+        status: 'open',
+        createdAt: new Date().toISOString(),
+    }];
+    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('voting_rounds', ?)`).run(JSON.stringify(roundConfig));
+
+    const closeRes = closeVotingRound('round-farm-grant');
+    assert(closeRes.success, 'Voting round closed successfully');
+    assert(bal(grantEnterprise) === 500, 'GrantFarm holds entire 500-bean grant (ceiling of 100 did NOT sweep it)');
+    assert(surplusOf(grantEnterprise) === 0, 'Project grant does not increment earned_surplus');
 
     // Rule 7 constraint: The ceiling must NOT be editable by the enterprise's own keepers (admin-only for now)
     const keeperEndpoints = ['/api/treasury/:treasury/offer', '/api/treasury/:treasury/need', '/api/treasury/:treasury/approve', '/api/treasury/:treasury/complete', '/api/treasury/:treasury/sweep'];

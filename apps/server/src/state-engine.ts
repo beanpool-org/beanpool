@@ -2023,21 +2023,27 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
  * When balance exceeds ceiling, the excess sweeps to COMMONS_POOL via moveToCommons inside a conservingTransaction.
  */
 export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
-    const row = db.prepare('SELECT working_capital_ceiling, is_treasury FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    const row = db.prepare('SELECT working_capital_ceiling, is_treasury, earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
     if (row?.is_treasury === 1 && row.working_capital_ceiling !== null && row.working_capital_ceiling !== undefined) {
         const ceiling = Number(row.working_capital_ceiling);
         if (ceiling >= 0) {
             const { balance } = getBalance(enterprisePubkey);
-            const excess = Math.round((balance - ceiling) * 100) / 100;
+            const earnedSurplus = Math.max(0, Number(row.earned_surplus ?? 0));
+            // THE SWEEP TAKES ONLY EARNED SURPLUS, NEVER GRANT MONEY (docs/the-commons.md §2.4 Rule 7).
+            // sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))
+            const excess = Math.round(Math.max(0, Math.min(balance - ceiling, earnedSurplus)) * 100) / 100;
             if (excess > 0) {
                 let sweptTxn: Transaction | null = null;
                 try {
                     sweptTxn = conservingTransaction(() => {
-                        return moveToCommons(
+                        const txn = moveToCommons(
                             enterprisePubkey,
                             excess,
                             `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
                         );
+                        db.prepare('UPDATE members SET earned_surplus = MAX(0, COALESCE(earned_surplus, 0) - ?) WHERE public_key = ?')
+                            .run(excess, enterprisePubkey);
+                        return txn;
                     });
                 } catch (err) {
                     console.error(`[EnterpriseCeiling] Failed to sweep ${excess} beans from ${enterprisePubkey}:`, err);
@@ -3541,10 +3547,8 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
-            const toMember = getMember(winner.proposerPubkey);
-            if (toMember?.isTreasury) {
-                sweepEnterpriseCeiling(winner.proposerPubkey);
-            }
+            // Community-voted project grants are capital grants (raise balance, never earned_surplus).
+            // Under Rule 7 (docs/the-commons.md §2.4), sweeps take only earned surplus, never grant money.
         } else {
             winner.status = 'proposed';
         }

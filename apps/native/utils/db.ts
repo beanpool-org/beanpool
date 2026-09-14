@@ -252,7 +252,18 @@ async function _doInitDB() {
             reach TEXT DEFAULT 'local',
             reach_peers TEXT,
             author_energy_cycled INTEGER DEFAULT 0,
-            author_founding_needed INTEGER DEFAULT 1
+            author_founding_needed INTEGER DEFAULT 1,
+            poll_options TEXT,
+            poll_closes_at DATETIME
+        );
+
+        CREATE TABLE IF NOT EXISTS poll_votes (
+            post_id TEXT NOT NULL,
+            voter_pubkey TEXT NOT NULL,
+            option_id TEXT NOT NULL,
+            signature TEXT,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (post_id, voter_pubkey)
         );
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
@@ -430,6 +441,21 @@ async function _doInitDB() {
         // #143 step 4: per-listing reach control for federation
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
+        // Community Polls migrations
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
+        try {
+            await database.execAsync(`
+                CREATE TABLE IF NOT EXISTS poll_votes (
+                    post_id TEXT NOT NULL,
+                    voter_pubkey TEXT NOT NULL,
+                    option_id TEXT NOT NULL,
+                    signature TEXT,
+                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (post_id, voter_pubkey)
+                );
+            `);
+        } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
         try { 
             await database.execAsync(`
@@ -561,6 +587,19 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
 
+        if (r.type === 'poll') {
+            if (typeof r.poll_options === 'string') {
+                try { r.pollOptions = JSON.parse(r.poll_options); } catch { r.pollOptions = []; }
+            } else if (Array.isArray(r.poll_options)) {
+                r.pollOptions = r.poll_options;
+            } else if (Array.isArray(r.pollOptions)) {
+                // already array
+            } else {
+                r.pollOptions = [];
+            }
+            r.pollClosesAt = r.poll_closes_at || r.pollClosesAt;
+        }
+
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
@@ -619,7 +658,7 @@ export async function getPost(id: string) {
                 await acquireSyncLock();
                 try {
                     await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [
                             p.id ?? id,
                             p.type ?? null,
@@ -647,7 +686,9 @@ export async function getPost(id: string) {
                             p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
                             p.reach || 'local',
-                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null
+                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null,
+                            p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
+                            p.poll_closes_at || p.pollClosesAt || null
                         ]
                     );
                 } finally {
@@ -1505,6 +1546,12 @@ export async function createPost(post: any) {
         // #143 step 4 — per-listing reach. Omitted fields default to 'local' on the server.
         ...(post.reach ? { reach: post.reach } : {}),
         ...(post.reach === 'peers' && post.reachPeers ? { reachPeers: post.reachPeers } : {}),
+        ...(post.type === 'poll' ? {
+            options: {
+                pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
+                durationDays: post.durationDays || 7
+            }
+        } : {})
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
@@ -1560,14 +1607,85 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
-         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null]
+         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
+         post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
+         post.poll_closes_at || null]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
+}
+
+export async function votePoll(postId: string, optionId: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline.');
+    }
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+    const body = {
+        postId,
+        optionId,
+        voterPublicKey: identity.publicKey
+    };
+    const bodyString = JSON.stringify(body);
+    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, {
+        method: 'POST',
+        headers,
+        body: bodyString
+    });
+    if (!res.ok) {
+        const txt = await res.text();
+        let errMsg = 'Failed to record vote';
+        try {
+            const j = JSON.parse(txt);
+            if (j.error) errMsg = j.error;
+        } catch {
+            if (txt) errMsg = txt;
+        }
+        throw new Error(errMsg);
+    }
+    return await res.json();
+}
+
+export async function closePoll(postId: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline.');
+    }
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+    const body = {
+        postId,
+        authorPublicKey: identity.publicKey
+    };
+    const bodyString = JSON.stringify(body);
+    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/close`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/close`, {
+        method: 'POST',
+        headers,
+        body: bodyString
+    });
+    if (!res.ok) {
+        const txt = await res.text();
+        let errMsg = 'Failed to close poll';
+        try {
+            const j = JSON.parse(txt);
+            if (j.error) errMsg = j.error;
+        } catch {
+            if (txt) errMsg = txt;
+        }
+        throw new Error(errMsg);
+    }
+    return await res.json();
 }
 
 export async function createProject(project: {
@@ -2040,7 +2158,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             // Deleted posts are transmitted with active=0 and tombstoned here natively.
             for (const p of delta.posts) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         p.id ?? null,
                         p.type ?? null,
@@ -2065,7 +2183,9 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                         p.updated_at || p.updatedAt || null,
                         p.origin_node || p.originNode || null,
                         p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0)
+                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+                        p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
+                        p.poll_closes_at || p.pollClosesAt || null
                     ]
                 );
             }

@@ -50,6 +50,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                 const b: BalanceInfo = await getBalance(identity.publicKey);
                 const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
                 setIsKeeperOfThis(mine.includes(pubkey));
+            } else {
+                setIsKeeperOfThis(false);
             }
         } catch (e: any) {
             setError(e.message || 'Could not load community enterprise details');

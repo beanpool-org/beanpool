@@ -1106,14 +1106,14 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit Enterprise Account (docs/the-commons.md §2.1)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, projectId);
+                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
 
                 // Record atomic Sweep Transaction
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`sweep_${txId}`, escrowPubkey, projectId, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
+                `).run(`sweep_${txId}`, escrowPubkey, project.creator_pubkey, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
         }
     });

@@ -246,16 +246,15 @@ async function runTests() {
     reconcileLedgerFromDb();
 
     // Verify auto-sweep behavior:
-    // Pledges land in ENTERPRISE account, NOT creator's personal balance! (docs/the-commons.md §2.1)
+    // Escrow is fully drained to 0, creator is credited with 200 beans (settled under #138 to close demurrage window)
     testAssert(getBalance(testBacker).balance === 300, 'Backer debited to 300');
     testAssert(getBalance(`escrow_${testProject}`).balance === 0, 'Escrow balance fully drained to 0');
-    testAssert(getBalance(testCreator).balance === 100, 'Creator personal balance remained 100 (DID NOT receive pledge sweep!)');
-    testAssert(getBalance(testProject).balance === 200, 'Enterprise account credited with 200 beans!');
+    testAssert(getBalance(testCreator).balance === 300, 'Creator credited with 200 beans (100 -> 300)');
 
-    // Verify sweep transaction was recorded to the enterprise
+    // Verify sweep transaction was recorded to creator
     const sweepTx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(`sweep_${pledge2TxId}`) as any;
     testAssert(!!sweepTx, 'Sweep transaction recorded');
-    testAssert(sweepTx.to_pubkey === testProject, 'Sweep transaction to_pubkey is the enterprise account');
+    testAssert(sweepTx.to_pubkey === testCreator, 'Sweep transaction to_pubkey is the creator account');
     testAssert(sweepTx.amount === 200, 'Sweep transaction amount is 200');
 
     // Verify ledger conservation

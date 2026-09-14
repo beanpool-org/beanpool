@@ -13,7 +13,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-vouch-covenant.ts
  */
 import {
-    initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
+    initStateEngine, getFirstNodeAdminPubkey, seedGenesisMember, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
     isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
 } from './state-engine.js';
@@ -47,7 +47,8 @@ const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
 function main() {
     console.log('Running Elder-vouch + covenant test...\n');
     initStateEngine();
-    const admin = getAdminPubkey();
+    seedGenesisMember('genesis_admin', 'Admin');
+    const admin = getFirstNodeAdminPubkey();
 
     // ── 1. canVouch capability (admin-granted, never tier-derived) ──
     seedMember('elderA'); seedMember('plain');

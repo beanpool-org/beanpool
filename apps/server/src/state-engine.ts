@@ -21,6 +21,28 @@ import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+} from './engine/node-roles.js';
+export {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+};
+import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
@@ -1047,11 +1069,10 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     const inviterKey = member?.invitedBy;
     if (!inviterKey || inviterKey === targetPubkey) return null;
 
-    const adminKey = getAdminPubkey();
     if (inviterKey === 'genesis') {
         return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
-    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+    if (inviterKey === 'SYSTEM' || isNodeAdmin(inviterKey)) {
         return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
     const inviter = getMember(inviterKey);
@@ -1191,7 +1212,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
@@ -1220,6 +1241,8 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
         isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
+        // nodeRole: explicit owner/admin role (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+        nodeRole: nodeRoleOf(publicKey),
     };
 }
 
@@ -1683,17 +1706,17 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
  * The system admin is exempt — it acts at the system level, not as a participant.
  */
 export function hasListedOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isNodeAdmin(publicKey)) return true;
     return hasListedOfferEngine(db, publicKey);
 }
 
 export function hasLiveOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isNodeAdmin(publicKey)) return true;
     return hasLiveOfferEngine(db, publicKey);
 }
 
 export function liveOfferCount(publicKey: string): number {
-    if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
+    if (isNodeAdmin(publicKey)) return OFFER_BANDS.length - 1;
     return liveOfferCountEngine(db, publicKey);
 }
 
@@ -1710,7 +1733,7 @@ export function usableFloor(publicKey: string): number {
  * set via adminSetVoucher), plus the system admin who always holds it.
  */
 export function canVouch(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isNodeAdmin(publicKey)) return true;
     const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_vouch;
 }
@@ -1728,7 +1751,7 @@ export function canVouch(publicKey: string): boolean {
  * Distinct from the 'Steward' tier (a cosmetic badge) and from node role (replication topology).
  */
 export function canOperate(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isNodeAdmin(publicKey)) return true;
     const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_operate;
 }
@@ -1744,7 +1767,7 @@ export function canOperate(publicKey: string): boolean {
  * The system admin retains a node-wide override — they create the enterprises in the first place.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isNodeAdmin(publicKey)) return true;
     if (!canOperate(publicKey)) return false;
     const row = db.prepare(
         "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
@@ -1759,7 +1782,7 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
  * The admin holds a node-wide override, so they get every treasury.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (publicKey === getAdminPubkey()) {
+    if (isNodeAdmin(publicKey)) {
         return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
             .map(r => r.public_key);
     }
@@ -1864,7 +1887,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
-    const isAdmin = actorPubkey === getAdminPubkey();
+    const isAdmin = isNodeAdmin(actorPubkey);
     if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
@@ -2626,15 +2649,6 @@ export function getCommunityHealth(): CommunityHealth {
 
 // ===================== ADMIN CONTROLS =====================
 
-export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
-    // Empty string, not 'system', when a node has no human admin. Every override site is
-    // `publicKey === getAdminPubkey()`, so a placeholder return value GRANTS ADMIN to anyone
-    // presenting that same literal as their actor — the old 'system' fallback matched itself.
-    // '' can never equal a public key, and routes reject a missing actor before they get here.
-    return row ? row.public_key : '';
-}
-
 /**
  * Write the status row only, with no broadcast.
  *
@@ -2976,8 +2990,8 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     }
 }
 
-export function adminSendMessage(targetPubkey: string, body: string) {
-    const adminPubkey = getAdminPubkey();
+export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
+    const adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || 'SYSTEM';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3207,8 +3221,7 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    const admin = getMember(adminPubkey);
-    if (!admin || (admin.invitedBy !== 'genesis' && admin.invitedBy !== null && admin.invitedBy !== undefined) || getActiveRound()) return null;
+    if (!isNodeAdmin(adminPubkey) || getActiveRound()) return null;
 
     const projects = getAllProjects();
     for (const pid of projectIds) {

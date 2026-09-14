@@ -428,7 +428,15 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         if (newPostType === 'poll') {
             const errors = new Set<string>();
             if (!newPostTitle.trim()) errors.add('title');
-            const validOptions = pollOptions.map(o => o.trim()).filter(Boolean);
+            const cleanOptions = pollOptions.map(o => o.trim());
+            if (cleanOptions.some(o => !o)) {
+                errors.add('options_empty');
+            }
+            const validOptions = cleanOptions.filter(Boolean);
+            const uniqueOptions = new Set(validOptions.map(o => o.toLowerCase()));
+            if (uniqueOptions.size !== validOptions.length) {
+                errors.add('options_duplicate');
+            }
             if (validOptions.length < 2 || validOptions.length > 4) errors.add('options');
             setValidationErrors(errors);
             if (errors.size > 0) return;
@@ -453,7 +461,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 setPollDurationDays(7);
                 setShowNewPost(false);
                 refreshPosts();
-                if (onNavigate) onNavigate('marketplace', 'deals_active');
+                if (onNavigate) onNavigate('marketplace');
             } catch (e: any) {
                 alert(e.message || 'Failed to create poll.');
             }
@@ -896,11 +904,17 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 {/* Type toggle */}
                 <div className="flex gap-2 mb-4">
                     {(['offer', 'need', 'poll'] as const).map(t => (
-                        <button key={t} onClick={() => { setNewPostType(t); setValidationErrors(new Set()); }} className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
-                            newPostType === t
-                                ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
-                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
-                        }`}>
+                        <button
+                            key={t}
+                            type="button"
+                            aria-pressed={newPostType === t}
+                            onClick={() => { setNewPostType(t); setValidationErrors(new Set()); }}
+                            className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
+                                newPostType === t
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                            }`}
+                        >
                             {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : '🗳️ Poll'}
                         </button>
                     ))}
@@ -975,6 +989,12 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                                 >
                                     + Add option
                                 </button>
+                            )}
+                            {validationErrors.has('options_empty') && (
+                                <p className="text-red-500 text-xs mt-1">Please fill or remove blank options.</p>
+                            )}
+                            {validationErrors.has('options_duplicate') && (
+                                <p className="text-red-500 text-xs mt-1">Options must be distinct.</p>
                             )}
                             {validationErrors.has('options') && (
                                 <p className="text-red-500 text-xs mt-1">Please provide at least 2 non-empty options.</p>

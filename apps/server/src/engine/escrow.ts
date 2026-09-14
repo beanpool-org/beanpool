@@ -447,7 +447,8 @@ export function completePostTransaction(
         releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
         if (!releaseResult) throw new Error('Failed to release escrow funds');
 
-        db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ?`).run(completedAt, transactionId);
+        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
+        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
 
         if (post && !post.repeatable) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);

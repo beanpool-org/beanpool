@@ -247,7 +247,8 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
             return;
         }
-        const tx = approvePostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        const actor = (ctx.state?.actor as string) || authorPublicKey;
+        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to approve request');
@@ -303,7 +304,8 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
     }
     const parsedFinalHours = finalHours != null ? Number(finalHours) : undefined;
     try {
-        const tx = completePostTransaction(transactionId, (ctx.state.actor as string) || confirmerPublicKey, parsedFinalHours);
+        const actor = (ctx.state?.actor as string) || confirmerPublicKey;
+        const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot complete — transaction not found or not authorized' };
@@ -312,7 +314,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e.status || e.statusCode || 400;
         ctx.body = { error: e.message || 'Escrow release failed' };
     }
 });

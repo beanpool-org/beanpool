@@ -25,6 +25,7 @@ import {
     canOperateTreasury, canAdministerTreasury, keeperOf, treasuryKeepers,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
     getBalance, adminSetUserStatus, adminDeletePost, getAdminPubkey,
+    transfer, createPost,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
@@ -40,7 +41,7 @@ function assert(cond: boolean, msg: string): void {
 function makeIdentity(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -192,7 +193,7 @@ async function main() {
     // Repair and moderation actions succeed for admin:
     adminSetUserStatus(eggs, 'disabled');
     const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10 });
-    assert(pausedOffer.status === 403 && pausedOffer.error?.startsWith('This enterprise has been closed'), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
+    assert(pausedOffer.status === 403 && Boolean(pausedOffer.error?.startsWith('This enterprise has been closed')), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
     adminSetUserStatus(eggs, 'active');
     const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10 });
     assert(unpausedOffer.status === 200, 'unpausing enterprise restores keeper operations');
@@ -219,6 +220,72 @@ async function main() {
     assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'revoking admin appointment removes spending authority');
     const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15 });
     assert(afterRevokeOffer.status === 403, `revoked admin is REFUSED again on spend route (got ${afterRevokeOffer.status})`);
+
+    // ── 9. Two-person rule & self-dealing guard for enterprise Needs ───────────
+    const bakery = createTreasury('CommunityBakery', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const alice = makeIdentity('alice');
+    const bob = makeIdentity('bob');
+
+    adminAssignTreasuryOperator(bakery, alice.pubKeyHex, 'admin');
+
+    // Keeper Alice posts Offer then Need for Bakery
+    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', credits: 8 });
+    assert(bakeryOffer.status === 200, 'Alice posts offer on Bakery');
+    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30 });
+    assert(bakeryNeed.status === 200, 'Alice posts need on Bakery');
+
+    // Keeper Alice bids on the need from her personal account
+    const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
+    assert(aliceBid.status === 200, 'Alice bids on Bakery need from personal account');
+    const dealTxId = aliceBid.body.transaction.id;
+
+    // Keeper Alice tries to approve her own bid -> REFUSED (403, friendly copy)
+    const selfApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, alice, { transactionId: dealTxId });
+    assert(selfApprove.status === 403, `Alice approving own bid is REFUSED 403 (got ${selfApprove.status})`);
+    assert(selfApprove.error === 'Another keeper of CommunityBakery needs to approve this — you cannot approve a job you are being paid for.',
+        `friendly refusal on self-approve: "${selfApprove.error}"`);
+
+    // Appoint Bob as second keeper: Bob approves Alice's bid -> SUCCEEDS
+    adminAssignTreasuryOperator(bakery, bob.pubKeyHex, 'admin');
+    const bobApprove = await signedFetch('POST', `/api/treasury/${bakery}/approve`, bob, { transactionId: dealTxId });
+    assert(bobApprove.status === 200, `second keeper Bob approves Alice's bid (got ${bobApprove.status})`);
+
+    // Keeper Alice tries to complete and pay herself -> REFUSED (403, friendly copy)
+    const selfComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, alice, { transactionId: dealTxId });
+    assert(selfComplete.status === 403, `Alice completing deal paying herself is REFUSED 403 (got ${selfComplete.status})`);
+    assert(selfComplete.error === 'Another keeper of CommunityBakery needs to complete this — you cannot complete a job you are being paid for.',
+        `friendly refusal on self-complete: "${selfComplete.error}"`);
+
+    // Keeper Bob completes and pays Alice -> SUCCEEDS
+    const bobComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, bob, { transactionId: dealTxId });
+    assert(bobComplete.status === 200, `second keeper Bob completes deal paying Alice (got ${bobComplete.status})`);
+    // Alice receives payout (30 minus 1.5% fee = 29.55)
+    assert(getBalance(alice.pubKeyHex).balance === 29.55, 'Alice received payment minus fee');
+
+    // Single-keeper enterprise: sole keeper cannot approve own bid -> REFUSED
+    const solo = createTreasury('SoloEnterprise', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const charlie = makeIdentity('charlie');
+    adminAssignTreasuryOperator(solo, charlie.pubKeyHex, 'admin');
+    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', credits: 10 });
+    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', credits: 20 });
+    const soloBid = await signedFetch('POST', '/api/marketplace/posts/request', charlie, { postId: soloNeed.body.post.id, buyerPublicKey: charlie.pubKeyHex });
+    const soloApprove = await signedFetch('POST', `/api/treasury/${solo}/approve`, charlie, { transactionId: soloBid.body.transaction.id });
+    assert(soloApprove.status === 403, `single keeper cannot approve own bid (got ${soloApprove.status})`);
+    assert(soloApprove.error === 'Another keeper of SoloEnterprise needs to approve this — you cannot approve a job you are being paid for.',
+        'single keeper gets friendly copy naming enterprise');
+
+    // Non-enterprise deals (peer to peer) are UNTOUCHED by this rule:
+    transfer('genesis', charlie.pubKeyHex, 100, 'seed charlie for escrow', 'direct', true);
+    createPost('offer', 'help', 'Charlie gardening', 'Garden help', 10, 'fixed', charlie.pubKeyHex);
+    const peerNeed = createPost('need', 'help', 'Help Charlie move', 'Moving boxes', 15, 'fixed', charlie.pubKeyHex);
+    assert(peerNeed !== null, 'Charlie creates personal need');
+    const dave = makeIdentity('dave');
+    const daveBid = await signedFetch('POST', '/api/marketplace/posts/request', dave, { postId: peerNeed!.id, buyerPublicKey: dave.pubKeyHex });
+    assert(daveBid.status === 200, 'Dave bids on Charlie personal need');
+    const peerApprove = await signedFetch('POST', '/api/marketplace/transactions/approve', charlie, { transactionId: daveBid.body.transaction.id, authorPublicKey: charlie.pubKeyHex });
+    assert(peerApprove.status === 200, `peer-to-peer personal need approval succeeds (got ${peerApprove.status})`);
+    const peerComplete = await signedFetch('POST', '/api/marketplace/transactions/complete', charlie, { transactionId: daveBid.body.transaction.id, confirmerPublicKey: charlie.pubKeyHex });
+    assert(peerComplete.status === 200, `peer-to-peer personal need completion succeeds (got ${peerComplete.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

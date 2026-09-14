@@ -444,6 +444,36 @@ export function initSchema() {
         console.error('[DB] Failed to backfill earned_surplus:', e);
     }
 
+    // Migration: Replace table-wide transaction_id UNIQUE on deferred_wage_claims with partial unique index
+    try {
+        const tableSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='deferred_wage_claims'").get() as any)?.sql || '';
+        if (tableSql.includes('transaction_id    TEXT UNIQUE') || tableSql.includes('transaction_id TEXT UNIQUE')) {
+            db.exec(`
+                CREATE TABLE deferred_wage_claims_new (
+                    id                TEXT PRIMARY KEY,
+                    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                    post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
+                    transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
+                    amount            REAL NOT NULL,
+                    status            TEXT NOT NULL DEFAULT 'pending',
+                    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    paid_at           DATETIME
+                );
+                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims;
+                DROP TABLE deferred_wage_claims;
+                ALTER TABLE deferred_wage_claims_new RENAME TO deferred_wage_claims;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
+                ON deferred_wage_claims(transaction_id)
+                WHERE transaction_id IS NOT NULL AND status IN ('pending', 'paid');
+                CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
+                CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
+            `);
+        }
+    } catch (e) {
+        console.error('[DB] Failed to rebuild deferred_wage_claims schema:', e);
+    }
+
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta
     // pull after this migration doesn't have to full-reconcile them. COALESCE falls

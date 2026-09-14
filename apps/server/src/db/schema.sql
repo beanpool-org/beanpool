@@ -733,12 +733,15 @@ CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
-    transaction_id    TEXT UNIQUE,
+    transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
     amount            REAL NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     paid_at           DATETIME
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
+ON deferred_wage_claims(transaction_id)
+WHERE transaction_id IS NOT NULL AND status IN ('pending', 'paid');
 CREATE INDEX IF NOT EXISTS idx_deferred_claims_enterprise ON deferred_wage_claims(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_deferred_claims_lookup ON deferred_wage_claims(enterprise_pubkey, keeper_pubkey, post_id, status);
 

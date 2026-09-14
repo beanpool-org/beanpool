@@ -469,12 +469,26 @@ async function main() {
     const countPending = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, 'post-dedup-1') as any).cnt;
     assert(countPending === 1, 'Only one pending claim exists in database despite repeated recording');
 
-    // 2. Replay prevention when claim status is 'paid'
+    // 2. Repeatable posts: once previous claim is paid, subsequent task creates a new claim (not swallowed)
     db.prepare("UPDATE deferred_wage_claims SET status = 'paid' WHERE id = ?").run(claimId1);
     const claimId3 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 15, 'post-dedup-1');
-    assert(claimId3 === claimId1, 'Paid claim is not replayed into a new pending claim (replay prevention)');
+    assert(claimId3 !== claimId1, 'Subsequent work on repeatable post creates a new claim instead of being swallowed by historical paid claim');
     const countTotal = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, 'post-dedup-1') as any).cnt;
-    assert(countTotal === 1, 'Still only one claim exists after attempted replay of paid claim');
+    assert(countTotal === 2, 'Two claims exist for post: 1 historical paid claim and 1 new pending claim');
+
+    // 2b. Retrying cancelled transaction does NOT crash on UNIQUE constraint
+    const retryTxId = 'tx-cancelled-retry-001';
+    const claimRetry1 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 10, 'post-dedup-1', retryTxId);
+    db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claimRetry1);
+    let retryCrashed = false;
+    let claimRetry2 = '';
+    try {
+        claimRetry2 = recordDeferredWageClaim(dedupTreasury, dedupKeeper, 10, 'post-dedup-1', retryTxId);
+    } catch (e) {
+        retryCrashed = true;
+    }
+    assert(!retryCrashed, 'Retrying transaction with cancelled claim does not crash with UNIQUE constraint error');
+    assert(claimRetry2 !== '', 'Retried transaction gets a valid claim ID');
 
     // 3. Dedup on acceptPost when enterprise has insufficient surplus
     createPost('offer', 'food', 'Keeper Bread', 'Daily baked loaf', 20, 'fixed', dedupKeeper, undefined, undefined, undefined, true);

@@ -15,7 +15,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, createPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance,
-    recordDeferredWageClaim, acceptPost,
+    recordDeferredWageClaim, acceptPost, cancelPostTransaction,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -421,6 +421,50 @@ async function main() {
 
     const acceptClaims = (db.prepare('SELECT COUNT(*) as cnt FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(dedupTreasury, keeperBread.id) as any).cnt;
     assert(acceptClaims === 1, 'Retrying acceptPost does NOT create duplicate deferred wage claims');
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // REGRESSION TEST 6: Transaction cancellation cancels pending deferred claims
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Regression Test 6: Transaction cancellation cancels pending claims ──');
+    const { publicKey: cancelTreasury } = createTreasury('CancelBakery', AVATAR, 100);
+    const cancelKeeper = 'cancel-keeper-000000000000000000000000000014';
+    const cancelCustomer = 'cancel-cust-000000000000000000000000000015';
+    seedMember(cancelKeeper, 'CancelKeeper');
+    seedMember(cancelCustomer, 'CancelCustomer');
+    assignKeeper(cancelTreasury, cancelKeeper);
+
+    // Give CancelBakery positive balance and surplus
+    transfer('genesis', cancelTreasury, 30, 'Fund cancel bakery', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus = 30 WHERE public_key = ?').run(cancelTreasury);
+
+    createPost('offer', 'food', 'Scones', 'Fresh scones', 30, 'fixed', cancelTreasury, undefined, undefined, undefined, true);
+    createPost('offer', 'skills', 'Baking help', 'Bake scones', 10, 'fixed', cancelKeeper, undefined, undefined, undefined, true);
+
+    const sconeNeed = createPost('need', 'work', 'Bake batch', 'Bake 50 scones', 20, 'fixed', cancelTreasury);
+    const sconeBid = requestPost(sconeNeed!.id, cancelKeeper);
+    approvePostRequest(sconeBid.id, cancelTreasury);
+
+    // Record an associated deferred claim for this transaction
+    const cancelClaimId = recordDeferredWageClaim(cancelTreasury, cancelKeeper, 10, sconeNeed!.id, sconeBid.id);
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(cancelClaimId) as any).status === 'pending', 'Deferred claim initially pending');
+
+    // Cancel transaction
+    const cancelResult = cancelPostTransaction(sconeBid.id, cancelTreasury);
+    assert(cancelResult !== null, 'Transaction cancelled successfully');
+    assert((db.prepare('SELECT status FROM deferred_wage_claims WHERE id = ?').get(cancelClaimId) as any).status === 'cancelled', 'Pending claim transitioned to cancelled upon transaction cancellation');
+
+    // Make an external sale to give CancelBakery more surplus and balance
+    transfer('genesis', cancelCustomer, 50, 'Seed CancelCustomer', 'direct', true);
+    createPost('offer', 'skills', 'Jam making', 'Make berry jam', 10, 'fixed', cancelCustomer, undefined, undefined, undefined, true);
+    const sconeOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(cancelTreasury) as any;
+    const custSconeBid = requestPost(sconeOffer.id, cancelCustomer);
+    approvePostRequest(custSconeBid.id, cancelTreasury);
+    completePostTransaction(custSconeBid.id, cancelCustomer);
+
+    // Assert that cancelled claim was NOT paid
+    const finalClaim = db.prepare('SELECT status, paid_at FROM deferred_wage_claims WHERE id = ?').get(cancelClaimId) as any;
+    assert(finalClaim.status === 'cancelled', 'Cancelled claim remained cancelled and was NOT paid by processDeferredWageClaims');
+    assert(finalClaim.paid_at === null, 'Cancelled claim has null paid_at');
 
     // Conservation check
     const { runLedgerAudit } = await import('./state-engine.js');

@@ -666,6 +666,9 @@ export function cancelPostTransaction(
 
         const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
         if (buyerMember?.is_treasury === 1) {
+            // Cancel any pending deferred wage claim associated with this transaction
+            db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE (transaction_id = ? OR (post_id = ? AND enterprise_pubkey = ? AND keeper_pubkey = ?)) AND status = 'pending'")
+                .run(transactionId, row.post_id, row.buyer_pubkey, row.seller_pubkey);
             const isPayeeKeeper = Boolean(
                 db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
                     .get(row.buyer_pubkey, row.seller_pubkey)

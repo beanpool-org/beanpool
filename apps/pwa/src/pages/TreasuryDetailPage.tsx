@@ -25,7 +25,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     // Operator Action States
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
-    const [actioningTxId, setActioningTxId] = useState<string | null>(null);
+    const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
     const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Post Modal State
@@ -108,7 +108,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
 
     const handleApproveBid = async (txId: string) => {
         try {
-            setActioningTxId(txId);
+            setActionState({ id: txId, type: 'approve' });
             setActionFeedback(null);
             await treasuryApprove(pubkey, txId);
             setActionFeedback({ type: 'success', message: 'Bid approved! Escrow funds locked in trust.' });
@@ -116,13 +116,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || 'Failed to approve bid.' });
         } finally {
-            setActioningTxId(null);
+            setActionState(null);
         }
     };
 
     const handleRejectBid = async (txId: string) => {
+        const confirmed = window.confirm('Are you sure you want to decline this request? The member will be notified.');
+        if (!confirmed) return;
         try {
-            setActioningTxId(txId);
+            setActionState({ id: txId, type: 'reject' });
             setActionFeedback(null);
             await treasuryReject(pubkey, txId);
             setActionFeedback({ type: 'success', message: 'Bid declined.' });
@@ -130,23 +132,35 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || 'Failed to decline bid.' });
         } finally {
-            setActioningTxId(null);
+            setActionState(null);
         }
     };
 
-    const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number) => {
-        const confirmed = window.confirm(`Release payment of ${credits ?? ''} 🫘 for "${postTitle || 'deal'}"? This action cannot be reversed.`);
-        if (!confirmed) return;
+    const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number, priceType?: string, initialHours?: number) => {
+        let finalHours: number | undefined;
+        if (priceType && priceType !== 'fixed') {
+            const input = window.prompt(`Enter hours worked for "${postTitle || 'deal'}":`, initialHours ? String(initialHours) : '1');
+            if (input === null) return;
+            const parsed = Number(input);
+            if (isNaN(parsed) || parsed <= 0) {
+                alert('Please enter a valid positive number of hours.');
+                return;
+            }
+            finalHours = parsed;
+        } else {
+            const confirmed = window.confirm(`Release payment of ${credits ?? ''} 🫘 for "${postTitle || 'deal'}"? This action cannot be reversed.`);
+            if (!confirmed) return;
+        }
         try {
-            setActioningTxId(txId);
+            setActionState({ id: txId, type: 'complete' });
             setActionFeedback(null);
-            await treasuryComplete(pubkey, txId);
+            await treasuryComplete(pubkey, txId, finalHours);
             setActionFeedback({ type: 'success', message: 'Payment released! Worker has been paid.' });
             await load();
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || 'Failed to release payment.' });
         } finally {
-            setActioningTxId(null);
+            setActionState(null);
         }
     };
 
@@ -410,19 +424,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     <div className="flex gap-2 pt-1">
                                                         <button
                                                             type="button"
-                                                            disabled={actioningTxId === b.id}
+                                                            disabled={actionState?.id === b.id}
                                                             onClick={() => handleApproveBid(b.id)}
-                                                            className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                         >
-                                                            {actioningTxId === b.id ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
+                                                            {actionState?.id === b.id && actionState?.type === 'approve' ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            disabled={actioningTxId === b.id}
+                                                            disabled={actionState?.id === b.id}
                                                             onClick={() => handleRejectBid(b.id)}
-                                                            className="py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
+                                                            className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
                                                         >
-                                                            Decline
+                                                            {actionState?.id === b.id && actionState?.type === 'reject' ? 'Declining…' : 'Decline'}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -431,11 +445,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     </div>
                                 )}
 
-                                {/* Active Deals to Pay / Complete */}
+                                {/* Active Deals */}
                                 {activeDeals.length > 0 && (
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
-                                            <span>Deals to Pay / Complete</span>
+                                            <span>Active Deals</span>
                                             <span className="bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 px-2 py-0.5 rounded-full text-[11px]">
                                                 {activeDeals.length}
                                             </span>
@@ -455,17 +469,26 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                         </span>
                                                     </div>
                                                     <div className="text-xs text-nature-500 dark:text-nature-400">
-                                                        Worker: <strong className="text-nature-800 dark:text-nature-200">{d.peer_callsign || 'Member'}</strong>
+                                                        {d.action_required === 'fulfill' ? 'Customer' : 'Worker'}: <strong className="text-nature-800 dark:text-nature-200">{d.peer_callsign || 'Member'}</strong>
                                                     </div>
                                                     <div className="pt-1">
-                                                        <button
-                                                            type="button"
-                                                            disabled={actioningTxId === d.id}
-                                                            onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits)}
-                                                            className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50"
-                                                        >
-                                                            {actioningTxId === d.id ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
-                                                        </button>
+                                                        {d.action_required === 'fulfill' ? (
+                                                            <div
+                                                                onClick={() => onNavigatePost?.(d.post_id)}
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
+                                                            >
+                                                                Fulfill Deal · Awaiting Customer Release
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                disabled={actionState?.id === d.id}
+                                                                onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                            >
+                                                                {actionState?.id === d.id && actionState?.type === 'complete' ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -582,15 +605,26 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
 
             {/* Post Offer / Need Modal */}
             {postModalMode && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => setPostModalMode(null)}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="post-modal-title"
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4 animate-in zoom-in-95 duration-200"
+                    >
                         <div className="flex justify-between items-center">
-                            <h2 className="text-lg font-black text-nature-900 dark:text-white">
+                            <h2 id="post-modal-title" className="text-lg font-black text-nature-900 dark:text-white">
                                 {postModalMode === 'offer' ? 'Post Enterprise Offer' : 'Post Enterprise Need'}
                             </h2>
                             <button
+                                type="button"
+                                aria-label="Close dialog"
                                 onClick={() => setPostModalMode(null)}
-                                className="text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 text-lg font-bold"
+                                className="text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 text-lg font-bold min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
                             >
                                 ✕
                             </button>

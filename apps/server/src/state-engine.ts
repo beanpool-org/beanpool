@@ -1580,6 +1580,7 @@ export function moveToCommons(
             id: crypto.randomUUID(),
             from, to: 'COMMONS_POOL', amount, taxFee: 0,
             memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
         };
         db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
             txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null

@@ -614,7 +614,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         </div>
                     </header>
                     
-                    <div className="flex-1 pb-24 max-w-lg sm:max-w-xl mx-auto w-full">
+                    <div className="flex-1 pb-72 md:pb-48 max-w-lg sm:max-w-xl mx-auto w-full">
                         {isEditingProject ? (
                             <div className="p-5 flex flex-col gap-4">
                                 {selectedProject.current_amount > 0 ? (
@@ -845,7 +845,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
 
                     {/* Pledge Sticky Footer */}
                     {identity?.publicKey !== selectedProject.creator_pubkey && !isEditingProject && (
-                        <div className="fixed bottom-0 left-0 right-0 bg-bg-card border-t border-border-secondary p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
+                        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 bg-bg-card border-t border-border-secondary p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-30">
                             <div className="max-w-md mx-auto">
                                 <div className="flex gap-2">
                                     <input 

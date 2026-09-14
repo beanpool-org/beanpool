@@ -2430,6 +2430,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         if (suspendUser && report.target_pubkey) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
+            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
             bumpMembersVersion();
@@ -2838,6 +2839,9 @@ export function isAdminPubkey(publicKey: string): boolean {
  */
 export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    if (status !== 'active') {
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+    }
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
@@ -2975,6 +2979,17 @@ export function adminDeletePost(postId: string) {
 }
 
 export function adminPruneUser(publicKey: string) {
+    if (isNodeOwner(publicKey)) {
+        const ownerCount = (db.prepare(
+            `SELECT COUNT(*) as c FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+        ).get(publicKey) as any)?.c || 0;
+        if (ownerCount === 0) {
+            throw new Error('Cannot prune the sole node owner; appoint another owner first');
+        }
+    }
+
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
     // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
     // them — `adminSetUserStatus` and the posts cancellation. If either throws, SQLite rolls the rows back
@@ -3047,6 +3062,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     }
     if (member.status === 'pruned') {
         return { ok: true, message: 'Account is already pruned' };
+    }
+
+    if (isNodeOwner(publicKey)) {
+        const ownerCount = (db.prepare(
+            `SELECT COUNT(*) as c FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+        ).get(publicKey) as any)?.c || 0;
+        if (ownerCount === 0) {
+            throw new Error('Cannot purge the sole node owner; appoint another owner first');
+        }
     }
 
     // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records

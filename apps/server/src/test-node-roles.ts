@@ -44,6 +44,8 @@ import {
     adminSetVoucher,
     vouchMember,
     adminPruneUser,
+    purgeMemberSelf,
+    adminSetUserStatus,
 } from './state-engine.js';
 import { db, seedNodeRolesFromGenesis } from './db/db.js';
 import Koa from 'koa';
@@ -485,6 +487,20 @@ async function main() {
         seedMember('disabled_user', 'DisabledUser');
         db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = 'disabled_user'").run();
         throws(() => grantNodeRole('disabled_user', 'admin', 'gen_alice'), 'Only active accounts can hold a node role', 'Cannot grant role to disabled account');
+
+        // Role revocation on status change
+        seedMember('status_change_user', 'StatusChangeUser');
+        grantNodeRole('status_change_user', 'admin', 'gen_alice');
+        assert(nodeRoleOf('status_change_user') === 'admin', 'status_change_user holds admin role');
+        adminSetUserStatus('status_change_user', 'disabled');
+        assert(nodeRoleOf('status_change_user') === null, 'status_change_user role is null after status changed to disabled');
+        assert(isNodeAdmin('status_change_user') === false, 'status_change_user is not admin after status changed to disabled');
+        const roleRow = db.prepare("SELECT * FROM node_roles WHERE member_pubkey = 'status_change_user'").get();
+        assert(!roleRow, 'node_roles row was deleted when status changed to disabled');
+
+        // Sole owner cannot be pruned or self-purged
+        throws(() => adminPruneUser('gen_alice'), 'Cannot prune the sole node owner; appoint another owner first', 'Cannot prune the sole node owner');
+        throws(() => purgeMemberSelf('gen_alice'), 'Cannot purge the sole node owner; appoint another owner first', 'Cannot self-purge the sole node owner');
 
     } finally {
         server.close();

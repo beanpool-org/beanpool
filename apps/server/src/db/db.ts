@@ -33,6 +33,7 @@ function wrapTxnFn(origFn: any) {
     if (typeof origFn !== 'function') return origFn;
     const wrapped = function (this: any, ...args: any[]) {
         const isOuter = !(db as any).inTransaction;
+        const hookCountBefore = pendingPostCommitHooks.length;
         try {
             const res = origFn.apply(this, args);
             if (isOuter && pendingPostCommitHooks.length > 0) {
@@ -43,9 +44,7 @@ function wrapTxnFn(origFn: any) {
             }
             return res;
         } catch (err) {
-            if (isOuter) {
-                pendingPostCommitHooks.length = 0;
-            }
+            pendingPostCommitHooks.length = hookCountBefore;
             throw err;
         }
     };

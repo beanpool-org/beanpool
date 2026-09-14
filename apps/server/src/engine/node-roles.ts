@@ -83,7 +83,7 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * - Target member must exist in members table
  * - A treasury (is_treasury=1) can NEVER hold a node role
  * - Only an owner may grant 'owner' (unless bootstrapping on a node with 0 owners)
- * - Only an owner may grant 'admin' if an actor is specified
+ * - Only an owner may grant 'admin'
  */
 export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
     if (role !== 'owner' && role !== 'admin') {
@@ -106,7 +106,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             throw new Error('Only an owner may grant the owner role');
         }
     } else if (role === 'admin') {
-        if (actorPubkey && !isNodeOwner(actorPubkey)) {
+        if (!actorPubkey || !isNodeOwner(actorPubkey)) {
             throw new Error('Only an owner may grant the admin role');
         }
     }
@@ -126,7 +126,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
  * Enforces:
  * - Only an owner may revoke 'owner'
  * - Never allow the last owner to be removed
- * - Only an owner may revoke 'admin' if an actor is specified
+ * - Only an owner may revoke 'admin'
  */
 export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
     if (role !== 'owner' && role !== 'admin') {
@@ -143,7 +143,7 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             throw new Error('Cannot remove the last owner');
         }
     } else if (role === 'admin') {
-        if (actorPubkey && !isNodeOwner(actorPubkey)) {
+        if (!actorPubkey || !isNodeOwner(actorPubkey)) {
             throw new Error('Only an owner may revoke the admin role');
         }
     }

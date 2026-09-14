@@ -153,6 +153,10 @@ async function main() {
     // Non-owner cannot grant admin
     throws(() => grantNodeRole('dave', 'admin', 'plain_user'), 'Only an owner may grant the admin role', 'Plain member cannot grant admin');
 
+    // Regression (Finding 1): Missing actorPubkey cannot grant admin
+    throws(() => grantNodeRole('dave', 'admin'), 'Only an owner may grant the admin role', 'Missing actorPubkey cannot grant admin');
+    throws(() => grantNodeRole('dave', 'admin', ''), 'Only an owner may grant the admin role', 'Empty actorPubkey cannot grant admin');
+
     // Owner CAN grant admin
     grantNodeRole('dave', 'admin', 'gen_alice');
     assert(nodeRoleOf('dave') === 'admin', "nodeRoleOf(Dave) is 'admin'");
@@ -174,6 +178,10 @@ async function main() {
 
     // Admin cannot revoke admin
     throws(() => revokeNodeRole('dave', 'admin', 'dave'), 'Only an owner may revoke the admin role', 'Admin Dave cannot revoke admin');
+
+    // Regression (Finding 1): Missing actorPubkey cannot revoke admin
+    throws(() => revokeNodeRole('dave', 'admin'), 'Only an owner may revoke the admin role', 'Missing actorPubkey cannot revoke admin');
+    throws(() => revokeNodeRole('dave', 'admin', ''), 'Only an owner may revoke the admin role', 'Empty actorPubkey cannot revoke admin');
 
     // Owner can revoke admin
     revokeNodeRole('dave', 'admin', 'gen_alice');

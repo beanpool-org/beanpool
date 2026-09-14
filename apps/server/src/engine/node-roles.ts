@@ -133,20 +133,29 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
         throw new Error("Role must be 'owner' or 'admin'");
     }
 
-    if (role === 'owner') {
-        if (!actorPubkey || !isNodeOwner(actorPubkey)) {
-            throw new Error('Only an owner may revoke the owner role');
+    db.transaction(() => {
+        if (role === 'owner') {
+            if (!actorPubkey || !isNodeOwner(actorPubkey)) {
+                throw new Error('Only an owner may revoke the owner role');
+            }
+            if (!isNodeOwner(targetPubkey)) {
+                return;
+            }
+
+            const ownerCount = (db.prepare(
+                `SELECT COUNT(*) as c FROM node_roles nr
+                 JOIN members m ON nr.member_pubkey = m.public_key
+                 WHERE nr.role = 'owner' AND m.status != 'pruned'`
+            ).get() as any)?.c || 0;
+            if (ownerCount <= 1) {
+                throw new Error('Cannot remove the last owner');
+            }
+        } else if (role === 'admin') {
+            if (!actorPubkey || !isNodeOwner(actorPubkey)) {
+                throw new Error('Only an owner may revoke the admin role');
+            }
         }
 
-        const ownerCount = (db.prepare("SELECT COUNT(*) as c FROM node_roles WHERE role = 'owner'").get() as any)?.c || 0;
-        if (ownerCount <= 1) {
-            throw new Error('Cannot remove the last owner');
-        }
-    } else if (role === 'admin') {
-        if (!actorPubkey || !isNodeOwner(actorPubkey)) {
-            throw new Error('Only an owner may revoke the admin role');
-        }
-    }
-
-    db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
+        db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
+    })();
 }

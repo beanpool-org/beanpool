@@ -204,6 +204,13 @@ async function main() {
     throws(() => revokeNodeRole('gen_alice', 'owner', 'gen_alice'), 'Cannot remove the last owner', 'Cannot remove the last owner');
     assert(isNodeOwner('gen_alice') === true, 'Alice is STILL an owner');
 
+    // Regression (Finding 3): Revoking owner from a non-owner on a single-owner node does NOT throw "Cannot remove the last owner"
+    revokeNodeRole('plain_user', 'owner', 'gen_alice');
+    assert(isNodeOwner('plain_user') === false, 'Revoking non-owner on single-owner node is safe no-op');
+    revokeNodeRole('dave', 'owner', 'gen_alice');
+    assert(isNodeOwner('dave') === false, 'Revoking admin from owner role on single-owner node does not raise false last-owner error');
+    assert(isNodeOwner('gen_alice') === true, 'Alice is STILL an owner after non-owner revoke attempts');
+
     // ── 7. Overrides: Former getAdminPubkey() call sites ──
     // Owner (Alice): has overrides
     assert(hasListedOffer('gen_alice') === true, 'Owner hasListedOffer override');

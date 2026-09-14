@@ -685,6 +685,21 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
 -- drives the Commons tab's per-enterprise controls.
 CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(member_pubkey);
 
+-- 22. Node owner and admin roles (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+-- Coordination and attribution record for authority over the node machine. Replaces the inferred
+-- getAdminPubkey() mechanism with explicit role assignments.
+--
+-- role CHECK IN ('owner', 'admin').
+-- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
+CREATE TABLE IF NOT EXISTS node_roles (
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key),
+    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
+    granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    granted_by    TEXT,
+    PRIMARY KEY (member_pubkey, role)
+);
+CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
+
 -- 21. Cross-node settlements (#104) — the durable state machine behind charge-home settlement.
 --
 -- Spec: docs/federation-economics.md §2.5. This is the "outbox" the failure-handling rules require, and

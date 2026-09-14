@@ -46,6 +46,8 @@ import {
     adminPruneUser,
     purgeMemberSelf,
     adminSetUserStatus,
+    getMember,
+    adminSendMessage,
 } from './state-engine.js';
 import { db, seedNodeRolesFromGenesis } from './db/db.js';
 import Koa from 'koa';
@@ -485,6 +487,36 @@ async function main() {
         assert(aliceInList && aliceInList.nodeRole === 'owner', "Alice has nodeRole 'owner' in /api/community/members");
         assert(daveInList && daveInList.nodeRole === 'admin', "Dave has nodeRole 'admin' in /api/community/members");
         assert(plainInList && plainInList.nodeRole === null, "Plain has nodeRole null in /api/community/members");
+
+        // Public /api/members read path also batches nodeRole
+        const allMemRes = await fetch(`${base}/api/members`);
+        assert(allMemRes.status === 200, 'GET /api/members returns 200');
+        const allMembersList: any = await allMemRes.json();
+        const aliceInAll = allMembersList.find((m: any) => m.publicKey === 'gen_alice');
+        const daveInAll = allMembersList.find((m: any) => m.publicKey === 'dave');
+        const plainInAll = allMembersList.find((m: any) => m.publicKey === 'plain_user');
+        assert(aliceInAll && aliceInAll.nodeRole === 'owner', "Alice has nodeRole 'owner' in /api/members");
+        assert(daveInAll && daveInAll.nodeRole === 'admin', "Dave has nodeRole 'admin' in /api/members");
+        assert(plainInAll && plainInAll.nodeRole === null, "Plain has nodeRole null in /api/members");
+
+        // rowToMember standardizes on nodeRole: null (not omitted/undefined)
+        const plainMember = getMember('plain_user');
+        assert(plainMember !== undefined, 'getMember(plain_user) returns member');
+        const plainJson = JSON.stringify(plainMember);
+        assert(plainJson.includes('"nodeRole":null'), 'JSON.stringify(plainMember) includes "nodeRole":null');
+
+        // adminSendMessage fallback to 'system' does not blackhole
+        adminSendMessage('plain_user', 'Hello from fallback system', 'SYSTEM');
+        const inboxRes = await fetch(`${base}/api/local/admin/inbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        assert(inboxRes.status === 200, 'POST /api/local/admin/inbox returns 200');
+        const inboxBody: any = await inboxRes.json();
+        assert(Array.isArray(inboxBody.conversations), 'inbox returns conversations array');
+        const systemConv = inboxBody.conversations.find((c: any) => c.participants.includes('system') && c.participants.includes('plain_user'));
+        assert(Boolean(systemConv), 'Admin inbox retrieves conversation created via system fallback');
 
         // ── 11. Pruned account privilege revocation ──
         seedMember('pruned_target', 'PrunedMember');

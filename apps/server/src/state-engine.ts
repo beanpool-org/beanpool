@@ -2809,6 +2809,9 @@ export function getCommunityHealth(): CommunityHealth {
 
 // ===================== ADMIN CONTROLS =====================
 
+/**
+ * @deprecated Replaced by explicit node_roles. Use getFirstNodeAdminPubkey() or isNodeAdmin().
+ */
 export function getAdminPubkey(): string {
     const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND public_key != '' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
     // Empty string, not 'system', when a node has no human admin. Every override site is
@@ -3209,8 +3212,9 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
 }
 
 export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
-    const adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
     if (!adminPubkey) throw new Error('No genesis admin configured');
+    if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }

@@ -26,7 +26,7 @@ export interface MessagingCallbacks {
 }
 
 function assertMemberActive(publicKey: string): void {
-    if (isSyntheticAccount(publicKey)) return;
+    if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');

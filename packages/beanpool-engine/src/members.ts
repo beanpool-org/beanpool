@@ -97,7 +97,7 @@ export function rowToMember(row: any): Member {
         elderVouchedBy: row.elder_vouched_by || null,
         isTreasury: !!row.is_treasury,
         archetype: row.archetype || null,
-        nodeRole: row.node_role || undefined,
+        nodeRole: row.node_role ?? null,
     };
 }
 

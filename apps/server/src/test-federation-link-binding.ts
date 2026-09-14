@@ -108,9 +108,10 @@ async function runTests() {
     check(canOperateTreasury(outsider, linkWithAdmin.treasuryPubkey) === false,
         'Outsider cannot operate the federation link treasury');
 
-    // ── 3. Self-healing of previously unkept links ──
-    // The link created in step 1 had no operator. Calling ensureFederationLink or reconcileFederationLinks heals it.
-    ensureFederationLink(peerNoOwner, 'NoOwnerPeer', createTreasury);
+    // ── 3. Healing of previously unkept links with explicit operator ──
+    // Calling ensureFederationLink with explicit operator binds the operator to existing unbound links.
+    // Background reconciliation without operator parameter does not auto-rebind, preserving admin revocations.
+    ensureFederationLink(peerNoOwner, 'NoOwnerPeer', createTreasury, admin);
     const healedRow = db.prepare('SELECT member_pubkey, role, granted_by FROM treasury_operators WHERE treasury_pubkey = ?').get(linkNoOwner.treasuryPubkey) as any;
     check(healedRow?.member_pubkey === admin, 'Previously unkept link is healed with admin operator');
     check(canOperateTreasury(admin, linkNoOwner.treasuryPubkey) === true, 'Admin can operate healed link');

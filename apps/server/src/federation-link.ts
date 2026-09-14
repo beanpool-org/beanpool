@@ -73,8 +73,8 @@ type CreateTreasuryFn = (
 export function findDefaultLinkOperator(): string | null {
     const adminRow = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND public_key != '' ORDER BY rowid ASC LIMIT 1").get() as any;
     if (adminRow?.public_key) return adminRow.public_key;
-    const firstMember = db.prepare("SELECT public_key FROM members WHERE public_key != 'SYSTEM' AND is_treasury = 0 AND public_key != '' ORDER BY rowid ASC LIMIT 1").get() as any;
-    return firstMember?.public_key || null;
+    // Do not fall back to arbitrary members: return null to prevent privilege escalation
+    return null;
 }
 
 export function ensureFederationLink(
@@ -87,15 +87,15 @@ export function ensureFederationLink(
 
     const existing = getFederationLink(peerId);
     if (existing) {
-        // Heal existing link if missing a keeper binding
-        const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ?").get(existing.treasuryPubkey);
-        if (!bound) {
-            const op = operatorPubkey || findDefaultLinkOperator();
-            if (op) {
+        // Do not auto-rebind default keepers if administrators have deliberately
+        // revoked them. Only bind if explicitly requested with operatorPubkey.
+        if (operatorPubkey) {
+            const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(existing.treasuryPubkey, operatorPubkey);
+            if (!bound) {
                 db.transaction(() => {
                     db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-                                VALUES (?, ?, 'keeper', 'system')`).run(existing.treasuryPubkey, op);
-                    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(op);
+                                VALUES (?, ?, 'keeper', 'admin')`).run(existing.treasuryPubkey, operatorPubkey);
+                    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(operatorPubkey);
                 })();
             }
         }
@@ -261,7 +261,11 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
         if (!peerId) continue;                       // no peer id = nothing to key a bridge or a link on
         const existing = getFederationLink(peerId);
         if (existing) {
-            ensureFederationLink(peerId, connector.callsign, createTreasury);
+            try {
+                ensureFederationLink(peerId, connector.callsign, createTreasury);
+            } catch (e: any) {
+                logger.error('P2P', `[Link] Failed to reconcile existing link for ${peerId.slice(-8)}: ${e?.message || e}`);
+            }
             continue;
         }
         try {

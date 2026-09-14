@@ -358,6 +358,9 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_treasury_operators_member_treasury ON treasury_operators(member_pubkey, treasury_pubkey)`).run(); } catch { }
 
     // Phase 2 delta backup — backfill the four newly-watermarked mutable tables.
     // Seed each row's updated_at from the best existing timestamp so a first delta

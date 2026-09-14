@@ -12,6 +12,7 @@ import {
     pausePost, resumePost, getMarketplaceTransactions,
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
+    canOperateTreasury,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -22,6 +23,36 @@ import type { RouteDeps } from './types.js';
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+
+    const isTreasury = (pk: string): boolean =>
+        !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
+
+    /**
+     * Authenticated actor authorization check.
+     * The actor must come from the verified session (ctx.state.actor).
+     * A body-supplied identity is accepted only when the actor is that identity,
+     * or is a keeper entitled to act for it (via canOperateTreasury for enterprises).
+     */
+    function assertActorEntitled(ctx: any, targetPubkey: string): boolean {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return false;
+        }
+        if (actor === targetPubkey) {
+            return true;
+        }
+        if (isTreasury(targetPubkey) && canOperateTreasury(actor, targetPubkey)) {
+            return true;
+        }
+        ctx.status = 403;
+        ctx.body = { error: isTreasury(targetPubkey)
+            ? 'You are not an authorized keeper of this enterprise'
+            : 'Not authorized to act on behalf of this identity'
+        };
+        return false;
+    }
 
 // ===================== MARKETPLACE API (PUBLIC) =====================
 
@@ -129,10 +160,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
         return;
     }
+    if (!assertActorEntitled(ctx, authorPublicKey)) return;
     try {
         const post = createPost(
             type, category || 'other', title, description || '',
-            Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', (ctx.state.actor as string) || authorPublicKey,
+            Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
             photos,
@@ -168,7 +200,8 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             ctx.body = { error: 'id and authorPublicKey are required' };
             return;
         }
-        const removed = removePost(id, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const removed = removePost(id, authorPublicKey);
         if (removed) {
             syncPulseMarketplaceGate();
         }
@@ -187,7 +220,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             ctx.body = { error: 'id and authorPublicKey are required' };
             return;
         }
-        const post = updatePost(id, (ctx.state.actor as string) || authorPublicKey, updates);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const post = updatePost(id, authorPublicKey, updates);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };
@@ -210,8 +244,9 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             ctx.body = { error: 'postId and buyerPublicKey are required' };
             return;
         }
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = acceptPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
+        const tx = acceptPost(postId, buyerPublicKey, parsedHours);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -230,8 +265,9 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
             ctx.body = { error: 'postId and buyerPublicKey are required' };
             return;
         }
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = requestPost(postId, (ctx.state.actor as string) || buyerPublicKey, parsedHours);
+        const tx = requestPost(postId, buyerPublicKey, parsedHours);
         if (!tx) throw new Error('Cannot request — post not found or unauthorized');
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
@@ -247,8 +283,14 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
             return;
         }
-        const actor = (ctx.state?.actor as string) || authorPublicKey;
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const actor = ctx.state?.actor as string;
         const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
+        if (!tx) {
+            ctx.status = 400;
+            ctx.body = { error: 'Cannot approve — request not found or unauthorized' };
+            return;
+        }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         respondSettlementAware(ctx, err, 'Failed to approve request');
@@ -263,7 +305,8 @@ router.post('/api/marketplace/transactions/reject', async (ctx) => {
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
             return;
         }
-        const tx = rejectPostRequest(transactionId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const tx = rejectPostRequest(transactionId, authorPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot reject — request not found or unauthorized' };
@@ -283,7 +326,8 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
             ctx.body = { error: 'transactionId and buyerPublicKey are required' };
             return;
         }
-        const tx = cancelPostRequest(transactionId, (ctx.state.actor as string) || buyerPublicKey);
+        if (!assertActorEntitled(ctx, buyerPublicKey)) return;
+        const tx = cancelPostRequest(transactionId, buyerPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot cancel — request not found or unauthorized' };
@@ -296,15 +340,17 @@ router.post('/api/marketplace/transactions/cancel-request', async (ctx) => {
 });
 
 router.post('/api/marketplace/transactions/complete', async (ctx) => {
-    const { transactionId, confirmerPublicKey, finalHours } = (ctx as any).requestBody || {};
+    const { transactionId, confirmerPublicKey, finalHours, hours } = (ctx as any).requestBody || {};
     if (!transactionId || !confirmerPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'transactionId and confirmerPublicKey are required' };
         return;
     }
-    const parsedFinalHours = finalHours != null ? Number(finalHours) : undefined;
+    if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
+    const rawHours = finalHours !== undefined ? finalHours : hours;
+    const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
     try {
-        const actor = (ctx.state?.actor as string) || confirmerPublicKey;
+        const actor = ctx.state?.actor as string;
         const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });
         if (!tx) {
             ctx.status = 400;
@@ -314,7 +360,11 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
-        ctx.status = e.status || e.statusCode || 400;
+        const rawCode = e?.status ?? e?.statusCode;
+        const statusCode = typeof rawCode === 'number' && Number.isInteger(rawCode) && rawCode >= 400 && rawCode <= 599
+            ? rawCode
+            : 400;
+        ctx.status = statusCode;
         ctx.body = { error: e.message || 'Escrow release failed' };
     }
 });
@@ -327,7 +377,8 @@ router.post('/api/marketplace/transactions/cancel', async (ctx) => {
             ctx.body = { error: 'transactionId and cancellerPublicKey are required' };
             return;
         }
-        const tx = cancelPostTransaction(transactionId, (ctx.state.actor as string) || cancellerPublicKey);
+        if (!assertActorEntitled(ctx, cancellerPublicKey)) return;
+        const tx = cancelPostTransaction(transactionId, cancellerPublicKey);
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: 'Cannot cancel — transaction not found or not authorized' };
@@ -348,7 +399,8 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
             ctx.body = { error: 'postId and authorPublicKey are required' };
             return;
         }
-        const success = pausePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const success = pausePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
         }
@@ -367,7 +419,8 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
             ctx.body = { error: 'postId and authorPublicKey are required' };
             return;
         }
-        const success = resumePost(postId, (ctx.state.actor as string) || authorPublicKey);
+        if (!assertActorEntitled(ctx, authorPublicKey)) return;
+        const success = resumePost(postId, authorPublicKey);
         if (success) {
             syncPulseMarketplaceGate();
         }
@@ -386,10 +439,15 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.body = { error: 'publicKey query parameter is required' };
         return;
     }
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
-        ctx.status = 403;
-        ctx.body = { error: 'You may only view your own marketplace transactions' };
-        return;
+    if (ENFORCE_READ_AUTH) {
+        const actor = ctx.state?.actor as string | undefined;
+        const isSelf = actor === publicKey;
+        const isAuthorizedKeeper = Boolean(actor && isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+        if (!isSelf && !isAuthorizedKeeper) {
+            ctx.status = 403;
+            ctx.body = { error: 'You may only view your own marketplace transactions' };
+            return;
+        }
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

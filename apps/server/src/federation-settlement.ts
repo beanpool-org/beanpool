@@ -168,6 +168,10 @@ export function respondSettlementAware(ctx: any, err: any, fallback = 'Request f
         ctx.body = { error: err.message || SETTLEMENT_REFUSED_MESSAGE, code: SETTLEMENT_REFUSED_CODE };
         return;
     }
-    ctx.status = err?.status || err?.statusCode || 400;
+    const rawCode = err?.status ?? err?.statusCode;
+    const statusCode = typeof rawCode === 'number' && Number.isInteger(rawCode) && rawCode >= 400 && rawCode <= 599
+        ? rawCode
+        : 400;
+    ctx.status = statusCode;
     ctx.body = { error: err?.message || fallback };
 }

@@ -176,9 +176,34 @@ export function approvePostRequest(
     const originRow = db.prepare('SELECT origin_node FROM posts WHERE id = ?').get(row.post_id) as any;
     assertTradableHere({ originNode: originRow?.origin_node }, row.seller_pubkey);
 
+    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+    const isPayeeKeeper = isEnterprisePayer && Boolean(
+        db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+            .get(row.buyer_pubkey, row.seller_pubkey)
+    );
+
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
-    if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
-    if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
+
+    if (isPayeeKeeper) {
+        // Rule 5: credit buys inputs, profit pays people (docs/the-commons.md §2.4).
+        // An enterprise may borrow from the community to buy things. It may NOT borrow
+        // from the community to pay itself. Keepers eat last: paid only while
+        // balance - amount >= 0. NEVER into credit.
+        if (balance - row.credits < 0) {
+            const name = buyerMember?.callsign || 'This enterprise';
+            const msg = balance <= 0
+                ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
+                : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+    } else {
+        if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
+        if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
+    }
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
 
@@ -417,7 +442,21 @@ export function completePostTransaction(
         if (isHourly && releaseCredits !== row.credits) {
             const diff = releaseCredits - row.credits;
             if (diff > 0) {
+                const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+                const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+                const isPayeeKeeper = isEnterprisePayer && Boolean(
+                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                        .get(row.buyer_pubkey, row.seller_pubkey)
+                );
                 const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
+                if (isPayeeKeeper && balance - diff < 0) {
+                    const name = buyerMember?.callsign || 'This enterprise';
+                    const msg = `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+                    const err: any = new Error(msg);
+                    err.status = 403;
+                    err.statusCode = 403;
+                    throw err;
+                }
                 if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
                 if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
                 cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);

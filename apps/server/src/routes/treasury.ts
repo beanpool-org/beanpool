@@ -288,7 +288,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const tx = approvePostRequest(String(transactionId), treasury);
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not approve (not this treasury’s deal, or already actioned)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Release escrow on a treasury Need it is the buyer of (e.g. pay the tender on completion).
@@ -302,7 +305,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const tx = completePostTransaction(String(transactionId), treasury);
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) {
+            ctx.status = e.status || e.statusCode || 400;
+            ctx.body = { error: e.message };
+        }
     });
 
     // Sweep surplus from the treasury into the shared Commons pool.

@@ -744,7 +744,7 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                const type = filter === 'all' ? '' : filter === 'needs' ? '&type=need' : '&type=offer';
+                const type = filter === 'all' || filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
                 const cat = categoryFilter !== 'all' ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
@@ -794,7 +794,7 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter = filter === 'all' ? undefined : { type: filter === 'needs' ? 'need' : 'offer' };
+        const queryFilter = filter === 'all' || filter === 'for-you' ? undefined : { type: filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll' };
         const runLoad = async () => {
             const data = await getPosts(queryFilter);
             setPosts(data);
@@ -843,8 +843,8 @@ export default function MarketScreen() {
         }
         if (blockedUsers.includes(p.author_pubkey)) return false;
         if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-        // #108: beans-only browse. Rows predating the column read as 0, i.e. beans-only.
-        if (beansOnly && p.cash_also_needed === 1) return false;
+        // #108: beans-only browse excludes polls
+        if (beansOnly && (p.type === 'poll' || p.cash_also_needed === 1)) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
@@ -853,7 +853,7 @@ export default function MarketScreen() {
         if (filter === 'for-you' && (p.type === 'poll' || !favCategories.includes(p.category))) return false;
         
         // Trust Level filters
-        if (trustFilter === 'founding' && !p.authorFoundingNeeded) return false;
+        if (trustFilter === 'founding' && (p.type === 'poll' || !p.authorFoundingNeeded)) return false;
         if (trustFilter === 'new' && (p.author_energy_cycled ?? 0) >= 120) return false;
         if (trustFilter === 'resident' && (p.author_energy_cycled ?? 0) < 120) return false;
         if (trustFilter === 'steward' && (p.author_energy_cycled ?? 0) < 520) return false;
@@ -888,7 +888,7 @@ export default function MarketScreen() {
     // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
     const realMemberListingsCount = posts.filter(p => {
         const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-        return !isPulse && p.status === 'active';
+        return !isPulse && p.type !== 'poll' && p.status === 'active';
     }).length;
     if (realMemberListingsCount >= 2) {
         filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));

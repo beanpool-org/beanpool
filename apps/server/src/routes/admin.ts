@@ -588,6 +588,10 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const adminPubkey = getAdminPubkey();
+    if (!adminPubkey) {
+        ctx.body = { conversations: [], adminPubkey: '' };
+        return;
+    }
     const convs = getConversationsByMember(adminPubkey);
     // Also grab any legacy 'system' conversations.
     // Use a Set for O(N) dedup instead of an O(N^2) nested .find().
@@ -629,7 +633,13 @@ router.post('/api/local/admin/commons/round', async (ctx) => {
             ctx.body = { error: 'projectIds and closesAt required' };
             return;
         }
-        const round = createVotingRound(getAdminPubkey(), projectIds, closesAt);
+        const adminPubkey = getAdminPubkey();
+        if (!adminPubkey) {
+            ctx.status = 400;
+            ctx.body = { error: 'No genesis admin configured' };
+            return;
+        }
+        const round = createVotingRound(adminPubkey, projectIds, closesAt);
         if (!round) {
             ctx.status = 400;
             ctx.body = { error: 'Failed — another round may be open, or not admin' };

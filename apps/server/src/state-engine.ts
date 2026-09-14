@@ -1051,7 +1051,7 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     if (inviterKey === 'genesis') {
         return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
-    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+    if (inviterKey === 'SYSTEM' || (adminKey && inviterKey === adminKey)) {
         return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
     const inviter = getMember(inviterKey);
@@ -1684,17 +1684,20 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
  * The system admin is exempt — it acts at the system level, not as a participant.
  */
 export function hasListedOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return true;
     return hasListedOfferEngine(db, publicKey);
 }
 
 export function hasLiveOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return true;
     return hasLiveOfferEngine(db, publicKey);
 }
 
 export function liveOfferCount(publicKey: string): number {
-    if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return OFFER_BANDS.length - 1;
     return liveOfferCountEngine(db, publicKey);
 }
 
@@ -1711,7 +1714,8 @@ export function usableFloor(publicKey: string): number {
  * set via adminSetVoucher), plus the system admin who always holds it.
  */
 export function canVouch(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return true;
     const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_vouch;
 }
@@ -1729,7 +1733,8 @@ export function canVouch(publicKey: string): boolean {
  * Distinct from the 'Steward' tier (a cosmetic badge) and from node role (replication topology).
  */
 export function canOperate(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return true;
     const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_operate;
 }
@@ -1766,7 +1771,8 @@ export function canOperateTreasury(publicKey: string, treasuryPubkey: string): b
  * legitimate keeper of the enterprise.
  */
 export function canAdministerTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    const admin = getAdminPubkey();
+    if (admin && publicKey === admin) return true;
     return canOperateTreasury(publicKey, treasuryPubkey);
 }
 
@@ -1878,7 +1884,8 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
-    const isAdmin = actorPubkey === getAdminPubkey();
+    const admin = getAdminPubkey();
+    const isAdmin = Boolean(admin && actorPubkey === admin);
     if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
@@ -2643,8 +2650,8 @@ export function getCommunityHealth(): CommunityHealth {
 // ===================== ADMIN CONTROLS =====================
 
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' ORDER BY rowid ASC LIMIT 1").get() as any;
-    return row ? row.public_key : '';
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND public_key != '' ORDER BY rowid ASC LIMIT 1").get() as any;
+    return (row?.public_key && typeof row.public_key === 'string') ? row.public_key.trim() : '';
 }
 
 /**
@@ -2990,6 +2997,7 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
 
 export function adminSendMessage(targetPubkey: string, body: string) {
     const adminPubkey = getAdminPubkey();
+    if (!adminPubkey) throw new Error('No genesis admin configured');
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3219,6 +3227,7 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
+    if (!adminPubkey) return null;
     const admin = getMember(adminPubkey);
     if (!admin || (admin.invitedBy !== 'genesis' && admin.invitedBy !== null && admin.invitedBy !== undefined) || getActiveRound()) return null;
 

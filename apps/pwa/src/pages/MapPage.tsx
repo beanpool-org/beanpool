@@ -522,13 +522,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             }
             setShowNewPost(false);
             refreshPosts();
-            if (onNavigate) {
-                if (newPostType === 'poll') {
-                    onNavigate('marketplace');
-                } else {
-                    onNavigate('marketplace', 'deals_active');
-                }
-            }
+            if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
             alert(e.message || 'Failed to create post. Are you offline?');
         }

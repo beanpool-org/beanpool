@@ -1055,6 +1055,7 @@ export interface FriendEntry {
     callsign: string;
     addedAt: string;
     isGuardian: boolean;
+    avatarUrl?: string | null;
 }
 
 export async function getFriends(publicKey: string): Promise<FriendEntry[]> {

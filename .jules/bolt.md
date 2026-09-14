@@ -170,3 +170,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-27 - O(1) Member and Profile Lookups in Server Admin Settings Audit Tree Rendering
 **Learning:** In `apps/server/static/settings.js`, rendering the admin member audit tree invoked `members.find(...)` and `profiles.find(...)` inside the recursive `buildNode` function for every member node in the hierarchy, resulting in an $O(M \times (M + P))$ nested linear scan.
 **Action:** Pre-computed `membersMap` and `profilesMap` indexed by `publicKey` in `renderAdminMembers` prior to executing `buildNode`, reducing member and profile resolution to $O(1)$ constant-time Map retrievals ($O(M + P)$ overall).
+
+## 2026-09-28 - Include avatarUrl in getFriends Response to Avoid O(M) Member Directory Fetch
+**Learning:** In `packages/beanpool-engine/src/social.ts`, `getFriends` only selected `friend_pubkey`, `callsign`, and `added_at`. To display friend avatars, PWA `PeoplePage.tsx` was forced to load all community members (`/api/community/members` - an $O(M)$ network payload) and map public keys to avatars.
+**Action:** Added `m.avatar_url` to `getFriends` SQL `SELECT` query in `packages/beanpool-engine/src/social.ts` (leveraging the existing `JOIN members m` at zero extra query cost) and added `avatarUrl` to `FriendEntry` interfaces in `@beanpool/engine` and `apps/pwa/src/lib/api.ts`. Updated `PeoplePage.tsx` to pass `f.avatarUrl` directly, rendering friend avatars in $O(1)$ time without fetching the entire $O(M)$ community member directory over the network.

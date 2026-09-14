@@ -239,6 +239,14 @@ export interface SyncRecoveryPin {
     updatedAt: string;
 }
 
+export interface SyncPollVote {
+    postId: string;
+    voterPubkey: string;
+    optionId: string;
+    signature: string;
+    createdAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -263,6 +271,7 @@ export interface SyncPayload {
     recoveryShares?: SyncRecoveryShare[];
     recoveryPins?: SyncRecoveryPin[];
     settlements?: SyncSettlement[];
+    pollVotes?: SyncPollVote[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
     generatedAt?: string;
@@ -347,6 +356,10 @@ export function exportSyncState(
         lat: row.lat,
         lng: row.lng,
         originNode: row.origin_node,
+        pollOptions: row.poll_options
+            ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
+            : undefined,
+        pollClosesAt: row.poll_closes_at || undefined,
     }));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];
@@ -565,6 +578,20 @@ export function exportSyncState(
         updatedAt: row.updated_at || row.created_at,
     }));
 
+    let pollVotes: SyncPollVote[] = [];
+    try {
+        const pollVoteRows = sel('poll_votes', 'created_at');
+        pollVotes = pollVoteRows.map((r: any) => ({
+            postId: r.post_id,
+            voterPubkey: r.voter_pubkey,
+            optionId: r.option_id,
+            signature: r.signature || '',
+            createdAt: r.created_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -598,6 +625,7 @@ export function exportSyncState(
         recoveryShares,
         recoveryPins,
         settlements,
+        pollVotes,
         tombstones,
     };
 }

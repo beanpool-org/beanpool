@@ -239,6 +239,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
     if (existingPost.type === 'poll') {
+        if (existingPost.status !== 'active') {
+            throw new Error('Cannot edit a closed poll');
+        }
         const voteCountRow = db.prepare("SELECT COUNT(*) as c FROM poll_votes WHERE post_id = ?").get(id) as any;
         const hasVotes = (voteCountRow?.c || 0) > 0;
         if (hasVotes) {
@@ -258,6 +261,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         delete updates.priceType;
         delete updates.repeatable;
         delete updates.cashAlsoNeeded;
+        delete updates.reach;
+        delete (updates as any).reachPeers;
     }
 
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
@@ -296,10 +301,18 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (!Array.isArray(rawOpts) || rawOpts.length < 2 || rawOpts.length > 4) {
             throw new Error('Polls must have between 2 and 4 options');
         }
+        const seenIds = new Set<string>();
         const cleanPollOptions = (rawOpts as any[]).map((opt: any, idx: number) => {
             const text = typeof opt === 'string' ? opt.trim() : (typeof opt?.text === 'string' ? opt.text.trim() : '');
-            if (!text) throw new Error('Poll options cannot be empty');
-            const optId = (typeof opt === 'object' && opt?.id) ? String(opt.id) : `opt_${idx + 1}`;
+            if (!text || text.length > 80) {
+                throw new Error('Poll options must be between 1 and 80 characters');
+            }
+            const rawId = (typeof opt === 'object' && opt?.id) ? String(opt.id).trim() : `opt_${idx + 1}`;
+            const optId = /^[a-zA-Z0-9_-]{1,32}$/.test(rawId) ? rawId : `opt_${idx + 1}`;
+            if (seenIds.has(optId)) {
+                throw new Error(`Duplicate option ID detected: ${optId}`);
+            }
+            seenIds.add(optId);
             return { id: optId, text };
         });
         fields.push('poll_options = ?');

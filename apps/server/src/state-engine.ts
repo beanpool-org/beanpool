@@ -126,6 +126,7 @@ import {
     type SyncRecoveryRequest,
     type SyncRecoveryApproval,
     type SyncMarketplaceTransaction,
+    type SyncPollVote,
     type SyncPayload
 } from '@beanpool/engine';
 import {
@@ -2236,6 +2237,7 @@ export type {
     SyncRecoveryRequest,
     SyncRecoveryApproval,
     SyncMarketplaceTransaction,
+    SyncPollVote,
     SyncPayload,
     ImportResult,
     NodeRole
@@ -3739,7 +3741,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

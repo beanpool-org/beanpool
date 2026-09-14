@@ -413,6 +413,131 @@ async function main() {
     await dispatch('POST', `/api/marketplace/posts/${aliceNewPoll!.id}/close`, ctxImpersonateClose);
     assert(ctxImpersonateClose.status === 403, 'Route rejects close impersonation (actor != authorPublicKey)');
 
+    console.log('\n--- 11. updatePost Validation & Poll Isolation ---');
+    // Cannot edit closed poll
+    errThrew = false;
+    try {
+        updatePost(poll1!.id, 'pub-alice', { title: 'New Closed Title' });
+    } catch (e: any) {
+        errThrew = true;
+        assert(e.message.includes('Cannot edit a closed poll'), 'Rejects updating a closed poll');
+    }
+    assert(errThrew, 'Blocked update on closed poll');
+
+    // Stripping reach and reachPeers for polls
+    updatePost(aliceNewPoll!.id, 'pub-alice', { reach: 'everywhere', reachPeers: ['peer1'] } as any);
+    const postRowAfterReach = db.prepare('SELECT reach, reach_peers FROM posts WHERE id = ?').get(aliceNewPoll!.id) as any;
+    assert(postRowAfterReach.reach === 'local', 'updatePost strips reach for polls (stays local)');
+    assert(postRowAfterReach.reach_peers === null, 'updatePost strips reachPeers for polls (stays null)');
+
+    // Option length validation in updatePost
+    errThrew = false;
+    try {
+        updatePost(aliceNewPoll!.id, 'pub-alice', {
+            pollOptions: [{ id: '1', text: 'Z'.repeat(81) }, { id: '2', text: 'Valid' }]
+        } as any);
+    } catch (e: any) {
+        errThrew = true;
+        assert(e.message.includes('between 1 and 80 characters'), 'updatePost rejects option > 80 chars');
+    }
+    assert(errThrew, 'Blocked update option > 80 chars');
+
+    // Duplicate option ID validation in updatePost
+    errThrew = false;
+    try {
+        updatePost(aliceNewPoll!.id, 'pub-alice', {
+            pollOptions: [{ id: 'dup_id', text: 'A' }, { id: 'dup_id', text: 'B' }]
+        } as any);
+    } catch (e: any) {
+        errThrew = true;
+        assert(e.message.includes('Duplicate option ID'), 'updatePost rejects duplicate option ID');
+    }
+    assert(errThrew, 'Blocked update duplicate option ID');
+
+    console.log('\n--- 12. Replication & Backup/Restore ---');
+    // Full export
+    const { exportSyncState: exportEngine, getPosts: getPostsEngine } = await import('@beanpool/engine');
+    const syncSnapshot = exportEngine(db, 'primary-node');
+    assert(Array.isArray(syncSnapshot.posts), 'exportSyncState includes posts');
+    const exportedPoll = syncSnapshot.posts?.find(p => p.id === poll1!.id);
+    assert(!!exportedPoll, 'exportSyncState exports poll1');
+    assert(Array.isArray(exportedPoll?.pollOptions) && exportedPoll!.pollOptions.length === 2, 'exportSyncState exports pollOptions');
+    assert(!!exportedPoll?.pollClosesAt, 'exportSyncState exports pollClosesAt');
+    assert(Array.isArray(syncSnapshot.pollVotes), 'exportSyncState includes pollVotes');
+    const exportedVote = syncSnapshot.pollVotes?.find(v => v.postId === poll1!.id && v.voterPubkey === 'pub-carol');
+    assert(!!exportedVote, 'exportSyncState exports ballot for poll1');
+    assert(exportedVote?.optionId === 'opt_no', 'exportSyncState ballot records correct optionId');
+
+    // Delta sync export
+    const pastSince = new Date(Date.now() - 3600000).toISOString();
+    const deltaSnapshot = exportEngine(db, 'primary-node', pastSince);
+    const deltaPoll = deltaSnapshot.posts?.find(p => p.id === poll1!.id);
+    assert(!!deltaPoll, 'Delta sync export carries poll');
+    const deltaVote = deltaSnapshot.pollVotes?.find(v => v.postId === poll1!.id);
+    assert(!!deltaVote, 'Delta sync export carries ballot');
+
+    // File backup & restore (writeDbSnapshot)
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
+    const tmpSnapFile = path.join(process.cwd(), `tmp-poll-backup-${Date.now()}.db`);
+    try {
+        writeDbSnapshot(tmpSnapFile);
+        assert(fs.existsSync(tmpSnapFile), 'Backup snapshot created via writeDbSnapshot');
+
+        const Database = (await import('better-sqlite3')).default;
+        const restoredDb = new Database(tmpSnapFile, { readonly: true });
+        const restoredPost = restoredDb.prepare('SELECT * FROM posts WHERE id = ?').get(poll1!.id) as any;
+        assert(!!restoredPost, 'Restored database contains poll post');
+        assert(restoredPost.poll_options.includes('Yes, definitely'), 'Restored database preserves poll options');
+        assert(!!restoredPost.poll_closes_at, 'Restored database preserves poll_closes_at');
+
+        const restoredVotes = restoredDb.prepare('SELECT * FROM poll_votes WHERE post_id = ?').all(poll1!.id) as any[];
+        assert(restoredVotes.length === 1, 'Restored database preserves ballots count');
+        assert(restoredVotes[0].voter_pubkey === 'pub-carol', 'Restored database ballot matches voter');
+        assert(restoredVotes[0].option_id === 'opt_no', 'Restored database ballot matches voted option');
+        restoredDb.close();
+    } finally {
+        if (fs.existsSync(tmpSnapFile)) fs.unlinkSync(tmpSnapFile);
+    }
+
+    // Secondary replica state import & restore
+    const Database = (await import('better-sqlite3')).default;
+    const replicaDb = new Database(':memory:');
+    const schemaSql = fs.readFileSync(path.join(thisDir, 'db', 'schema.sql'), 'utf-8');
+    replicaDb.exec(schemaSql);
+    for (const m of members) {
+        replicaDb.prepare(`
+            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, credit_frozen, joined_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        `).run(m.pubkey, m.callsign, m.avatar, m.status, m.frozen);
+    }
+    for (const rp of syncSnapshot.posts ?? []) {
+        const pollOptionsJson = rp.pollOptions != null
+            ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
+            : null;
+        replicaDb.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits, rp.authorPublicKey, rp.createdAt,
+            rp.active ? 1 : 0, rp.status, rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null, rp.originNode || 'node',
+            rp.priceType || 'fixed', rp.acceptedBy || null, rp.acceptedAt || null, rp.pendingTransactionId || null,
+            rp.completedAt || null, rp.updatedAt || rp.createdAt, pollOptionsJson, rp.pollClosesAt || null
+        );
+    }
+    for (const pv of syncSnapshot.pollVotes ?? []) {
+        replicaDb.prepare(`INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
+                    VALUES (?, ?, ?, ?, ?)`).run(pv.postId, pv.voterPubkey, pv.optionId, pv.signature || '', pv.createdAt);
+    }
+    const replicaPolls = getPostsEngine(replicaDb as any, { id: poll1!.id, includeInactive: true });
+    assert(replicaPolls.length === 1, 'Replication replica contains restored poll');
+    assert(Array.isArray(replicaPolls[0].pollOptions) && replicaPolls[0].pollOptions.length === 2, 'Replica preserves poll options');
+    assert(replicaPolls[0].totalVotes === 1, 'Replica preserves vote turnout');
+    assert(replicaPolls[0].pollVotes?.length === 1, 'Replica preserves voter ballot records');
+    assert(replicaPolls[0].pollVotes?.[0]?.voterPubkey === 'pub-carol', 'Replica preserves voter identity');
+    replicaDb.close();
+
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);
 }
 

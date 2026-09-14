@@ -284,7 +284,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -360,10 +360,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             for (const rp of remote.posts ?? []) {
-                const existing = db.prepare("SELECT updated_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null } | undefined;
+                const pollOptionsJson = rp.pollOptions != null
+                    ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
+                    : null;
+                const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -383,7 +387,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.acceptedAt || null,
                         rp.pendingTransactionId || null,
                         rp.completedAt || null,
-                        rp.updatedAt || rp.createdAt
+                        rp.updatedAt || rp.createdAt,
+                        pollOptionsJson,
+                        pollClosesAtVal
                     );
                     newPosts++;
                 } else {
@@ -405,6 +411,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         completed_at = ?,
                         lat = ?,
                         lng = ?,
+                        poll_options = COALESCE(?, poll_options),
+                        poll_closes_at = COALESCE(?, poll_closes_at),
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -420,6 +428,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.completedAt || null,
                         rp.lat ?? null,
                         rp.lng ?? null,
+                        pollOptionsJson,
+                        pollClosesAtVal,
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -815,6 +825,27 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rs.generation, rs.createdAt, rs.updatedAt || rs.createdAt,
                     );
                     if (res.changes > 0) recoverySharesImported++;
+                }
+            }
+
+            if (remote.pollVotes) {
+                const importVote = db.prepare(`INSERT INTO poll_votes
+                    (post_id, voter_pubkey, option_id, signature, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
+                        option_id = excluded.option_id,
+                        signature = excluded.signature,
+                        created_at = excluded.created_at
+                    WHERE excluded.created_at IS NOT NULL
+                      AND (poll_votes.created_at IS NULL OR excluded.created_at >= poll_votes.created_at)`);
+                for (const pv of remote.pollVotes) {
+                    importVote.run(
+                        pv.postId,
+                        pv.voterPubkey,
+                        pv.optionId,
+                        pv.signature || '',
+                        pv.createdAt || new Date().toISOString()
+                    );
                 }
             }
 

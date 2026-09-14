@@ -1970,8 +1970,29 @@ export async function getActiveVotingRound(): Promise<{ id: string; status: stri
 
 // ===================== COMMUNITY TREASURIES =====================
 export interface TreasurySummary {
-    publicKey: string; name: string; avatar?: string | null;
-    balance: number; creditLine: number; liveOffers: number;
+    publicKey: string;
+    name: string;
+    callsign?: string;
+    avatar?: string | null;
+    avatarUrl?: string | null;
+    balance: number;
+    creditLine: number;
+    liveOffers: number;
+    earnedSurplus?: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    goalAmount?: number | null;
+    currentAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: string;
+    status?: string;
+    paused?: boolean;
+    keepers?: Array<{ pubkey: string; callsign: string; role: string }>;
+    link?: any;
+}
+
+export async function treasuryPledge(treasury: string, amount: number, memo?: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
 }
 
 export async function getTreasuries(): Promise<TreasurySummary[]> {

@@ -196,7 +196,23 @@ export function initSchema() {
     // Protocol v1: pre-seeded earned credit for the dynamic floor formula.
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0`).run(); } catch { }
     // Enterprise Credit Model (Rules 6 & 7)
-    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus INTEGER DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
+    try {
+        // Backfill earned_surplus for existing live enterprises (e.g. Community Eggs) from historical sales
+        db.prepare(`
+            UPDATE members
+            SET earned_surplus = MAX(0, COALESCE((
+                SELECT SUM(credits) FROM marketplace_transactions
+                WHERE seller_pubkey = members.public_key AND status = 'completed'
+                  AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+            ), 0) - COALESCE((
+                SELECT SUM(credits) FROM marketplace_transactions
+                WHERE buyer_pubkey = members.public_key AND status = 'completed'
+                  AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+            ), 0))
+            WHERE is_treasury = 1 AND (earned_surplus IS NULL OR earned_surplus = 0)
+        `).run();
+    } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }

@@ -276,6 +276,55 @@ async function main() {
     // Existing enterprise without ceiling (e.g. CommunityEggs) defaults to NULL and is uncapped
     assert(ceilingOf(eggs) === null, 'Existing enterprise (CommunityEggs) has working_capital_ceiling = NULL (uncapped)');
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // REGRESSION TEST 2: Community Eggs backfill from historical sales
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Regression Test 2: Historical sales earned surplus backfill ──');
+    const { publicKey: liveEggs } = createTreasury('LiveCommunityEggs', AVATAR, 200);
+    const eggKeeper = 'egg-keeper-000000000000000000000000000009';
+    const eggCustomer = 'egg-cust-0000000000000000000000000000010';
+    seedMember(eggKeeper, 'EggKeeper');
+    seedMember(eggCustomer, 'EggCustomer');
+    assignKeeper(liveEggs, eggKeeper);
+    // Simulate historical trading before Rule 6 migration:
+    // 2 completed sales of 12 beans each (total 24 beans)
+    db.prepare(`
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        VALUES ('hist-tx-1', 'post-1', ?, ?, 12.0, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+               ('hist-tx-2', 'post-2', ?, ?, 12.0, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    `).run(eggCustomer, liveEggs, eggCustomer, liveEggs);
+    // Give LiveCommunityEggs balance
+    transfer('genesis', liveEggs, 24, 'Fund egg revenue', 'direct', true);
+    // Explicitly reset earned_surplus to 0 to simulate pre-migration state
+    db.prepare('UPDATE members SET earned_surplus = 0 WHERE public_key = ?').run(liveEggs);
+    assert(surplusOf(liveEggs) === 0, 'LiveCommunityEggs starts with 0 earned surplus before backfill');
+
+    // Run the migration backfill query
+    db.prepare(`
+        UPDATE members
+        SET earned_surplus = MAX(0, COALESCE((
+            SELECT SUM(credits) FROM marketplace_transactions
+            WHERE seller_pubkey = members.public_key AND status = 'completed'
+              AND buyer_pubkey NOT IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+        ), 0) - COALESCE((
+            SELECT SUM(credits) FROM marketplace_transactions
+            WHERE buyer_pubkey = members.public_key AND status = 'completed'
+              AND seller_pubkey IN (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = members.public_key)
+        ), 0))
+        WHERE is_treasury = 1 AND (earned_surplus IS NULL OR earned_surplus = 0)
+    `).run();
+
+    assert(surplusOf(liveEggs) === 24, 'LiveCommunityEggs earned_surplus accurately backfilled to 24 Beans from historical sales');
+
+    // Keeper can now be paid from the backfilled surplus
+    createPost('offer', 'food', 'Farm fresh eggs', 'Fresh eggs daily', 12, 'fixed', liveEggs, undefined, undefined, undefined, true);
+    createPost('offer', 'skills', 'Coop repair', 'Fixed coop roof', 10, 'fixed', eggKeeper, undefined, undefined, undefined, true);
+    const eggWageNeed = createPost('need', 'work', 'Coop maintenance', 'Fix roof', 15, 'fixed', liveEggs);
+    const keeperWageBid = requestPost(eggWageNeed!.id, eggKeeper);
+    const approveKeeperWage = approvePostRequest(keeperWageBid.id, liveEggs);
+    assert(approveKeeperWage !== null, 'Keepers are no longer stranded — backfilled surplus allows keeper wage approval');
+    assert(surplusOf(liveEggs) === 9, 'Surplus decrements to 9 (24 - 15) after keeper wage approval');
+
     // Conservation check
     const { runLedgerAudit } = await import('./state-engine.js');
     const audit = runLedgerAudit();

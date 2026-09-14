@@ -134,7 +134,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         }
     };
 
-    const handleCompleteDeal = async (txId: string) => {
+    const handleCompleteDeal = async (txId: string, postTitle?: string, credits?: number) => {
+        const confirmed = window.confirm(`Release payment of ${credits ?? ''} 🫘 for "${postTitle || 'deal'}"? This action cannot be reversed.`);
+        if (!confirmed) return;
         try {
             setActioningTxId(txId);
             setActionFeedback(null);
@@ -459,7 +461,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                         <button
                                                             type="button"
                                                             disabled={actioningTxId === d.id}
-                                                            onClick={() => handleCompleteDeal(d.id)}
+                                                            onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits)}
                                                             className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50"
                                                         >
                                                             {actioningTxId === d.id ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}

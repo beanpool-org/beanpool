@@ -325,6 +325,56 @@ async function main() {
     assert(approveKeeperWage !== null, 'Keepers are no longer stranded — backfilled surplus allows keeper wage approval');
     assert(surplusOf(liveEggs) === 9, 'Surplus decrements to 9 (24 - 15) after keeper wage approval');
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // REGRESSION TEST 3: Escrow stranding prevention on hourly adjustment
+    // ─────────────────────────────────────────────────────────────────────────────
+    console.log('\n── Regression Test 3: Hourly adjustment escrow stranding prevention ──');
+    const { publicKey: garden } = createTreasury('HourlyGarden', AVATAR, 100);
+    const gardenKeeper = 'garden-keeper-000000000000000000000000000011';
+    const gardenCustomer = 'garden-cust-000000000000000000000000000012';
+    seedMember(gardenKeeper, 'GardenKeeper');
+    seedMember(gardenCustomer, 'GardenCustomer');
+    assignKeeper(garden, gardenKeeper);
+
+    // Give garden 20 balance and 20 earned surplus
+    transfer('genesis', garden, 20, 'Seed garden', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus = 20 WHERE public_key = ?').run(garden);
+
+    createPost('offer', 'food', 'Garden greens', 'Fresh lettuce', 25, 'fixed', garden, undefined, undefined, undefined, true);
+    createPost('offer', 'skills', 'Weeding service', 'Weed beds', 10, 'fixed', gardenKeeper, undefined, undefined, undefined, true);
+
+    // Hourly need: 10 credits per hour, 2 hours = 20 credits base
+    const weedNeed = createPost('need', 'work', 'Weeding bed', 'Weed garden beds', 10, 'hourly', garden);
+    const weedBid = requestPost(weedNeed!.id, gardenKeeper, 2);
+    approvePostRequest(weedBid.id, garden);
+
+    // At this point, 20 beans are in escrow, earned surplus decremented to 0
+    assert(bal(`escrow_${weedBid.id}`) === 20, '20 beans locked in escrow for initial 2 hours');
+    assert(surplusOf(garden) === 0, 'Earned surplus decremented to 0 for initial 2 hours');
+
+    // Keeper completes 3 hours (30 beans, diff = 10). Enterprise has 0 surplus, cannot cover extra 10 beans.
+    const weedComplete = completePostTransaction(weedBid.id, garden, 3);
+    assert(weedComplete !== null, 'Transaction completes rather than stranding escrow');
+    assert(bal(`escrow_${weedBid.id}`) === 0, 'Escrow account is drained to 0 — NO STRANDED ESCROW');
+    assert(bal(gardenKeeper) === 19.70, 'Keeper received base 20 hold minus 1.5% fee (19.70)');
+
+    // Verify deferred wage claim recorded for the difference (10 beans)
+    const gardenClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND keeper_pubkey = ? AND status = ?').get(garden, gardenKeeper, 'pending') as any;
+    assert(!!gardenClaim && gardenClaim.amount === 10, 'Deferred wage claim recorded for the remaining 10 beans');
+
+    // Enterprise earns surplus from customer sale (25 beans)
+    transfer('genesis', gardenCustomer, 50, 'Seed GardenCustomer', 'direct', true);
+    createPost('offer', 'skills', 'Watering service', 'Water plots', 10, 'fixed', gardenCustomer, undefined, undefined, undefined, true);
+    const gardenOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'offer'").get(garden) as any;
+    const custBid = requestPost(gardenOffer.id, gardenCustomer);
+    approvePostRequest(custBid.id, garden);
+    completePostTransaction(custBid.id, gardenCustomer);
+
+    // Sale of 25 beans pays 10 claim automatically!
+    const updatedGardenClaim = db.prepare('SELECT * FROM deferred_wage_claims WHERE id = ?').get(gardenClaim.id) as any;
+    assert(updatedGardenClaim.status === 'paid', 'Deferred claim for extra hours paid automatically on sales income');
+    assert(bal(gardenKeeper) === Math.round((19.70 + 9.85) * 100) / 100, 'Keeper received both payments minus fee (29.55 total)');
+
     // Conservation check
     const { runLedgerAudit } = await import('./state-engine.js');
     const audit = runLedgerAudit();

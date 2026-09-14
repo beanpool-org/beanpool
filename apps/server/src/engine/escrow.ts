@@ -534,29 +534,22 @@ export function completePostTransaction(
                 if (isPayeeKeeper) {
                     const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
                     const earnedSurplus = Number(trow?.earned_surplus) || 0;
-                    const name = buyerMember?.callsign || 'This enterprise';
-                    if (balance - diff < 0) {
+                    if (balance - diff < 0 || diff > earnedSurplus) {
+                        // Extra hours cannot be funded from balance or earned surplus.
+                        // Record deferred wage claim for the difference (diff), release the base hold
+                        // (row.credits) already secured in escrow to the keeper, and avoid stranding funds.
                         recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
-                        const msg = `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
-                        const err: any = new Error(msg);
-                        err.status = 403;
-                        err.statusCode = 403;
-                        throw err;
+                        releaseCredits = row.credits;
+                    } else {
+                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                            .run(diff, row.buyer_pubkey);
+                        cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
                     }
-                    if (diff > earnedSurplus) {
-                        recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
-                        const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay additional keeper wages (${diff} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
-                        const err: any = new Error(msg);
-                        err.status = 403;
-                        err.statusCode = 403;
-                        throw err;
-                    }
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                        .run(Math.round(diff), row.buyer_pubkey);
+                } else {
+                    if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
+                    if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
+                    cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
                 }
-                if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
-                if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
-                cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true);
             } else if (diff < 0) {
                 const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
                 const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
@@ -566,7 +559,7 @@ export function completePostTransaction(
                 );
                 if (isPayeeKeeper) {
                     db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                        .run(Math.round(Math.abs(diff)), row.buyer_pubkey);
+                        .run(Math.abs(diff), row.buyer_pubkey);
                 }
                 cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true);
             }

@@ -381,6 +381,73 @@ failed initiative is what it is *for*.
 zero transactions and mints zero beans; `SUM(balances) + COMMONS_POOL = 0` holds throughout, whatever
 number we pick. The risk being managed here is *capacity*, not issuance.
 
+**Rule 5 — credit buys inputs; profit pays people.** *(Marty, 2026-09-14 — the missing half of this
+model.)*
+
+> **An enterprise may borrow from the community to buy things. It may not borrow from the community
+> to pay itself.**
+
+At approve time the server already knows the payee, the amount and the balance, and
+`treasury_operators` says whether the payee is a keeper. So:
+
+| Payee | May spend |
+|---|---|
+| **not a keeper** of this enterprise — a supplier, a neighbour's labour, feed, timber | down to `usableFloor`, i.e. into credit |
+| **a keeper** of this enterprise | only while `balance − amount >= 0`. **Never into credit.** |
+
+This closes the loop with Rule 3. Keepers pledge their earned standing to give the enterprise a
+credit line — and then **cannot convert that standing into their own wages.** You may lend the
+community's trust to the flock; you may not route it into your own pocket.
+
+It also makes Rule 4 (no personal recourse) considerably safer. The failure that rule is most
+exposed to is a **bust-out** — run an enterprise into the ground while paying yourself out of its
+credit line, then walk. That attack *requires* paying a keeper from credit. Block it and the attack
+has no payload left.
+
+**A sole keeper in deficit therefore cannot be paid at all.** That is correct, not a bug — the
+operator eats last, as in any real small concern — but the UI must say so plainly rather than let
+someone discover it at the moment they expected money.
+
+**Rule 6 — keeper pay is capped by *earned surplus*, so grants cannot become wages.** A positive
+balance is not the same thing as profit. If the Commons grants 300 beans to the tool shed, the
+balance rises and Rule 5 alone would let the keepers pay themselves out of community money.
+
+Track one integer on the enterprise: `earned_surplus` = lifetime income **from sales** minus
+lifetime payments **to keepers**. Keeper pay is capped by it. Grants, pledges and gifts raise the
+balance and never the surplus — they can buy feed, hire a neighbour, fund the thing they were voted
+for, and they can never come out as wages.
+
+**Seasonality is handled by deferring, not by relaxing.** A flock buys feed in winter and sells eggs
+in spring; the keeper does the work in the cold half. A keeper payment that Rule 5 or 6 refuses
+becomes a **deferred wage claim** — recorded now, paid automatically the moment the enterprise can
+legitimately pay it. Same pattern as a queued Commons grant (§3.7): the community's decision is not
+thrown away over a timing accident.
+
+**Rule 7 — surplus above a working-capital ceiling returns to the Commons automatically.**
+Enterprises are exempt from demurrage (§0.1), so a member's idle beans shrink and an enterprise's
+never do. With sweeping left voluntary, an enterprise can accumulate indefinitely while everyone
+else's holdings decay. That is capitalism wearing the app's clothes — not by intent, but the effect
+is identical.
+
+Each enterprise declares the working capital its purpose actually requires. Below the ceiling it
+holds freely and stays decay-exempt, because saving toward a real pump or a new coop is legitimate.
+**Above the ceiling, surplus sweeps to the Commons automatically** — no keeper decision involved.
+
+The ceiling is set at creation and changed only by a **Decision**, never by the enterprise's own
+keepers. Otherwise the first response to hitting it is to raise it.
+
+*(Note: enterprises already contribute on every sale — marketplace settlements run through escrow
+and pay the 1.5% community fee like anyone else. The leak was never contribution. It was
+accumulation.)*
+
+Together, Rules 5–7 mean an enterprise can **hold** what it needs, **pay outsiders** on credit, pay
+**its own people only out of genuine trading profit**, and cannot **accumulate** past its stated
+purpose.
+
+> **Member-facing copy is not updated yet.** These rules will need to reach `apps/website/rules.html`
+> and the in-app explanations before they are live, and the app already carries copy that overstates
+> what the system does. Do not let the rule book and the rule diverge again.
+
 ### 2.5 Creating one — self-serve becomes safe
 
 Creation is admin-only today for one reason: **creating an enterprise currently hands out a −200
@@ -1158,6 +1225,33 @@ Antigravity's counter-argument is better than my proposal.)*
 *audience scope*. If the keepers of Community Eggs want a private thread, they create a group called
 "Community Eggs Team" like anyone else would. Two objects, no foreign key, nothing to desynchronise.
 The "somewhere to discuss it" gap in §2.2 is then filled by groups generally, not by a special case.
+
+---
+
+## 10. Decisions log
+
+Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
+
+| | Decision |
+|---|---|
+| Enterprise leadership | **Lead keeper**, not owner (§2.3) |
+| Enterprise credit floor | derived from keepers' earned standing, **plain sum, no multiplier** (§2.4 Rule 2) |
+| Backing | an **explicit once-only pledge**, never auto-split, never deducted from the personal floor (Rule 3) |
+| On default | **no personal recourse** — freeze the enterprise, not the household (Rule 4) |
+| Paying keepers | **only out of profit**, never out of credit (Rule 5) |
+| Grants as wages | **no** — capped by earned surplus (Rule 6) |
+| Hoarding | surplus above a **working-capital ceiling** sweeps automatically (Rule 7) |
+| Creating an enterprise | **no fee**. The standing gate is enough, and a member at their floor could not pay one |
+| Enterprises kept per member | **3** |
+| Can an enterprise vote? | **Never.** It is a balance sheet, not a person. Make it deliberate and write it down |
+| Opening a Decision | **no bond.** The stick was rejected; the carrot is that participation is **visible on your profile** — in a village, being known as someone who turns up is the real currency |
+| Emergency suspension | admin for now, and a new **`moderator`** node role — can action reports and pause someone while their future is decided, nothing else |
+| Admins | **must be members** of the node they administer, or they cannot be attributable |
+| Quorum | **30% of members active in the last 30 days**, floor of 3. Dormant accounts never count |
+| A levy | **do not build it.** Wait until a community has actually run out of pool money and asked |
+| Underfunded passed grants | **queue, do not fail** — one at a time, visible, expires at 90 days |
+| Admin spending an enterprise's money | **no** — split the permission; admins may administer, not spend (§2.3, `admin-surface.md` §6) |
+| Approving your own payment | **no** — two-person rule; a different keeper approves |
 
 ---
 

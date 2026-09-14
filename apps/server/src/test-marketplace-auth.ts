@@ -57,8 +57,8 @@ async function testMarketplaceActorAuth() {
     initStateEngine();
 
     const router = createMarketplaceRoutes({
-        clampLimit: (n) => Number(n) || 50,
-        clampOffset: (n) => Number(n) || 0,
+        clampLimit: (n: any) => Number(n) || 50,
+        clampOffset: (n: any) => Number(n) || 0,
         enforceReadAuth: false,
     } as any);
 

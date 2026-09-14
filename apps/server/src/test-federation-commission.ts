@@ -45,7 +45,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createTreasury, createPost, adminAssignTreasuryOperator, getAdminPubkey, seedGenesisMember,
+    createTreasury, createPost, adminAssignTreasuryOperator, getFirstNodeAdminPubkey, seedGenesisMember,
 } from './state-engine.js';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
@@ -338,7 +338,7 @@ async function main() {
     assert(nodeTotal() === before9, '9c. node total unchanged');
 
     // ── 10. The admin's node-wide override reaches a link like any other enterprise (#106). ────────────
-    const admin = getAdminPubkey();
+    const admin = getFirstNodeAdminPubkey();
     if (admin) {
         const asAdmin = await commission(admin, { postId: remotePost.id });
         assert(asAdmin.status === 503,

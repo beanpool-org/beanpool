@@ -23,6 +23,10 @@ import {
     getAdminPubkey,
     isAdminPubkey,
     seedGenesisMember,
+    isNodeOwner,
+    isNodeAdmin,
+    nodeRoleOf,
+    getFirstNodeAdminPubkey,
     canOperate,
     canOperateTreasury,
     canVouch,
@@ -50,7 +54,7 @@ function assert(cond: boolean, msg: string) {
 }
 
 async function main() {
-    console.log('Running test-admin-genesis-pubkey suite...\n');
+    console.log('Running test-admin-genesis-pubkey suite with explicit node_roles...\n');
 
     initStateEngine();
 
@@ -64,6 +68,16 @@ async function main() {
     // '' rather than a placeholder: every override site compares `publicKey === getAdminPubkey()`,
     // so any non-empty sentinel grants admin to whoever presents that same literal as their actor.
     assert(adminBeforeHuman === '', 'getAdminPubkey() returns an empty string — not a self-matching sentinel — when no human genesis member exists');
+
+    // SYSTEM is never in node_roles
+    const systemRole = db.prepare("SELECT * FROM node_roles WHERE member_pubkey = 'SYSTEM'").get();
+    assert(!systemRole, 'SYSTEM is NEVER inserted into node_roles');
+    assert(isNodeAdmin('SYSTEM') === false, 'SYSTEM does NOT have isNodeAdmin');
+    assert(isNodeOwner('SYSTEM') === false, 'SYSTEM does NOT have isNodeOwner');
+    assert(nodeRoleOf('SYSTEM') === null, 'SYSTEM has nodeRoleOf = null');
+
+    const firstAdminBeforeHuman = getFirstNodeAdminPubkey();
+    assert(firstAdminBeforeHuman === '', 'getFirstNodeAdminPubkey() returns empty string when no human admin exists');
 
     // Negative assertions for empty actor string on a fresh node (no human genesis member):
     const initialTreasuryRow = db.prepare("SELECT public_key FROM members WHERE is_treasury = 1 LIMIT 1").get() as any;
@@ -81,22 +95,21 @@ async function main() {
     const alicePubkey = 'pubkey_alice_genesis_0001';
     seedGenesisMember(alicePubkey, 'Alice');
 
-    const adminAfterAlice = getAdminPubkey();
-    assert(adminAfterAlice === alicePubkey, 'getAdminPubkey() returns the first human genesis member (Alice)');
-    assert(adminAfterAlice !== 'SYSTEM', 'getAdminPubkey() does not return SYSTEM after seeding Alice');
+    const adminAfterAlice = getFirstNodeAdminPubkey();
+    assert(adminAfterAlice === alicePubkey, 'getFirstNodeAdminPubkey() returns Alice');
+    assert(isNodeOwner(alicePubkey) === true, 'Alice has isNodeOwner = true');
+    assert(isNodeAdmin(alicePubkey) === true, 'Alice has isNodeAdmin = true');
+    assert(nodeRoleOf(alicePubkey) === 'owner', "Alice has nodeRoleOf = 'owner'");
 
     // 3. Seed second human genesis member
     const bobPubkey = 'pubkey_bob_genesis_0002';
     seedGenesisMember(bobPubkey, 'Bob');
 
-    const adminAfterBob = getAdminPubkey();
-    assert(adminAfterBob === alicePubkey, 'getAdminPubkey() deterministically picks first-seeded genesis member (Alice) via ORDER BY rowid ASC');
+    assert(isNodeOwner(bobPubkey) === true, 'Bob also receives owner role as genesis member');
+    const adminAfterBob = getFirstNodeAdminPubkey();
+    assert(adminAfterBob === alicePubkey, 'getFirstNodeAdminPubkey() deterministically picks first-seeded genesis member (Alice)');
 
     // 4. Admin override checks
-    // createTreasury(name, avatar, creditLine) — the callsign is NOT the account id. It returns a
-    // freshly generated pubkey, and canOperateTreasury() is keyed on that. Asserting against the
-    // callsign string made the two negative cases vacuous: they would have passed against any
-    // treasury that did not exist.
     const farmPubkey = createTreasury('CommunityFarm', 'data:image/png;base64,iVBORw0KGgo=', 500).publicKey;
 
     assert(canOperate(alicePubkey) === true, 'real genesis admin has canOperate override');

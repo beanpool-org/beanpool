@@ -13,9 +13,9 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-vouch-covenant.ts
  */
 import {
-    initStateEngine, getAdminPubkey, canVouch, vouchMember, unvouchMember, adminSetVoucher,
+    initStateEngine, getAdminPubkey, getFirstNodeAdminPubkey, seedGenesisMember, canVouch, vouchMember, unvouchMember, adminSetVoucher,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
-    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance, seedGenesisMember,
+    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
 } from './state-engine.js';
 import { db } from './db/db.js';
 

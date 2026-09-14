@@ -32,7 +32,7 @@
 import crypto from 'node:crypto';
 import {
     initStateEngine, getBalance, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createProject, createVotingRound, closeVotingRound,
+    createProject, createVotingRound, closeVotingRound, grantNodeRole,
 } from './state-engine.js';
 import { setCommonsBalance } from '@beanpool/core';
 import { db, createCrowdfundProject, pledgeToProject, deleteCrowdfundProject } from './db/db.js';
@@ -143,6 +143,7 @@ async function main() {
     // NON-ZERO granted balance, and the grant supplies that.
     seedMember(rowless, 0, 0);
     seedMember(admin, 0, 0);
+    grantNodeRole(admin, 'owner');
 
     setCommonsBalance(50_000);          // must cover both grants; deductFromCommons refuses otherwise
     reconcileLedgerFromDb();            // pull the seeded rows in, as boot would

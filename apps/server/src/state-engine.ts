@@ -21,6 +21,28 @@ import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+} from './engine/node-roles.js';
+export {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+};
+import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
@@ -1190,7 +1212,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
@@ -1219,6 +1241,8 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
         isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
+        // nodeRole: explicit owner/admin role (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+        nodeRole: nodeRoleOf(publicKey),
     };
 }
 
@@ -2633,16 +2657,16 @@ export function getAdminPubkey(): string {
 }
 
 /**
- * Check whether a public key belongs to an active genesis administrator.
+ * Check whether a public key belongs to an active genesis administrator or holds a node admin/owner role.
  * Guards against the empty-string sentinel hazard: an empty or missing public key
  * must never match an empty getAdminPubkey() fallback.
  */
 export function isAdminPubkey(publicKey: string): boolean {
     if (!publicKey || typeof publicKey !== 'string') return false;
+    if (isNodeAdmin(publicKey)) return true;
     const admin = getAdminPubkey();
     return Boolean(admin && publicKey === admin);
 }
-
 /**
  * Write the status row only, with no broadcast.
  *
@@ -2832,6 +2856,7 @@ export function adminPruneUser(publicKey: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -2951,6 +2976,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
 
     broadcast({ type: 'profile_updated', publicKey });
@@ -2984,8 +3010,8 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     }
 }
 
-export function adminSendMessage(targetPubkey: string, body: string) {
-    const adminPubkey = getAdminPubkey();
+export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
+    const adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || 'SYSTEM';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3215,8 +3241,7 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    const admin = getMember(adminPubkey);
-    if (!admin || (admin.invitedBy !== 'genesis' && admin.invitedBy !== null && admin.invitedBy !== undefined) || getActiveRound()) return null;
+    if (!isNodeAdmin(adminPubkey) || getActiveRound()) return null;
 
     const projects = getAllProjects();
     for (const pid of projectIds) {

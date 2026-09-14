@@ -65,7 +65,7 @@ import {
     getFriends, addFriend, removeFriend,
     adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
-    getAdminPubkey, recordActivity,
+    recordActivity,
     markConversationRead, getUnreadCounts,
     createProject, updateProject, deleteProject, voteForProject, createVotingRound, closeVotingRound,
     getProjects, getAllProjects, getVotingRounds, getActiveRound, getCommonsBalance, getGovernanceCredits,

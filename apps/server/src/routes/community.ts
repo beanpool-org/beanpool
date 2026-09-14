@@ -12,7 +12,7 @@ import {
     getCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
+    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getCommunityHealth,
     seedGenesisMember,
@@ -728,6 +728,7 @@ router.get('/api/community/members', async (ctx) => {
         .filter(m => !m.isTreasury)
         .map(m => ({
             ...m,
+            nodeRole: nodeRoleOf(m.publicKey),
             avatarUrl: m.avatarUrl
                 ? (m.avatarUrl.startsWith('bundled://')
                     ? m.avatarUrl
@@ -1343,6 +1344,7 @@ router.get('/api/members', async (ctx) => {
         publicKey: m.publicKey,
         callsign: m.callsign,
         joinedAt: m.joinedAt,
+        nodeRole: nodeRoleOf(m.publicKey),
         avatarUrl: m.avatarUrl
             ? (m.avatarUrl.startsWith('bundled://')
                 ? m.avatarUrl

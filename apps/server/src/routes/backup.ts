@@ -8,7 +8,7 @@ import path from 'node:path';
 import {
     getNodeRole, exportSyncState,
     getConversationsByMember, getConversationMessages,
-    getAdminPubkey, recordReplicationAccess, getReplicationAccessLog,
+    recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig,

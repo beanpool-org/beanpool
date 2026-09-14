@@ -32,6 +32,7 @@ export interface Member {
     /** This account is a community treasury (the Commons' trading face), not a person. */
     isTreasury?: boolean;
     archetype?: string | null;
+    nodeRole?: 'owner' | 'admin' | null;
 }
 
 export interface InviteCode {
@@ -96,6 +97,7 @@ export function rowToMember(row: any): Member {
         elderVouchedBy: row.elder_vouched_by || null,
         isTreasury: !!row.is_treasury,
         archetype: row.archetype || null,
+        nodeRole: row.node_role || undefined,
     };
 }
 

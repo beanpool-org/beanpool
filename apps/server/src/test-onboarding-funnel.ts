@@ -26,7 +26,7 @@
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-onboarding-funnel.ts
  */
-import { initStateEngine, getAdminPubkey, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, getFirstNodeAdminPubkey, seedGenesisMember } from './state-engine.js';
 import { recordFunnelEvent, hasNoAvatarYet, getFunnel, pruneFunnel, clampDays } from './engine/funnel.js';
 import { redeemInvite, generateInvite } from './engine/invites.js';
 import { db } from './db/db.js';
@@ -49,7 +49,7 @@ function count(event: string, variant = ''): number {
 async function main(): Promise<void> {
     initStateEngine();
     seedGenesisMember('genesis_admin', 'Admin');
-    const admin = getAdminPubkey();
+    const admin = getFirstNodeAdminPubkey();
 
     // ---------- 1. counters aggregate, and cannot hold an identity ----------
     recordFunnelEvent('protection_shown', 'A');

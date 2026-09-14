@@ -41,28 +41,28 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
 
     const [question, setQuestion] = useState('');
     const [description, setDescription] = useState('');
-    const [options, setOptions] = useState<string[]>(['', '']);
+    const [options, setOptions] = useState<Array<{ id: string; text: string }>>([
+        { id: '1', text: '' },
+        { id: '2', text: '' },
+    ]);
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
     const [submitting, setSubmitting] = useState(false);
 
     const handleAddOption = () => {
         if (options.length < 4) {
-            setOptions(prev => [...prev, '']);
+            const nextId = String(Date.now() + Math.random());
+            setOptions(prev => [...prev, { id: nextId, text: '' }]);
         }
     };
 
-    const handleRemoveOption = (index: number) => {
+    const handleRemoveOption = (id: string) => {
         if (options.length > 2) {
-            setOptions(prev => prev.filter((_, i) => i !== index));
+            setOptions(prev => prev.filter(o => o.id !== id));
         }
     };
 
-    const handleOptionChange = (text: string, index: number) => {
-        setOptions(prev => {
-            const next = [...prev];
-            next[index] = text;
-            return next;
-        });
+    const handleOptionChange = (text: string, id: string) => {
+        setOptions(prev => prev.map(o => o.id === id ? { ...o, text } : o));
     };
 
     const handleCreatePoll = async () => {
@@ -72,7 +72,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             return;
         }
 
-        const validOptions = options.map(o => o.trim()).filter(Boolean);
+        const validOptions = options.map(o => o.text.trim()).filter(Boolean);
         if (validOptions.length < 2) {
             Alert.alert('Options Required', 'A poll must have at least 2 non-empty options.');
             return;
@@ -117,7 +117,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             // Reset form
             setQuestion('');
             setDescription('');
-            setOptions(['', '']);
+            setOptions([{ id: '1', text: '' }, { id: '2', text: '' }]);
             setDurationDays(7);
 
             Alert.alert('Poll Created', 'Your poll has been published to the community feed!');
@@ -144,7 +144,13 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                 <View style={styles.container}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <Pressable onPress={onClose} hitSlop={12} style={styles.cancelBtn} accessibilityRole="button">
+                        <Pressable
+                            onPress={onClose}
+                            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                            style={styles.cancelBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel"
+                        >
                             <Text style={styles.cancelText}>Cancel</Text>
                         </Pressable>
                         <Text style={styles.headerTitle}>New Community Poll</Text>
@@ -220,19 +226,19 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                         </View>
 
                         {options.map((opt, idx) => (
-                            <View key={idx} style={styles.optionInputRow}>
+                            <View key={opt.id} style={styles.optionInputRow}>
                                 <Text style={styles.optionIndexBadge}>{idx + 1}</Text>
                                 <TextInput
                                     style={styles.optionInput}
                                     placeholder={`Option ${idx + 1}`}
                                     placeholderTextColor={colors.text.muted}
-                                    value={opt}
-                                    onChangeText={(val) => handleOptionChange(val, idx)}
+                                    value={opt.text}
+                                    onChangeText={(val) => handleOptionChange(val, opt.id)}
                                     maxLength={80}
                                 />
                                 {options.length > 2 && (
                                     <Pressable
-                                        onPress={() => handleRemoveOption(idx)}
+                                        onPress={() => handleRemoveOption(opt.id)}
                                         style={styles.removeOptionBtn}
                                         hitSlop={8}
                                         accessibilityRole="button"
@@ -298,7 +304,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.body,
         },
         cancelBtn: {
-            padding: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 10,
+            minHeight: 44,
+            minWidth: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
         },
         cancelText: {
             fontSize: 15,
@@ -372,8 +383,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             marginBottom: 6,
         },
         addOptionBtn: {
-            paddingVertical: 2,
-            paddingHorizontal: 6,
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            minHeight: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
         },
         addOptionText: {
             fontSize: 12,
@@ -406,6 +420,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         removeOptionBtn: {
             padding: 8,
+            minHeight: 44,
+            minWidth: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
         },
         removeOptionText: {
             fontSize: 14,

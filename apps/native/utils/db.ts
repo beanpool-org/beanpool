@@ -265,6 +265,7 @@ async function _doInitDB() {
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             PRIMARY KEY (post_id, voter_pubkey)
         );
+        CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -454,6 +455,7 @@ async function _doInitDB() {
                     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                     PRIMARY KEY (post_id, voter_pubkey)
                 );
+                CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
             `);
         } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
@@ -1634,7 +1636,7 @@ export async function createPost(post: any) {
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
          post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
          post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
-         post.poll_closes_at || null]
+         post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }

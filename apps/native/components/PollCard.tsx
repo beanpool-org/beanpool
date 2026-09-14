@@ -54,11 +54,15 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
 
     // Keep livePost in sync if prop changes
     React.useEffect(() => {
-        setLivePost(post);
+        setLivePost((prev: any) => ({
+            ...post,
+            pollVotes: (prev?.pollVotes && prev.pollVotes.length > 0) ? prev.pollVotes : post.pollVotes,
+        }));
     }, [post]);
 
     const isAuthor = Boolean(currentPubkey && (livePost.author_pubkey === currentPubkey || livePost.authorPublicKey === currentPubkey));
-    const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt && new Date(livePost.pollClosesAt) <= new Date());
+    const closesAt = livePost.pollClosesAt || livePost.poll_closes_at;
+    const isClosed = livePost.status === 'completed' || (closesAt ? new Date(closesAt).getTime() <= Date.now() : false);
     const authorName = livePost.author_callsign || livePost.authorCallsign || (livePost.author_pubkey ? livePost.author_pubkey.slice(0, 6) : 'Unknown');
     const avatarUrl = livePost.author_avatar || livePost.authorAvatarUrl;
 
@@ -261,7 +265,9 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                     <Pressable
                         onPress={() => setShowVoters(prev => !prev)}
                         style={styles.votersToggleBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityRole="button"
+                        accessibilityLabel={showVoters ? 'Hide voters list' : `View voters list, ${votesList.length} votes`}
                     >
                         <Text style={styles.votersToggleText}>
                             {showVoters ? 'Hide voters ▲' : `View voters (${votesList.length}) ▼`}
@@ -359,8 +365,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: theme === 'dark' ? '#9ca3af' : '#4b5563',
         },
         closeBtn: {
-            paddingHorizontal: 8,
-            paddingVertical: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            minHeight: 44,
+            minWidth: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
             borderRadius: 6,
             borderWidth: 1,
             borderColor: theme === 'dark' ? '#7f1d1d' : '#fecaca',
@@ -495,8 +505,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontWeight: '600',
         },
         votersToggleBtn: {
-            paddingVertical: 4,
-            paddingHorizontal: 8,
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            minHeight: 44,
+            justifyContent: 'center',
         },
         votersToggleText: {
             fontSize: 12,

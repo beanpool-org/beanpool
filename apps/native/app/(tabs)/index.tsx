@@ -842,7 +842,8 @@ export default function MarketScreen() {
             if (p.status !== 'active') return false;
         }
         if (blockedUsers.includes(p.author_pubkey)) return false;
-        if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+        // Category filter: polls are civic governance posts and bypass goods category filters
+        if (categoryFilter !== 'all' && p.category !== categoryFilter && filter !== 'polls') return false;
         // #108: beans-only browse excludes polls
         if (beansOnly && (p.type === 'poll' || p.cash_also_needed === 1)) return false;
         

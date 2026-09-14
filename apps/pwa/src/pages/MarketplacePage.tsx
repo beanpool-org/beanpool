@@ -357,7 +357,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             try {
                 const filter: any = {};
                 if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
-                if (categoryFilter !== 'all') filter.category = categoryFilter;
+                if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
                 if (beansOnly) filter.beansOnly = true;
 
                 // Always fetch home node listings and the viewer's OWN posts (to surface & re-activate
@@ -2145,10 +2145,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
                 }
 
-                // Radius filter: polls have null coordinates and never pin to map; allow when viewing polls tab
+                // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs
                 if (radiusSettings) {
                     filtered = filtered.filter(p => {
-                        if (p.type === 'poll') return typeFilter === 'poll';
+                        if (p.type === 'poll') return typeFilter === 'all' || typeFilter === 'poll';
                         if (p.lat == null || p.lng == null) return false;
                         const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
                         return dist <= radiusSettings.radiusKm;

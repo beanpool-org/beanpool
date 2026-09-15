@@ -502,7 +502,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                             </button>
                         </div>
                     </header>
-                    <div className="p-5 max-w-lg sm:max-w-xl mx-auto w-full flex flex-col gap-4 flex-1">
+                    <div className="p-5 pb-24 max-w-lg sm:max-w-xl mx-auto w-full flex flex-col gap-4 flex-1" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 2rem)' }}>
                         <p className="text-sm text-nature-500 dark:text-nature-400">
                             Pitch an idea to the community. Beans pledged will be instantly credited to your account to fund the work.
                         </p>

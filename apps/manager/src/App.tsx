@@ -1112,6 +1112,18 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                         }
                                     }}
+                                    onGrantNodeRole={async (pubkey, role) => {
+                                        if (activeNode) {
+                                            await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            await loadNodeData();
+                                        }
+                                    }}
+                                    onRevokeNodeRole={async (pubkey, role) => {
+                                        if (activeNode) {
+                                            await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            await loadNodeData();
+                                        }
+                                    }}
                                 />
                             )}
 

@@ -349,6 +349,12 @@ export function ApplianceSection({
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ password: activeNode.adminPassword }),
             });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                setUpdateAvailable(false);
+                setUpdateInfo(`Update check failed: ${err.error || `HTTP ${res.status}`}`);
+                return;
+            }
             const data = await res.json();
             if (data.updateAvailable) {
                 setUpdateAvailable(true);
@@ -357,9 +363,9 @@ export function ApplianceSection({
                 setUpdateAvailable(false);
                 setUpdateInfo(`Up to date (current release: v${data.currentVersion || '1.4.2'})`);
             }
-        } catch {
+        } catch (e: unknown) {
             setUpdateAvailable(false);
-            setUpdateInfo('Node is running the current sovereign release.');
+            setUpdateInfo(`Unable to check for updates: ${e instanceof Error ? e.message : 'Network error'}`);
         } finally {
             setCheckingUpdate(false);
         }
@@ -448,13 +454,18 @@ export function ApplianceSection({
         if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
-            await fetch(url, {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     password: activeNode.adminPassword,
                 }),
             });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(`Node reset failed: ${err.error || `HTTP ${res.status}`}`);
+                return;
+            }
             alert('Node has been reset. Refreshing page.');
             window.location.reload();
         } catch (e: unknown) {

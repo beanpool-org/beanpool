@@ -385,4 +385,97 @@ describe('ApplianceSection Component', () => {
         // Disable 2FA button should render
         expect(screen.getByRole('button', { name: /disable 2fa/i })).toBeInTheDocument();
     });
+
+    it('surfaces error cleanly when update check returns HTTP error', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/admin/check-update')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 401,
+                    json: () => Promise.resolve({ error: 'Invalid password' }),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ connectors: [] }),
+            });
+        }));
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                />
+            );
+        });
+
+        const checkBtn = screen.getByRole('button', { name: /check release updates/i });
+        await act(async () => {
+            fireEvent.click(checkBtn);
+        });
+
+        expect(screen.getByText(/Update check failed: Invalid password/i)).toBeInTheDocument();
+        expect(screen.queryByText(/✓ Up to date/i)).not.toBeInTheDocument();
+    });
+
+    it('alerts error and does not reload window when factory reset fails', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/reset')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 401,
+                    json: () => Promise.resolve({ error: 'Unauthorized reset attempt' }),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ connectors: [] }),
+            });
+        }));
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="access"
+                />
+            );
+        });
+
+        const resetBtn = screen.getByRole('button', { name: /wipe & reset node/i });
+        await act(async () => {
+            fireEvent.click(resetBtn);
+        });
+
+        expect(alertSpy).toHaveBeenCalledWith('Node reset failed: Unauthorized reset attempt');
+    });
 });

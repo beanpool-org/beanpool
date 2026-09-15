@@ -62,6 +62,19 @@ describe('App Component', () => {
 
             expect(screen.getByText('Connect Sovereign Node')).toBeInTheDocument();
         });
+
+        it('navigates to members tab and renders members management in Fleet Mode', async () => {
+            await act(async () => {
+                render(<App isFleetMode={true} />);
+            });
+
+            const membersTab = screen.getByRole('button', { name: /trust & members/i });
+            await act(async () => {
+                fireEvent.click(membersTab);
+            });
+
+            expect(screen.getByText(/Community Treasuries & Enterprises/i)).toBeInTheDocument();
+        });
     });
 
     describe('Single Node Mode (isFleetMode = false)', () => {

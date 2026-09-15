@@ -343,4 +343,46 @@ describe('ApplianceSection Component', () => {
             })
         );
     });
+
+    it('correctly maps totpEnabled to enabled when rendering 2FA card in access subtab', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/2fa/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true, totpEnabled: true }),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ connectors: [] }),
+            });
+        }));
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="access"
+                />
+            );
+        });
+
+        // 2FA status badge should display "Enabled"
+        expect(screen.getByText('Enabled')).toBeInTheDocument();
+        // Disable 2FA button should render
+        expect(screen.getByRole('button', { name: /disable 2fa/i })).toBeInTheDocument();
+    });
 });

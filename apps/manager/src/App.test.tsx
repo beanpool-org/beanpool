@@ -149,5 +149,45 @@ describe('App Component', () => {
             expect(screen.getByText(/unlock settings/i)).toBeInTheDocument();
             expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
         });
+
+        it('authenticating via AdminLoginCard in single-node mode keeps credentials in session storage without writing password to localStorage', async () => {
+            sessionStorage.clear();
+            localStorage.clear();
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+
+            const passInput = screen.getByPlaceholderText(/enter node admin password/i);
+            const unlockBtn = screen.getByRole('button', { name: /unlock settings/i });
+
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/verify-password')) {
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        json: () => Promise.resolve({ success: true, sessionToken: 'tfa-session-xyz' }),
+                    });
+                }
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }),
+                });
+            }));
+
+            await act(async () => {
+                fireEvent.change(passInput, { target: { value: 'secret-pass-123' } });
+                fireEvent.click(unlockBtn);
+            });
+
+            expect(screen.getByText('Node Settings')).toBeInTheDocument();
+            expect(sessionStorage.getItem('bp-admin-token')).toBe('secret-pass-123');
+            expect(sessionStorage.getItem('bp_tfa_session_local-node')).toBe('tfa-session-xyz');
+            const profilesRaw = localStorage.getItem('bp_fleet_profiles');
+            if (profilesRaw) {
+                const profiles = JSON.parse(profilesRaw);
+                expect(profiles.some((p: any) => p.adminPassword === 'secret-pass-123')).toBe(false);
+            }
+        });
     });
 });

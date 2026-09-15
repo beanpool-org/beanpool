@@ -140,7 +140,10 @@ export function ApplianceSection({
             });
             if (res.ok) {
                 const data = await res.json();
-                setTfaStatus(data);
+                setTfaStatus({
+                    ...data,
+                    enabled: Boolean(data.totpEnabled ?? data.enabled),
+                });
             }
         } catch {}
     };

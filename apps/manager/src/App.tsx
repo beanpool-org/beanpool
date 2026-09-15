@@ -835,11 +835,13 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
         return (
             <AdminLoginCard
                 nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
-                onAuthenticated={(pwd) => {
+                onAuthenticated={(pwd, sessionToken) => {
                     setAdminToken(pwd);
                     if (activeNode) {
                         activeNode.adminPassword = pwd;
-                        handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
+                    }
+                    if (sessionToken) {
+                        setTfaSessionToken(activeNode?.id || 'local-node', sessionToken);
                     }
                     setRefreshToken((n) => n + 1);
                 }}

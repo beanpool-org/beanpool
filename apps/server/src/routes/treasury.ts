@@ -21,6 +21,7 @@ import {
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
+import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -243,24 +244,30 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const pledgeHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const body = (ctx as any).requestBody || {};
-        const { fromPubkey, amount, memo } = body;
-        const actor = (ctx.state?.actor as string) || fromPubkey;
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
-        if (blocked(statusOf(treasury))) {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if (statusOf(treasury) !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
         }
-        if (blocked(statusOf(actor))) {
+        if (statusOf(actor) !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: 'Your account is not active, so you cannot pledge.' };
+            ctx.body = { error: 'Only active community members can pledge.' };
             return;
         }
+        if (blockCrossNodeSettlement(ctx, actor)) return;
+
+        const body = (ctx as any).requestBody || {};
+        const { amount, memo } = body;
         const parsedAmount = Number(amount);
-        if (!actor || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             ctx.status = 400;
-            ctx.body = { error: 'fromPubkey and a positive amount are required' };
+            ctx.body = { error: 'A positive amount is required' };
             return;
         }
         try {

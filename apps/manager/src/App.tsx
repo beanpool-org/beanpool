@@ -914,6 +914,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             activeNode={activeNode}
                                             diag={diag}
                                             nodeData={nodeData}
+                                            tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                             onComplete={() => {
                                                 setShowColdStart(false);
                                                 loadNodeData();
@@ -1002,6 +1003,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                 <EconomySection
                                     activeNode={activeNode}
                                     nodeData={nodeData}
+                                    tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                     onRefresh={() => {
                                         loadNodeData();
                                         loadDiagnostics();

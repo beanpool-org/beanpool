@@ -247,10 +247,8 @@ export function ApplianceSection({
         setRestoreStatus(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
-            const headers: Record<string, string> = {};
-            if (activeNode.adminPassword) headers['X-Admin-Password'] = activeNode.adminPassword;
-            const token = getTfaSessionToken(activeNode.id);
-            if (token) headers['X-Admin-2FA-Session'] = token;
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            delete headers['Content-Type'];
 
             const res = await fetch(url, {
                 method: 'POST',

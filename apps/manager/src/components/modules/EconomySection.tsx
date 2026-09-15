@@ -166,14 +166,15 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/projects');
             const res = await fetch(url, {
+                method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json();
                 setCommonsData({
-                    proposed: data.proposed || [],
-                    activeRound: data.activeRound || null,
-                    pastRounds: data.pastRounds || [],
+                    proposed: data.projects || data.proposed || [],
+                    activeRound: data.rounds?.find((r: any) => r.status === 'ACTIVE') || data.activeRound || null,
+                    pastRounds: data.rounds?.filter((r: any) => r.status !== 'ACTIVE') || data.pastRounds || [],
                 });
             }
         } catch {

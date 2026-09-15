@@ -64,7 +64,9 @@ export interface MemberItem {
 
 export interface NodeDataPayload {
     health?: {
+        healthScore?: number;
         flags?: NodeHealthFlag[];
+        [key: string]: unknown;
     };
     reports?: NodeReport[];
     members?: MemberItem[];
@@ -541,6 +543,125 @@ export async function updateNodeUserOperator(
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
+}
+
+export interface NodeRoleRecord {
+    member_pubkey: string;
+    role: 'owner' | 'admin' | 'moderator';
+    granted_at: string;
+    granted_by: string | null;
+    callsign?: string;
+}
+
+export async function fetchNodeRoles(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<NodeRoleRecord[]> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch node roles');
+    }
+    const data = await res.json();
+    return data.roles || [];
+}
+
+export async function grantNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey, role }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to grant node role');
+    }
+    return data;
+}
+
+export async function revokeNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/node-roles/${encodeURIComponent(pubkey)}/${encodeURIComponent(role)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke node role');
+    }
+    return data;
+}
+
+export async function fetchTreasuryKeepers(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch keepers');
+    }
+    const data = await res.json();
+    return data.keepers || [];
+}
+
+export async function assignTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey: memberPubkey }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to assign keeper');
+    }
+    return data.keepers || [];
+}
+
+export async function revokeTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(memberPubkey)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke keeper');
+    }
+    return data.keepers || [];
 }
 
 export interface NodeTreasury {

@@ -726,7 +726,7 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
 CREATE TABLE IF NOT EXISTS node_roles (
     member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
-    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
+    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
     granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by    TEXT
 );

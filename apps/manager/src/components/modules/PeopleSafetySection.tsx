@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
+import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import type { NodeProfile } from '../../lib/profiles';
@@ -15,6 +16,8 @@ interface PeopleSafetySectionProps {
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     initialSubTab?: 'directory' | 'invites' | 'moderation';
 }
 
@@ -28,6 +31,8 @@ export function PeopleSafetySection({
     onUpdateTier,
     onToggleVoucher,
     onToggleOperator,
+    onGrantNodeRole,
+    onRevokeNodeRole,
     initialSubTab = 'directory',
 }: PeopleSafetySectionProps) {
     const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation'>(initialSubTab);
@@ -129,6 +134,8 @@ export function PeopleSafetySection({
                     onUpdateTier={onUpdateTier}
                     onToggleVoucher={onToggleVoucher}
                     onToggleOperator={onToggleOperator}
+                    onGrantNodeRole={onGrantNodeRole}
+                    onRevokeNodeRole={onRevokeNodeRole}
                 />
             )}
 

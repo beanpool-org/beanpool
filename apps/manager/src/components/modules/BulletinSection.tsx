@@ -9,8 +9,12 @@ interface BulletinSectionProps {
 
 interface PulseChannel {
     id: string;
-    title: string;
-    feedUrl: string;
+    title?: string;
+    feedUrl?: string;
+    url?: string;
+    handle?: string;
+    platform?: string;
+    category?: string;
     description?: string;
     itemCount?: number;
     enabled?: boolean;
@@ -95,16 +99,13 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
         if (!channelFeedUrl.trim() || !channelTitle.trim()) return;
         setAddingChannel(true);
         try {
-            const channelId = channelTitle.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    channelId,
-                    title: channelTitle.trim(),
-                    feedUrl: channelFeedUrl.trim(),
-                    description: channelDescription.trim() || undefined,
+                    url: channelFeedUrl.trim(),
+                    category: 'learn',
                 }),
             });
             if (res.ok) {
@@ -128,11 +129,16 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
         if (!confirm('Remove this Pulse feed channel?')) return;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels/remove');
-            await fetch(url, {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ channelId }),
+                body: JSON.stringify({ id: channelId }),
             });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.error || 'Failed to remove channel');
+                return;
+            }
             await loadChannels();
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : String(e));
@@ -313,9 +319,9 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                                     className="p-4 rounded-xl bg-nature-900/80 border border-nature-800 flex items-center justify-between gap-3 shadow-md"
                                 >
                                     <div>
-                                        <h4 className="text-sm font-bold text-white m-0">{c.title}</h4>
+                                        <h4 className="text-sm font-bold text-white m-0">{c.title || c.handle || c.url}</h4>
                                         <span className="text-[11px] font-mono text-nature-400 truncate block max-w-xs sm:max-w-sm mt-0.5">
-                                            {c.feedUrl}
+                                            {c.url || c.feedUrl}
                                         </span>
                                         {c.description && (
                                             <p className="text-xs text-nature-300 m-0 mt-1">{c.description}</p>

@@ -74,7 +74,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
             reader.onload = (event) => {
                 const base64 = event.target?.result as string;
                 if (base64) {
-                    setNewPhotos(prev => [...prev, base64].slice(0, 1)); // Single avatar
+                    setNewPhotos([base64]); // Single avatar
                 }
             };
             reader.readAsDataURL(file); 

@@ -1720,6 +1720,51 @@ export async function createProject(project: {
     });
 }
 
+export async function deleteCrowdfundProjectApi(projectId: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline. Please connect to a BeanPool Node to cancel your initiative.');
+    }
+
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+
+    const body = {
+        id: projectId,
+        creatorPubkey: identity.publicKey,
+    };
+    const bodyString = JSON.stringify(body);
+    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/delete', bodyString, identity.privateKey, identity.publicKey);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+        res = await fetch(`${anchorUrl}/api/crowdfund/projects/delete`, {
+            method: 'POST',
+            headers,
+            body: bodyString,
+            signal: controller.signal,
+        });
+    } catch (e: any) {
+        throw new Error(e.message || 'Network request failed. You must be connected to a node to cancel initiatives.');
+    } finally {
+        clearTimeout(timeoutId);
+    }
+
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Failed to cancel initiative: ${errorText}`);
+    }
+
+    try {
+        const database = await getDb();
+        await database.runAsync(`DELETE FROM projects WHERE id = ?;`, [projectId]);
+    } catch { }
+}
+
 export async function getActiveVotingRound(): Promise<{ id: string; status: string; closesAt: string; projectIds: string[]; createdAt: string } | null> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) return null;

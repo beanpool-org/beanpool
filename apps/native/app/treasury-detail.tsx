@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse } from '../utils/db';
+import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -29,6 +29,7 @@ export default function TreasuryDetailScreen() {
     const [pledgeAmount, setPledgeAmount] = useState('');
     const [pledgeMemo, setPledgeMemo] = useState('');
     const [pledging, setPledging] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [reporting, setReporting] = useState(false);
@@ -171,7 +172,7 @@ export default function TreasuryDetailScreen() {
     };
 
     const handlePledge = async () => {
-        if (!treasuryKey) return;
+        if (!treasuryKey || pledging) return;
         const amt = Number(pledgeAmount);
         if (isNaN(amt) || amt <= 0) {
             Alert.alert('Invalid Amount', 'Please enter a positive number of Beans to pledge.');
@@ -189,6 +190,33 @@ export default function TreasuryDetailScreen() {
         } finally {
             setPledging(false);
         }
+    };
+
+    const handleCancelInitiative = () => {
+        if (!treasuryKey || cancelling) return;
+        Alert.alert(
+            'Cancel Initiative & Refund Backers?',
+            'This will close the initiative and immediately refund all escrowed pledges back to their backers.',
+            [
+                { text: 'Keep Initiative', style: 'cancel' },
+                {
+                    text: 'Cancel & Refund',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setCancelling(true);
+                        try {
+                            await deleteCrowdfundProjectApi(treasuryKey);
+                            Alert.alert('Initiative Cancelled 🌱', 'Pledges have been refunded to backers.');
+                            router.back();
+                        } catch (e: any) {
+                            Alert.alert('Cancellation Failed', e.message || 'Could not cancel initiative.');
+                        } finally {
+                            setCancelling(false);
+                        }
+                    }
+                }
+            ]
+        );
     };
 
     const getDaysRemaining = (deadline: string | null) => {
@@ -386,6 +414,7 @@ export default function TreasuryDetailScreen() {
                                             onPress={handlePledge}
                                             accessibilityRole="button"
                                             accessibilityLabel="Pledge Beans"
+                                            accessibilityState={{ disabled: pledging || !pledgeAmount.trim(), busy: pledging }}
                                         >
                                             {pledging ? (
                                                 <ActivityIndicator color={colors.text.inverse} />
@@ -600,6 +629,29 @@ export default function TreasuryDetailScreen() {
                                 <Text style={styles.opHint}>
                                     Post the treasury's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
+
+                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
+                                        <Pressable
+                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
+                                            onPress={handleCancelInitiative}
+                                            disabled={cancelling}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Cancel initiative and refund escrow"
+                                        >
+                                            {cancelling ? (
+                                                <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                            ) : (
+                                                <>
+                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.solid} />
+                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid }}>
+                                                        Cancel Initiative & Refund Escrow
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                )}
                             </View>
                         )}
 

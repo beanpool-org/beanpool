@@ -311,24 +311,10 @@ export default function ProjectsScreen() {
 
                     {/* Primary CTA if has goal and not funded */}
                     {hasGoal && !isFunded && (
-                        <Pressable
-                            accessibilityRole="button"
-                            style={styles.pledgeCardBtn}
-                            onPress={(e) => {
-                                e.stopPropagation();
-                                router.push({
-                                    pathname: '/treasury-detail',
-                                    params: {
-                                        publicKey: item.publicKey,
-                                        name: item.name || item.callsign,
-                                        avatar: item.avatar || item.avatarUrl || ''
-                                    }
-                                });
-                            }}
-                        >
+                        <View style={styles.pledgeCardBtn} aria-hidden={true}>
                             <MaterialCommunityIcons name="sprout" size={16} color={colors.text.inverse} />
                             <Text style={styles.pledgeCardBtnText}>Pledge Beans</Text>
-                        </Pressable>
+                        </View>
                     )}
                 </View>
             </Pressable>

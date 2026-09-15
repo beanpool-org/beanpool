@@ -134,7 +134,7 @@ export function ApplianceSection({
 
     const load2faStatus = async () => {
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/admin/2fa/status');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/status');
             const res = await fetch(url, {
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
             });
@@ -147,7 +147,7 @@ export function ApplianceSection({
 
     const loadConnectors = async () => {
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/connectors');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/connectors');
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
@@ -277,7 +277,7 @@ export function ApplianceSection({
         setSavingIdentity(true);
         setIdentitySuccess(null);
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/update-identity');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -312,7 +312,7 @@ export function ApplianceSection({
         setChangingPwd(true);
         setPwdStatus(null);
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/change-password');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/change-password');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -365,7 +365,7 @@ export function ApplianceSection({
 
     const handleSetup2FA = async () => {
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/admin/2fa/setup');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -383,7 +383,7 @@ export function ApplianceSection({
     const handleVerify2FA = async () => {
         if (!totpVerifyCode.trim()) return;
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/admin/2fa/verify');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/verify');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -404,7 +404,7 @@ export function ApplianceSection({
     const handleDisable2FA = async () => {
         if (!confirm('Disable 2FA protection for this node admin account?')) return;
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/admin/2fa/disable');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -423,7 +423,7 @@ export function ApplianceSection({
         if (!peerAddress.trim()) return;
         setConnectingPeer(true);
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/connectors/connect');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/connectors/connect');
             await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -442,7 +442,7 @@ export function ApplianceSection({
         if (!confirm('CRITICAL DANGER: Are you sure you want to reset this node? All identity and local configs will be erased.')) return;
         if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/reset');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
             await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
@@ -717,7 +717,15 @@ export function ApplianceSection({
                                 </div>
                             )}
 
-                            <form onSubmit={handleRestoreSubmit} className="space-y-3">
+                            <form
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (window.confirm('⚠️ DANGER: Restoring will completely overwrite the sovereign node database and all active ledger balances. Are you sure you want to proceed?')) {
+                                        handleRestoreSubmit(e);
+                                    }
+                                }}
+                                className="space-y-3"
+                            >
                                 <input
                                     type="file"
                                     accept=".sqlite,.db,.tar.gz"

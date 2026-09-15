@@ -382,7 +382,12 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        adminDeletePost(ctx.params.id);
+        const ok = adminDeletePost(ctx.params.id);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Post not found' };
+            return;
+        }
         ctx.body = { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);

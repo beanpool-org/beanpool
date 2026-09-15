@@ -1333,6 +1333,15 @@ export async function treasuryComplete(treasury: string, transactionId: string, 
 export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
+export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+}
+export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+}
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null }> {
+    return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+}
 
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {
     return request('GET', '/api/commons/rounds');

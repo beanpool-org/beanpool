@@ -175,7 +175,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!targetSnapshotNode) return;
         setSnapshotLoading(true);
         try {
-            const items = await fetchNodeSnapshots(targetSnapshotNode.url, targetSnapshotNode.adminPassword);
+            const items = await fetchNodeSnapshots(
+                targetSnapshotNode.url,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             setSnapshots(items);
         } catch {
             setSnapshots([]);
@@ -312,7 +316,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!targetSnapshotNode) return;
         setCreatingSnapshot(true);
         try {
-            await createNodeSnapshot(targetSnapshotNode.url, targetSnapshotNode.adminPassword);
+            await createNodeSnapshot(
+                targetSnapshotNode.url,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             await loadSnapshots();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -326,7 +334,12 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleDeleteSnapshot = async (name: string) => {
         if (!targetSnapshotNode || !confirm(`Delete snapshot ${name}?`)) return;
         try {
-            await deleteNodeSnapshot(targetSnapshotNode.url, name, targetSnapshotNode.adminPassword);
+            await deleteNodeSnapshot(
+                targetSnapshotNode.url,
+                name,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             await loadSnapshots();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);

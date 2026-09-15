@@ -203,7 +203,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         >
                                             <Avatar 
                                                 callsign={f.callsign} 
-                                                avatarUrl={memberAvatarMap[f.publicKey]} 
+                                                avatarUrl={f.avatarUrl || memberAvatarMap[f.publicKey]}
                                                 size={36}
                                             />
                                         </button>

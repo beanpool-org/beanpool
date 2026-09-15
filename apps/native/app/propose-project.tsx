@@ -5,15 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { createProject } from '../utils/db';
+import { createEnterpriseApi } from '../utils/db';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrencyDisplay } from '../components/CurrencyDisplay';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
-
 
 export default function ProposeProjectModal() {
     const { theme, colors } = useTheme();
@@ -21,23 +20,29 @@ export default function ProposeProjectModal() {
         container: { flex: 1, backgroundColor: colors.surface.app },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 1, textTransform: 'uppercase' },
-        infoBox: { flexDirection: 'row', backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald50, padding: 16, borderRadius: 12, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : palette.emerald200 },
-        infoText: { flex: 1, fontSize: 14, color: theme === 'dark' ? colors.text.body : palette.emerald800, lineHeight: 22 },
+        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        infoBox: { flexDirection: 'row', backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald50, padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : palette.emerald200 },
+        infoText: { flex: 1, fontSize: 13, color: theme === 'dark' ? colors.text.body : palette.emerald800, lineHeight: 19 },
         scroll: { padding: 20 },
-        field: { marginBottom: 24 },
-        label: { fontSize: 11, fontWeight: 'bold', color: theme === 'dark' ? colors.text.secondary : palette.gray700, letterSpacing: 1, marginBottom: 8 },
+        field: { marginBottom: 20 },
+        label: { fontSize: 11, fontWeight: 'bold', color: theme === 'dark' ? colors.text.secondary : palette.gray700, letterSpacing: 0.5, marginBottom: 8 },
         hint: { fontSize: 12, color: colors.text.secondary, marginTop: 6 },
-        input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 16, fontSize: 16, color: colors.text.body },
-        priceInput: { fontSize: 24, fontWeight: 'bold', color: colors.brand.primary },
-        textarea: { height: 160, paddingTop: 16 },
+        input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, fontSize: 15, color: colors.text.body },
+        priceInput: { fontSize: 22, fontWeight: 'bold', color: colors.brand.primary },
+        textarea: { height: 120, paddingTop: 14 },
+        typeSelectorRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+        typeBtn: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border.default, backgroundColor: colors.surface.card },
+        typeBtnActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
+        typeBtnTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text.heading, marginBottom: 4 },
+        typeBtnDesc: { fontSize: 11, color: colors.text.secondary, lineHeight: 15 },
         footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
         submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.primary, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
-        submitBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold', letterSpacing: 1 },
+        submitBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 },
         toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
     }));
 
+    const [lifecycle, setLifecycle] = useState<'bounded' | 'ongoing'>('bounded');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [goalAmount, setGoalAmount] = useState('');
@@ -59,17 +64,17 @@ export default function ProposeProjectModal() {
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + maxExpiryDays);
 
-    const fieldBorder = (field: string) => validationErrors.has(field) ? { borderColor: colors.feedback.danger.solid, borderWidth: 2, shadowColor: colors.feedback.danger.solid, shadowOpacity: 0.3, shadowRadius: 6 } : {};
+    const fieldBorder = (field: string) => validationErrors.has(field) ? { borderColor: colors.feedback.danger.solid, borderWidth: 2 } : {};
 
     const handleSubmit = async () => {
         if (submittingRef.current) return;
 
         const errors = new Set<string>();
-        if (!title.trim()) errors.add('title');
-        if (!goalAmount.trim() || isNaN(Number(goalAmount)) || Number(goalAmount) <= 0) errors.add('goalAmount');
+        if (!title.trim() || title.trim().length < 2) errors.add('title');
         if (!description.trim()) errors.add('description');
-        if (!deadlineDate) errors.add('deadline');
-        if (photos.length === 0) errors.add('photos');
+        if (lifecycle === 'bounded') {
+            if (!goalAmount.trim() || isNaN(Number(goalAmount)) || Number(goalAmount) <= 0) errors.add('goalAmount');
+        }
         setValidationErrors(errors);
         if (errors.size > 0) {
             setValidationToast('⚠️ Please complete all required fields');
@@ -78,25 +83,32 @@ export default function ProposeProjectModal() {
         }
 
         let parsedDeadline = null;
-        if (deadlineDate) {
+        if (lifecycle === 'bounded' && deadlineDate) {
             parsedDeadline = deadlineDate.toISOString();
         }
 
         submittingRef.current = true;
         setSubmitting(true);
         try {
-            await createProject({
-                title: title.trim(),
+            await createEnterpriseApi({
+                name: title.trim(),
+                purpose: description.trim(),
                 description: description.trim(),
-                goal_amount: parseInt(goalAmount, 10) || 0,
+                lifecycle,
+                goalAmount: lifecycle === 'bounded' ? (parseInt(goalAmount, 10) || 0) : null,
+                deadlineAt: parsedDeadline,
                 photos,
-                deadline_at: parsedDeadline
+                avatar: photos.length > 0 ? photos[0] : undefined,
             });
-            Alert.alert("Proposal Submitted", "Your community project proposal has been broadcast to the network.", [
-                { text: "OK", onPress: () => router.back() }
-            ]);
+            Alert.alert(
+                "Initiative Started 🌱",
+                lifecycle === 'bounded' 
+                    ? "Your bounded project has been created and is now open for community backing."
+                    : "Your community enterprise has been established in the Commons.",
+                [{ text: "OK", onPress: () => router.back() }]
+            );
         } catch (e: any) {
-            Alert.alert("Submission Failed", e.message || "Could not propose project.");
+            Alert.alert("Creation Failed", e.message || "Could not start enterprise.");
         } finally {
             setSubmitting(false);
             submittingRef.current = false;
@@ -110,7 +122,7 @@ export default function ProposeProjectModal() {
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Propose Project</Text>
+                <Text style={styles.headerTitle}>Start an Enterprise / Project</Text>
                 <View style={{ width: 40 }} />
             </View>
 
@@ -122,84 +134,132 @@ export default function ProposeProjectModal() {
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information" size={20} color={colors.brand.primary} style={{ marginRight: 8 }} />
-                        <Text style={styles.infoText}>Project proposals must be voted on and approved by the community before any funds are released.</Text>
+                        <Text style={styles.infoText}>
+                            Community enterprises trade, produce, and steward shared initiatives. Bounded initiatives raise beans toward specific community goals.
+                        </Text>
                     </View>
 
-                    {/* Title */}
+                    {/* Initiative Type Selector */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>PROJECT TITLE</Text>
+                        <Text style={styles.label}>INITIATIVE TYPE</Text>
+                        <View style={styles.typeSelectorRow}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Bounded Project: Has funding goal and deadline"
+                                accessibilityState={{ selected: lifecycle === 'bounded' }}
+                                style={[styles.typeBtn, lifecycle === 'bounded' && styles.typeBtnActive]}
+                                onPress={() => setLifecycle('bounded')}
+                            >
+                                <Text style={styles.typeBtnTitle}>🌱 Bounded Project</Text>
+                                <Text style={styles.typeBtnDesc}>Has funding goal and optional deadline</Text>
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Ongoing Enterprise: Permanent co-op or facility"
+                                accessibilityState={{ selected: lifecycle === 'ongoing' }}
+                                style={[styles.typeBtn, lifecycle === 'ongoing' && styles.typeBtnActive]}
+                                onPress={() => setLifecycle('ongoing')}
+                            >
+                                <Text style={styles.typeBtnTitle}>🏛️ Ongoing</Text>
+                                <Text style={styles.typeBtnDesc}>Permanent co-op or community facility</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+
+                    {/* Name / Title */}
+                    <View style={styles.field}>
+                        <Text style={styles.label}>NAME / TITLE *</Text>
                         <TextInput
-                            accessibilityLabel="Project title"
+                            accessibilityLabel="Enterprise name or project title"
                             style={[styles.input, fieldBorder('title')]}
-                            placeholder="e.g. Community Garden Tool Shed"
+                            placeholder="e.g. Community Tool Shed or Shade House"
                             value={title}
                             onChangeText={(v) => { setTitle(v); if (validationErrors.has('title')) { const n = new Set(validationErrors); n.delete('title'); setValidationErrors(n); } }}
                             maxLength={60}
                         />
                     </View>
 
-                    {/* Goal Amount */}
+                    {/* Purpose Statement (required per docs/the-commons.md §2.1) */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>FUNDING GOAL (<CurrencyDisplay hideAmount={true} />)</Text>
+                        <Text style={styles.label}>PURPOSE STATEMENT *</Text>
                         <TextInput
-                            accessibilityLabel="Funding goal amount"
-                            style={[styles.input, styles.priceInput, fieldBorder('goalAmount')]}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={goalAmount}
-                            onChangeText={(v) => { setGoalAmount(v); if (validationErrors.has('goalAmount')) { const n = new Set(validationErrors); n.delete('goalAmount'); setValidationErrors(n); } }}
-                            maxLength={6}
+                            accessibilityLabel="Purpose statement"
+                            style={[styles.input, styles.textarea, fieldBorder('description')]}
+                            placeholder="State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')."
+                            value={description}
+                            onChangeText={(v) => { setDescription(v); if (validationErrors.has('description')) { const n = new Set(validationErrors); n.delete('description'); setValidationErrors(n); } }}
+                            multiline
+                            textAlignVertical="top"
                         />
-                        {/* PWA states "Commons allocation limit bounds this locally". */}
-                        <Text style={styles.hint}>Amount requested from the community pool.</Text>
+                        <Text style={styles.hint}>The purpose statement is what the community judges the initiative against.</Text>
                     </View>
 
-                    {/* Deadline */}
-                    <View style={styles.field}>
-                        <Text style={styles.label}>FUNDING DEADLINE *</Text>
-                        <Pressable
-                            style={[styles.input, { justifyContent: 'center' }, fieldBorder('deadline')]}
-                            onPress={() => setShowPicker(true)}
-                            accessibilityRole="button"
-                            accessibilityLabel={deadlineDate ? `Funding deadline: ${deadlineDate.toISOString().split('T')[0]}` : "Select funding deadline date"}
-                        >
-                            <Text style={{ color: deadlineDate ? colors.text.heading : colors.text.muted, fontSize: 16 }}>
-                                {deadlineDate ? deadlineDate.toISOString().split('T')[0] : "Select Deadline Date"}
-                            </Text>
-                        </Pressable>
-                        {showPicker && (
-                            <DateTimePicker
-                                value={deadlineDate || new Date()}
-                                mode="date"
-                                display="default"
-                                minimumDate={new Date()}
-                                maximumDate={maxDate}
-                                onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
-                                    setShowPicker(false);
-                                    if (event.type === 'set' && selectedDate) {
-                                        setDeadlineDate(selectedDate);
-                                        if (validationErrors.has('deadline')) { const n = new Set(validationErrors); n.delete('deadline'); setValidationErrors(n); }
-                                    }
-                                }}
-                            />
-                        )}
-                        <Text style={styles.hint}>If set, project will automatically expire on this date.</Text>
-                    </View>
+                    {/* Bounded Project Fields: Goal & Deadline */}
+                    {lifecycle === 'bounded' && (
+                        <>
+                            <View style={styles.field}>
+                                <Text style={styles.label}>FUNDING GOAL (<CurrencyDisplay hideAmount={true} />) *</Text>
+                                <TextInput
+                                    accessibilityLabel="Funding goal amount"
+                                    style={[styles.input, styles.priceInput, fieldBorder('goalAmount')]}
+                                    placeholder="0"
+                                    keyboardType="numeric"
+                                    value={goalAmount}
+                                    onChangeText={(v) => { setGoalAmount(v); if (validationErrors.has('goalAmount')) { const n = new Set(validationErrors); n.delete('goalAmount'); setValidationErrors(n); } }}
+                                    maxLength={6}
+                                />
+                                <Text style={styles.hint}>Pledges are held safely in the enterprise account.</Text>
+                            </View>
 
-                    {/* Photos */}
+                            <View style={styles.field}>
+                                <Text style={styles.label}>FUNDING DEADLINE (OPTIONAL)</Text>
+                                <Pressable
+                                    style={[styles.input, { justifyContent: 'center' }]}
+                                    onPress={() => setShowPicker(true)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={deadlineDate ? `Funding deadline: ${deadlineDate.toISOString().split('T')[0]}` : "Select funding deadline date"}
+                                >
+                                    <Text style={{ color: deadlineDate ? colors.text.heading : colors.text.muted, fontSize: 15 }}>
+                                        {deadlineDate ? deadlineDate.toISOString().split('T')[0] : "Select Deadline Date (Optional)"}
+                                    </Text>
+                                </Pressable>
+                                {showPicker && (
+                                    <DateTimePicker
+                                        value={deadlineDate || new Date()}
+                                        mode="date"
+                                        display="default"
+                                        minimumDate={new Date()}
+                                        maximumDate={maxDate}
+                                        onChange={(event: DateTimePickerEvent, selectedDate?: Date) => {
+                                            setShowPicker(false);
+                                            if (event.type === 'set' && selectedDate) {
+                                                setDeadlineDate(selectedDate);
+                                            }
+                                        }}
+                                    />
+                                )}
+                                {deadlineDate && (
+                                    <Pressable onPress={() => setDeadlineDate(null)} style={{ marginTop: 4 }}>
+                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.solid }}>Clear deadline</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        </>
+                    )}
+
+                    {/* Photos / Avatar */}
                     <View style={styles.field}>
-                        <Text style={styles.label}>PROJECT PHOTOS * (MIN 1, MAX 3)</Text>
-                        <View style={[{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4, borderRadius: 12 }, fieldBorder('photos')]}>
+                        <Text style={styles.label}>COVER PHOTO / AVATAR (OPTIONAL)</Text>
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4, padding: 4 }}>
                             {photos.map((uri, idx) => (
                                 uri && typeof uri === 'string' && uri.trim() !== '' && uri !== 'null' && uri !== 'undefined' ? (
                                     <View key={idx} style={{ position: 'relative' }}>
-                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: colors.surface.subtle }} accessibilityLabel="Project photo" />
+                                        <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: colors.surface.subtle }} accessibilityLabel="Initiative photo" />
                                         <Pressable
                                             onPress={() => setPhotos(prev => prev.filter((_, i) => i !== idx))}
-                                            style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3 }}
+                                            style={{ position: 'absolute', top: -5, right: -5, backgroundColor: colors.feedback.danger.solid, borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}
                                             accessibilityRole="button"
                                             accessibilityLabel="Remove photo"
-                                            accessibilityHint="Removes this photo from the project"
                                         >
                                             <MaterialCommunityIcons name="close" size={16} color={colors.text.inverse} />
                                         </Pressable>
@@ -224,7 +284,6 @@ export default function ProposeProjectModal() {
                                             );
                                             if (manipResult.base64) {
                                                 setPhotos(prev => [...prev, `data:image/jpeg;base64,${manipResult.base64}`]);
-                                                if (validationErrors.has('photos')) { const n = new Set(validationErrors); n.delete('photos'); setValidationErrors(n); }
                                             }
                                         }
                                     }}
@@ -236,20 +295,6 @@ export default function ProposeProjectModal() {
                                 </Pressable>
                             )}
                         </View>
-                    </View>
-
-                    {/* Description */}
-                    <View style={styles.field}>
-                        <Text style={styles.label}>PROPOSAL DETAILS</Text>
-                        <TextInput
-                            accessibilityLabel="Proposal details"
-                            style={[styles.input, styles.textarea, fieldBorder('description')]}
-                            placeholder="Describe the project, who benefits, and how the credits will be allocated..."
-                            value={description}
-                            onChangeText={(v) => { setDescription(v); if (validationErrors.has('description')) { const n = new Set(validationErrors); n.delete('description'); setValidationErrors(n); } }}
-                            multiline
-                            textAlignVertical="top"
-                        />
                     </View>
 
                 </ScrollView>
@@ -266,14 +311,13 @@ export default function ProposeProjectModal() {
                         onPress={handleSubmit}
                         disabled={submitting}
                         accessibilityRole="button"
-                        accessibilityLabel={submitting ? "Submitting to network" : "Submit to network"}
-                        accessibilityHint="Submits your community project proposal"
+                        accessibilityLabel={submitting ? "Starting enterprise..." : "Start Enterprise"}
                         accessibilityState={{ disabled: submitting, busy: submitting }}
                     >
                         {submitting ? (
                             <ActivityIndicator color={colors.text.inverse} />
                         ) : (
-                            <Text style={styles.submitBtnText}>SUBMIT TO NETWORK</Text>
+                            <Text style={styles.submitBtnText}>START INITIATIVE 🌱</Text>
                         )}
                     </Pressable>
                 </View>
@@ -281,5 +325,3 @@ export default function ProposeProjectModal() {
         </SafeAreaView>
     );
 }
-
-

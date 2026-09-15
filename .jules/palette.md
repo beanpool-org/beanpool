@@ -38,6 +38,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 - Marketplace filter-clear `✕` buttons (category + distance): keyboard-operable.
 - REJECTED: WelcomePage "← Back" controls (#72) — already semantic `<button>`s; not
   an a11y gap. Do not re-file.
+- OnboardingGuide decorative emojis hidden (#780): wrapped in `aria-hidden="true"` to prevent screen reader noise while preserving WCAG 2.5.3 visible names.
 
 ---
 
@@ -140,3 +141,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-13 - RecoveryAlertBanner Region Label, Focus Rings, and Touch Targets
 **Learning:** `RecoveryAlertBanner.tsx` rendered an urgent security alert region (`role="region"`) without an `aria-label`, raw decorative emojis (`🚨`, `🛑`) were exposed to screen readers, and the action button lacked minimum touch target height (`min-h-[44px]`), dynamic `aria-busy` state, and focus-visible outline rings.
 **Action:** Added `aria-label="Account recovery alert"` to `role="region"`, wrapped decorative emojis with `aria-hidden="true"`, added `aria-busy={stopping}`, `min-h-[44px]`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2` styling to the action button.
+
+## 2026-09-14 - OnboardingGuide Decorative Emoji Hiding
+**Learning:** `OnboardingGuide.tsx` rendered decorative emojis (`⚡`, `🟢`, `🫘`, `🪙`, `🤝`, `🌾`, `⏱️`, `🔒`, `🚀`, `📍`, `💬`, `➕`, `💳`) in headings and paragraph texts without hiding them from assistive technology, causing screen readers to announce character names and create noise during onboarding navigation.
+**Action:** Wrapped all decorative emojis in `OnboardingGuide.tsx` with `<span aria-hidden="true">` and added `OnboardingGuide.test.tsx` verifying decorative emoji hiding.

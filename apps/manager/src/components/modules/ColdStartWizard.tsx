@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
 import {
@@ -23,6 +24,27 @@ interface GeneratedCard {
     code: string;
     url: string;
     qrUrl: string;
+}
+
+export function generateOfflineQrUrl(text: string): string {
+    try {
+        const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
+        const size = qr.modules.size;
+        const data = qr.modules.data;
+        let path = '';
+        for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+                if (data[r * size + c]) {
+                    path += `M${c + 1},${r + 1}h1v1h-1z `;
+                }
+            }
+        }
+        const totalSize = size + 2; // 1-module margin
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" shape-rendering="crispEdges"><path fill="#ffffff" d="M0,0h${totalSize}v${totalSize}h-${totalSize}z"/><path fill="#000000" d="${path}"/></svg>`;
+        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    } catch {
+        return '';
+    }
 }
 
 const FIRST_ENTERPRISE_PRESETS = [
@@ -77,10 +99,52 @@ export function ColdStartWizard({
     const [savingStep1, setSavingStep1] = useState(false);
 
     // Step 2: Enrol Owner Key & Break-Glass
-    const [totpSecret, setTotpSecret] = useState('BP-COLD-START-9942-SEC');
+    const generateSecureSeed = () => {
+        if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
+            const bytes = new Uint8Array(6);
+            window.crypto.getRandomValues(bytes);
+            return Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').toUpperCase().slice(0, 8);
+        }
+        return Math.random().toString(36).substring(2, 10).toUpperCase();
+    };
+
+    const [emergencySeed] = useState(() => `BP-RECOVERY-${generateSecureSeed()}`);
+    const [totpSecret, setTotpSecret] = useState('');
+    const [pairQrUrl, setPairQrUrl] = useState(() =>
+        generateOfflineQrUrl(`beanpool://pair-owner?node=${publicAddress}`)
+    );
     const [totpVerified, setTotpVerified] = useState(false);
     const [breakGlassSaved, setBreakGlassSaved] = useState(false);
     const [breakGlassDownloaded, setBreakGlassDownloaded] = useState(false);
+
+    useEffect(() => {
+        const pairPayload = `beanpool://pair-owner?node=${publicAddress}&t=${Date.now()}`;
+        setPairQrUrl(generateOfflineQrUrl(pairPayload));
+    }, [publicAddress]);
+
+    useEffect(() => {
+        const enrollTotp = async () => {
+            if (!activeNode?.url) return;
+            try {
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.secret) {
+                        setTotpSecret(data.formattedSecret || data.secret);
+                    }
+                }
+            } catch {
+                if (!totpSecret) {
+                    setTotpSecret('BP-' + generateSecureSeed() + '-' + generateSecureSeed());
+                }
+            }
+        };
+        enrollTotp();
+    }, [activeNode?.id, activeNode?.url]);
 
     // Step 3: First Enterprise & First Offer
     const [selectedPresetId, setSelectedPresetId] = useState<'food' | 'tools' | 'machinery'>('food');
@@ -110,7 +174,7 @@ export function ColdStartWizard({
     const handleVerifyReachability = async () => {
         setReachabilityStatus('checking');
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/health');
+            const url = resolveNodeApiUrl(activeNode.url, '/api/community/health');
             const res = await fetch(url).catch(() => null);
             if (res && (res.ok || res.status === 200)) {
                 setReachabilityStatus('reachable');
@@ -126,8 +190,8 @@ export function ColdStartWizard({
         e.preventDefault();
         setSavingStep1(true);
         try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/update-identity');
-            await fetch(url, {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
@@ -135,6 +199,9 @@ export function ColdStartWizard({
                     name: diag?.callsign || 'node-genesis',
                 }),
             }).catch(() => null);
+            if (res && !res.ok) {
+                console.warn('[ColdStart] Identity update returned status:', res.status);
+            }
             setCurrentStep(2);
         } finally {
             setSavingStep1(false);
@@ -159,7 +226,7 @@ key, ends the session, and writes a permanent, public audit entry:
 
 KEEP THIS FILE SECURE AND STORED OFF-NODE (OFFLINE USB / SAFE).
 =====================================================
-Emergency Seed: BP-RECOVERY-${Math.random().toString(36).substring(2, 10).toUpperCase()}
+Emergency Seed: ${emergencySeed}
 TOTP Secret:    ${totpSecret}
 =====================================================`;
 
@@ -284,7 +351,7 @@ TOTP Secret:    ${totpSecret}
                     // Fallback to offline code if node is isolated
                 }
                 const url = `${baseUrl}/?invite=${encodeURIComponent(code)}`;
-                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}`;
+                const qrUrl = generateOfflineQrUrl(url);
                 cards.push({ code, url, qrUrl });
             }
             setFoundingCards(cards);
@@ -466,13 +533,15 @@ TOTP Secret:    ${totpSecret}
                                 Scan this pairing challenge with the BeanPool mobile app to bind your device key as node owner.
                             </p>
                             <div className="w-36 h-36 bg-white p-2 rounded-xl mx-auto flex items-center justify-center">
-                                <img
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(
-                                        `beanpool://pair-owner?node=${publicAddress}&t=${Date.now()}`
-                                    )}`}
-                                    alt="Pair Owner QR"
-                                    className="w-full h-full block"
-                                />
+                                {pairQrUrl ? (
+                                    <img
+                                        src={pairQrUrl}
+                                        alt="Pair Owner QR"
+                                        className="w-full h-full block"
+                                    />
+                                ) : (
+                                    <span className="text-[11px] text-nature-600 font-mono">Generating QR...</span>
+                                )}
                             </div>
                             <div className="text-center">
                                 <span className="text-[10px] text-emerald-400 font-medium">✓ Cryptographic challenge ready</span>

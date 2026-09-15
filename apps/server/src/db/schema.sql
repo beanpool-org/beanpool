@@ -1064,3 +1064,60 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_category_feed
 CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
     ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
+
+-- 23. Community Decisions & Decision Votes (docs/the-commons.md §3.2–§3.8, Slice 5)
+-- The binding half of governance: proposals typed by what they touch (member, pool, rule, nothing),
+-- auto-closing on a tick after a fixed 7-day window, evaluated against active-member quorum (30%, floor 3)
+-- and specific supermajority thresholds, executing in a single atomic transaction.
+CREATE TABLE IF NOT EXISTS decisions (
+    id                   TEXT PRIMARY KEY,
+    author_pubkey        TEXT NOT NULL REFERENCES members(public_key),
+    title                TEXT NOT NULL,
+    description          TEXT NOT NULL,
+    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool', 'rule', 'nothing')),
+    effect               TEXT NOT NULL,
+    subject              TEXT,
+    params               TEXT,
+    franchise            TEXT NOT NULL CHECK (franchise IN ('1m1v', 'quadratic_trade')),
+    status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN (
+        'open',
+        'passed',
+        'failed',
+        'unresolved',
+        'passed_queued_for_funds',
+        'execution_pending_grace',
+        'execution_blocked',
+        'execution_void',
+        'executed',
+        'admin_halted'
+    )),
+    opens_at             DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    closes_at            DATETIME NOT NULL,
+    grace_period_ends_at DATETIME,
+    created_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    executed_at          DATETIME,
+    execution_error      TEXT,
+    execution_reason     TEXT,
+    admin_halted_at      DATETIME,
+    admin_halted_by      TEXT REFERENCES members(public_key),
+    admin_halt_reason    TEXT,
+    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
+CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
+CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
+CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS decision_votes (
+    decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    voter_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    support       INTEGER NOT NULL CHECK (support IN (0, 1)),
+    weight        REAL NOT NULL DEFAULT 1,
+    credits_used  REAL NOT NULL DEFAULT 1,
+    signature     TEXT,
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (decision_id, voter_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
+CREATE INDEX IF NOT EXISTS idx_decision_votes_decision ON decision_votes(decision_id);

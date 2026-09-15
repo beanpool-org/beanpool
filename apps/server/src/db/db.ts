@@ -342,20 +342,27 @@ export function initSchema() {
     try {
         const nrSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='node_roles'").get() as any;
         if (nrSql?.sql && !nrSql.sql.includes('moderator')) {
-            db.exec(`
-                CREATE TABLE IF NOT EXISTS node_roles_migration (
-                    member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
-                    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
-                    granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    granted_by    TEXT
-                );
-                INSERT OR IGNORE INTO node_roles_migration SELECT member_pubkey, role, granted_at, granted_by FROM node_roles;
-                DROP TABLE node_roles;
-                ALTER TABLE node_roles_migration RENAME TO node_roles;
-                CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
-            `);
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS node_roles_migration;
+                    CREATE TABLE node_roles_migration (
+                        member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+                        role          TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
+                        granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        granted_by    TEXT
+                    );
+                    INSERT INTO node_roles_migration (member_pubkey, role, granted_at, granted_by)
+                        SELECT member_pubkey, role, granted_at, granted_by FROM node_roles;
+                    DROP TABLE node_roles;
+                    ALTER TABLE node_roles_migration RENAME TO node_roles;
+                    CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
+                `);
+            })();
+            console.log('[DB] ✅ Migrated node_roles CHECK constraint to allow moderator');
         }
-    } catch { }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
+    }
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);

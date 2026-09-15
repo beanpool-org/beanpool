@@ -65,7 +65,8 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     const reqPath = ctx.path || ctx.request?.path || '';
     const isEnrolment = reqPath === '/api/local/admin/auth/enrol' ||
                         reqPath === '/api/local/admin/auth/break-glass/enrol' ||
-                        reqPath === '/api/local/admin/auth/break-glass/status';
+                        reqPath === '/api/local/admin/auth/break-glass/status' ||
+                        reqPath === '/api/local/admin/auth/break-glass-status';
 
     if (isBreakGlass && !isEnrolment) {
         ctx.status = 403;

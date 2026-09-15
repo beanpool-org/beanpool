@@ -306,7 +306,7 @@ export function verifyAndSolveChallenge(params: {
  * - session_epoch verification: if epoch bumped since minting, token is rejected
  * - Node role verification: member must still be an active owner/admin
  */
-export function consumeHandshakeToken(token: string): {
+export function consumeHandshakeToken(token: string, now = Date.now()): {
     ok: boolean;
     error?: string;
     replay?: boolean;
@@ -335,7 +335,6 @@ export function consumeHandshakeToken(token: string): {
     }
 
     // Expiry check: 60-second window
-    const now = Date.now();
     if (now > entry.expiresAt) {
         return { ok: false, error: 'Handshake token has expired', expired: true };
     }
@@ -361,7 +360,7 @@ export function consumeHandshakeToken(token: string): {
         sessionId,
         memberPubkey: entry.memberPubkey,
         role: entry.role,
-        sessionEpoch: currentEpoch,
+        sessionEpoch: entry.sessionEpoch,
         createdAt: now,
         lastActiveAt: now,
         hardExpiresAt: now + SESSION_HARD_TTL_MS,
@@ -370,6 +369,8 @@ export function consumeHandshakeToken(token: string): {
     adminSessions.set(sessionId, session);
 
     const csrfToken = issueCsrfToken();
+
+    logger.info('AUTH', `Minted admin browser session for ${entry.memberPubkey} (role: ${entry.role})`);
 
     return {
         ok: true,
@@ -402,6 +403,8 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
     session?: AdminSession;
     expired?: boolean;
     idle?: boolean;
+    idleTimeout?: boolean;
+    hardLimit?: boolean;
     revoked?: boolean;
 } {
     if (!sessionId) {
@@ -416,13 +419,13 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
     // 12h Hard Limit check
     if (now > session.hardExpiresAt) {
         adminSessions.delete(sessionId);
-        return { valid: false, error: 'Session expired (12h hard limit reached)', expired: true };
+        return { valid: false, error: 'Session expired (12h hard limit reached)', expired: true, hardLimit: true };
     }
 
     // 2h Idle Limit check
     if (now > session.idleExpiresAt) {
         adminSessions.delete(sessionId);
-        return { valid: false, error: 'Session expired (2h idle timeout)', idle: true };
+        return { valid: false, error: 'Session expired (2h idle timeout)', idle: true, idleTimeout: true };
     }
 
     // session_epoch check
@@ -446,18 +449,12 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 }
 
 /**
- * Revokes all web sessions for a member by bumping their session_epoch in SQLite
- * and deleting cached memory sessions.
+ * Revokes all web sessions for a member by bumping their session_epoch in SQLite.
+ * Existing sessions are invalidated on their next request via the epoch check.
  */
 export function revokeAllMemberSessions(memberPubkey: string): number {
     if (!memberPubkey) return 0;
     const newEpoch = bumpNodeRoleSessionEpoch(memberPubkey);
-    // Prune all cached sessions for this member
-    for (const [sid, sess] of adminSessions) {
-        if (sess.memberPubkey === memberPubkey) {
-            adminSessions.delete(sid);
-        }
-    }
     logger.info('AUTH', `Revoked all web sessions for ${memberPubkey} (new session_epoch: ${newEpoch})`);
     return newEpoch;
 }
@@ -550,7 +547,7 @@ export function enrolAdminOwnerKey(params: {
     // Grant role in node_roles if not already held
     const currentRole = nodeRoleOf(targetPubkey);
     if (currentRole !== role) {
-        grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'enrolment'));
+        grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'));
     }
 
     // Generate per-owner break-glass code
@@ -562,7 +559,7 @@ export function enrolAdminOwnerKey(params: {
     if (isBreakGlass) {
         const callsign = member.callsign || targetPubkey.slice(0, 8);
         const alertBody = `Break-glass recovery used to authorise a new admin key for @${callsign}.`;
-        adminBroadcastAnnouncement('🚨 Admin Security Alert', alertBody, 'critical');
+        adminBroadcastAnnouncement('Break-Glass Recovery Used', alertBody, 'critical');
         logger.warn('AUTH', `[BREAK-GLASS] ${alertBody} (pubkey: ${targetPubkey})`);
         alertEmitted = true;
     }

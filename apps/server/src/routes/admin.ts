@@ -112,7 +112,13 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
 
     const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode });
     if (!res.ok) {
-        ctx.status = res.totpRequired ? 401 : (res.error?.includes('signature') || res.error?.includes('Signature') ? 403 : 400);
+        let status = 400;
+        if (res.totpRequired) {
+            status = 401;
+        } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('not found')) {
+            status = 403;
+        }
+        ctx.status = status;
         ctx.body = { error: res.error, totpRequired: res.totpRequired };
         return;
     }
@@ -319,7 +325,7 @@ const handleEnrol = async (ctx: any) => {
     try {
         const res = enrolAdminOwnerKey({
             targetPubkey,
-            actorPubkey: (ctx.state as any)?.actor,
+            actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
             isBreakGlass,
             role: body.role || 'owner',
         });
@@ -360,6 +366,9 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
  * GET /api/local/admin/auth/break-glass-status
  */
 router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
+});
+router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
     ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 

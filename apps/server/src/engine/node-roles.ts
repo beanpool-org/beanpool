@@ -144,7 +144,11 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              WHERE nr.role = 'owner' AND m.status = 'active'`
         ).get() as any)?.c || 0;
 
-        const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
+        const isOwner =
+            actorPubkey === 'owner:password' ||
+            actorPubkey === 'break-glass:enrolment' ||
+            actorPubkey === 'SYSTEM' ||
+            (!!actorPubkey && isNodeOwner(actorPubkey));
 
         if (role === 'owner') {
             if (ownerCount > 0 && !isOwner) {

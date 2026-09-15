@@ -67,6 +67,11 @@ export interface LocalConfig {
     // correct, and a drift is corrected on demand. Null → env BACKUP_RECONCILE_EVERY_MS
     // → 15m. 0 → routine full reconcile disabled (drift-triggered fulls still run).
     backupReconcileMinutes?: number | null;
+    // --- Break-glass Admin Mode (docs/admin-surface.md §2.2, §2.4) ---
+    // When true, password / break-glass credentials can ONLY reach key enrolment.
+    // All normal admin routes require a cryptographic key session.
+    // Default false during migration rollout.
+    breakGlassMode?: boolean;
 }
 
 export interface Thresholds {
@@ -425,4 +430,16 @@ export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayCon
     saveLocalConfig(config);
     console.log('⚙️ Gateway configuration updated:', merged);
     return merged;
+}
+
+export function isBreakGlassMode(): boolean {
+    if (process.env.ADMIN_BREAK_GLASS_MODE === '1' || process.env.ADMIN_BREAK_GLASS_MODE === 'true') {
+        return true;
+    }
+    const config = getLocalConfig();
+    return !!config.breakGlassMode;
+}
+
+export function setBreakGlassMode(enabled: boolean): void {
+    updateLocalConfig({ breakGlassMode: enabled });
 }

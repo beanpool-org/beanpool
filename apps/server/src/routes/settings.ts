@@ -15,8 +15,9 @@ import {
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
-    getGatewayConfig,
+    getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
+import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken } from '../admin-auth.js';
 import qrcode from 'qrcode';
@@ -108,6 +109,44 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
         return next();
     }
+
+    // 1. Deep-link Handshake Token Exchange (phone button flow)
+    const token = ctx.query.token as string | undefined;
+    if (token) {
+        const exchangeRes = consumeHandshakeToken(token);
+        if (exchangeRes.ok && exchangeRes.sessionId) {
+            ctx.cookies.set('admin_session', exchangeRes.sessionId, {
+                httpOnly: true,
+                sameSite: 'lax',
+                maxAge: 12 * 3600 * 1000,
+                path: '/',
+            });
+            ctx.redirect('/settings');
+            return;
+        } else {
+            ctx.redirect('/settings?auth_error=' + encodeURIComponent(exchangeRes.error || 'Invalid token'));
+            return;
+        }
+    }
+
+    // 2. Break-glass mode enforcement: settings is restricted to enrolled key sessions
+    if (isBreakGlassMode()) {
+        const rawToken =
+            (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+            (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+            ctx.request?.headers?.['x-admin-session'] ||
+            ctx.headers?.['x-admin-session'];
+        const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+
+        const hasValidSession = sessionToken && validateAdminSession(sessionToken).valid;
+        if (!hasValidSession) {
+            ctx.status = 403;
+            ctx.type = 'text/html';
+            ctx.body = '<!DOCTYPE html><html><head><title>Access Restricted</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><h2>🔒 Break-Glass Mode Active</h2><p style="color:#94a3b8;margin-top:1rem;">Settings access is restricted to enrolled key sessions. Password access is disabled except for key enrolment.</p></body></html>';
+            return;
+        }
+    }
+
     const managerPath = resolveServerPath('public/settings/index.html');
     const publicPath = resolveServerPath('public/settings.html');
     const staticPath = resolveServerPath('static/settings.html');

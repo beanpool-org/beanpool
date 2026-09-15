@@ -39,6 +39,18 @@ import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
 import { resolveChannel } from '../engine/pulse-resolver.js';
+import {
+    createAdminChallenge,
+    getAdminChallenge,
+    verifyAndSolveChallenge,
+    consumeHandshakeToken,
+    validateAdminSession,
+    revokeAllMemberSessions,
+    revokeAdminSession,
+    enrolAdminOwnerKey,
+    verifyEd25519Signature,
+} from '../admin-key-auth.js';
+import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -63,6 +75,292 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
     const token = issueCsrfToken();
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
+});
+
+// ===================== KEY-BASED ADMIN AUTH & BREAK-GLASS ENDPOINTS =====================
+// Implements docs/admin-surface.md §2 (all):
+// Signed challenge auth for phone & desktop QR flow, single-use 60s handshake tokens,
+// browser sessions (2h idle / 12h hard), instant revocation via session_epoch,
+// break-glass mode gating, and per-owner break-glass enrolment.
+
+/**
+ * POST /api/local/admin/auth/challenge
+ * Requests a fresh 60-second challenge for signed authentication (desktop QR or phone).
+ */
+router.post('/api/local/admin/auth/challenge', async (ctx) => {
+    const c = createAdminChallenge();
+    ctx.body = {
+        success: true,
+        challengeId: c.challengeId,
+        challenge: c.challenge,
+        expiresAt: c.expiresAt,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/verify-challenge
+ * Mobile app submits the signed challenge to mint a 60-second single-use handshake token.
+ */
+router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const { challengeId, memberPubkey, signature, totpCode } = body;
+    if (!challengeId || !memberPubkey || !signature) {
+        ctx.status = 400;
+        ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
+        return;
+    }
+
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode });
+    if (!res.ok) {
+        ctx.status = res.totpRequired ? 401 : (res.error?.includes('signature') || res.error?.includes('Signature') ? 403 : 400);
+        ctx.body = { error: res.error, totpRequired: res.totpRequired };
+        return;
+    }
+
+    ctx.body = {
+        success: true,
+        handshakeToken: res.handshakeToken,
+        expiresAt: res.expiresAt,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/challenge/:challengeId
+ * Polled by desktop browser waiting for mobile app challenge signature.
+ */
+router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
+    const c = getAdminChallenge(ctx.params.challengeId);
+    if (!c || c.status === 'expired') {
+        ctx.status = 404;
+        ctx.body = { error: 'Challenge not found or expired', status: 'expired' };
+        return;
+    }
+    if (c.status === 'pending') {
+        ctx.body = { status: 'pending', expiresAt: c.expiresAt };
+        return;
+    }
+    ctx.body = {
+        status: 'resolved',
+        handshakeToken: c.handshakeToken,
+        memberPubkey: c.memberPubkey,
+        role: c.role,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/exchange
+ * Exchanges single-use 60s handshake token for a browser session (2h idle / 12h hard).
+ * Single-use: burned immediately, replays rejected.
+ */
+router.post('/api/local/admin/auth/exchange', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const token = body.token || (ctx.query?.token as string);
+    if (!token) {
+        ctx.status = 400;
+        ctx.body = { error: 'token is required' };
+        return;
+    }
+
+    const res = consumeHandshakeToken(token);
+    if (!res.ok) {
+        ctx.status = 401;
+        ctx.body = {
+            error: res.error,
+            replay: res.replay,
+            expired: res.expired,
+            revoked: res.revoked,
+        };
+        return;
+    }
+
+    ctx.cookies.set('admin_session', res.sessionId, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 12 * 3600 * 1000,
+        path: '/',
+    });
+    if (res.csrfToken) {
+        ctx.set('X-CSRF-Token', res.csrfToken);
+    }
+    ctx.body = {
+        success: true,
+        sessionId: res.sessionId,
+        csrfToken: res.csrfToken,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+        hardExpiresAt: res.hardExpiresAt,
+        idleExpiresAt: res.idleExpiresAt,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/revoke-all
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite.
+ * Gated by checkAdminAuth or signature header.
+ */
+router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let targetPubkey = body.memberPubkey || body.pubkey;
+
+    // Check if called with an active admin session or password auth
+    const isAuthed = await checkAdminAuth(ctx as any);
+    if (isAuthed) {
+        targetPubkey = targetPubkey || (ctx.state as any)?.actor || getFirstNodeAdminPubkey();
+    } else {
+        // Allow mobile app with signed headers (X-Public-Key, X-Signature)
+        const pubKeyHex = ctx.get('X-Public-Key');
+        const signatureBase64 = ctx.get('X-Signature');
+        if (pubKeyHex && signatureBase64 && isNodeAdmin(pubKeyHex)) {
+            const timestampHeader = ctx.get('X-Timestamp');
+            const nonce = ctx.get('X-Nonce');
+            const rawBody = (ctx as any).rawBody ?? '';
+            const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
+            if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {
+                targetPubkey = pubKeyHex;
+            }
+        }
+    }
+
+    if (!targetPubkey || !isNodeAdmin(targetPubkey)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized or target member is not an admin' };
+        return;
+    }
+
+    const newEpoch = revokeAllMemberSessions(targetPubkey);
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.body = {
+        success: true,
+        memberPubkey: targetPubkey,
+        sessionEpoch: newEpoch,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/session
+ * Returns authentication status and active member details.
+ */
+router.get('/api/local/admin/auth/session', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+
+    if (sessionToken) {
+        const res = validateAdminSession(sessionToken);
+        if (res.valid && res.session) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: true,
+                memberPubkey: res.session.memberPubkey,
+                role: res.session.role,
+                sessionEpoch: res.session.sessionEpoch,
+                hardExpiresAt: res.session.hardExpiresAt,
+                idleExpiresAt: res.session.idleExpiresAt,
+            };
+            return;
+        }
+    }
+
+    // Check if authenticated via password
+    const ok = await checkAdminAuth(ctx as any);
+    if (ok) {
+        ctx.body = {
+            authenticated: true,
+            isKeySession: !!(ctx.state as any)?.isKeySession,
+            memberPubkey: (ctx.state as any)?.actor || null,
+            role: (ctx.state as any)?.adminRole || 'owner',
+        };
+        return;
+    }
+    ctx.body = { authenticated: false };
+});
+
+/**
+ * POST /api/local/admin/auth/logout
+ * Destroys current session and clears cookie.
+ */
+router.post('/api/local/admin/auth/logout', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+    if (sessionToken) {
+        revokeAdminSession(sessionToken);
+    }
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.body = { success: true };
+});
+
+/**
+ * POST /api/local/admin/auth/enrol
+ * POST /api/local/admin/auth/break-glass/enrol
+ * Enrols a member key and generates a unique per-owner break-glass code.
+ * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
+ */
+const handleEnrol = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
+    if (!targetPubkey) {
+        ctx.status = 400;
+        ctx.body = { error: 'memberPubkey is required' };
+        return;
+    }
+
+    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || !(ctx.state as any)?.isKeySession;
+
+    try {
+        const res = enrolAdminOwnerKey({
+            targetPubkey,
+            actorPubkey: (ctx.state as any)?.actor,
+            isBreakGlass,
+            role: body.role || 'owner',
+        });
+        ctx.body = {
+            success: true,
+            memberPubkey: res.memberPubkey,
+            role: res.role,
+            breakGlassCode: res.breakGlassCode,
+            alertEmitted: res.alertEmitted,
+            message: 'Store this break-glass code securely. It will only be shown once.',
+        };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to enrol admin key' };
+    }
+};
+
+router.post('/api/local/admin/auth/enrol', handleEnrol);
+router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
+
+/**
+ * POST /api/local/admin/auth/break-glass-mode
+ * Toggles break-glass mode on or off.
+ */
+router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (typeof body.enabled !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'enabled (boolean) is required' };
+        return;
+    }
+    setBreakGlassMode(body.enabled);
+    ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
+});
+
+/**
+ * GET /api/local/admin/auth/break-glass-status
+ */
+router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================

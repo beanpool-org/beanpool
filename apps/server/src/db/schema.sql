@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- Enterprise Credit Model (Rules 6 & 7)
     earned_surplus REAL DEFAULT 0,
     working_capital_ceiling REAL DEFAULT NULL,
+    -- Grandfathered credit floor for enterprises (docs/the-commons.md §2.4, §6 Slice 4).
+    -- Auto-cleared once keepers' pledges exceed it.
+    legacy_credit_floor REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
@@ -1056,3 +1059,17 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_category_feed
 CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
     ON pulse_items(owner_pubkey) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
+
+-- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
+-- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.
+-- Counted once across enterprises; locked if enterprise is in deficit.
+CREATE TABLE IF NOT EXISTS enterprise_pledges (
+    id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL REFERENCES members(public_key),
+    enterprise TEXT NOT NULL REFERENCES members(public_key),
+    amount REAL NOT NULL CHECK (amount > 0),
+    pledged_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    released_at DATETIME DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_enterprise ON enterprise_pledges(enterprise, released_at);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_keeper ON enterprise_pledges(keeper, released_at);

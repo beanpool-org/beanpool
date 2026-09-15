@@ -2014,6 +2014,15 @@ export async function treasuryReject(treasury: string, transactionId: string) {
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
+export async function treasuryPledge(treasury: string, amount: number) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount });
+}
+export async function treasuryRelease(treasury: string, amount?: number) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+}
+export async function getTreasuryPledges(treasury: string) {
+    return signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+}
 
 // Voting is being redesigned (see docs/the-commons.md)
 

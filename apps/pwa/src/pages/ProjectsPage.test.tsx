@@ -120,15 +120,16 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
         expect(modalContainer?.className).toContain('fixed inset-0 z-50 flex flex-col');
 
         // Verify content container has pb-72 (18rem) and md:pb-48 (12rem)
-        // so content is never occluded behind sticky pledge footer and bottom nav bar
+        // and style with dynamic clearance so content is never occluded behind sticky pledge footer and bottom nav bar
         const aboutHeading = screen.getByText('About the Project');
         const contentContainer = aboutHeading.closest('.max-w-lg');
         expect(contentContainer).not.toBeNull();
         expect(contentContainer?.className).toContain('pb-72');
         expect(contentContainer?.className).toContain('md:pb-48');
+        expect(contentContainer).toHaveStyle({ paddingBottom: 'calc(var(--bottom-nav-offset) + 12rem)' });
     });
 
-    it('positions sticky pledge footer above mobile bottom nav bar (bottom-16 md:bottom-0 z-30)', async () => {
+    it('positions sticky pledge footer above mobile bottom nav bar offset by nav height', async () => {
         render(<ProjectsPage identity={backerIdentity} />);
 
         await waitFor(() => {
@@ -143,12 +144,16 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
 
         const pledgeFooter = pledgeButton.closest('.fixed');
         expect(pledgeFooter).not.toBeNull();
-        expect(pledgeFooter?.className).toContain('bottom-16');
+        expect(pledgeFooter?.className).toContain('bottom-[var(--bottom-nav-offset)]');
         expect(pledgeFooter?.className).toContain('md:bottom-0');
+        expect(pledgeFooter).toHaveStyle({ bottom: 'var(--bottom-nav-offset)' });
         expect(pledgeFooter?.className).toContain('z-30');
 
-        // Verify Amount input and Optional memo input exist in pledge footer
-        expect(screen.getByPlaceholderText('Amount')).toBeInTheDocument();
+        // Verify Amount input is wide enough for placeholder and 4-digit value
+        const amountInput = screen.getByPlaceholderText('Amount');
+        expect(amountInput).toBeInTheDocument();
+        expect(amountInput.className).toContain('w-32');
+        expect(amountInput.className).toContain('min-w-[7.5rem]');
         expect(screen.getByPlaceholderText('Optional memo...')).toBeInTheDocument();
     });
 

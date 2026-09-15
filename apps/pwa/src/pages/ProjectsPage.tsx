@@ -272,7 +272,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: '4rem' }}>
+        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: 'var(--bottom-nav-offset)' }}>
             <header className="sticky top-0 z-40 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex flex-col gap-3">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
@@ -614,7 +614,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         </div>
                     </header>
                     
-                    <div className="flex-1 pb-72 md:pb-48 max-w-lg sm:max-w-xl mx-auto w-full">
+                    <div className="flex-1 pb-72 md:pb-48 max-w-lg sm:max-w-xl mx-auto w-full" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 12rem)' }}>
                         {isEditingProject ? (
                             <div className="p-5 flex flex-col gap-4">
                                 {selectedProject.current_amount > 0 ? (
@@ -845,7 +845,10 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
 
                     {/* Pledge Sticky Footer */}
                     {identity?.publicKey !== selectedProject.creator_pubkey && !isEditingProject && (
-                        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 bg-bg-card border-t border-border-secondary p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-30">
+                        <div 
+                            className="fixed bottom-[var(--bottom-nav-offset)] md:bottom-0 left-0 right-0 bg-bg-card border-t border-border-secondary p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-30"
+                            style={{ bottom: 'var(--bottom-nav-offset)' }}
+                        >
                             <div className="max-w-md mx-auto">
                                 <div className="flex gap-2">
                                     <input 
@@ -853,7 +856,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                         value={pledgeAmount}
                                         onChange={e => setPledgeAmount(e.target.value ? Number(e.target.value) : '')}
                                         placeholder="Amount"
-                                        className="w-24 bg-bg-input border border-border-secondary rounded-xl text-center font-black text-lg focus:border-accent outline-none shadow-inner text-nature-900 dark:text-white p-2.5"
+                                        className="w-32 sm:w-36 min-w-[7.5rem] bg-bg-input border border-border-secondary rounded-xl text-center font-black text-lg focus:border-accent outline-none shadow-inner text-nature-900 dark:text-white px-3 py-2.5"
                                         style={{ color: '#1a1a1a' }}
                                     />
                                     <input 

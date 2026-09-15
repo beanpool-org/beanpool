@@ -579,7 +579,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
 
-        // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, and /api/local/admin/*)
+        // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, and /api/admin/*)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
             const normalizedPath = ctx.path.replace(/\/+$/, '') || '/';
             if (
@@ -587,7 +587,8 @@ export async function startHttpsServer(port: number): Promise<void> {
                 normalizedPath.startsWith('/settings/') ||
                 normalizedPath === '/settings-legacy' ||
                 normalizedPath === '/settings.js' ||
-                ctx.path.startsWith('/api/local/admin/')
+                ctx.path.startsWith('/api/local/admin/') ||
+                ctx.path.startsWith('/api/admin/')
             ) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => 
                     clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))

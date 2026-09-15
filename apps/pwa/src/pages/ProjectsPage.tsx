@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-    getTreasuries, type Treasury,
+    getTreasuries, getBalance, type Treasury, type BalanceInfo,
     createEnterprise
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -13,6 +13,7 @@ interface Props {
 
 export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
+    const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +59,10 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
 
     useEffect(() => {
         fetchEnterprises();
-    }, []);
+        if (identity?.publicKey) {
+            getBalance(identity.publicKey).then(setBalanceInfo).catch(() => {});
+        }
+    }, [identity?.publicKey]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -175,6 +179,26 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                             + Propose
                         </button>
                     )}
+                </div>
+
+                {/* Commons Pool & Available Governance Credits */}
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
+                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                            Commons Pool
+                        </div>
+                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                            {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
+                        </div>
+                    </div>
+                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                            My Governance Credits
+                        </div>
+                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                            {balanceInfo?.earnedCredit ?? 0}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Filter Controls: All / Ongoing / Bounded */}
@@ -337,6 +361,20 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                                     style={{ width: `${progress}%` }}
                                                 />
                                             </div>
+
+                                            {/* Primary CTA if has goal and not funded */}
+                                            {!isFunded && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenTreasury?.(t.publicKey);
+                                                    }}
+                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                                >
+                                                    <span>🌱</span> Pledge Beans
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>

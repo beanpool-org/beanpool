@@ -270,6 +270,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const posts: any[] = detail?.posts || [];
     const flow: any[] = detail?.flow || [];
     const keepers: any[] = detail?.keepers || [];
+    const deferredClaims: any[] = detail?.deferredClaims || [];
+    const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
+    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
     return (
         <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
@@ -475,6 +478,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     </div>
                                 </div>
                             </div>
+
+                            {pendingClaims.length > 0 && (
+                                <div className="mt-4 p-3.5 rounded-xl bg-nature-50 dark:bg-nature-800/50 border border-nature-200 dark:border-nature-700">
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                            Pending Wage Claims ({pendingClaims.length})
+                                        </span>
+                                        <span className="font-black text-amber-500 dark:text-amber-400 text-sm">
+                                            {pendingClaimsTotal} 🫘
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 leading-relaxed">
+                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Action feedback alert */}

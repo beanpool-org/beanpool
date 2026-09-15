@@ -3402,7 +3402,8 @@ export function createProject(proposerPubkey: string, title: string, description
     
     // For simplicity, we store projects as JSON in node_config (since they are rare)
     // Or normally we'd make a table for them. Let's store in config to avoid more schema migrations for now.
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     projects.push(project);
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
     
@@ -3446,7 +3447,8 @@ export function createProject(proposerPubkey: string, title: string, description
 
 export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
     if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
@@ -3477,11 +3479,17 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
 }
 
 export function deleteProject(proposerPubkey: string, projectId: string): boolean {
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
     if (projects[index].status !== 'proposed') return false;
+
+    const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (acc && Math.abs(acc.balance) > 1e-9) {
+        throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+    }
 
     projects.splice(index, 1);
     db.transaction(() => {
@@ -3489,6 +3497,8 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
         db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
         db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
     })();
     broadcast({ type: 'project_deleted', projectId });
     return true;
@@ -3564,12 +3574,14 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
     if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
 
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     for (const pid of projectIds) {
-        const p = projects.find(pr => pr.id === pid && pr.status === 'proposed');
+        const p = blobProjects.find(pr => pr.id === pid && pr.status === 'proposed');
         if (p) p.status = 'active';
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ? AND is_treasury = 1 AND status = 'proposed'").run(pid);
     }
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     const round: VotingRound = { id: crypto.randomUUID(), status: 'open', closesAt, projectIds, createdBy: adminPubkey, createdAt: new Date().toISOString() };
     const rounds = getVotingRounds();
@@ -3598,56 +3610,31 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
     const winner = candidates[0];
 
     if (winner && voteWeight(winner) > 0) {
-        // A2-5: the commons→proposer grant was previously credited to the proposer's
-        // IN-MEMORY ledger account only — no DB write, no transaction row. A crash
-        // before the proposer's next transfer lost the grant; with no txn row the
-        // ledger could never reconcile to balances, and the conservation audit
-        // drifted. Perform it atomically: debit commons, credit the proposer in
-        // memory AND in the DB, and record a COMMONS_POOL→proposer transaction — so
-        // the grant is durable, auditable, and conservation-consistent.
+        // A2-5: the commons→enterprise grant is credited to the enterprise's
+        // IN-MEMORY ledger account AND DB row atomically, with a COMMONS_POOL→enterprise
+        // transaction — so the grant is durable, auditable, and conservation-consistent.
         const ts = new Date().toISOString();
         const txId = crypto.randomUUID();
-        // #138 review: the grant now commits as ONE unit — the Commons debit, the proposer's credit, both
-        // rows, the decay rows and the Commons row. `persistDecayEvents()` and `persistCommonsBalance()` used
-        // to run after the transaction had already committed, leaving a window in which the proposer's credit
-        // was durable while the Commons debit was not. A restart in that window restores the pot from its
-        // unwritten, pre-grant row — so the grant becomes newly minted beans, which is the one thing a mutual
-        // credit ledger must never do.
-        //
-        // `conservingTransaction` rather than `db.transaction`, and the DEDUCT moved inside it. Both halves of
-        // this grant live in memory as well as in rows, and a SQLite rollback touches only the rows; the
-        // snapshot has to be taken before the deduct, or a rollback would restore an already-debited pot
-        // alongside a reverted credit and destroy the beans instead.
+        const isProposerTreasury = ((db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(winner.proposerPubkey) as any)?.is_treasury === 1);
+        const targetAccount = isProposerTreasury ? winner.proposerPubkey : ((winner as any).enterprisePubkey || winner.id);
         const funded = conservingTransaction(() => {
             if (!ledger.deductFromCommons(winner.requestedAmount)) return false;
-            const account = ledger.getAccount(winner.proposerPubkey);
+            const account = ledger.getAccount(targetAccount);
             account.balance += winner.requestedAmount;
-                // #138: the epoch travels with the balance, on BOTH arms. This wrote a literal 0 on insert
-                // and omitted the column entirely from the DO UPDATE, so the grant landed on a row whose
-                // demurrage window was still open — and the proposer's next read charged the whole stale
-                // interval against the granted amount. `account` came from ledger.getAccount() above, which
-                // already settled what was genuinely owed and stamped the epoch, so this just carries that
-                // settlement into the row. The old `VALUES (…, 0)` was worse than stale on the insert arm:
-                // epoch 0 is 1970, which invites ~56 years of compound decay against a balance that is NOT
-                // zero here. (Elsewhere an epoch-0 insert is harmless because the balance is 0 and
-                // applyDecay's no-decay branch stamps the epoch before anything can be charged.)
-                db.prepare(`
-                    INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(public_key) DO UPDATE SET
-                        balance = excluded.balance,
-                        last_demurrage_epoch = excluded.last_demurrage_epoch,
-                        last_updated_at = excluded.last_updated_at
-                `).run(winner.proposerPubkey, account.balance, account.lastDemurrageEpoch, ts);
+            // #138 & Slice 3: the epoch travels with the balance, on BOTH arms. The grant lands on the
+            // enterprise treasury targetAccount (or enterprise proposer) rather than creator's personal wallet.
+            db.prepare(`
+                INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(public_key) DO UPDATE SET
+                    balance = excluded.balance,
+                    last_demurrage_epoch = excluded.last_demurrage_epoch,
+                    last_updated_at = excluded.last_updated_at
+            `).run(targetAccount, account.balance, account.lastDemurrageEpoch, ts);
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
-                .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
-            // The getAccount() above may have queued a decay event, and this path DESTROYS BEANS without
-            // draining it. Measured by reverting this line: 1.99 beans gone. #137 made `loadState` unwind an
-            // undrained Commons credit along with its debit, which is right when the debit lives only in
-            // memory — but the UPSERT above has already written the post-decay balance to the row, so the
-            // debit is durable and the unwind takes back a credit that had a real counterpart. Draining here
-            // settles both halves before anything can resync. It also gives the collection its `demurrage_`
-            // transaction row, without which the demurrage is invisible to an audit.
+                .run(txId, 'COMMONS_POOL', targetAccount, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
+            // #137: persistDecayEvents drains any demurrage event collected during getAccount, settling both halves
+            // before anything can resync and giving the collection its demurrage_ transaction row.
             persistDecayEvents();
             persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
             return true;
@@ -3667,20 +3654,45 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         }
     }
 
-    for (const c of candidates) if (c.id !== winner?.id && c.status === 'active') c.status = 'proposed';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const blobWinner = blobProjects.find(p => p.id === winner?.id);
+    if (blobWinner && winner) {
+        blobWinner.status = winner.status;
+        if (winner.fundedAt) blobWinner.fundedAt = winner.fundedAt;
+    }
+    for (const c of candidates) {
+        if (c.id !== winner?.id && c.status === 'active') {
+            c.status = 'proposed';
+            const bp = blobProjects.find(p => p.id === c.id);
+            if (bp) bp.status = 'proposed';
+            try {
+                db.prepare("UPDATE members SET status = 'proposed' WHERE public_key = ? AND status = 'active' AND is_treasury = 1").run(c.id);
+            } catch { }
+        }
+    }
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     broadcast({ type: 'voting_round_closed', roundId, winnerId: winner?.status === 'funded' ? winner.id : null });
     return { success: true, winner: winner?.status === 'funded' ? winner : undefined };
 }
 
 export function adminRejectProject(projectId: string): boolean {
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return false;
-    project.status = 'rejected';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-    return true;
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
+    let found = false;
+    if (project) {
+        project.status = 'rejected';
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
+        found = true;
+    }
+    const member = db.prepare("SELECT public_key FROM members WHERE public_key = ? AND is_treasury = 1").get(projectId);
+    if (member) {
+        db.prepare("UPDATE members SET status = 'rejected' WHERE public_key = ?").run(projectId);
+        found = true;
+    }
+    return found;
 }
 
 export function getProjects(): CommunityProject[] {
@@ -3703,9 +3715,16 @@ export function getAllProjects(): CommunityProject[] {
         `).all() as any[];
 
         for (const e of enterprises) {
-            if (!knownIds.has(e.public_key)) {
-                const lead = e.lead_keeper || e.any_keeper || e.public_key;
-                const leadMember = getMember(lead);
+            const lead = e.lead_keeper || e.any_keeper || e.public_key;
+            const leadMember = getMember(lead);
+            const existing = blobProjects.find(p => p.id === e.public_key);
+            if (existing) {
+                // Keep live values from members table so blob doesn't shadow SQL
+                existing.title = e.callsign || existing.title;
+                existing.description = e.purpose || e.bio || existing.description;
+                if (e.goal_amount != null) existing.requestedAmount = Number(e.goal_amount);
+                if (e.status) existing.status = e.status.toLowerCase() as any;
+            } else {
                 blobProjects.push({
                     id: e.public_key,
                     title: e.callsign,

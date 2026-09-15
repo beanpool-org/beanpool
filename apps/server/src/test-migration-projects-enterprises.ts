@@ -33,7 +33,7 @@ import {
 } from './db/db.js';
 import {
     initStateEngine, reconcileLedgerFromDb, getBalance,
-    getAllProjects, getProjects, createProject,
+    getAllProjects, getProjects, createProject, deleteProject,
 } from './state-engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -260,6 +260,13 @@ async function runTests() {
     // Verify ledger conservation
     const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
     testAssert(Math.abs(sumAfter - (sumBefore + 600)) < 1e-9, 'Ledger conservation strictly preserved (delta = seeded 600)');
+
+    // Test deleteProject does not resurrect in getAllProjects
+    const delProj = createProject(testCreator, 'Delete Me Project', 'Will be pruned', 100);
+    testAssert(!!delProj && getAllProjects().some(p => p.id === delProj.id), 'Created project visible in getAllProjects');
+    const delSuccess = deleteProject(testCreator, delProj!.id);
+    testAssert(delSuccess, 'deleteProject succeeded');
+    testAssert(!getAllProjects().some(p => p.id === delProj!.id), 'Pruned project does not resurrect in getAllProjects');
 
     console.log(`\n🎉 ${testsPassed}/${testsRun} checks passed.`);
     console.log('⭐️ Project == Enterprise migration and unification tests ALL PASSED.');

@@ -675,6 +675,24 @@ async function runDecisionsSuite() {
     testAssert(soleOwnerDec.status === 'execution_blocked', 'Sole owner removal blocked before grace window or suspension');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(admin) as any).status === 'active', 'Sole node owner remains active');
 
+    // 11e-2. Sole node owner suspend blocked in preflight per §3.8
+    const decSoleOwnerSuspend = createDecision({
+        authorPubkey: admin,
+        title: 'Attempt to suspend sole owner',
+        description: 'Should fail at preflight',
+        touches: 'member',
+        effect: 'suspend_member',
+        subject: admin,
+    });
+    castDecisionVote(decSoleOwnerSuspend.id, voterA, true);
+    castDecisionVote(decSoleOwnerSuspend.id, voterB, true);
+    castDecisionVote(decSoleOwnerSuspend.id, voterC, true);
+    closeForTick(decSoleOwnerSuspend.id);
+    tickDecisions();
+    const soleOwnerSuspendDec = getDecision(decSoleOwnerSuspend.id)!;
+    testAssert(soleOwnerSuspendDec.status === 'execution_blocked', 'Sole owner suspension blocked in preflight (§3.8)');
+    testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(admin) as any).status === 'active', 'Sole node owner remains active after suspend attempt');
+
     // 11f. Hardship grant validates recipient is not treasury or missing
     const decBadHardship = createDecision({
         authorPubkey: admin,
@@ -719,6 +737,36 @@ async function runDecisionsSuite() {
     testAssert(getCommonsBalance() === 350, 'Commons pool debited 150 beans to cover deficit');
     const writeOffTx = db.prepare("SELECT * FROM transactions WHERE to_pubkey = ? AND auth_signer = ?").get(insolventEnt, `system:decision:${decWriteOff.id}`) as any;
     testAssert(writeOffTx != null && writeOffTx.amount === 150, 'Deficit write-off transaction recorded with provenance');
+
+    // 11h. Write off deficit queued when pool funds insufficient, then automatically executed on tick when replenished
+    const queuedInsolventEnt = 'ent_queued_insolvent_' + Date.now();
+    seedTestMember(queuedInsolventEnt, 'Queued Insolvent', { isTreasury: true });
+    const acctQueued = ledger.getAccount(queuedInsolventEnt);
+    acctQueued.balance = -200;
+    db.prepare("UPDATE accounts SET balance = -200 WHERE public_key = ?").run(queuedInsolventEnt);
+    setCommonsBalance(50); // Only 50 available, deficit is 200
+
+    const decQueuedWriteOff = createDecision({
+        authorPubkey: admin,
+        title: 'Queued write-off for deficit',
+        description: 'Needs 200, pool only has 50',
+        touches: 'pool',
+        effect: 'write_off_deficit',
+        subject: queuedInsolventEnt,
+    });
+    castDecisionVote(decQueuedWriteOff.id, voterA, true, 4);
+    castDecisionVote(decQueuedWriteOff.id, voterB, true, 4);
+    castDecisionVote(decQueuedWriteOff.id, voterC, true, 4);
+    closeForTick(decQueuedWriteOff.id);
+    tickDecisions();
+    testAssert(getDecision(decQueuedWriteOff.id)!.status === 'passed_queued_for_funds', 'Underfunded write_off_deficit enters passed_queued_for_funds');
+
+    // Replenish Commons pool
+    setCommonsBalance(300);
+    tickDecisions();
+    testAssert(getDecision(decQueuedWriteOff.id)!.status === 'executed', 'Queued write_off_deficit executes automatically once pool has funds');
+    testAssert(ledger.getAccount(queuedInsolventEnt).balance === 0, 'Queued insolvent enterprise balance reset to 0');
+    testAssert(getCommonsBalance() === 100, 'Commons pool debited 200 beans');
 
     console.log(`\n🎉 All ${testsPassed}/${testsRun} Decisions Engine tests PASSED!`);
 }

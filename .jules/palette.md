@@ -38,6 +38,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 - Marketplace filter-clear `✕` buttons (category + distance): keyboard-operable.
 - REJECTED: WelcomePage "← Back" controls (#72) — already semantic `<button>`s; not
   an a11y gap. Do not re-file.
+- OnboardingGuide decorative emojis hidden (#780): wrapped in `aria-hidden="true"` to prevent screen reader noise while preserving WCAG 2.5.3 visible names.
 
 ---
 

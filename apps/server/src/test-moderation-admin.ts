@@ -11,7 +11,7 @@
  */
 import assert from 'node:assert';
 import crypto from 'node:crypto';
-import { initStateEngine, submitReport, getReports, dismissReport, actionReport, createPost, getPosts, getMember } from './state-engine.js';
+import { initStateEngine, submitReport, getReports, dismissReport, actionReport, createPost, getPosts, getMember, adminDeletePost } from './state-engine.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 
@@ -111,13 +111,16 @@ assert.strictEqual(actionedReports.reports.length, 1, 'E. Actioned filter must r
 assert.strictEqual(actionedReports.reports[0].id, r2.id, 'E. Actioned report ID must match');
 console.log('  E. actionReport correctly deletes post, suspends user, and sets status to actioned');
 
-// F. Non-existent report handling
+// F. Non-existent report and post deletion handling
 const dismissFake = dismissReport('non-existent-id-999');
 assert.strictEqual(dismissFake, false, 'F. dismissReport must return false for fake ID');
 
 const actionFake = actionReport('non-existent-id-999', true, true);
 assert.strictEqual(actionFake, false, 'F. actionReport must return false for fake ID');
-console.log('  F. Non-existent report IDs handled cleanly without errors');
+
+const deleteFakePost = adminDeletePost('non-existent-post-id-999');
+assert.strictEqual(deleteFakePost, false, 'F. adminDeletePost must return false for non-existent post ID');
+console.log('  F. Non-existent report and post IDs handled cleanly without errors');
 
 console.log('✅ #172 moderation admin portal test PASSED!');
 

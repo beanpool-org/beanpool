@@ -87,7 +87,12 @@ async function main() {
         { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
 
-    // Reactions — sending a message from A, then testing reaction permissions.
+    // Send message — spoof check (signed by A but claiming to be B) is DENIED.
+    const msgSpoofed = await signedFetch('POST', '/api/messages/send', A,
+        { conversationId: conv.id, authorPubkey: B.pubKeyHex, ciphertext: 'impersonating B', nonce: '123' });
+    assert(msgSpoofed.status === 403, `send message: spoofed authorPubkey is DENIED (got ${msgSpoofed.status} ${msgSpoofed.error ?? ''})`);
+
+    // Send message — participant A sends valid message.
     const msgRes = await signedFetch('POST', '/api/messages/send', A,
         { conversationId: conv.id, authorPubkey: A.pubKeyHex, ciphertext: 'hello', nonce: '123' });
     assert(msgRes.status === 200, `send message: A sends message in A-B DM (got ${msgRes.status})`);

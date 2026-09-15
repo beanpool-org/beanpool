@@ -4117,7 +4117,10 @@ export function getAllProjects(): CommunityProject[] {
         }
     } catch { }
 
-    return blobProjects;
+    const prunedIds = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE status IN ('pruned', 'deleted')").all() as any[]).map(r => r.public_key)
+    );
+    return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
 export function getVotingRounds(): VotingRound[] {

@@ -105,8 +105,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // ---- Public transparency reads ------------------------------------------------------
     const listTreasuriesHandler = async (ctx: any) => {
+        const includeBounded = ctx.query?.includeBounded === 'true';
+        const whereClause = includeBounded
+            ? "is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
+            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND status NOT IN ('pruned', 'deleted')";
         const rows = db.prepare(
-            "SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
+            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -167,7 +171,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);

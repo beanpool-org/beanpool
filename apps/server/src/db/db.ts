@@ -930,14 +930,14 @@ export function getCrowdfundProjects(): ProjectRow[] {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
     `).all() as any[];
 
     const projectMap = new Map<string, any>();
     try {
-        const pRows = db.prepare("SELECT * FROM projects").all() as any[];
+        const pRows = db.prepare("SELECT * FROM projects WHERE status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").all() as any[];
         for (const p of pRows) projectMap.set(p.id, p);
     } catch { }
 
@@ -951,10 +951,14 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.public_key = ? AND m.is_treasury = 1
+        WHERE m.public_key = ? AND m.is_treasury = 1 AND m.status NOT IN ('pruned', 'deleted')
     `).get(id) as any;
 
-    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as any;
+    // If e was soft-deleted or pruned in members, it's deleted - don't resurrect from legacy projects table
+    const prunedOrDeleted = db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status IN ('pruned', 'deleted')").get(id);
+    if (prunedOrDeleted) return undefined;
+
+    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ? AND status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").get(id) as any;
     if (!e && !legacyP) return undefined;
     if (e) return rowToProjectRow(e, legacyP);
     return legacyP as ProjectRow;
@@ -1223,6 +1227,18 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
         db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
+        try {
+            const cpRow = db.prepare("SELECT value FROM node_config WHERE key = 'commons_projects'").get() as any;
+            if (cpRow && cpRow.value) {
+                const projects = JSON.parse(cpRow.value);
+                if (Array.isArray(projects)) {
+                    const filtered = projects.filter((p: any) => p.id !== projectId);
+                    if (filtered.length !== projects.length) {
+                        db.prepare("UPDATE node_config SET value = ? WHERE key = 'commons_projects'").run(JSON.stringify(filtered));
+                    }
+                }
+            }
+        } catch { }
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
     });

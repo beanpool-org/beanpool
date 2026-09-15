@@ -688,7 +688,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'grant_tier': {
-                    const tier: TierName = decision.params?.tier || 'Resident';
+                    const validTiers: TierName[] = ['Newcomer', 'Resident', 'Steward', 'Elder'];
+                    const tier: TierName = decision.params?.tier;
+                    if (!tier || !validTiers.includes(tier)) {
+                        throw new Error(`Invalid tier badge: ${tier}`);
+                    }
                     const granted = grantedCreditForTier(tier);
                     db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, decision.subject!);
                     break;

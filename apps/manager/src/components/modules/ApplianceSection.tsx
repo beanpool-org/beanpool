@@ -727,7 +727,7 @@ export function ApplianceSection({
                                 <span>Restore Database Wizard</span>
                             </h3>
                             <p className="text-xs text-nature-400 m-0">
-                                Restore this node from a previously exported SQLite backup file. Overwrites existing database tables.
+                                Restore this node from a previously exported backup archive (.tar.gz). Overwrites existing database tables.
                             </p>
 
                             {restoreStatus && (
@@ -737,12 +737,7 @@ export function ApplianceSection({
                             )}
 
                             <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    if (window.confirm('⚠️ DANGER: Restoring will completely overwrite the sovereign node database and all active ledger balances. Are you sure you want to proceed?')) {
-                                        handleRestoreSubmit(e);
-                                    }
-                                }}
+                                onSubmit={handleRestoreSubmit}
                                 className="space-y-3"
                             >
                                 <input

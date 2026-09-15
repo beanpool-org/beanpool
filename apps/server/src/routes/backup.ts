@@ -416,6 +416,35 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     ctx.body = { success: true, config };
 });
 
+// Verify SQLite integrity check on active database or snapshot (PRAGMA integrity_check)
+router.post('/api/local/admin/backup/verify', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { name } = (ctx as any).requestBody || {};
+    try {
+        if (name) {
+            const target = resolveSnapshotPath(name);
+            if (!target || !fs.existsSync(target)) {
+                ctx.status = 404;
+                ctx.body = { error: 'Snapshot not found' };
+                return;
+            }
+            const Database = (await import('better-sqlite3')).default;
+            const snapDb = new Database(target, { readonly: true });
+            const check = snapDb.pragma('integrity_check') as any[];
+            snapDb.close();
+            const ok = check.length === 1 && check[0].integrity_check === 'ok';
+            ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
+        } else {
+            const check = db.pragma('integrity_check') as any[];
+            const ok = check.length === 1 && check[0].integrity_check === 'ok';
+            ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
+        }
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { error: e.message || 'Integrity check failed' };
+    }
+});
+
 // Backup pull cadence — operator-tunable from the fleet manager. GET returns the
 // effective values (config → env → default) + live puller status; POST overrides
 // them in local-config, read live by the backup puller on its next tick (no restart).

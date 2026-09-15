@@ -851,6 +851,70 @@ export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPas
     }
 }
 
+export interface SnapshotScheduleConfig {
+    enabled: boolean;
+    intervalHours: number;
+    keep: number;
+}
+
+export interface BackupVerificationResult {
+    success: boolean;
+    ok: boolean;
+    verifiedAt: string;
+    result?: unknown[];
+}
+
+export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        return { enabled: true, intervalHours: 24, keep: 7 };
+    }
+    const data = await res.json();
+    return data.config || { enabled: true, intervalHours: 24, keep: 7 };
+}
+
+export async function updateNodeSnapshotSchedule(
+    nodeUrl: string,
+    config: Partial<SnapshotScheduleConfig>,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...config, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.config;
+}
+
+export async function verifyNodeBackup(
+    nodeUrl: string,
+    snapshotName?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<BackupVerificationResult> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup/verify');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ name: snapshotName, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function updateNodeReplicationCadence(
     nodeUrl: string,
     pullSeconds: number,

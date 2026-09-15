@@ -295,7 +295,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                 <div className="w-12" />
             </div>
 
-            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
+            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
                     <div className="py-20 text-center text-nature-500 font-medium">Loading treasury details…</div>
                 ) : error ? (
@@ -404,7 +404,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                 placeholder="Amount (🫘)"
                                                 value={pledgeAmount}
                                                 onChange={(e) => setPledgeAmount(e.target.value)}
-                                                className="w-32 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                className="w-32 sm:w-36 min-w-[7.5rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                             />
                                             <input
                                                 type="text"

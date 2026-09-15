@@ -1056,6 +1056,7 @@ export interface FriendEntry {
     callsign: string;
     addedAt: string;
     isGuardian: boolean;
+    avatarUrl?: string | null;
 }
 
 export async function getFriends(publicKey: string): Promise<FriendEntry[]> {
@@ -1251,6 +1252,7 @@ export interface Treasury {
     earnedSurplus?: number;
     workingCapitalCeiling?: number | null;
     purpose?: string | null;
+    description?: string | null;
     goalAmount?: number | null;
     currentAmount?: number | null;
     deadlineAt?: string | null;

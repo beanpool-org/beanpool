@@ -805,7 +805,8 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
-                    className="fixed bottom-[5.5rem] right-3 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     title="New Post"
                 >
                     +
@@ -823,7 +824,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
         {/* Map Preview Card */}
         {previewPost && (
-            <div className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[4.5rem]">
+            <div className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)' }}>
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}
@@ -884,7 +885,10 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
 
         {/* Quick Post Panel — rendered OUTSIDE the map div so Leaflet touch handlers don't interfere */}
         {showNewPost && (
-            <div className="fixed bottom-[4.5rem] left-3 right-3 max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain">
+            <div 
+                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
+                style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)' }}
+            >
                 <div className="flex justify-between items-center mb-4">
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">New Post</span>
                     <button onClick={() => {

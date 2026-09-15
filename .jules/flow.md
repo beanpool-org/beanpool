@@ -79,3 +79,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Replace any types in ai-client, node-client and EditNodeModal
 **Learning:** `lib/ai-client.ts`, `lib/node-client.ts`, and `EditNodeModal.tsx` relied on `any` types for parameters, response payloads, and catch error variables, weakening type safety across manager API clients and modals.
 **Action:** Replace `any` types with strict `unknown` types and typed interfaces to enhance autocompletion and prevent runtime type mismatches.
+
+## 2026-09-10 - Replace any types with strict interfaces in App.tsx and node-client.ts
+**Learning:** `App.tsx` and `node-client.ts` relied on `any` types for `fleetNodeData`, `nodeData`, `nodeLogs`, and filter parameters, bypassing type checking for node health flags and user reports.
+**Action:** Defined `NodeHealthFlag`, `NodeReport`, `MemberItem`, and `NodeDataPayload` interfaces in `node-client.ts` and updated state and filter callbacks in `App.tsx` with strict types.

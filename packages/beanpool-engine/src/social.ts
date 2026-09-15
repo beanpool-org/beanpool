@@ -29,6 +29,7 @@ export interface FriendEntry {
     callsign: string;
     addedAt: string;
     isGuardian: boolean;
+    avatarUrl?: string | null;
 }
 
 export interface AverageRatingResult {
@@ -108,7 +109,7 @@ export function getAverageRating(db: Db, targetPubkey: string): AverageRatingRes
 
 export function getFriends(db: Db, pubkey: string): FriendEntry[] {
     const rows = db.prepare(`
-        SELECT f.friend_pubkey, m.callsign, f.added_at 
+        SELECT f.friend_pubkey, m.callsign, f.added_at, m.avatar_url
         FROM friends f 
         JOIN members m ON f.friend_pubkey = m.public_key 
         WHERE f.owner_pubkey=?
@@ -118,6 +119,11 @@ export function getFriends(db: Db, pubkey: string): FriendEntry[] {
         publicKey: r.friend_pubkey,
         callsign: r.callsign,
         addedAt: r.added_at,
-        isGuardian: false
+        isGuardian: false,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.friend_pubkey}?size=thumb`)
+            : null,
     }));
 }

@@ -10,6 +10,14 @@ import {
     getTfaSessionToken,
     setTfaSessionToken,
     clearAllTfaSessionTokens,
+    loginToNode,
+    fetchNodeTreasuries,
+    createNodeTreasury,
+    fetchNodeSnapshots,
+    createNodeSnapshot,
+    deleteNodeSnapshot,
+    updateNodeReplicationCadence,
+    forceNodeResync,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -346,5 +354,124 @@ describe('2FA session token transmission in node client admin actions', () => {
 
         await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+    });
+});
+
+describe('node client login, treasury, snapshot, and replication helpers', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const lastCall = () => fetchMock.mock.calls[0];
+    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('loginToNode posts password and totpCode and returns body on success', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, tfaSessionToken: 'sess-123' }),
+        });
+
+        const res = await loginToNode('https://node.example.com', 'pwd123', '654321');
+
+        expect(res).toEqual({ success: true, tfaSessionToken: 'sess-123' });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/admin/login');
+        expect(JSON.parse((init as any).body)).toEqual({ password: 'pwd123', totpCode: '654321' });
+    });
+
+    it('loginToNode throws custom error message on login failure', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Invalid TOTP code' }),
+        });
+
+        await expect(loginToNode('https://node.example.com', 'pwd123', '000000')).rejects.toThrow('Invalid TOTP code');
+    });
+
+    it('fetchNodeTreasuries returns treasuries array on success and empty array on failure', async () => {
+        const mockTreasuries = [{ publicKey: 'treasury1', name: 'Community Chest', balance: 100, creditLine: 50, liveOffers: 2 }];
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ treasuries: mockTreasuries }),
+        });
+
+        const treasuries = await fetchNodeTreasuries('https://node.example.com');
+        expect(treasuries).toEqual(mockTreasuries);
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+        const empty = await fetchNodeTreasuries('https://node.example.com');
+        expect(empty).toEqual([]);
+    });
+
+    it('createNodeTreasury sends POST to create a treasury', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, publicKey: 'new-treasury-pub' }),
+        });
+
+        const res = await createNodeTreasury(
+            'https://node.example.com',
+            { name: 'Reserve', avatar: 'sprout', creditLine: 1000 },
+            'adminpass',
+            'tfa123'
+        );
+
+        expect(res).toEqual({ success: true, publicKey: 'new-treasury-pub' });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/treasury');
+        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(JSON.parse((init as any).body)).toEqual({
+            name: 'Reserve',
+            avatar: 'sprout',
+            creditLine: 1000,
+            password: 'adminpass',
+        });
+    });
+
+    it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {
+        const mockSnapshot = { name: 'snap-1.db', sizeBytes: 1024, createdAt: '2026-01-01' };
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ snapshots: [mockSnapshot] }),
+        });
+        const list = await fetchNodeSnapshots('https://node.example.com', 'pwd');
+        expect(list).toEqual([mockSnapshot]);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ snapshot: mockSnapshot }),
+        });
+        const created = await createNodeSnapshot('https://node.example.com', 'pwd');
+        expect(created).toEqual(mockSnapshot);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await expect(deleteNodeSnapshot('https://node.example.com', 'snap-1.db', 'pwd')).resolves.toBeUndefined();
+    });
+
+    it('updateNodeReplicationCadence and forceNodeResync trigger replication updates', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+
+        await updateNodeReplicationCadence('https://node.example.com', 30, 5, 'pwd');
+        expect(lastCall()[0]).toContain('/api/local/admin/backup-config');
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ pullSeconds: 30, reconcileMinutes: 5, password: 'pwd' });
+
+        fetchMock.mockClear();
+
+        await forceNodeResync('https://node.example.com', 'pwd');
+        expect(lastCall()[0]).toContain('/api/local/admin/replication-resync');
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ password: 'pwd' });
     });
 });

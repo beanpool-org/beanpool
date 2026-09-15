@@ -253,7 +253,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 )}
             </div>
 
-            <div className="max-w-2xl mx-auto pb-20">
+            <div className="max-w-2xl mx-auto pb-20" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {/* Banner Profile */}
                 <div className="flex flex-col items-center p-8 border-b border-nature-200 dark:border-nature-800">
                     <div className="w-24 h-24 rounded-full mb-4 border-4 border-nature-200 dark:border-nature-800 overflow-hidden bg-oat-100 dark:bg-nature-900 flex items-center justify-center shadow-lg">

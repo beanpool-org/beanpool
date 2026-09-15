@@ -2327,10 +2327,11 @@ export function getFriends(pubkey: string): FriendEntry[] {
 
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): AbuseReport | null {
     if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
+    const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, reason.slice(0, 500), createdAt);
-    return { id, reporterPubkey, targetPubkey, targetPostId, reason: reason.slice(0, 500), createdAt, status: 'pending' };
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, safeReason, createdAt);
+    return { id, reporterPubkey, targetPubkey, targetPostId, reason: safeReason, createdAt, status: 'pending' };
 }
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {

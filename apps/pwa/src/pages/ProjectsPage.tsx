@@ -158,7 +158,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     }, [treasuries, filter]);
 
     return (
-        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: '4rem' }}>
+        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: 'var(--bottom-nav-offset)' }}>
             {/* Header */}
             <header className="sticky top-0 z-40 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex flex-col gap-3">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
@@ -254,79 +254,64 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         return (
                             <div
                                 key={t.publicKey}
-                                role="button"
-                                tabIndex={0}
                                 onClick={() => onOpenTreasury?.(t.publicKey)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                        e.preventDefault();
-                                        onOpenTreasury?.(t.publicKey);
-                                    }
-                                }}
-                                className={`bg-nature-900 border rounded-2xl p-4 flex flex-col justify-between gap-3 cursor-pointer hover:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors shadow-sm ${
-                                    t.link ? 'border-sky-900/60' : 'border-nature-800'
-                                }`}
+                                className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
                             >
                                 <div className="space-y-3">
-                                    {/* Card Header: Avatar, Name & Lifecycle badge */}
+                                    {/* Top row: Avatar + Name + Lifecycle Tag */}
                                     <div className="flex items-start gap-3">
-                                        {avatarSrc ? (
-                                            <img
-                                                src={avatarSrc}
-                                                alt=""
-                                                className="w-12 h-12 rounded-full object-cover shrink-0 border border-nature-700"
-                                            />
-                                        ) : (
-                                            <div
-                                                className="w-12 h-12 rounded-full bg-nature-800 flex items-center justify-center text-xl shrink-0 border border-nature-700"
-                                                aria-hidden="true"
-                                            >
-                                                {hasGoal ? '🌱' : t.link ? '🔗' : '🏛️'}
-                                            </div>
-                                        )}
-
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <h2 className="text-white font-bold text-base truncate">
-                                                    {t.name || t.callsign}
-                                                </h2>
-                                                {isFunded ? (
-                                                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                                        🎉 FUNDED
-                                                    </span>
-                                                ) : hasGoal ? (
-                                                    <span className="bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                                        🌱 PROJECT
-                                                    </span>
-                                                ) : (
-                                                    <span className="bg-nature-800 text-nature-300 border border-nature-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                                                        🏛️ ONGOING
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {t.link ? (
-                                                <div className="text-nature-400 text-xs mt-0.5">
-                                                    {energySentence(t.link.energyBalance)}
-                                                </div>
+                                        <div className="w-12 h-12 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center overflow-hidden shrink-0 text-xl font-bold text-emerald-400">
+                                            {avatarSrc ? (
+                                                <img src={avatarSrc} alt={t.name} className="w-full h-full object-cover" />
                                             ) : (
-                                                <div className="text-nature-400 text-xs mt-0.5">
-                                                    {t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}
-                                                    {t.keepers && t.keepers.length > 0 ? ` · ${t.keepers.length} keeper${t.keepers.length === 1 ? '' : 's'}` : ''}
-                                                </div>
+                                                <span>🌱</span>
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors truncate">
+                                                    {t.name}
+                                                </h3>
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                    t.lifecycle === 'bounded'
+                                                        ? 'bg-amber-950/50 text-amber-300 border-amber-800/60'
+                                                        : 'bg-blue-950/50 text-blue-300 border-blue-800/60'
+                                                }`}>
+                                                    {t.lifecycle === 'bounded' ? '⏱️ Bounded' : '🏛️ Ongoing'}
+                                                </span>
+                                            </div>
+                                            {t.callsign && (
+                                                <p className="text-xs text-nature-400 mt-0.5">
+                                                    @{t.callsign}
+                                                </p>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Purpose Statement (docs §4) */}
-                                    <p className="text-nature-300 text-sm line-clamp-2 leading-relaxed">
-                                        {t.purpose || 'No stated purpose yet.'}
+                                    {/* Purpose statement (docs/the-commons.md §2.1) */}
+                                    <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
+                                        {t.purpose || t.description || 'Community enterprise'}
                                     </p>
+
+                                    {/* Energy Balance sentence (docs/the-commons.md §2.2) */}
+                                    {t.balance != null && (
+                                        <p className="text-[11px] text-nature-400 italic">
+                                            {energySentence(t.balance)}
+                                        </p>
+                                    )}
+
+                                    {/* Financial Ceiling indicator if surplus exists */}
+                                    {t.earnedSurplus != null && t.earnedSurplus > 0 && (
+                                        <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                                            <span>📈</span>
+                                            <span>Earned Surplus: {t.earnedSurplus} 🫘</span>
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="space-y-3 pt-2">
-                                    {/* Financial info row */}
-                                    <div className="flex justify-between items-center bg-nature-950/60 rounded-xl p-2.5 border border-nature-800/80">
+                                <div className="mt-4 pt-3 border-t border-nature-800 space-y-2">
+                                    {/* Balance Row */}
+                                    <div className="flex justify-between items-center text-xs">
                                         <div>
                                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
                                                 Balance
@@ -385,13 +370,15 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                 <div
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                     onClick={() => setShowNewModal(false)}
+                    style={{ overflowY: 'auto', paddingBottom: 'calc(var(--bottom-nav-offset) + 2rem)' }}
                 >
                     <div
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="propose-modal-title"
                         onClick={(e) => e.stopPropagation()}
-                        className="bg-nature-900 border border-nature-800 rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4 animate-in zoom-in-95 duration-200 text-white"
+                        className="bg-nature-900 border border-nature-800 rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4 animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="propose-modal-title" className="text-lg font-black text-white">
@@ -414,9 +401,9 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         )}
 
                         <form onSubmit={submitNewEnterprise} className="space-y-4">
-                            {/* Type selector */}
+                            {/* Lifecycle choice: Bounded Project vs Ongoing Enterprise */}
                             <div>
-                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1.5">
+                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-2">
                                     Initiative Type
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
@@ -429,7 +416,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>🌱 Bounded Project</span>
+                                        <span>⏱️ Bounded Project</span>
                                         <span className="text-[10px] font-normal opacity-80">Has funding goal & deadline</span>
                                     </button>
                                     <button

@@ -254,8 +254,16 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         return (
                             <div
                                 key={t.publicKey}
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => onOpenTreasury?.(t.publicKey)}
-                                className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onOpenTreasury?.(t.publicKey);
+                                    }
+                                }}
+                                className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
                             >
                                 <div className="space-y-3">
                                     {/* Top row: Avatar + Name + Lifecycle Tag */}

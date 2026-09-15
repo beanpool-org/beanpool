@@ -147,6 +147,29 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
         expect(handleOpenTreasury).toHaveBeenCalledWith('treasury-1');
     });
 
+    it('supports keyboard navigation (Enter and Space) on enterprise cards', async () => {
+        const handleOpenTreasury = vi.fn();
+        render(<ProjectsPage identity={backerIdentity} onOpenTreasury={handleOpenTreasury} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        });
+
+        const cards = screen.getAllByRole('button').filter(el => el.getAttribute('tabindex') === '0');
+        expect(cards.length).toBeGreaterThan(0);
+        const firstCard = cards[0];
+
+        // Enter key activates card
+        fireEvent.keyDown(firstCard, { key: 'Enter' });
+        expect(handleOpenTreasury).toHaveBeenCalledWith('treasury-1');
+
+        handleOpenTreasury.mockClear();
+
+        // Space key activates card
+        fireEvent.keyDown(firstCard, { key: ' ' });
+        expect(handleOpenTreasury).toHaveBeenCalledWith('treasury-1');
+    });
+
     it('ensures ProjectsPage scroll container has overflow-y: auto and paddingBottom: var(--bottom-nav-offset)', async () => {
         const { container } = render(<ProjectsPage identity={backerIdentity} />);
 

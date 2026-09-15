@@ -102,10 +102,10 @@ router.get('/.well-known/assetlinks.json', async (ctx) => {
 
 // ===================== SETTINGS PAGE =====================
 
-router.get(['/settings', '/settings/(.*)'], async (ctx) => {
+router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     // If request has a file extension (e.g. .js, .css, .png) and is under /settings/, let static middleware handle it
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
-        return;
+        return next();
     }
     const managerPath = resolveServerPath('public/settings/index.html');
     const publicPath = resolveServerPath('public/settings.html');
@@ -124,10 +124,12 @@ router.get(['/settings', '/settings/(.*)'], async (ctx) => {
 
 router.get('/settings-legacy', async (ctx) => {
     const staticPath = resolveServerPath('static/settings.html');
-    if (fs.existsSync(staticPath)) {
+    const publicPath = resolveServerPath('public/settings.html');
+    const resolvedPath = fs.existsSync(staticPath) ? staticPath : publicPath;
+    if (fs.existsSync(resolvedPath)) {
         ctx.type = 'html';
         ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        ctx.body = fs.createReadStream(staticPath);
+        ctx.body = fs.createReadStream(resolvedPath);
     } else {
         ctx.status = 404;
         ctx.body = 'Legacy settings page not found.';

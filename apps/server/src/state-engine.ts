@@ -3770,7 +3770,7 @@ export function getAllProjects(): CommunityProject[] {
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
             FROM members m
-            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         `).all() as any[];
 
         for (const e of enterprises) {

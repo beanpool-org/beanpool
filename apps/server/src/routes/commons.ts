@@ -136,11 +136,16 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
-    const { authorPubkey, title, description, touches, effect, subject, params } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || authorPubkey;
-    if (!actor || !title || !touches || !effect) {
+    const { title, description, touches, effect, subject, params } = (ctx as any).requestBody || {};
+    const actor = ctx.state.actor as string;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required to propose a decision' };
+        return;
+    }
+    if (!title || !touches || !effect) {
         ctx.status = 400;
-        ctx.body = { error: 'authorPubkey, title, touches, and effect are required' };
+        ctx.body = { error: 'title, touches, and effect are required' };
         return;
     }
     try {

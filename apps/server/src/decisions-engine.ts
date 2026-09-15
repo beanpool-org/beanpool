@@ -599,10 +599,10 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
-    if (decision.effect === 'remove_member') {
+    if (decision.effect === 'remove_member' || decision.effect === 'suspend_member') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
         if (isSoleOwner(decision.subject)) {
-            return { status: 'blocked', reason: 'Cannot remove sole node owner via community vote' };
+            return { status: 'blocked', reason: 'Cannot remove or suspend sole node owner via community vote per §3.8' };
         }
     }
 
@@ -721,6 +721,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         }
     }
 
+    const cancelledDecisionIds: string[] = [];
+
     // Reversible state flips and money movements: single atomic commit
     try {
         conservingTransaction(() => {
@@ -749,7 +751,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     `).run(now, decision.subject!);
 
                     for (const cd of cancelledDecisions) {
-                        broadcast({ type: 'decision_updated', decision: getDecision(cd.id)! });
+                        cancelledDecisionIds.push(cd.id);
                     }
                     break;
                 }
@@ -894,6 +896,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 WHERE id = ?
             `).run(now, now, decisionId);
         });
+
+        for (const cid of cancelledDecisionIds) {
+            broadcast({ type: 'decision_updated', decision: getDecision(cid)! });
+        }
 
         if (decision.subject) {
             broadcast({ type: 'profile_updated', publicKey: decision.subject });
@@ -1123,8 +1129,15 @@ export function tickDecisions(asOfTime?: number): {
             `).run(now.toISOString(), top.id);
             broadcast({ type: 'decision_updated', decision: getDecision(top.id)! });
         } else {
-            const amount = Number(JSON.parse(top.params || '{}')?.amount || 0);
-            if (amount > 0 && getCommonsBalanceExact() >= amount) {
+            let requiredAmount = 0;
+            if (top.effect === 'write_off_deficit' && top.subject) {
+                const entAccount = ledger.getAccount(top.subject);
+                requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+            } else {
+                requiredAmount = Number(JSON.parse(top.params || '{}')?.amount || 0);
+            }
+
+            if (requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
                 const res = executeDecision(top.id);
                 if (res.success && res.status === 'executed') {
                     executed++;

@@ -195,6 +195,18 @@ async function runSuite() {
 
     console.log('--- 1. Propose Constraints & Standing Gate ---');
 
+    // 1a-0. Auth gating: unauthenticated proposal fails with 401
+    const resNoAuth = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        body: {
+            title: 'Unauthenticated proposal',
+            description: 'Should fail with 401',
+            touches: 'nothing',
+            effect: 'poll',
+        },
+    });
+    assert(resNoAuth.status === 401, 'Propose without actor fails with 401');
+    assert(resNoAuth.body.error.includes('Authentication required'), 'Error cites auth required');
+
     // 1a. Gating: earnedCredit > 0 required
     const resDave = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: daveZeroStanding,

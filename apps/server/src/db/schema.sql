@@ -555,7 +555,8 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
+    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
+    purpose, goal_amount, deadline_at, lifecycle, paused
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

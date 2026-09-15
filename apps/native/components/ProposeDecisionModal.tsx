@@ -319,6 +319,13 @@ export function ProposeDecisionModal({
             return;
         }
 
+        const targetPubkey = selectedMember?.publicKey || (subject.trim().length === 64 ? subject.trim() : null);
+
+        if (touches === 'member' && !targetPubkey) {
+            Alert.alert('Member Not Found', 'Please enter or select a valid member callsign or 64-character public key.');
+            return;
+        }
+
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
             const amount = Number(grantAmount);
@@ -334,11 +341,16 @@ export function ProposeDecisionModal({
                 Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
                 return;
             }
-            if (!subject.trim()) {
+            if (!targetPubkey) {
                 Alert.alert('Missing Lead Keeper', 'Please enter the lead keeper callsign or public key to remove.');
                 return;
             }
-            params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: subject.trim() };
+            params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
+        } else if (effect === 'write_off_deficit') {
+            if (!enterprisePubkey.trim()) {
+                Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
+                return;
+            }
         } else if (effect === 'set_rule') {
             params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
@@ -357,7 +369,7 @@ export function ProposeDecisionModal({
                 description: description.trim(),
                 touches,
                 effect,
-                subject: subject.trim() || null,
+                subject: (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : subject.trim())) || null,
                 params,
             });
 
@@ -454,8 +466,8 @@ export function ProposeDecisionModal({
                             </Pressable>
                         ))}
 
-                        {/* Enterprise Input for remove_lead_keeper */}
-                        {effect === 'remove_lead_keeper' && (
+                        {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
+                        {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
                             <>
                                 <Text style={styles.sectionLabel}>Target Enterprise Public Key</Text>
                                 {treasuries && treasuries.length > 0 && (

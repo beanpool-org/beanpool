@@ -956,14 +956,14 @@ export function getCrowdfundProjects(): ProjectRow[] {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
     `).all() as any[];
 
     const projectMap = new Map<string, any>();
     try {
-        const pRows = db.prepare("SELECT * FROM projects").all() as any[];
+        const pRows = db.prepare("SELECT * FROM projects WHERE status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").all() as any[];
         for (const p of pRows) projectMap.set(p.id, p);
     } catch { }
 
@@ -977,10 +977,14 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.public_key = ? AND m.is_treasury = 1
+        WHERE m.public_key = ? AND m.is_treasury = 1 AND m.status NOT IN ('pruned', 'deleted')
     `).get(id) as any;
 
-    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as any;
+    // If e was soft-deleted or pruned in members, it's deleted - don't resurrect from legacy projects table
+    const prunedOrDeleted = db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status IN ('pruned', 'deleted')").get(id);
+    if (prunedOrDeleted) return undefined;
+
+    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ? AND status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").get(id) as any;
     if (!e && !legacyP) return undefined;
     if (e) return rowToProjectRow(e, legacyP);
     return legacyP as ProjectRow;
@@ -1004,11 +1008,6 @@ export function createCrowdfundProject(
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
     db.transaction(() => {
-        db.prepare(`
-            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
-        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
-
         const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
         if (!existing) {
             db.prepare(`
@@ -1028,6 +1027,11 @@ export function createCrowdfundProject(
                 db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
             }
         }
+
+        db.prepare(`
+            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
 }
 
@@ -1182,6 +1186,17 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
 
+    // Guard against deleting funded/completed projects
+    if (project.status !== 'ACTIVE') {
+        throw new Error('Cannot delete a project that is already funded or completed');
+    }
+
+    // Guard against non-zero account balance to maintain ledger conservation
+    const account = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (account && Math.abs(account.balance) > 0.0001) {
+        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
+    }
+
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
     // on any of them becomes a retrospective tax on money they are merely getting back.
@@ -1236,8 +1251,20 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
+        try {
+            const cpRow = db.prepare("SELECT value FROM node_config WHERE key = 'commons_projects'").get() as any;
+            if (cpRow && cpRow.value) {
+                const projects = JSON.parse(cpRow.value);
+                if (Array.isArray(projects)) {
+                    const filtered = projects.filter((p: any) => p.id !== projectId);
+                    if (filtered.length !== projects.length) {
+                        db.prepare("UPDATE node_config SET value = ? WHERE key = 'commons_projects'").run(JSON.stringify(filtered));
+                    }
+                }
+            }
+        } catch { }
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
     });

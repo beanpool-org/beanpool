@@ -1861,7 +1861,161 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
     }
 }
 
-// Voting is being redesigned (see docs/the-commons.md)
+// ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
+
+export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionFranchise = '1m1v' | 'quadratic_trade';
+export type DecisionStatus =
+    | 'open'
+    | 'passed'
+    | 'failed'
+    | 'unresolved'
+    | 'passed_queued_for_funds'
+    | 'execution_pending_grace'
+    | 'execution_blocked'
+    | 'execution_void'
+    | 'executed'
+    | 'admin_halted';
+
+export type DecisionEffect =
+    | 'suspend_member'
+    | 'unsuspend_member'
+    | 'freeze_credit'
+    | 'unfreeze_credit'
+    | 'grant_voucher'
+    | 'revoke_voucher'
+    | 'grant_tier'
+    | 'revoke_tier'
+    | 'grant_elder'
+    | 'revoke_elder'
+    | 'remove_lead_keeper'
+    | 'reinstate_member'
+    | 'remove_member'
+    | 'grant_enterprise'
+    | 'grant_hardship'
+    | 'write_off_deficit'
+    | 'set_levy'
+    | 'set_rule'
+    | 'poll';
+
+export interface Decision {
+    id: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject: string | null;
+    params: any | null;
+    franchise: DecisionFranchise;
+    status: DecisionStatus;
+    opensAt: string;
+    closesAt: string;
+    gracePeriodEndsAt: string | null;
+    createdAt: string;
+    executedAt: string | null;
+    executionError: string | null;
+    executionReason: string | null;
+    adminHaltedAt: string | null;
+    adminHaltedBy: string | null;
+    adminHaltReason: string | null;
+    updatedAt: string;
+}
+
+export interface DecisionVote {
+    decisionId: string;
+    voterPubkey: string;
+    support: number; // 1 = yes, 0 = no
+    weight: number;
+    creditsUsed: number;
+    signature?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DecisionTally {
+    decisionId: string;
+    status: DecisionStatus;
+    totalVoters: number;
+    quorumRequired: number;
+    quorumMet: boolean;
+    yesWeight: number;
+    noWeight: number;
+    totalWeight: number;
+    supportRatio: number;
+    thresholdRequired: number;
+    passed: boolean;
+}
+
+export interface DecisionWithTally extends Decision {
+    tally: DecisionTally;
+}
+
+export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return { decisions: [], activeMembers30d: 0 };
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const url = `${anchorUrl}/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`;
+        const res = await fetch(url);
+        if (!res.ok) return { decisions: [], activeMembers30d: 0 };
+        const data = await res.json();
+        return {
+            decisions: data.decisions || [],
+            activeMembers30d: data.activeMembers30d || 0,
+        };
+    } catch {
+        return { decisions: [], activeMembers30d: 0 };
+    }
+}
+
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[] } | null> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return null;
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const res = await fetch(`${anchorUrl}/api/commons/decisions/${encodeURIComponent(id)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+export async function createDecision(payload: {
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject?: string | null;
+    params?: any;
+    closesAt?: string;
+}): Promise<{ success: boolean; decision: Decision }> {
+    return _signedRequest('/api/commons/decisions', payload);
+}
+
+export async function castDecisionVote(decisionId: string, payload: {
+    voterPubkey: string;
+    support: boolean;
+    voteCount?: number;
+    signature?: string;
+}): Promise<{ success: boolean; creditsUsed: number }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, payload);
+}
+
+export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const res = await fetch(`${anchorUrl}/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
+        if (!res.ok) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
+        return await res.json();
+    } catch {
+        return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
+    }
+}
 
 export async function updatePost(id: string, updates: any) {
     const identity = await loadIdentity();

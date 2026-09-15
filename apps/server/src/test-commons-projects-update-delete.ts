@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, createProject, getAllProjects } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 
 const PORT = 8559;
 const BASE = `https://localhost:${PORT}`;
@@ -133,6 +133,20 @@ async function main() {
     const allProjectsAfterDelete = getAllProjects();
     const deletedProj = allProjectsAfterDelete.find(p => p.id === projectId);
     assert(!deletedProj, 'Project is no longer present or active in state engine after deletion');
+
+    // Verify crowdfund db functions and API do not resurrect pruned/deleted projects (Pass 3 fix)
+    const cfProjectsAfterDelete = getCrowdfundProjects();
+    assert(!cfProjectsAfterDelete.some(p => p.id === projectId), 'Deleted project is not returned by getCrowdfundProjects()');
+
+    const cfProjAfterDelete = getCrowdfundProject(projectId);
+    assert(cfProjAfterDelete === undefined, 'Deleted project returns undefined from getCrowdfundProject(id)');
+
+    const cfGetRes = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
+    assert(cfGetRes.status === 404, `GET /api/crowdfund/projects/:id returns 404 after deletion (got ${cfGetRes.status})`);
+
+    // Verify /api/treasuries excludes deleted and bounded enterprises by default
+    const treasuriesRes = await fetch(`${BASE}/api/treasuries`).then(r => r.json()) as any;
+    assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
 
     // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 400
     const repeatDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', proposer, {

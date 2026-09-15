@@ -2,10 +2,12 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getBalance, getActiveVotingRound, getTreasuries, type TreasurySummary } from '../../utils/db';
+import { getBalance, getActiveVotingRound, getTreasuries, getDecisions, getAllCommunityMembers, type DecisionWithTally, type TreasurySummary } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
+import { DecideSection } from '../../components/DecideSection';
+import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
@@ -19,6 +21,13 @@ export default function ProjectsScreen() {
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     const [activeRound, setActiveRound] = useState<any>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    const [treasuries, setTreasuries] = useState<any[]>([]);
+    const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>('decide');
+    const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
+    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
+    const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
 
     // Filter & sort states
     const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
@@ -32,12 +41,31 @@ export default function ProjectsScreen() {
         headerTitle: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
+        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+        treasuryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        treasuryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.subtle },
+        treasuryAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+        treasuryName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        treasuryMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        treasuryBalance: { fontSize: 14, fontWeight: '800' },
+        treasuryBalancePos: { color: colors.brand.primary },
+        treasuryBalanceNeg: { color: colors.feedback.warning.solid },
+        operatorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, borderRadius: 10, padding: 8, marginTop: 2 },
+        operatorBadgeText: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', flex: 1 },
 
         statCardRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         statCard: { flex: 1, minWidth: 0, backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border.default },
         statCardLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
         statCardValueRow: { flexDirection: 'row', alignItems: 'center' },
         statCardAmount: { fontSize: 20, color: colors.text.heading, fontWeight: '800' },
+
+        sectionTabsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+        sectionTabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 14, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
+        sectionTabBtnActive: { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary },
+        sectionTabText: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
+        sectionTabTextActive: { color: colors.brand.primary },
+        sectionBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, backgroundColor: colors.brand.primary },
+        sectionBadgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
 
         roundBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.feedback.info.bg, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.info.border },
         roundBannerTitle: { fontSize: 13, color: colors.feedback.info.fg, fontWeight: '700' },
@@ -145,7 +173,31 @@ export default function ProjectsScreen() {
             const r = await getActiveVotingRound();
             setActiveRound(r);
         } catch {}
+
+        try {
+            const decData = await getDecisions();
+            setDecisions(decData.decisions || []);
+            setActiveMembers30d(decData.activeMembers30d || 0);
+        } catch (err) {
+            console.error('[Projects] Failed loading decisions:', err);
+        }
+
+        try {
+            const mems = await getAllCommunityMembers();
+            setMembersList(mems || []);
+        } catch (err) {
+            console.error('[Projects] Failed loading members:', err);
+        }
     }, []);
+
+    const canProposeDecision = (balanceState.earnedCredit || 0) > 0;
+    const hasOpenDecision = useMemo(() => {
+        if (!identity?.publicKey) return false;
+        return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
+    }, [decisions, identity]);
+    const openDecisionsCount = useMemo(() => {
+        return decisions.filter(d => d.status === 'open').length;
+    }, [decisions]);
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
@@ -352,7 +404,7 @@ export default function ProjectsScreen() {
                                 </Pressable>
                             </View>
                             <Text style={styles.headerDesc}>
-                                Community enterprises trade, produce, and steward shared initiatives. Bounded initiatives raise beans toward specific community goals.
+                                Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.
                             </Text>
                         </View>
 
@@ -369,6 +421,108 @@ export default function ProjectsScreen() {
                                 <Text style={styles.statCardAmount} numberOfLines={1}>{balanceState.earnedCredit || 0}</Text>
                             </View>
                         </View>
+
+                        {/* Section Switcher: Decide vs Enterprises */}
+                        <View style={styles.sectionTabsRow}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Decide Section"
+                                style={[styles.sectionTabBtn, activeSection === 'decide' && styles.sectionTabBtnActive]}
+                                onPress={() => setActiveSection('decide')}
+                            >
+                                <MaterialCommunityIcons
+                                    name="vote"
+                                    size={18}
+                                    color={activeSection === 'decide' ? colors.brand.primary : colors.text.secondary}
+                                />
+                                <Text style={[styles.sectionTabText, activeSection === 'decide' && styles.sectionTabTextActive]}>
+                                    Decide
+                                </Text>
+                                {openDecisionsCount > 0 && (
+                                    <View style={styles.sectionBadge}>
+                                        <Text style={styles.sectionBadgeText}>{openDecisionsCount}</Text>
+                                    </View>
+                                )}
+                            </Pressable>
+
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="Enterprises Section"
+                                style={[styles.sectionTabBtn, activeSection === 'enterprises' && styles.sectionTabBtnActive]}
+                                onPress={() => setActiveSection('enterprises')}
+                            >
+                                <MaterialCommunityIcons
+                                    name="office-building"
+                                    size={18}
+                                    color={activeSection === 'enterprises' ? colors.brand.primary : colors.text.secondary}
+                                />
+                                <Text style={[styles.sectionTabText, activeSection === 'enterprises' && styles.sectionTabTextActive]}>
+                                    Enterprises
+                                </Text>
+                            </Pressable>
+                        </View>
+
+                        {activeSection === 'decide' ? (
+                            <DecideSection
+                                decisions={decisions}
+                                activeMembers30d={activeMembers30d}
+                                identity={identity}
+                                balanceState={balanceState}
+                                onRefresh={loadData}
+                                onOpenPropose={() => {
+                                    if (!canProposeDecision) {
+                                        Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        return;
+                                    }
+                                    if (hasOpenDecision) {
+                                        Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+                                        return;
+                                    }
+                                    setShowProposeDecision(true);
+                                }}
+                                canPropose={canProposeDecision}
+                                hasOpenDecision={hasOpenDecision}
+                                activeView={activeDecideView}
+                                onChangeView={setActiveDecideView}
+                            />
+                        ) : (
+                            <>
+                                {/* Community Treasuries — the Commons' trading accounts (eggs, etc.) */}
+                        {treasuries.length > 0 && (
+                            <View style={{ marginBottom: 12 }}>
+                                <Text style={styles.treasuryPanelLabel}>🏛️ Community Treasuries</Text>
+                                {treasuries.map((t: any, index: number) => (
+                                    <Pressable
+                                        key={t.publicKey || `treasury-${index}`}
+                                        style={styles.treasuryCard}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Open ${t.name} treasury`}
+                                        onPress={() => {
+                                            if (!t.publicKey) return;
+                                            router.push({ pathname: '/treasury-detail', params: { publicKey: t.publicKey, name: t.name, avatar: t.avatar } });
+                                        }}
+                                    >
+                                        {t.avatar ? (
+                                            <Image source={{ uri: t.avatar }} style={styles.treasuryAvatar} />
+                                        ) : (
+                                            <View style={[styles.treasuryAvatar, styles.treasuryAvatarPlaceholder]}><Text style={{ fontSize: 18 }}>🏛️</Text></View>
+                                        )}
+                                        <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
+                                            <Text style={styles.treasuryName} numberOfLines={1}>{t.name}</Text>
+                                            <Text style={styles.treasuryMeta}>{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</Text>
+                                        </View>
+                                        <Text style={[styles.treasuryBalance, t.balance < 0 ? styles.treasuryBalanceNeg : styles.treasuryBalancePos]}>{t.balance} 🫘</Text>
+                                        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} style={{ marginLeft: 4 }} />
+                                    </Pressable>
+                                ))}
+                                {balanceState.canOperate && (
+                                    <View style={styles.operatorBadge}>
+                                        <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                        <Text style={styles.operatorBadgeText}>You can operate treasuries — post their offers & pay tenders</Text>
+                                    </View>
+                                )}
+                            </View>
+                        )}
 
                         {/* Active round banner if any */}
                         {activeRound && (
@@ -399,53 +553,57 @@ export default function ProjectsScreen() {
                                 </Pressable>
                             ))}
                         </View>
+                            </>
+                        )}
                     </View>
                 }
                 ListEmptyComponent={
-                    loading ? (
-                        <View style={{ gap: 16 }}>
-                            <View style={styles.skeletonCard}>
-                                <View style={styles.skeletonLineTitle} />
-                                <View style={styles.skeletonLineDesc} />
-                                <View style={styles.skeletonLineProgress} />
+                    activeSection === 'decide' ? null : (
+                        loading ? (
+                            <View style={{ gap: 16 }}>
+                                <View style={styles.skeletonCard}>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
+                                </View>
+                                <View style={styles.skeletonCard}>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
+                                </View>
                             </View>
-                            <View style={styles.skeletonCard}>
-                                <View style={styles.skeletonLineTitle} />
-                                <View style={styles.skeletonLineDesc} />
-                                <View style={styles.skeletonLineProgress} />
+                        ) : (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyEmoji}>🌱</Text>
+                                <Text style={styles.emptyTitle}>No enterprises proposed yet</Text>
+                                <Text style={styles.emptyDesc}>
+                                    Got an idea that benefits the community? Start an enterprise or propose a project to get started.
+                                </Text>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={styles.emptyBtn}
+                                    onPress={async () => {
+                                        const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                                        if (!anchorUrl) {
+                                            Alert.alert('Not Connected', 'Connect to a community first.', [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
+                                            ]);
+                                            return;
+                                        }
+                                        router.push('/propose-project');
+                                    }}
+                                >
+                                    <Text style={styles.emptyBtnText}>+ Propose a Project</Text>
+                                </Pressable>
                             </View>
-                        </View>
-                    ) : (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>🌱</Text>
-                            <Text style={styles.emptyTitle}>No enterprises proposed yet</Text>
-                            <Text style={styles.emptyDesc}>
-                                Got an idea that benefits the community? Start an enterprise or propose a project to get started.
-                            </Text>
-                            <Pressable
-                                accessibilityRole="button"
-                                style={styles.emptyBtn}
-                                onPress={async () => {
-                                    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                                    if (!anchorUrl) {
-                                        Alert.alert('Not Connected', 'Connect to a community first.', [
-                                            { text: 'Cancel', style: 'cancel' },
-                                            { text: 'Connect', onPress: () => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } }) }
-                                        ]);
-                                        return;
-                                    }
-                                    router.push('/propose-project');
-                                }}
-                            >
-                                <Text style={styles.emptyBtnText}>+ Propose a Project</Text>
-                            </Pressable>
-                        </View>
+                        )
                     )
                 }
             />
             <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Propose a project or start an enterprise"
+                accessibilityLabel={activeSection === 'decide' ? "Propose a decision" : "Propose a project or start an enterprise"}
                 style={styles.fab}
                 onPress={async () => {
                     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -456,7 +614,19 @@ export default function ProjectsScreen() {
                         ]);
                         return;
                     }
-                    router.push('/propose-project');
+                    if (activeSection === 'decide') {
+                        if (!canProposeDecision) {
+                            Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                            return;
+                        }
+                        if (hasOpenDecision) {
+                            Alert.alert('Limit Reached', 'You already have an open decision (limit 1 open decision per author).');
+                            return;
+                        }
+                        setShowProposeDecision(true);
+                    } else {
+                        router.push('/propose-project');
+                    }
                 }}
             >
                 <MaterialCommunityIcons name="plus" size={30} color={colors.text.inverse} />
@@ -466,6 +636,16 @@ export default function ProjectsScreen() {
                 isOpen={showCommonsInfo}
                 onClose={() => setShowCommonsInfo(false)}
                 commonsBalance={balanceState.commons || 0}
+            />
+
+            <ProposeDecisionModal
+                isOpen={showProposeDecision}
+                onClose={() => setShowProposeDecision(false)}
+                onCreated={loadData}
+                identity={identity}
+                commonsBalance={balanceState.commons || 0}
+                treasuries={treasuries}
+                members={membersList}
             />
         </View>
     );

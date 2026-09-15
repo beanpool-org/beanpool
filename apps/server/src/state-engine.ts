@@ -43,6 +43,58 @@ export {
     type NodeRoleRecord,
 };
 import {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+} from './decisions-engine.js';
+export {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+};
+import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
@@ -475,6 +527,15 @@ export function initStateEngine(): void {
         setInterval(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
         }, 60 * 60 * 1000);
+
+        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+        // evaluate passed grants queue, and fire expired grace-period prunes.
+        setTimeout(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 30 * 1000);
+        setInterval(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 60 * 1000);
     }
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
@@ -3348,16 +3409,19 @@ export function adminDeletePost(postId: string) {
     return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
 }
 
+export function isSoleOwner(publicKey: string): boolean {
+    if (!isNodeOwner(publicKey)) return false;
+    const ownerCount = (db.prepare(
+        `SELECT COUNT(*) as c FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+    ).get(publicKey) as any)?.c || 0;
+    return ownerCount === 0;
+}
+
 export function adminPruneUser(publicKey: string) {
-    if (isNodeOwner(publicKey)) {
-        const ownerCount = (db.prepare(
-            `SELECT COUNT(*) as c FROM node_roles nr
-             JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
-        ).get(publicKey) as any)?.c || 0;
-        if (ownerCount === 0) {
-            throw new Error('Cannot prune the sole node owner; appoint another owner first');
-        }
+    if (isSoleOwner(publicKey)) {
+        throw new Error('Cannot prune the sole node owner; appoint another owner first');
     }
 
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
@@ -3795,13 +3859,17 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     if (acc && Math.abs(acc.balance) > 1e-9) {
         throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
     }
+    const acct = ledger.getAccount(projectId);
+    if (acct && Math.abs(acct.balance) > 0.0001) {
+        throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
+    }
 
     projects.splice(index, 1);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
     })();
@@ -4019,7 +4087,7 @@ export function getAllProjects(): CommunityProject[] {
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
             FROM members m
-            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         `).all() as any[];
 
         for (const e of enterprises) {
@@ -4049,7 +4117,10 @@ export function getAllProjects(): CommunityProject[] {
         }
     } catch { }
 
-    return blobProjects;
+    const prunedIds = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE status IN ('pruned', 'deleted')").all() as any[]).map(r => r.public_key)
+    );
+    return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
 export function getVotingRounds(): VotingRound[] {

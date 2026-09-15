@@ -1,21 +1,36 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     getTreasuries, getBalance, type Treasury, type BalanceInfo,
-    createEnterprise
+    createEnterprise,
+    getDecisions, type DecisionWithTally,
+    getCommonsBalance,
+    getAllMembers, type MemberSummary,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { DecideSection } from '../components/DecideSection';
+import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
     onOpenTreasury?: (publicKey: string) => void;
+    initialSection?: 'decide' | 'enterprises';
 }
 
-export function ProjectsPage({ identity, onOpenTreasury }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises' }: Props) {
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // UI States
+    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>(initialSection);
+    const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
+    const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
+    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    const [commonsBalance, setCommonsBalance] = useState<number>(0);
+    const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
+    const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
 
     // Filter: all | ongoing | bounded
     const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
@@ -48,8 +63,21 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
         try {
             setLoading(true);
             setError(null);
-            const data = await getTreasuries();
-            setTreasuries(data.treasuries || []);
+            const [tresData, decData, commonsData, membersData, balData] = await Promise.all([
+                getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
+                getDecisions ? getDecisions().catch(() => ({ decisions: [], activeMembers30d: 0 })) : { decisions: [], activeMembers30d: 0 },
+                getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
+                getAllMembers ? getAllMembers().catch(() => []) : [],
+                identity?.publicKey && getBalance ? getBalance(identity.publicKey).catch(() => null) : null,
+            ]);
+            setTreasuries(tresData.treasuries || []);
+            setDecisions(decData.decisions || []);
+            setActiveMembers30d(decData.activeMembers30d || 0);
+            setCommonsBalance(commonsData.balance || 0);
+            if (balData) setBalanceInfo(balData);
+            if (Array.isArray(membersData)) {
+                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to fetch community enterprises');
         } finally {
@@ -57,9 +85,18 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
         }
     };
 
+    const canProposeDecision = (balanceInfo?.earnedCredit || 0) > 0;
+    const hasOpenDecision = useMemo(() => {
+        if (!identity?.publicKey) return false;
+        return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
+    }, [decisions, identity]);
+    const openDecisionsCount = useMemo(() => {
+        return decisions.filter(d => d.status === 'open').length;
+    }, [decisions]);
+
     useEffect(() => {
         fetchEnterprises();
-        if (identity?.publicKey) {
+        if (identity?.publicKey && getBalance) {
             getBalance(identity.publicKey).then(setBalanceInfo).catch(() => {});
         }
     }, [identity?.publicKey]);
@@ -166,13 +203,25 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Community enterprises, initiatives & projects</p>
+                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, pooled circulation, and shared enterprises</p>
                     </div>
                     {identity && (
                         <button
                             onClick={() => {
-                                setShowNewModal(true);
-                                setCreateError(null);
+                                if (activeSection === 'decide') {
+                                    if (!canProposeDecision) {
+                                        alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        return;
+                                    }
+                                    if (hasOpenDecision) {
+                                        alert('You already have an open decision (limit 1 open decision per author).');
+                                        return;
+                                    }
+                                    setShowProposeDecision(true);
+                                } else {
+                                    setShowNewModal(true);
+                                    setCreateError(null);
+                                }
                             }}
                             className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
@@ -201,57 +250,118 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                     </div>
                 </div>
 
-                {/* Filter Controls: All / Ongoing / Bounded */}
-                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1">
-                    {(['all', 'ongoing', 'bounded'] as const).map(option => (
-                        <button
-                            key={option}
-                            onClick={() => setFilter(option)}
-                            className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
-                                filter === option
-                                    ? 'bg-emerald-600 text-white shadow-sm'
-                                    : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
-                            }`}
-                        >
-                            {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
-                        </button>
-                    ))}
+                {/* Section Switcher: Decide vs Enterprises */}
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
+                    <button
+                        onClick={() => setActiveSection('decide')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                            activeSection === 'decide'
+                                ? 'bg-nature-800 text-white shadow-sm'
+                                : 'text-nature-400 hover:text-white'
+                        }`}
+                    >
+                        <span>🗳️</span>
+                        <span>Decide</span>
+                        {openDecisionsCount > 0 && (
+                            <span className="bg-accent text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                                {openDecisionsCount}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveSection('enterprises')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                            activeSection === 'enterprises'
+                                ? 'bg-nature-800 text-white shadow-sm'
+                                : 'text-nature-400 hover:text-white'
+                        }`}
+                    >
+                        <span>🏛️</span>
+                        <span>Enterprises</span>
+                    </button>
                 </div>
+
+                {/* Filter Controls: All / Ongoing / Bounded */}
+                {activeSection === 'enterprises' && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1">
+                        {(['all', 'ongoing', 'bounded'] as const).map(option => (
+                            <button
+                                key={option}
+                                onClick={() => setFilter(option)}
+                                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                                    filter === option
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                }`}
+                            >
+                                {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </header>
 
-            {/* Content List */}
-            {loading ? (
-                <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
-            ) : error ? (
-                <div className="p-8 text-center text-red-500">{error}</div>
-            ) : filteredEnterprises.length === 0 ? (
-                <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
-                    <p className="text-4xl opacity-50 mb-3">🌱</p>
-                    <p className="text-base font-bold text-white mb-1">No enterprises found</p>
-                    <p className="text-sm text-nature-400 mb-6">
-                        Got an idea that benefits the community? Start an enterprise or propose a project to get started.
-                    </p>
-                    {identity && (
-                        <button
-                            onClick={() => setShowNewModal(true)}
-                            className="bg-accent hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
-                        >
-                            + Propose a Project
-                        </button>
-                    )}
+            {activeSection === 'decide' ? (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                    <DecideSection
+                        decisions={decisions}
+                        activeMembers30d={activeMembers30d}
+                        identity={identity}
+                        balanceInfo={balanceInfo}
+                        commonsBalance={commonsBalance}
+                        onRefresh={fetchEnterprises}
+                        onOpenPropose={() => {
+                            if (!canProposeDecision) {
+                                alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                return;
+                            }
+                            if (hasOpenDecision) {
+                                alert('You already have an open decision (limit 1 open decision per author).');
+                                return;
+                            }
+                            setShowProposeDecision(true);
+                        }}
+                        canPropose={canProposeDecision}
+                        hasOpenDecision={hasOpenDecision}
+                        activeView={activeDecideView}
+                        onChangeView={setActiveDecideView}
+                    />
                 </div>
-            ) : (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {filteredEnterprises.map(t => {
-                        const hasGoal = t.goalAmount != null && t.goalAmount > 0;
-                        const currentRaised = t.currentAmount != null ? t.currentAmount : Math.max(0, t.balance);
-                        const goal = t.goalAmount || 1;
-                        const progress = Math.min(100, (currentRaised / goal) * 100);
-                        const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
-                        const daysRemaining = getDaysRemaining(t.deadlineAt);
-                        const avatarSrc = resolveAvatarUrl(t.avatar || t.avatarUrl);
+            ) : loading ? (
+                <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
+                ) : error ? (
+                    <div className="p-8 text-center text-red-500">{error}</div>
+                ) : filteredEnterprises.length === 0 ? (
+                    <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
+                        <p className="text-4xl opacity-50 mb-3">🌱</p>
+                        <p className="text-base font-bold text-white mb-1">No enterprises found</p>
+                        <p className="text-sm text-nature-400 mb-6">
+                            Got an idea that benefits the community? Start an enterprise or propose a project to get started.
+                        </p>
+                        {identity && (
+                            <button
+                                onClick={() => {
+                                    setShowNewModal(true);
+                                    setCreateError(null);
+                                }}
+                                className="bg-accent hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                            >
+                                + Propose a Project
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {filteredEnterprises.map(t => {
+                            const hasGoal = t.goalAmount != null && t.goalAmount > 0;
+                            const currentRaised = t.currentAmount != null ? t.currentAmount : Math.max(0, t.balance);
+                            const goal = t.goalAmount || 1;
+                            const progress = Math.min(100, (currentRaised / goal) * 100);
+                            const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
+                            const daysRemaining = getDaysRemaining(t.deadlineAt);
+                            const avatarSrc = resolveAvatarUrl(t.avatar || t.avatarUrl);
 
-                        return (
+                            return (
                             <div
                                 key={t.publicKey}
                                 role="button"
@@ -555,6 +665,15 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                     </div>
                 </div>
             )}
+            <ProposeDecisionModal
+                isOpen={showProposeDecision}
+                onClose={() => setShowProposeDecision(false)}
+                onCreated={fetchEnterprises}
+                identity={identity}
+                commonsBalance={commonsBalance}
+                treasuries={treasuries}
+                members={allMembersList}
+            />
         </div>
     );
 }

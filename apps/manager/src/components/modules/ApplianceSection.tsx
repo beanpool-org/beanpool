@@ -11,6 +11,7 @@ import {
     resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
+    setTfaSessionToken,
 } from '../../lib/node-client';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -397,12 +398,19 @@ export function ApplianceSection({
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ totpCode: totpVerifyCode.trim() }),
             });
-            if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
                 setTfaMessage('2FA successfully enabled!');
                 setTotpVerifyCode('');
+                const token = data.tfaSessionToken || data.sessionToken;
+                if (token) {
+                    setTfaSessionToken(activeNode.id, token);
+                    sessionStorage.setItem('bp_tfa_session_local-node', token);
+                    sessionStorage.setItem('bp-2fa-session', token);
+                }
                 await load2faStatus();
             } else {
-                alert('Invalid 2FA code. Please try again.');
+                alert(data.error || 'Invalid 2FA code. Please try again.');
             }
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : String(e));
@@ -419,6 +427,9 @@ export function ApplianceSection({
             });
             if (res.ok) {
                 setTfaMessage('2FA disabled.');
+                setTfaSessionToken(activeNode.id, undefined);
+                sessionStorage.removeItem('bp_tfa_session_local-node');
+                sessionStorage.removeItem('bp-2fa-session');
                 await load2faStatus();
             }
         } catch (e: unknown) {

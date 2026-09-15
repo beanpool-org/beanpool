@@ -18,6 +18,7 @@ import {
     getGatewayConfig,
 } from '../config/local-config.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
+import { issue2faSessionToken } from '../admin-auth.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -521,8 +522,16 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
+    const tfaSessionToken = issue2faSessionToken();
+    ctx.set('X-Admin-2FA-Session', tfaSessionToken);
     console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
-    ctx.body = { success: true, message: '2FA enabled successfully', totpEnabled: true };
+    ctx.body = {
+        success: true,
+        message: '2FA enabled successfully',
+        totpEnabled: true,
+        tfaSessionToken,
+        sessionToken: tfaSessionToken,
+    };
 });
 
 /**

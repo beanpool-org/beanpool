@@ -40,6 +40,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
   paused posts. (Closed PR #116 made exactly this mistake — do not re-file it.)
 - NOTE: the federation-api `verify_member`/`relay_message` lookups some PRs "fixed"
   are inside a commented-out `[SECURITY PATCH]` block (dead code) — do not edit.
+- Friends avatar lookups → O(1) (#782): `getFriends` SQL query includes `m.avatar_url` directly, avoiding $O(M)$ member directory fetch.
 
 ### Coordination note (2026-06-25, from the primary agent)
 - **Connector-lookup optimization — canonical open PR is #141.** Duplicates **#133,

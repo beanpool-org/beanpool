@@ -587,6 +587,44 @@ async function main() {
     assert(k1Pledges.length === 1, 'KRevoke1 pledge remains to cover deficit when co-keeper is frozen');
     assert(k1Pledges[0].amount === 40, `KRevoke1 locked pledge is exactly 40 (deficit requirement), got ${k1Pledges[0]?.amount}`);
 
+    // 10.6: getAvailableBacking reports true incremental headroom and respects frozen/inactive status
+    const { publicKey: headroomEnt } = createTreasury('HeadroomEnterprise', AVATAR, 0);
+    const KHeadroom = 'keeper-headroom-000000000000000000000001';
+    seedMember(KHeadroom, 'KHeadroom');
+    mtx(KHeadroom, TradePartner1, 100);
+    mtx(KHeadroom, TradePartner2, 100);
+    const headroomEarned = getMemberTrustProfile(KHeadroom).earnedCredit;
+    assert(headroomEarned > 0, `KHeadroom has earnedCredit = ${headroomEarned}`);
+    assignKeeper(headroomEnt, KHeadroom);
+
+    assert(getAvailableBacking(KHeadroom) === headroomEarned, 'Available backing matches earned credit before any pledge');
+    assert(getAvailableBacking(KHeadroom, headroomEnt) === headroomEarned, 'Available backing forEnterprise matches earned credit before any pledge');
+
+    // Pledge 30 incrementally to headroomEnt
+    pledgeEnterpriseBacking(headroomEnt, KHeadroom, 30);
+    const remainingHeadroom = headroomEarned - 30;
+    // Calling getAvailableBacking(KHeadroom, headroomEnt) must now report true remaining incremental headroom (20), NOT 50!
+    assert(getAvailableBacking(KHeadroom, headroomEnt) === remainingHeadroom, `getAvailableBacking reports remaining headroom (${remainingHeadroom}) after pledge to this enterprise, not un-subtracted (${headroomEarned})`);
+    assert(getAvailableBacking(KHeadroom) === remainingHeadroom, 'getAvailableBacking without enterprise parameter reports matching headroom');
+
+    // Account freeze / inactive checks
+    adminSetCreditFrozen(KHeadroom, true);
+    assert(getAvailableBacking(KHeadroom) === 0, 'getAvailableBacking returns 0 when keeper credit is frozen');
+    assert(getAvailableBacking(KHeadroom, headroomEnt) === 0, 'getAvailableBacking forEnterprise returns 0 when keeper credit is frozen');
+
+    adminSetCreditFrozen(KHeadroom, false);
+    assert(getAvailableBacking(KHeadroom) === remainingHeadroom, 'getAvailableBacking restores headroom when un-frozen');
+
+    adminSetUserStatus(KHeadroom, 'disabled');
+    assert(getAvailableBacking(KHeadroom) === 0, 'getAvailableBacking returns 0 when keeper status is disabled');
+
+    adminSetUserStatus(KHeadroom, 'pruned');
+    assert(getAvailableBacking(KHeadroom) === 0, 'getAvailableBacking returns 0 when keeper status is pruned');
+
+    adminSetUserStatus(KHeadroom, 'active');
+    assert(getAvailableBacking(KHeadroom) === remainingHeadroom, 'getAvailableBacking restores headroom when re-activated');
+
+
 
     // =========================================================================
     // 9. Conservation Check: SUM(balances) + COMMONS_POOL = 0

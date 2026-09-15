@@ -1958,17 +1958,21 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
 /**
  * Available earned credit that a keeper can pledge to back enterprises (docs/the-commons.md §2.4 Rule 3).
  * A keeper's earned credit is never deducted from their personal floor, but is counted once across all
- * enterprises they keep:
- *   available_to_back(keeper) = earnedCredit(keeper) - Σ active backing pledged elsewhere
+ * enterprises they keep.
+ * Pledges are incremental: headroom is earned credit minus ALL active pledges across all enterprises.
+ * Returns 0 if account is inactive (disabled/pruned) or credit-frozen.
  */
-export function getAvailableBacking(keeperPubkey: string, forEnterprise?: string): number {
+export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: string): number {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+    if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
+        return 0;
+    }
     const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-    const sql = forEnterprise
-        ? "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise != ? AND released_at IS NULL"
-        : "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL";
-    const row = (forEnterprise ? db.prepare(sql).get(keeperPubkey, forEnterprise) : db.prepare(sql).get(keeperPubkey)) as any;
-    const pledgedElsewhere = Number(row?.total || 0);
-    return Math.max(0, earnedCredit - pledgedElsewhere);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+    ).get(keeperPubkey) as any;
+    const totalPledged = Number(row?.total || 0);
+    return Math.max(0, earnedCredit - totalPledged);
 }
 
 /**

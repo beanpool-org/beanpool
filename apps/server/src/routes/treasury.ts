@@ -123,7 +123,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 if (r.goal_amount != null) {
                     const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(r.public_key) as any;
                     const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${r.public_key}`) as any)?.balance || 0;
-                    currentAmount = Math.max(b.balance, Number(pRow?.current_amount || 0), Number(escBal));
+                    currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
                 }
                 return {
                     publicKey: r.public_key, name: r.callsign,
@@ -207,7 +207,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (m.goal_amount != null) {
             const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(treasury) as any;
             const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance || 0;
-            currentAmount = Math.max(b.balance, Number(pRow?.current_amount || 0), Number(escBal));
+            currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
         }
 
         ctx.body = {
@@ -278,14 +278,22 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
     const createEnterpriseHandler = async (ctx: any) => {
-        const body = (ctx as any).requestBody || {};
-        const actor = (ctx.state?.actor as string) || body.creatorPubkey || body.creator_pubkey || body.proposerPubkey;
+        const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
             ctx.body = { error: 'Authentication required' };
             return;
         }
-        const { name, title, avatar, photos, creditLine, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
+
+        const memberStatus = statusOf(actor);
+        if (memberStatus !== 'active') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only active community members can create an enterprise' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
+        const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
         const enterpriseName = String(name || title || '').trim();
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
@@ -303,7 +311,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const res = createTreasury(
                 enterpriseName,
                 photoUrl || '',
-                Number(creditLine) || 0,
+                0, // Member-created enterprises must start with 0 credit line (Rule 1)
                 {
                     systemCreated: !photoUrl,
                     workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,

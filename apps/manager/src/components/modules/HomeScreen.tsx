@@ -35,6 +35,24 @@ export function HomeScreen({
     
     // Calculate unclaimed invites from nodeData or invites count
     const membersCount = (nodeData?.members || []).length;
+    const enterprisesCount = (nodeData?.members || []).filter((m: any) => m.isTreasury).length;
+
+    const circulationVolume = (() => {
+        if (typeof (nodeData as any)?.tradeVolume === 'number') {
+            return (nodeData as any).tradeVolume.toFixed(1);
+        }
+        if (typeof (nodeData as any)?.circulation === 'number') {
+            return (nodeData as any).circulation.toFixed(1);
+        }
+        if (nodeData?.memberStats) {
+            const totalVol = Object.values(nodeData.memberStats as Record<string, { volume?: number }>).reduce(
+                (sum, s) => sum + (s.volume || 0),
+                0
+            );
+            return (totalVol / 2).toFixed(1);
+        }
+        return '0.0';
+    })();
 
     // Disk/storage usage percentage
     const dbBytes = diag?.dbSizeBytes || 0;
@@ -197,8 +215,7 @@ export function HomeScreen({
                         <span className="text-lg" aria-hidden="true">🌾</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
-                        {/* Enterprises count */}
-                        3
+                        {enterprisesCount}
                     </div>
                     <p className="text-xs text-nature-400 m-0">
                         Community projects &amp; co-ops
@@ -216,7 +233,7 @@ export function HomeScreen({
                         <span className="text-lg" aria-hidden="true">🔄</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
-                        148.5 <span className="text-xs font-normal text-nature-400">beans</span>
+                        {circulationVolume} <span className="text-xs font-normal text-nature-400">beans</span>
                     </div>
                     <p className="text-xs text-nature-400 m-0">
                         Active trade volume this week

@@ -800,6 +800,7 @@ export function App() {
                             nodeDataLoading={nodeDataLoading}
                             activeNodeUrl={activeNode?.url}
                             adminPassword={activeNode?.adminPassword}
+                            tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                             onRefresh={() => loadNodeData()}
                             onFreezeUser={async (pubkey, freeze) => {
                                 if (activeNode) {

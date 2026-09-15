@@ -74,6 +74,7 @@ interface MembersModuleProps {
     nodeDataLoading: boolean;
     activeNodeUrl?: string;
     adminPassword?: string;
+    tfaToken?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
@@ -160,7 +161,7 @@ export function getMemberTier(m: MemberItem | null | undefined): string {
     return 'Citizen';
 }
 
-export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminPassword, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher, onToggleOperator }: MembersModuleProps) {
+export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminPassword, tfaToken, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher, onToggleOperator }: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<ThreatItem | null>(null);
     const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
@@ -354,7 +355,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                 : 'data:image/svg+xml,' + encodeURIComponent(
                     `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">${newTreasuryAvatar || '🏛️'}</text></svg>`
                 );
-            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword);
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword, tfaToken);
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
@@ -376,7 +377,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                 credits: Number(offerCredits) || 0,
                 description: offerDescription.trim(),
                 repeatable: true
-            }, adminPassword);
+            }, adminPassword, tfaToken);
             setOfferTreasury(null);
             setOfferTitle('');
             setOfferDescription('');

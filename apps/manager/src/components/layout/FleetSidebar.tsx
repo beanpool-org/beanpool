@@ -1,7 +1,22 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
+import { IS_FLEET_MODE } from '../../lib/mode';
 
-export type TabId = 'overview' | 'analytics' | 'gateway' | 'members' | 'topology' | 'invites' | 'onboarding' | 'logs' | 'ai';
+export type TabId =
+    | 'home'
+    | 'people'
+    | 'economy'
+    | 'bulletin'
+    | 'appliance'
+    | 'overview'
+    | 'analytics'
+    | 'gateway'
+    | 'members'
+    | 'topology'
+    | 'invites'
+    | 'onboarding'
+    | 'logs'
+    | 'ai';
 
 /**
  * `auth_required` is kept apart from `offline` because the two need different actions from
@@ -28,6 +43,8 @@ interface FleetSidebarProps {
     onSelectTab: (tab: TabId) => void;
     nodeHealthMap?: Record<string, NodeHealthStatus>;
     tabAlertCounts?: Partial<Record<TabId, AlertCounts>>;
+    isFleetMode?: boolean;
+    onLogout?: () => void;
 }
 
 export function FleetSidebar({
@@ -42,10 +59,20 @@ export function FleetSidebar({
     onSelectTab,
     nodeHealthMap = {},
     tabAlertCounts = {},
+    isFleetMode = IS_FLEET_MODE,
+    onLogout,
 }: FleetSidebarProps) {
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const activeNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+
+    const singleNodeNavItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
+        { id: 'home', label: 'Home', icon: '⚡' },
+        { id: 'people', label: 'People & Safety', icon: '👥' },
+        { id: 'economy', label: 'Shared Projects & Economy', icon: '🏛️' },
+        { id: 'bulletin', label: 'Bulletin & News', icon: '📢' },
+        { id: 'appliance', label: 'Appliance & Data', icon: '⚙️' },
+    ];
 
     const multiServerItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'overview', label: 'Fleet Telemetry', icon: '📊' },
@@ -64,7 +91,17 @@ export function FleetSidebar({
 
     const renderNavItem = (item: { id: TabId; label: string; icon: string; badge?: string }) => {
         const isActive = activeTab === item.id;
-        const counts = tabAlertCounts[item.id] || { critical: 0, warning: 0 };
+        let counts = tabAlertCounts[item.id] || { critical: 0, warning: 0 };
+        if (!isFleetMode) {
+            if (item.id === 'people') {
+                const members = tabAlertCounts.members || { critical: 0, warning: 0 };
+                counts = { critical: counts.critical + members.critical, warning: counts.warning + members.warning };
+            } else if (item.id === 'appliance') {
+                const gw = tabAlertCounts.gateway || { critical: 0, warning: 0 };
+                const logs = tabAlertCounts.logs || { critical: 0, warning: 0 };
+                counts = { critical: counts.critical + gw.critical + logs.critical, warning: counts.warning + gw.warning + logs.warning };
+            }
+        }
         const hasCounts = counts.critical > 0 || counts.warning > 0;
 
         return (
@@ -123,50 +160,62 @@ export function FleetSidebar({
                         <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight">
                             BeanPool
                         </h1>
-                        <p className="text-[11px] font-semibold text-terra-400 m-0">Fleet Manager v1.2</p>
+                        <p className="text-[11px] font-semibold text-terra-400 m-0">
+                            {isFleetMode ? 'Fleet Manager v1.2' : 'Node Settings'}
+                        </p>
                     </div>
                 </div>
             </div>
 
             {/* Navigation Tabs */}
-            <div className="px-3 py-3 space-y-1 overflow-y-auto custom-scrollbar">
-                {/* Multi-Server Control Plane */}
-                <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
-                    Multi-Server Control Plane
+            {isFleetMode ? (
+                <div className="px-3 py-3 space-y-1 overflow-y-auto custom-scrollbar">
+                    {/* Multi-Server Control Plane */}
+                    <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
+                        Multi-Server Control Plane
+                    </div>
+                    {multiServerItems.map(renderNavItem)}
+
+                    {/* Divider Line */}
+                    <div className="my-3 border-t border-nature-800/80 mx-2" />
+
+                    {/* Selected Node Operations */}
+                    <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-terra-400 flex items-center justify-between">
+                        <span>Node Controls</span>
+                        <span className="text-[9px] font-mono text-sky-400 truncate max-w-[110px]" title={activeNode?.name}>
+                            {activeNode?.name || 'Selected'}
+                        </span>
+                    </div>
+                    {nodeScopedItems.map(renderNavItem)}
                 </div>
-                {multiServerItems.map(renderNavItem)}
-
-                {/* Divider Line */}
-                <div className="my-3 border-t border-nature-800/80 mx-2" />
-
-                {/* Selected Node Operations */}
-                <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-terra-400 flex items-center justify-between">
-                    <span>Node Controls</span>
-                    <span className="text-[9px] font-mono text-sky-400 truncate max-w-[110px]" title={activeNode?.name}>
-                        {activeNode?.name || 'Selected'}
-                    </span>
+            ) : (
+                <div className="px-3 py-3 space-y-1 overflow-y-auto custom-scrollbar">
+                    <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
+                        Navigation
+                    </div>
+                    {singleNodeNavItems.map(renderNavItem)}
                 </div>
-                {nodeScopedItems.map(renderNavItem)}
-            </div>
+            )}
 
-            {/* Connected Fleet Panel (All Nodes Visible) */}
-            <div className="flex-1 flex flex-col min-h-0 border-t border-nature-800/80 px-3 py-4">
-                <div className="flex items-center justify-between px-3 pb-2.5">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
-                        Connected Fleet ({profiles.length})
-                    </span>
-                    <button
-                        onClick={onOpenAddModal}
-                        className="px-2 py-1 rounded-lg bg-terra-500/20 hover:bg-terra-500/30 text-terra-300 text-[11px] font-bold transition-all border border-terra-500/30"
-                        title="Connect New Sovereign Node"
-                    >
-                        + Add Node
-                    </button>
-                </div>
+            {/* Bottom Status / Fleet Panel */}
+            {isFleetMode ? (
+                <div className="flex-1 flex flex-col min-h-0 border-t border-nature-800/80 px-3 py-4">
+                    <div className="flex items-center justify-between px-3 pb-2.5">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400">
+                            Connected Fleet ({profiles.length})
+                        </span>
+                        <button
+                            onClick={onOpenAddModal}
+                            className="px-2 py-1 rounded-lg bg-terra-500/20 hover:bg-terra-500/30 text-terra-300 text-[11px] font-bold transition-all border border-terra-500/30"
+                            title="Connect New Sovereign Node"
+                        >
+                            + Add Node
+                        </button>
+                    </div>
 
-                {/* Scrollable Node Cards */}
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                    {profiles.length === 0 ? (
+                    {/* Scrollable Node Cards */}
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                        {profiles.length === 0 ? (
                         <div className="p-4 text-center rounded-xl bg-nature-950/40 border border-nature-800/80 space-y-2">
                             <div className="text-xl">🌱</div>
                             <div className="text-xs font-bold text-white">No Connected Nodes</div>
@@ -337,14 +386,50 @@ export function FleetSidebar({
                     )}
                 </div>
             </div>
+            ) : (
+                <div className="flex-1 flex flex-col justify-end min-h-0 border-t border-nature-800/80 px-4 py-4 space-y-3">
+                    <div className="p-3.5 rounded-2xl bg-nature-950/60 border border-nature-800/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400">Node Status</span>
+                            <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-bold">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>Online</span>
+                            </span>
+                        </div>
+                        <div className="text-xs font-bold text-white truncate" title={activeNode?.name}>
+                            {activeNode?.name || 'Local Sovereign Node'}
+                        </div>
+                        <div className="text-[10px] font-mono text-nature-400 truncate">
+                            {activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs px-1">
+                        <a
+                            href="/settings-legacy"
+                            className="text-[11px] text-nature-400 hover:text-terra-400 transition-colors underline"
+                        >
+                            Legacy Settings
+                        </a>
+                        {onLogout && (
+                            <button
+                                onClick={onLogout}
+                                className="text-[11px] text-nature-400 hover:text-red-400 transition-colors font-medium"
+                            >
+                                Log Out
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Footer Status */}
             <div className="p-3 border-t border-nature-800/80 bg-nature-950/60 text-[11px] text-nature-400 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span>Decoupled API Client</span>
+                    <span>{isFleetMode ? 'Decoupled API Client' : 'Sovereign Node v1.4.2'}</span>
                 </div>
-                <span className="font-mono text-[10px] text-nature-500">Node API</span>
+                <span className="font-mono text-[10px] text-nature-500">{isFleetMode ? 'Fleet API' : 'Single Node'}</span>
             </div>
         </aside>
     );

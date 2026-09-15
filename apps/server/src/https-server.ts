@@ -86,11 +86,12 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from './services/snapshot-scheduler.js';
 
-const PUBLIC_DIR = path.resolve('public');
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const SERVER_ROOT = path.resolve(__dirname, '..');
+const PUBLIC_DIR = fs.existsSync(path.resolve('public')) ? path.resolve('public') : path.join(SERVER_ROOT, 'public');
 
 // Route modules
 import { createSettingsRoutes } from './routes/settings.js';
@@ -578,9 +579,16 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
 
-        // 2. Admin IP Allowlist Enforcement (/settings and /api/local/admin/*)
+        // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, and /api/local/admin/*)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            if (ctx.path === '/settings' || ctx.path.startsWith('/api/local/admin/')) {
+            const normalizedPath = ctx.path.replace(/\/+$/, '') || '/';
+            if (
+                normalizedPath === '/settings' ||
+                normalizedPath.startsWith('/settings/') ||
+                normalizedPath === '/settings-legacy' ||
+                normalizedPath === '/settings.js' ||
+                ctx.path.startsWith('/api/local/admin/')
+            ) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => 
                     clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))
                 );
@@ -619,7 +627,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             // — so exempt it. It renders native-app-only there (no web escape
             // hatch), since servePwa is off.
             const isInviteTrampoline = ctx.path === '/' && !!ctx.query.invite;
-            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
+            if (ctx.path !== '/settings' && !ctx.path.startsWith('/settings/') && ctx.path !== '/settings-legacy' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
                 ctx.status = 530;
                 ctx.body = { error: 'Headless Mode: PWA hosting is disabled on this node gateway' };
                 return;
@@ -1010,9 +1018,20 @@ export async function startHttpsServer(port: number): Promise<void> {
         gzip: true,
     }));
 
-    // SPA fallback — return index.html for /manager/* and /app/* routes
+    // SPA fallback — return index.html for /settings/*, /manager/* and /app/* routes
     app.use(async (ctx) => {
         if (ctx.method === 'GET') {
+            if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
+                const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
+                if (fs.existsSync(settingsIndexPath)) {
+                    ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    ctx.set('Pragma', 'no-cache');
+                    ctx.set('Expires', '0');
+                    ctx.type = 'html';
+                    ctx.body = fs.createReadStream(settingsIndexPath);
+                    return;
+                }
+            }
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {

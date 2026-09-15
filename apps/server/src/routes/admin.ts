@@ -176,6 +176,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         }
     }
 
+    const rolesList = listNodeRoles();
+    const rolesByPubkey = new Map<string, MemberNodeRole>();
+    for (const r of rolesList) {
+        rolesByPubkey.set(r.member_pubkey, r.role);
+    }
+
     ctx.body = {
         members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
             const isVoucher = canVouch(m.publicKey);
@@ -189,6 +195,7 @@ router.post('/api/local/admin/data', async (ctx) => {
                 tier,
                 standing: tier,
                 canVouch: isVoucher,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
                 platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
             };
         }),
@@ -908,9 +915,9 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: 'pubkey and role are required' };
         return;
     }
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 
@@ -930,9 +937,9 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     const signedActor = (ctx.state as any)?.actor;
     const effectiveActor = signedActor || 'owner:password';
 
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 

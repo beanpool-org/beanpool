@@ -150,6 +150,8 @@ function makeMember(callsign: string, opts?: {
         VALUES (?, ?, 0)
     `).run(pubkey, balance);
 
+    reconcileLedgerFromDb();
+
     return pubkey;
 }
 

@@ -212,7 +212,7 @@ export default function ProjectsScreen() {
         const currentRaised = item.currentAmount != null ? item.currentAmount : Math.max(0, item.balance);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
-        const isFunded = hasGoal && currentRaised >= goalAmount;
+        const isFunded = hasGoal && (currentRaised >= goalAmount || item.status === 'funded' || item.status === 'completed');
         const daysRemaining = getDaysRemaining(item.deadlineAt);
 
         return (

@@ -48,6 +48,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
 
     const handlePledge = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (pledging) return;
         const amt = Number(pledgeAmount);
         if (isNaN(amt) || amt <= 0) {
             setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
@@ -352,7 +353,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                             const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
                             const goal = detail.goalAmount;
                             const progress = Math.min(100, (current / goal) * 100);
-                            const isFunded = current >= goal;
+                            const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
 
                             return (

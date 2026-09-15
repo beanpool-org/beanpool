@@ -84,7 +84,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
 
     const submitNewEnterprise = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!identity) return;
+        if (!identity || creating) return;
         if (!newTitle.trim()) {
             setCreateError('Title is required');
             return;
@@ -247,7 +247,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         const currentRaised = t.currentAmount != null ? t.currentAmount : Math.max(0, t.balance);
                         const goal = t.goalAmount || 1;
                         const progress = Math.min(100, (currentRaised / goal) * 100);
-                        const isFunded = hasGoal && currentRaised >= goal;
+                        const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
                         const daysRemaining = getDaysRemaining(t.deadlineAt);
                         const avatarSrc = resolveAvatarUrl(t.avatar || t.avatarUrl);
 
@@ -364,16 +364,12 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
 
                                             {/* Primary CTA if has goal and not funded */}
                                             {!isFunded && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onOpenTreasury?.(t.publicKey);
-                                                    }}
-                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                                                 >
                                                     <span>🌱</span> Pledge Beans
-                                                </button>
+                                                </div>
                                             )}
                                         </div>
                                     )}

@@ -154,7 +154,7 @@ export default function TreasuryDetailScreen() {
     const avatar = detail?.avatar || params.avatar;
 
     const handleSweep = async () => {
-        if (!treasuryKey) return;
+        if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
         if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
         if (amt > balance) { Alert.alert('Not enough surplus', `This treasury only holds ${balance} 🫘.`); return; }
@@ -361,7 +361,7 @@ export default function TreasuryDetailScreen() {
                             const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
                             const goal = detail.goalAmount;
                             const progress = Math.min(100, (current / goal) * 100);
-                            const isFunded = current >= goal;
+                            const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
                             return (
                                 <View style={styles.progressCard}>

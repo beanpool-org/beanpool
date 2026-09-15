@@ -3106,16 +3106,19 @@ export function adminDeletePost(postId: string) {
     return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
 }
 
+export function isSoleOwner(publicKey: string): boolean {
+    if (!isNodeOwner(publicKey)) return false;
+    const ownerCount = (db.prepare(
+        `SELECT COUNT(*) as c FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+    ).get(publicKey) as any)?.c || 0;
+    return ownerCount === 0;
+}
+
 export function adminPruneUser(publicKey: string) {
-    if (isNodeOwner(publicKey)) {
-        const ownerCount = (db.prepare(
-            `SELECT COUNT(*) as c FROM node_roles nr
-             JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
-        ).get(publicKey) as any)?.c || 0;
-        if (ownerCount === 0) {
-            throw new Error('Cannot prune the sole node owner; appoint another owner first');
-        }
+    if (isSoleOwner(publicKey)) {
+        throw new Error('Cannot prune the sole node owner; appoint another owner first');
     }
 
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
@@ -3544,12 +3547,19 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
     if (projects[index].status !== 'proposed') return false;
 
+    const acct = ledger.getAccount(projectId);
+    if (acct && Math.abs(acct.balance) > 0.0001) {
+        throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
+    }
+
     projects.splice(index, 1);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
+        writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
     })();
     broadcast({ type: 'project_deleted', projectId });
     return true;

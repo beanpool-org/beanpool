@@ -141,7 +141,6 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                 }
 
                 if (Array.isArray(proposals) && proposals.length > 0) {
-                    let modified = false;
                     for (const prop of proposals) {
                         if (prop.migrated) continue;
 

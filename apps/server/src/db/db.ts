@@ -956,11 +956,6 @@ export function createCrowdfundProject(
     const now = new Date().toISOString();
 
     db.transaction(() => {
-        db.prepare(`
-            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
-        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
-
         const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
         if (!existing) {
             const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
@@ -986,6 +981,11 @@ export function createCrowdfundProject(
                 db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
             }
         }
+
+        db.prepare(`
+            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
 }
 

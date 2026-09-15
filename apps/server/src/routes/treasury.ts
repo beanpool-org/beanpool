@@ -131,6 +131,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                         : null,
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     derivedAllowance: floorInfo.derivedAllowance,
+                    legacyFloor: floorInfo.legacyFloor,
                     legacyCreditFloor: floorInfo.legacyFloor,
                     liveOffers: b.liveOffers,
                     earnedSurplus: r.earned_surplus ?? 0,
@@ -509,11 +510,39 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/treasury/:treasury/pledge', pledgeHandler);
     router.post('/api/treasury/:treasury/backing', pledgeHandler);
 
-    // Release backing pledge (gated by keepership and deficit covenant)
+    // Release backing pledge (gated by keepership or active pledge, and deficit covenant)
     const releaseHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = requireOperator(ctx, treasury);
-        if (!actor) return;
+        if (!isTreasury(treasury)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Not a treasury' };
+            return;
+        }
+        const actor = ctx.state?.actor;
+        if (!actor) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            return;
+        }
+
+        const isOp = canOperateTreasury(actor, treasury);
+        const hasActivePledge = !!db.prepare(
+            "SELECT 1 FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL"
+        ).get(treasury, actor);
+
+        if (!isOp && !hasActivePledge) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            return;
+        }
+
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
+
         const { amount } = (ctx as any).requestBody || {};
         const parsedAmount = (amount !== undefined && amount !== null) ? Number(amount) : undefined;
         if (parsedAmount !== undefined && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {

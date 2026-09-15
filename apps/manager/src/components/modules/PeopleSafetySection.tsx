@@ -49,14 +49,27 @@ export function PeopleSafetySection({
         setBulkDeleteResult(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/posts/bulk-delete');
+            const cutoffMs = Date.now() - bulkDeleteDays * 24 * 60 * 60 * 1000;
+            const posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
+            const stalePostIds = posts
+                .filter((p) => p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
+                .map((p) => p.id);
+
+            if (stalePostIds.length === 0) {
+                setBulkDeleteResult(`No posts older than ${bulkDeleteDays} days found.`);
+                setBulkDeleting(false);
+                return;
+            }
+
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ days: bulkDeleteDays }),
+                body: JSON.stringify({ postIds: stalePostIds }),
             });
             const data = await res.json();
             if (res.ok) {
-                setBulkDeleteResult(`Deleted ${data.deletedCount ?? 0} post(s).`);
+                const count = data.deleted ?? data.deletedCount ?? stalePostIds.length;
+                setBulkDeleteResult(`Deleted ${count} post(s).`);
                 onRefresh();
             } else {
                 setBulkDeleteResult(`Failed: ${data.error || 'Unknown error'}`);

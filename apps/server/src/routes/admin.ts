@@ -588,7 +588,7 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         return;
     }
     const deleted = adminBulkDeletePosts(postIds);
-    ctx.body = { success: true, deleted };
+    ctx.body = { success: true, deleted, deletedCount: deleted };
 });
 
 

@@ -82,6 +82,7 @@ import {
 import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createSettingsRoutes } from './routes/settings.js';
+import type { RouteDeps } from './routes/types.js';
 
 let total = 0;
 let passed = 0;
@@ -167,10 +168,14 @@ async function main() {
         await next();
     });
 
-    const dummyDeps = {
+    const dummyDeps: RouteDeps = {
         checkAdminAuth,
         activeConnections: new Map(),
         calculateAnalytics: () => ({}),
+        rateLimit: () => false,
+        clampLimit: (v: unknown, def = 50) => (typeof v === 'number' && !isNaN(v) ? Math.min(Math.max(v, 1), 100) : def),
+        clampOffset: (v: unknown) => (typeof v === 'number' && !isNaN(v) ? Math.max(v, 0) : 0),
+        enforceReadAuth: false,
     };
     const adminRouter = createAdminRoutes(dummyDeps);
     const settingsRouter = createSettingsRoutes(dummyDeps);
@@ -500,10 +505,10 @@ async function main() {
 
         const replacementBreakGlassCode = enrolBody.breakGlassCode;
 
-        // Verify replacement key is now owner in DB
         const replacementRole = listNodeRoles().find(r => r.member_pubkey === replacementKeys.pub);
         assert(replacementRole?.role === 'owner', 'Replacement key is registered as owner in DB');
-        assert(Boolean(replacementRole?.break_glass_hash), 'Replacement owner has break_glass_hash in DB');
+        assert(Boolean(replacementRole?.has_break_glass), 'Replacement owner has has_break_glass in listNodeRoles');
+        assert(Boolean(getNodeRoleBreakGlassHash(replacementKeys.pub)), 'Replacement owner has break_glass_hash in DB');
 
         // ── 10. Per-Owner Break-Glass Code & Loud Public Alert ──
         console.log('Testing per-owner break-glass code authentication & alert emission...');

@@ -668,9 +668,13 @@ export interface NodeTreasury {
     publicKey: string;
     name: string;
     avatar?: string;
+    avatarUrl?: string;
     balance: number;
     creditLine: number;
     liveOffers: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    keepers?: string[];
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
@@ -683,7 +687,7 @@ export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury
 
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number },
+    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {

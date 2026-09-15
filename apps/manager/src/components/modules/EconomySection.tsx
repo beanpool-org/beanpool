@@ -4,7 +4,12 @@ import {
     fetchNodeTreasuries,
     createNodeTreasury,
     seedTreasuryOffer,
+    fetchTreasuryKeepers,
+    assignTreasuryKeeper,
+    revokeTreasuryKeeper,
     type NodeTreasury,
+    type NodeDataPayload,
+    type MemberItem,
     resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
@@ -12,6 +17,7 @@ import {
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
+    nodeData?: NodeDataPayload | null;
     onRefresh: () => void;
 }
 
@@ -33,7 +39,30 @@ interface CommonsProject {
     status?: string;
 }
 
-export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
+const ENTERPRISE_PRESETS = [
+    {
+        name: 'Community Garden & Produce',
+        avatar: '🌾',
+        purpose: 'Fresh seasonal vegetables, fruit, seedlings, and compost for members',
+    },
+    {
+        name: 'Tool Shed & Workshop',
+        avatar: '🛠️',
+        purpose: 'Lending library of power tools, hand tools, workshop gear, and repairs',
+    },
+    {
+        name: 'Machinery & Transport',
+        avatar: '🚜',
+        purpose: 'Tractor, trailer, equipment haulage, and shared machinery pool',
+    },
+    {
+        name: 'Pasture Eggs & Poultry',
+        avatar: '🥚',
+        purpose: 'Pasture-raised fresh eggs and ethical poultry feed co-operative',
+    },
+];
+
+export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySectionProps) {
     const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool'>('enterprises');
 
     // Enterprises state
@@ -41,8 +70,19 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
     const [loadingTreasuries, setLoadingTreasuries] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newEnterpriseName, setNewEnterpriseName] = useState('');
+    const [newEnterpriseAvatar, setNewEnterpriseAvatar] = useState('🌾');
     const [newEnterprisePurpose, setNewEnterprisePurpose] = useState('');
+    const [newEnterpriseCeiling, setNewEnterpriseCeiling] = useState('');
+    const [newEnterpriseKeeper, setNewEnterpriseKeeper] = useState('');
     const [creatingEnterprise, setCreatingEnterprise] = useState(false);
+
+    // Keepers state
+    const [keepersMap, setKeepersMap] = useState<Record<string, string[]>>({});
+    const [manageKeepersTreasury, setManageKeepersTreasury] = useState<NodeTreasury | null>(null);
+    const [assignMemberPubkey, setAssignMemberPubkey] = useState('');
+    const [customKeeperPubkey, setCustomKeeperPubkey] = useState('');
+    const [keeperActionLoading, setKeeperActionLoading] = useState(false);
+    const [keeperError, setKeeperError] = useState<string | null>(null);
 
     // Offer seed state
     const [seedOfferTreasury, setSeedOfferTreasury] = useState<NodeTreasury | null>(null);
@@ -61,13 +101,61 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
     const [roundDays, setRoundDays] = useState(7);
     const [roundActionLoading, setRoundActionLoading] = useState(false);
 
+    const members: MemberItem[] = nodeData?.members || [];
+
+    const getMemberDisplayName = (pubkey: string): string => {
+        const found = members.find((m) => (m.publicKey || m.pubkey) === pubkey);
+        if (found) {
+            return (found.name || (found as { callsign?: string }).callsign || pubkey.slice(0, 10)) as string;
+        }
+        return `${pubkey.slice(0, 10)}...`;
+    };
+
     const loadTreasuries = async () => {
         setLoadingTreasuries(true);
         try {
             const list = await fetchNodeTreasuries(activeNode.url);
             setTreasuries(list || []);
+
+            // Populate keepers from list or fetch individually if not returned
+            const tfaToken = getTfaSessionToken(activeNode.id);
+            const initialMap: Record<string, string[]> = {};
+            for (const t of list || []) {
+                if (t.publicKey) {
+                    initialMap[t.publicKey] = t.keepers || [];
+                }
+            }
+            setKeepersMap(initialMap);
+
+            // Fetch live keepers for any treasury missing keepers in initial list
+            const missing = (list || []).filter((t) => t.publicKey && !t.keepers);
+            if (missing.length > 0) {
+                const results = await Promise.all(
+                    missing.map(async (t) => {
+                        try {
+                            const keepers = await fetchTreasuryKeepers(
+                                activeNode.url,
+                                t.publicKey,
+                                activeNode.adminPassword,
+                                tfaToken
+                            );
+                            return { pubkey: t.publicKey, keepers };
+                        } catch {
+                            return { pubkey: t.publicKey, keepers: [] };
+                        }
+                    })
+                );
+                setKeepersMap((prev) => {
+                    const next = { ...prev };
+                    for (const r of results) {
+                        next[r.pubkey] = r.keepers;
+                    }
+                    return next;
+                });
+            }
         } catch {
             setTreasuries([]);
+            setKeepersMap({});
         } finally {
             setLoadingTreasuries(false);
         }
@@ -105,14 +193,38 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
         if (!newEnterpriseName.trim()) return;
         setCreatingEnterprise(true);
         try {
-            await createNodeTreasury(
+            const ceilingNum = newEnterpriseCeiling.trim() ? Number(newEnterpriseCeiling) : null;
+            const res = await createNodeTreasury(
                 activeNode.url,
-                { name: newEnterpriseName.trim(), avatar: '🌾' },
+                {
+                    name: newEnterpriseName.trim(),
+                    avatar: newEnterpriseAvatar.trim() || '🌾',
+                    workingCapitalCeiling: ceilingNum,
+                },
                 activeNode.adminPassword,
                 getTfaSessionToken(activeNode.id)
             );
+
+            // If an initial keeper was selected, assign them immediately
+            if (res.publicKey && newEnterpriseKeeper.trim()) {
+                try {
+                    await assignTreasuryKeeper(
+                        activeNode.url,
+                        res.publicKey,
+                        newEnterpriseKeeper.trim(),
+                        activeNode.adminPassword,
+                        getTfaSessionToken(activeNode.id)
+                    );
+                } catch (assignErr) {
+                    console.error('Failed to assign initial keeper:', assignErr);
+                }
+            }
+
             setNewEnterpriseName('');
+            setNewEnterpriseAvatar('🌾');
             setNewEnterprisePurpose('');
+            setNewEnterpriseCeiling('');
+            setNewEnterpriseKeeper('');
             setShowCreateModal(false);
             await loadTreasuries();
             onRefresh();
@@ -120,6 +232,94 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
             alert(e instanceof Error ? e.message : 'Failed to create enterprise');
         } finally {
             setCreatingEnterprise(false);
+        }
+    };
+
+    const handleApplyPreset = (preset: typeof ENTERPRISE_PRESETS[0]) => {
+        setNewEnterpriseName(preset.name);
+        setNewEnterpriseAvatar(preset.avatar);
+        setNewEnterprisePurpose(preset.purpose);
+    };
+
+    const handleOpenManageKeepers = async (t: NodeTreasury) => {
+        setManageKeepersTreasury(t);
+        setKeeperError(null);
+        setAssignMemberPubkey('');
+        setCustomKeeperPubkey('');
+
+        // Refresh keepers for this treasury to be 100% current
+        try {
+            const keepers = await fetchTreasuryKeepers(
+                activeNode.url,
+                t.publicKey,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            setKeepersMap((prev) => ({ ...prev, [t.publicKey]: keepers }));
+        } catch {
+            // Keep existing from map if fetch fails
+        }
+    };
+
+    const handleAssignKeeper = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!manageKeepersTreasury) return;
+        const targetPubkey = (assignMemberPubkey || customKeeperPubkey).trim();
+        if (!targetPubkey) {
+            setKeeperError('Please select a community member or enter a public key.');
+            return;
+        }
+
+        setKeeperActionLoading(true);
+        setKeeperError(null);
+        try {
+            const updatedKeepers = await assignTreasuryKeeper(
+                activeNode.url,
+                manageKeepersTreasury.publicKey,
+                targetPubkey,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            setKeepersMap((prev) => ({
+                ...prev,
+                [manageKeepersTreasury.publicKey]: updatedKeepers,
+            }));
+            setAssignMemberPubkey('');
+            setCustomKeeperPubkey('');
+            onRefresh();
+        } catch (err: unknown) {
+            setKeeperError(err instanceof Error ? err.message : 'Failed to assign keeper');
+        } finally {
+            setKeeperActionLoading(false);
+        }
+    };
+
+    const handleRevokeKeeper = async (keeperPubkey: string) => {
+        if (!manageKeepersTreasury) return;
+        const displayName = getMemberDisplayName(keeperPubkey);
+        if (!confirm(`Revoke keeper permissions from @${displayName} for ${manageKeepersTreasury.name}?`)) {
+            return;
+        }
+
+        setKeeperActionLoading(true);
+        setKeeperError(null);
+        try {
+            const updatedKeepers = await revokeTreasuryKeeper(
+                activeNode.url,
+                manageKeepersTreasury.publicKey,
+                keeperPubkey,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            setKeepersMap((prev) => ({
+                ...prev,
+                [manageKeepersTreasury.publicKey]: updatedKeepers,
+            }));
+            onRefresh();
+        } catch (err: unknown) {
+            setKeeperError(err instanceof Error ? err.message : 'Failed to revoke keeper');
+        } finally {
+            setKeeperActionLoading(false);
         }
     };
 
@@ -310,50 +510,106 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {treasuries.map((t) => (
-                                <div
-                                    key={t.publicKey}
-                                    className="p-5 rounded-2xl bg-nature-900/80 border border-nature-800 hover:border-nature-700 transition-all flex flex-col justify-between shadow-lg"
-                                >
-                                    <div>
-                                        <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div className="flex items-center gap-2.5">
-                                                <div className="w-9 h-9 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center text-lg">
-                                                    🌾
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-bold text-white m-0">{t.name}</h4>
-                                                    <span className="text-[10px] font-mono text-nature-400">
-                                                        {(t.publicKey || '').slice(0, 12)}...
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                                Active
-                                            </span>
-                                        </div>
-
-                                        <p className="text-xs text-nature-300 m-0 mb-4 line-clamp-2">
-                                            Community cooperative enterprise account.
-                                        </p>
-                                    </div>
-
-                                    <div className="border-t border-nature-800/80 pt-3 flex items-center justify-between">
+                            {treasuries.map((t) => {
+                                const currentKeepers = keepersMap[t.publicKey] || t.keepers || [];
+                                return (
+                                    <div
+                                        key={t.publicKey}
+                                        className="p-5 rounded-2xl bg-nature-900/80 border border-nature-800 hover:border-nature-700 transition-all flex flex-col justify-between shadow-lg space-y-4"
+                                    >
                                         <div>
-                                            <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
-                                            <div className="text-sm font-bold text-white font-mono">
-                                                {t.balance ?? '0.00'} beans
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className="w-9 h-9 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center text-lg">
+                                                        {t.avatar || '🌾'}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-sm font-bold text-white m-0">{t.name}</h4>
+                                                        <span className="text-[10px] font-mono text-nature-400">
+                                                            {(t.publicKey || '').slice(0, 12)}...
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                                    Active
+                                                </span>
+                                            </div>
+
+                                            <p className="text-xs text-nature-300 m-0 mb-3 line-clamp-2">
+                                                {t.purpose || 'Community cooperative enterprise account.'}
+                                            </p>
+
+                                            {/* Working capital ceiling badge */}
+                                            {t.workingCapitalCeiling != null && (
+                                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-nature-950 border border-nature-800 text-[10px] text-nature-300 mb-3">
+                                                    <span className="text-terra-400 font-bold">Ceiling:</span>
+                                                    <span className="font-mono">{t.workingCapitalCeiling} beans</span>
+                                                </div>
+                                            )}
+
+                                            {/* Keepers display */}
+                                            <div className="bg-nature-950/70 border border-nature-800/80 rounded-xl p-2.5 space-y-1.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                                                        Keepers ({currentKeepers.length})
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleOpenManageKeepers(t)}
+                                                        className="text-[10px] font-bold text-terra-400 hover:text-terra-300 transition-colors"
+                                                    >
+                                                        Manage
+                                                    </button>
+                                                </div>
+                                                {currentKeepers.length === 0 ? (
+                                                    <div className="text-[11px] text-amber-400/90 flex items-center gap-1">
+                                                        <span>⚠️</span>
+                                                        <span>No keepers appointed</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {currentKeepers.slice(0, 3).map((pk) => (
+                                                            <span
+                                                                key={pk}
+                                                                className="px-2 py-0.5 rounded-md bg-nature-800/80 border border-nature-700 text-[10px] font-medium text-nature-200"
+                                                            >
+                                                                @{getMemberDisplayName(pk)}
+                                                            </span>
+                                                        ))}
+                                                        {currentKeepers.length > 3 && (
+                                                            <span className="px-1.5 py-0.5 rounded text-[10px] text-nature-400 font-medium">
+                                                                +{currentKeepers.length - 3} more
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => setSeedOfferTreasury(t)}
-                                            className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-terra-300 border border-nature-700 transition-all"
-                                        >
-                                            Seed Offer
-                                        </button>
+
+                                        <div className="border-t border-nature-800/80 pt-3 flex items-center justify-between">
+                                            <div>
+                                                <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
+                                                <div className="text-sm font-bold text-white font-mono">
+                                                    {t.balance ?? '0.00'} beans
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleOpenManageKeepers(t)}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+                                                >
+                                                    Keepers
+                                                </button>
+                                                <button
+                                                    onClick={() => setSeedOfferTreasury(t)}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-terra-900/30 hover:bg-terra-900/50 text-xs font-bold text-terra-300 border border-terra-700/50 transition-all"
+                                                >
+                                                    Seed Offer
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -494,32 +750,114 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
             {/* Create Enterprise Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
-                        <h3 className="text-base font-bold text-white m-0">🌾 Create Community Enterprise</h3>
-                        <form onSubmit={handleCreateEnterprise} className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">Enterprise Name</label>
-                                <input
-                                    type="text"
-                                    value={newEnterpriseName}
-                                    onChange={(e) => setNewEnterpriseName(e.target.value)}
-                                    placeholder="e.g. Community Eggs, Tool Shed, Bakery"
-                                    required
-                                    autoFocus
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
+                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
+                        <div className="border-b border-nature-800 pb-3">
+                            <h3 className="text-base font-bold text-white m-0">🌾 Create Community Enterprise</h3>
+                            <p className="text-xs text-nature-400 m-0 mt-0.5">
+                                Set up a shared cooperative account to trade, post offers, and organise community work.
+                            </p>
+                        </div>
+
+                        {/* Presets */}
+                        <div>
+                            <span className="text-xs font-bold text-nature-300 block mb-2">Choose from Presets:</span>
+                            <div className="grid grid-cols-2 gap-2">
+                                {ENTERPRISE_PRESETS.map((p) => (
+                                    <button
+                                        key={p.name}
+                                        type="button"
+                                        onClick={() => handleApplyPreset(p)}
+                                        className="p-2.5 rounded-xl bg-nature-950 hover:bg-nature-800/80 border border-nature-800 text-left transition-all group"
+                                    >
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-terra-300">
+                                            <span>{p.avatar}</span>
+                                            <span className="truncate">{p.name}</span>
+                                        </div>
+                                        <p className="text-[10px] text-nature-400 line-clamp-1 mt-0.5">{p.purpose}</p>
+                                    </button>
+                                ))}
                             </div>
+                        </div>
+
+                        <form onSubmit={handleCreateEnterprise} className="space-y-3 pt-2">
+                            <div className="grid grid-cols-4 gap-2">
+                                <div className="col-span-1">
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">Avatar</label>
+                                    <input
+                                        type="text"
+                                        value={newEnterpriseAvatar}
+                                        onChange={(e) => setNewEnterpriseAvatar(e.target.value)}
+                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-center text-lg text-white focus:outline-none focus:border-terra-500"
+                                        maxLength={4}
+                                    />
+                                </div>
+                                <div className="col-span-3">
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">Enterprise Name</label>
+                                    <input
+                                        type="text"
+                                        value={newEnterpriseName}
+                                        onChange={(e) => setNewEnterpriseName(e.target.value)}
+                                        placeholder="e.g. Community Eggs, Tool Shed, Bakery"
+                                        required
+                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                    />
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-bold text-nature-300 mb-1">Purpose Statement</label>
                                 <textarea
                                     value={newEnterprisePurpose}
                                     onChange={(e) => setNewEnterprisePurpose(e.target.value)}
                                     placeholder="What does this enterprise produce or provide for the community?"
-                                    rows={3}
+                                    rows={2}
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 resize-none"
                                 />
                             </div>
-                            <div className="flex items-center justify-end gap-2 pt-2">
+
+                            <div>
+                                <label className="block text-xs font-bold text-nature-300 mb-1">
+                                    Working Capital Ceiling (Beans, optional)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={newEnterpriseCeiling}
+                                    onChange={(e) => setNewEnterpriseCeiling(e.target.value)}
+                                    placeholder="e.g. 200 (surplus above this automatically sweeps to Commons)"
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
+                                />
+                                <p className="text-[10px] text-nature-400 mt-1">
+                                    Rule 7: Enterprise retains operating reserves up to ceiling; surplus returns to Commons.
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-nature-300 mb-1">
+                                    Initial Lead Keeper (Optional)
+                                </label>
+                                <select
+                                    value={newEnterpriseKeeper}
+                                    onChange={(e) => setNewEnterpriseKeeper(e.target.value)}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
+                                >
+                                    <option value="">None (assign keeper later)</option>
+                                    {members.map((m) => {
+                                        const pk = m.publicKey || m.pubkey || '';
+                                        const name = m.name || (m as { callsign?: string }).callsign || pk.slice(0, 10);
+                                        return (
+                                            <option key={pk} value={pk}>
+                                                @{name} ({pk.slice(0, 8)}...)
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                                <p className="text-[10px] text-nature-400 mt-1">
+                                    Appointing an initial keeper allows immediate offer posting and bid management.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t border-nature-800">
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
@@ -536,6 +874,172 @@ export function EconomySection({ activeNode, onRefresh }: EconomySectionProps) {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Manage Keepers Modal */}
+            {manageKeepersTreasury && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div>
+                                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                    <span>{manageKeepersTreasury.avatar || '🌾'}</span>
+                                    <span>Manage Keepers — {manageKeepersTreasury.name}</span>
+                                </h3>
+                                <p className="text-xs text-nature-400 m-0 mt-1">
+                                    Keepers hold operational authority to post offers/needs, approve bids, and disburse
+                                    funds for this enterprise.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setManageKeepersTreasury(null)}
+                                className="w-8 h-8 rounded-full bg-nature-800 hover:bg-nature-700 text-nature-300 flex items-center justify-center text-sm font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {keeperError && (
+                            <div className="p-3 rounded-xl bg-red-900/30 border border-red-800/80 text-xs text-red-300">
+                                {keeperError}
+                            </div>
+                        )}
+
+                        {/* Current Keepers List */}
+                        <div>
+                            <h4 className="text-xs font-bold text-nature-300 uppercase tracking-wider mb-2">
+                                Current Keepers ({(keepersMap[manageKeepersTreasury.publicKey] || []).length})
+                            </h4>
+
+                            {(keepersMap[manageKeepersTreasury.publicKey] || []).length === 0 ? (
+                                <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800 text-center text-xs text-nature-400">
+                                    <p className="font-semibold text-amber-400 mb-1">No keepers currently assigned.</p>
+                                    <p className="text-[11px] text-nature-400">
+                                        Without an appointed keeper, community members cannot operate this enterprise or
+                                        satisfy the offer covenant.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {(keepersMap[manageKeepersTreasury.publicKey] || []).map((pk) => {
+                                        const name = getMemberDisplayName(pk);
+                                        return (
+                                            <div
+                                                key={pk}
+                                                className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="w-7 h-7 rounded-lg bg-nature-800 border border-nature-700 flex items-center justify-center text-xs font-bold text-terra-400">
+                                                        {name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs font-bold text-white truncate">
+                                                            @{name}
+                                                        </div>
+                                                        <div className="text-[10px] font-mono text-nature-500 truncate">
+                                                            {pk.slice(0, 16)}...
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => handleRevokeKeeper(pk)}
+                                                    disabled={keeperActionLoading}
+                                                    className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-xs font-bold text-red-300 border border-red-800/80 transition-all disabled:opacity-40 shrink-0"
+                                                >
+                                                    Revoke
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Assign New Keeper Form */}
+                        <form onSubmit={handleAssignKeeper} className="p-4 rounded-2xl bg-nature-950 border border-nature-800 space-y-3">
+                            <div>
+                                <h4 className="text-xs font-bold text-white mb-0.5">Assign Community Keeper</h4>
+                                <p className="text-[11px] text-nature-400 mb-2">
+                                    Appoint a trusted community member as an operator for this enterprise.
+                                </p>
+                            </div>
+
+                            {/* Dropdown from community members */}
+                            {members.length > 0 && (
+                                <div>
+                                    <label htmlFor="assign-member-select" className="block text-[11px] font-semibold text-nature-300 mb-1">
+                                        Select Member
+                                    </label>
+                                    <select
+                                        id="assign-member-select"
+                                        value={assignMemberPubkey}
+                                        onChange={(e) => {
+                                            setAssignMemberPubkey(e.target.value);
+                                            if (e.target.value) setCustomKeeperPubkey('');
+                                        }}
+                                        className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
+                                    >
+                                        <option value="">-- Choose from community directory --</option>
+                                        {members
+                                            .filter(
+                                                (m) =>
+                                                    !(keepersMap[manageKeepersTreasury.publicKey] || []).includes(
+                                                        m.publicKey || m.pubkey || ''
+                                                    )
+                                            )
+                                            .map((m) => {
+                                                const pk = m.publicKey || m.pubkey || '';
+                                                const name =
+                                                    m.name || (m as { callsign?: string }).callsign || pk.slice(0, 10);
+                                                return (
+                                                    <option key={pk} value={pk}>
+                                                        @{name} ({pk.slice(0, 8)}...)
+                                                    </option>
+                                                );
+                                            })}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* Or direct pubkey entry */}
+                            <div>
+                                <label htmlFor="custom-keeper-input" className="block text-[11px] font-semibold text-nature-300 mb-1">
+                                    Or Member Public Key
+                                </label>
+                                <input
+                                    id="custom-keeper-input"
+                                    type="text"
+                                    value={customKeeperPubkey}
+                                    onChange={(e) => {
+                                        setCustomKeeperPubkey(e.target.value);
+                                        if (e.target.value) setAssignMemberPubkey('');
+                                    }}
+                                    placeholder="Paste member public key"
+                                    className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={keeperActionLoading || (!assignMemberPubkey && !customKeeperPubkey)}
+                                className="w-full py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-40"
+                            >
+                                {keeperActionLoading ? 'Assigning...' : '+ Assign Keeper'}
+                            </button>
+                        </form>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setManageKeepersTreasury(null)}
+                                className="px-4 py-2 rounded-xl bg-nature-800 text-xs font-bold text-nature-300 hover:text-white"
+                            >
+                                Done
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

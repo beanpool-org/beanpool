@@ -966,6 +966,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             {activeTab === 'economy' && (
                                 <EconomySection
                                     activeNode={activeNode}
+                                    nodeData={nodeData}
                                     onRefresh={() => {
                                         loadNodeData();
                                         loadDiagnostics();

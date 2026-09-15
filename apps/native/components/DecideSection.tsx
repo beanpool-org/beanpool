@@ -672,10 +672,12 @@ export function DecideSection({
                                                 <Text style={styles.qvLabel}>
                                                     Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
                                                 </Text>
-                                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        style={styles.stepperBtn}
+                                                        accessibilityLabel="Decrease vote count"
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
@@ -683,11 +685,13 @@ export function DecideSection({
                                                             }));
                                                         }}
                                                     >
-                                                        <MaterialCommunityIcons name="minus-circle-outline" size={22} color={colors.brand.primary} />
+                                                        <MaterialCommunityIcons name="minus-circle-outline" size={24} color={colors.brand.primary} />
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        style={styles.stepperBtn}
+                                                        accessibilityLabel="Increase vote count"
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
@@ -695,7 +699,7 @@ export function DecideSection({
                                                             }));
                                                         }}
                                                     >
-                                                        <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.brand.primary} />
+                                                        <MaterialCommunityIcons name="plus-circle-outline" size={24} color={colors.brand.primary} />
                                                     </Pressable>
                                                 </View>
                                             </View>

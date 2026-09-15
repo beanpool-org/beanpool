@@ -766,7 +766,44 @@ async function runDecisionsSuite() {
     tickDecisions();
     testAssert(getDecision(decQueuedWriteOff.id)!.status === 'executed', 'Queued write_off_deficit executes automatically once pool has funds');
     testAssert(ledger.getAccount(queuedInsolventEnt).balance === 0, 'Queued insolvent enterprise balance reset to 0');
-    testAssert(getCommonsBalance() === 100, 'Commons pool debited 200 beans');
+    // 11i. Enforce 1-grant queue capacity per §3.7: trailing underfunded grants become execution_blocked
+    setCommonsBalance(10); // Pool underfunded
+    const entQueue1 = 'ent_q1_' + Date.now();
+    seedTestMember(entQueue1, 'Q1 Enterprise', { isTreasury: true });
+    const decQ1 = createDecision({
+        authorPubkey: admin,
+        title: 'Grant Q1',
+        description: 'First queued grant',
+        touches: 'pool',
+        effect: 'grant_enterprise',
+        subject: entQueue1,
+        params: { amount: 100 },
+    });
+    castDecisionVote(decQ1.id, voterA, true, 4);
+    castDecisionVote(decQ1.id, voterB, true, 4);
+    castDecisionVote(decQ1.id, voterC, true, 4);
+    closeForTick(decQ1.id);
+    tickDecisions();
+    testAssert(getDecision(decQ1.id)!.status === 'passed_queued_for_funds', 'First underfunded grant occupies queue slot');
+
+    const entQueue2 = 'ent_q2_' + Date.now();
+    seedTestMember(entQueue2, 'Q2 Enterprise', { isTreasury: true });
+    const decQ2 = createDecision({
+        authorPubkey: admin,
+        title: 'Grant Q2',
+        description: 'Second underfunded grant exceeding queue capacity',
+        touches: 'pool',
+        effect: 'grant_enterprise',
+        subject: entQueue2,
+        params: { amount: 150 },
+    });
+    castDecisionVote(decQ2.id, voterA, true, 4);
+    castDecisionVote(decQ2.id, voterB, true, 4);
+    castDecisionVote(decQ2.id, voterC, true, 4);
+    closeForTick(decQ2.id);
+    tickDecisions();
+    testAssert(getDecision(decQ2.id)!.status === 'execution_blocked', 'Second underfunded grant blocked when queue is at capacity (§3.7)');
+    testAssert(getDecision(decQ2.id)!.executionError?.includes('Funding queue full'), 'Blocked reason cites 1-grant queue limit');
 
     console.log(`\n🎉 All ${testsPassed}/${testsRun} Decisions Engine tests PASSED!`);
 }

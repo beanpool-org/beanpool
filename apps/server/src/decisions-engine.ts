@@ -666,6 +666,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: true, status: decision.status };
     }
 
+    if (decision.status === 'admin_halted' || decision.status === 'failed' || decision.status === 'unresolved') {
+        return { success: false, status: decision.status, error: `Cannot execute decision in status ${decision.status}` };
+    }
+
     const preflight = preflightAssert(decision);
     const now = new Date().toISOString();
 
@@ -678,6 +682,18 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     }
 
     if (preflight.status === 'insufficient_funds') {
+        const existingQueued = (db.prepare(
+            "SELECT COUNT(*) as c FROM decisions WHERE status = 'passed_queued_for_funds' AND id != ?"
+        ).get(decisionId) as any)?.c || 0;
+
+        if (existingQueued >= 1) {
+            db.prepare(
+                "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
+            ).run(now, decisionId);
+            broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+            return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
+        }
+
         db.prepare(
             "UPDATE decisions SET status = 'passed_queued_for_funds', execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Queued for pool funds', now, decisionId);
@@ -1014,15 +1030,24 @@ export function tickDecisions(asOfTime?: number): {
     let graceExpired = 0;
     let queuedEvaluated = 0;
 
-    // 1. Close open decisions whose window expired
+    // 1. Close open decisions whose window expired, or retry stranded passed decisions
     const openExpired = db.prepare(
-        "SELECT * FROM decisions WHERE status = 'open' AND closes_at <= ? ORDER BY closes_at ASC"
+        "SELECT * FROM decisions WHERE status IN ('open', 'passed') AND closes_at <= ? ORDER BY closes_at ASC"
     ).all(nowIso) as any[];
 
     for (const r of openExpired) {
         evaluated++;
-        const tally = tallyDecision(r.id, asOfTime);
         const now = new Date().toISOString();
+
+        if (r.status === 'passed') {
+            const res = executeDecision(r.id);
+            if (res.success && res.status === 'executed') {
+                executed++;
+            }
+            continue;
+        }
+
+        const tally = tallyDecision(r.id, asOfTime);
 
         if (!tally.quorumMet) {
             db.prepare(`

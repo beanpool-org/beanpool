@@ -206,20 +206,21 @@ async function runTests() {
     const testProject = 'proj_' + crypto.randomUUID().slice(0, 12);
 
     const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'creator_test', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'backer_test', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator, 'cr_' + testCreator.slice(8, 16));
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker, 'bk_' + testBacker.slice(8, 16));
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`).run(testCreator, nowEpoch);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 500, ?)`).run(testBacker, nowEpoch);
     reconcileLedgerFromDb();
 
     // Create crowdfund project (goal = 200)
-    createCrowdfundProject(testProject, testCreator, 'Community Tool Shed', 'Shared workshop tools', ['https://example.com/shed.png'], 200, null);
+    const projectTitle = 'Community Tool Shed ' + testProject.slice(5, 11);
+    createCrowdfundProject(testProject, testCreator, projectTitle, 'Shared workshop tools', ['https://example.com/shed.png'], 200, null);
 
     // Verify getters return unified enterprise
     const cfProjects = getCrowdfundProjects();
     const foundProject = cfProjects.find(p => p.id === testProject);
     testAssert(!!foundProject, 'getCrowdfundProjects returns newly created project');
-    testAssert(foundProject?.title === 'Community Tool Shed', 'Project title matches');
+    testAssert(foundProject?.title === projectTitle, 'Project title matches');
     testAssert(foundProject?.goal_amount === 200, 'Project goal amount matches');
 
     const singleProject = getCrowdfundProject(testProject);

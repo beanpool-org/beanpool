@@ -546,7 +546,9 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        const clientIp = replicationClientIp(ctx);
+        // Derive real remote socket IP for security access control (strip IPv6-mapped IPv4 prefix)
+        const rawSocketIp = ctx.socket?.remoteAddress || ctx.ip || 'unknown';
+        const clientIp = rawSocketIp.replace(/^::ffff:/, '');
 
         // 1. Dynamic CORS Allowed Origins Handling (#131)
         const requestOrigin = ctx.get('Origin');
@@ -581,7 +583,7 @@ export async function startHttpsServer(port: number): Promise<void> {
 
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            const normalizedPath = ctx.path.replace(/\/+$/, '') || '/';
+            const normalizedPath = path.posix.normalize(ctx.path).replace(/\/+$/, '') || '/';
             if (
                 normalizedPath === '/settings' ||
                 normalizedPath.startsWith('/settings/') ||
@@ -591,16 +593,26 @@ export async function startHttpsServer(port: number): Promise<void> {
                 normalizedPath.startsWith('/api/local/admin/') ||
                 normalizedPath === '/api/admin' ||
                 normalizedPath.startsWith('/api/admin/') ||
+                normalizedPath === '/api/local/verify-password' ||
+                normalizedPath === '/api/local/dashboard' ||
                 normalizedPath === '/api/local/update-identity' ||
                 normalizedPath === '/api/local/change-password' ||
                 normalizedPath === '/api/local/reset' ||
                 normalizedPath === '/api/local/connectors' ||
                 normalizedPath.startsWith('/api/local/connectors/') ||
-                normalizedPath.startsWith('/api/local/federation/')
+                normalizedPath.startsWith('/api/local/federation/') ||
+                normalizedPath === '/api/manager' ||
+                normalizedPath.startsWith('/api/manager/') ||
+                normalizedPath === '/api/pricing-guide/admin' ||
+                normalizedPath.startsWith('/api/pricing-guide/admin/')
             ) {
-                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => 
-                    clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))
-                );
+                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
+                    const norm = allowedIp.trim();
+                    if (clientIp === norm || norm === '*') return true;
+                    if ((norm === '127.0.0.1' || norm === 'localhost') && (clientIp === '127.0.0.1' || clientIp === '::1')) return true;
+                    if (norm.endsWith('*') && clientIp.startsWith(norm.slice(0, -1))) return true;
+                    return false;
+                });
                 if (!isAllowed) {
                     ctx.status = 403;
                     ctx.body = { error: 'Access denied by Gateway Admin IP allowlist' };

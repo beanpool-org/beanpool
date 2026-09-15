@@ -596,7 +596,7 @@ export function App() {
                     flex: 1,
                     minHeight: 0,
                     overflowY: (activeTab === 'map' && !showSettings) ? 'hidden' : 'auto',
-                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : '4rem',
+                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : 'var(--bottom-nav-offset)',
                     position: 'relative',
                 }} className="md:pb-0">
                     {showSettings && (
@@ -728,7 +728,7 @@ export function App() {
                     backgroundPosition: 'center',
                     borderTop: '1px solid #111',
                     zIndex: 100,
-                    padding: '0.2rem 4px',
+                    padding: '0.2rem 4px calc(0.2rem + env(safe-area-inset-bottom, 0px))',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-0.5 sm:gap-1">

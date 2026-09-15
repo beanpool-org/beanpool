@@ -253,7 +253,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                 <div className="w-12" />
             </div>
 
-            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
+            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
                     <div className="py-20 text-center text-nature-500 font-medium">Loading treasury details…</div>
                 ) : error ? (

@@ -259,6 +259,20 @@ async function runTests() {
     testAssert(sweepTx.to_pubkey === testProject, 'Sweep transaction to_pubkey is the enterprise account');
     testAssert(sweepTx.amount === 200, 'Sweep transaction amount is 200');
 
+    // Verify current_amount does not double-count sweeps (Comment 1)
+    const singleProjectAfter = getCrowdfundProject(testProject);
+    testAssert(singleProjectAfter?.current_amount === 200, 'current_amount does not double-count sweeps (exactly 200, not 400)');
+
+    // Verify Commons proposal can receive direct pledges via fallback (Comment 5)
+    const commonsProp = createProject(testCreator, 'Solar Battery Initiative', 'Power backup', 150);
+    testAssert(!!commonsProp, 'Commons proposal created successfully');
+    const propPledgeTxId = 'pledge_prop_' + crypto.randomUUID();
+    pledgeToProject(propPledgeTxId, commonsProp.id, testBacker, 50, 'Pledge to commons proposal');
+    reconcileLedgerFromDb();
+    testAssert(getBalance(`escrow_${commonsProp.id}`).balance === 50, 'Escrow holds 50 beans for commons proposal');
+    const commonsPropProject = getCrowdfundProject(commonsProp.id);
+    testAssert(commonsPropProject?.current_amount === 50, 'Bounded commons proposal resolves in getCrowdfundProject with current_amount 50');
+
     // Verify ledger conservation
     const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
     testAssert(Math.abs(sumAfter - (sumBefore + 600)) < 1e-9, 'Ledger conservation strictly preserved (delta = seeded 600)');

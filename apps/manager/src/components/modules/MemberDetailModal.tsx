@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
@@ -66,7 +66,15 @@ export function MemberDetailModal({
     const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
 
     const pubkey = member?.publicKey || member?.pubkey || '';
-    const currentRole: MemberNodeRole | null = (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null;
+    const [localRole, setLocalRole] = useState<MemberNodeRole | null>(
+        () => (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null
+    );
+
+    useEffect(() => {
+        setLocalRole((nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null);
+    }, [nodeRole, member?.nodeRole]);
+
+    const currentRole = localRole;
     const displayName = getMemberDisplayName(member, profiles);
     const initial = displayName.charAt(0).toUpperCase();
 
@@ -90,6 +98,7 @@ export function MemberDetailModal({
         setRoleSuccess(null);
         try {
             await onGrantNodeRole(pubkey, targetRole);
+            setLocalRole(targetRole);
             setRoleSuccess(`Granted ${targetRole} role successfully`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -110,6 +119,7 @@ export function MemberDetailModal({
         setRoleSuccess(null);
         try {
             await onRevokeNodeRole(pubkey, currentRole);
+            setLocalRole(null);
             setRoleSuccess(`Revoked ${currentRole} role successfully`);
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);

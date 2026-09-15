@@ -879,17 +879,10 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     }
     const goalAmount = Number(e.goal_amount ?? legacyP?.goal_amount ?? 0);
 
-    let currentAmount = 0;
-    if (legacyP && legacyP.current_amount != null) {
-        currentAmount = Number(legacyP.current_amount);
-    }
+    let currentAmount = Number(legacyP?.current_amount || 0);
     try {
-        const txSum = (db.prepare(`
-            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
-        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
-        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, txSum, accBal);
+        const escBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(`escrow_${e.public_key}`) as any)?.balance || 0;
+        currentAmount = Math.max(currentAmount, Number(escBal));
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -957,21 +950,20 @@ export function createCrowdfundProject(
 ) {
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();
+    const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
+    const existingCallsign = db.prepare(
+        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(baseCallsign, id) as any;
+    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
-    db.prepare(`
-        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
-    `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
 
-    const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
-    if (!existing) {
-        const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-        const existingCallsign = db.prepare(
-            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-        ).get(baseCallsign, id) as any;
-        const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
-
-        db.transaction(() => {
+        const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
+        if (!existing) {
             db.prepare(`
                 INSERT INTO members (
                     public_key, callsign, joined_at, avatar_url, bio, status,
@@ -988,8 +980,8 @@ export function createCrowdfundProject(
                 `).run(id, creator_pubkey, now);
                 db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
             }
-        })();
-    }
+        }
+    })();
 }
 
 export function updateCrowdfundProject(
@@ -1047,8 +1039,17 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
 
-    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
-    if (!project) throw new Error("Project not found");
+    let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
+    if (!project) {
+        const memberEnterprise = db.prepare(`SELECT public_key, callsign, purpose, bio, goal_amount, deadline_at, status FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).get(projectId) as any;
+        if (!memberEnterprise) throw new Error("Project not found");
+        const lead = (db.prepare(`SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead' LIMIT 1`).get(projectId) as any)?.member_pubkey || memberEnterprise.public_key;
+        db.prepare(`
+            INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, '[]', ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
+        project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
+    }
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow

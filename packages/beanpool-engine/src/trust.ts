@@ -389,9 +389,15 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 
     let derivedAllowance = 0;
     try {
-        const pledgeRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL"
-        ).get(enterprisePubkey) as any;
+        const pledgeRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
         derivedAllowance = Number(pledgeRow?.total || 0);
     } catch {
         derivedAllowance = 0;
@@ -399,11 +405,9 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 
     let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
 
-    // Auto-clear legacy floor once keepers' derived pledges reach or exceed it (Slice 4)
+    // Auto-clear legacy floor once keepers' derived pledges reach or exceed it (Slice 4).
+    // Strictly read-only here: persistent database UPDATE is executed inside state mutation endpoints.
     if (legacyFloor > 0 && derivedAllowance >= legacyFloor) {
-        try {
-            db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
-        } catch { }
         legacyFloor = 0;
     }
 

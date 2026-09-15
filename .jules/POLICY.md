@@ -315,3 +315,8 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** Replace untyped `any` annotations with strict interfaces in `apps/manager/src/App.tsx` and `apps/manager/src/lib/node-client.ts`.
 - **Why not to re-file:** Landed in commit `149780e`. Defined strict TypeScript interfaces (`NodeHealthFlag`, `NodeReport`, `MemberItem`, `NodeDataPayload`) in `node-client.ts` and removed `any` annotations across state and filter callbacks in `App.tsx`.
 
+### 2026-09-15 — Scout: test coverage commons-reject-project (#781) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `POST /api/local/admin/commons/reject` and `adminRejectProject`.
+- **Why not to re-file:** Landed in merge commit `60e55543`. The tests target `/api/local/admin/commons/reject` and `adminRejectProject`, which SURVIVE the project==enterprise unification (#792) — old routes now serve from the unified model — so this coverage stays valid; the only conflict was the suite-list line in `scripts/test-all.sh`.
+

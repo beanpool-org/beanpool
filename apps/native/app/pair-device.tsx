@@ -26,6 +26,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { palette } from '../constants/colors';
 import { encryptPairingPayload } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
+import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ParsedPairingData {
@@ -332,10 +333,8 @@ export default function PairDeviceScreen() {
                 throw new Error('Unable to determine target node address');
             }
 
-            const parsed = new URL(targetNode);
-            const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-            if (parsed.protocol !== 'https:' && !isLocal) {
-                throw new Error('Insecure pairing relay URL. HTTPS required.');
+            if (shouldBlockCleartextNodeUrl(targetNode)) {
+                throw new Error('Insecure pairing relay URL. HTTPS required for public host.');
             }
             const normalizedTargetNode = targetNode.trim().replace(/\/+$/, '');
 

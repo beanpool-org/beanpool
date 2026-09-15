@@ -51,6 +51,12 @@ CREATE TABLE IF NOT EXISTS members (
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
     archetype TEXT,
+    -- Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
+    purpose TEXT,
+    goal_amount REAL DEFAULT NULL,
+    deadline_at DATETIME DEFAULT NULL,
+    lifecycle TEXT DEFAULT 'ongoing',
+    paused INTEGER DEFAULT 0,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -331,6 +337,8 @@ CREATE TABLE IF NOT EXISTS projects (
     current_amount INTEGER DEFAULT 0,
     deadline_at DATETIME,
     status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'FUNDED', 'FAILED', 'COMPLETED'
+    migrated_at DATETIME,
+    enterprise_pubkey TEXT,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -551,7 +559,8 @@ AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
-    legacy_credit_floor
+    legacy_credit_floor,
+    purpose, goal_amount, deadline_at, lifecycle, paused
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

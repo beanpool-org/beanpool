@@ -274,3 +274,49 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** MARGINAL / JUDGEMENT
 - **Claim:** replace `array.find()` with a pre-computed `Map`.
 - **Why not to re-file blindly:** #766 was worth it — the lookup sat inside a **recursive tree render**, so it was O(M·(M+P)). #745 replaced a **single** lookup per render, where building the Map costs as much as the scan it saves. Both are harmless and both landed, but a `.find()` → `Map` rewrite is only a win when the lookup is in a loop or recursion. Do not file these against one-shot lookups.
+
+### 2026-09-15 — Atlas: manager node-client unit tests (#777) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing unit tests for node client helpers (`loginToNode`, `fetchNodeTreasuries`, `createNodeTreasury`, `fetchNodeSnapshots`, `createNodeSnapshot`, `deleteNodeSnapshot`, `updateNodeReplicationCadence`, `forceNodeResync`) in `apps/manager/src/lib/node-client.ts`.
+- **Why not to re-file:** Landed in commit `e3a9f47`. Added unit tests in `apps/manager/src/lib/node-client.test.ts` covering authentication, treasury management, snapshot operations, and replication cadence helpers.
+
+### 2026-09-15 — Shield: pairing relay uses shared shouldBlockCleartextNodeUrl (#778) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Enforce secure transport for pairing relay URLs in `apps/native/app/pair-device.tsx`.
+- **Why not to re-file:** Landed in commit `60d1424`. Replaced custom hostname parsing with `shouldBlockCleartextNodeUrl(targetNode)` in `apps/native/app/pair-device.tsx` to block insecure cleartext HTTP/WS pairing relays on non-private hosts.
+
+### 2026-09-15 — Forge: validate report reason type in submitReport (#779) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Validate report reason type in `submitReport` to prevent runtime `TypeError` when calling `.slice()`.
+- **Why not to re-file:** Landed in commit `daa3989`. Validates `typeof reason === 'string' && reason.trim()` in `apps/server/src/routes/community.ts` and safely coerces reason via `String(reason ?? '')` before slicing in `apps/server/src/state-engine.ts`.
+
+### 2026-09-15 — Palette: OnboardingGuide decorative emojis hidden, WCAG 2.5.3 name preserved (#780) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Hide decorative emojis in `apps/pwa/src/components/OnboardingGuide.tsx` from screen readers while preserving accessible names under WCAG 2.5.3.
+- **Why not to re-file:** Landed in commit `7d09b2e`. Wrapped decorative emojis in `<span aria-hidden="true">` across cards in `OnboardingGuide.tsx` while preserving accessible button names under WCAG 2.5.3, verified by unit tests in `OnboardingGuide.test.tsx`.
+
+### 2026-09-15 — Bolt: avatarUrl in getFriends response (#782) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Include `avatarUrl` in `getFriends` response to avoid $O(M)$ member directory fetch.
+- **Why not to re-file:** Landed in commit `b393517`. Added `m.avatar_url` to the `getFriends` SQL query in `packages/beanpool-engine/src/social.ts` and updated `FriendEntry` interfaces, enabling $O(1)$ friend avatar rendering in PWA `PeoplePage.tsx`.
+
+### 2026-09-15 — Pixel: create-poll button accessibilityLabel/hint/state (#783) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Add missing `accessibilityLabel`, `accessibilityHint`, and `accessibilityState` to the create-poll submit button in `apps/native/components/NewPollModal.tsx`.
+- **Why not to re-file:** Landed in commit `8eed2fa`. Added dynamic `accessibilityLabel` ("Create poll" / "Creating poll"), `accessibilityHint`, and `accessibilityState={{ disabled: submitting, busy: submitting }}` to the submit button in `NewPollModal.tsx`.
+
+### 2026-09-15 — Vault: 2FA session token forwarded on snapshot ops — closes the #682 gap (#784) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Snapshot operations in `apps/manager/src/components/modules/TopologyModule.tsx` failed with 401 on 2FA-enabled nodes because `getTfaSessionToken` was not forwarded.
+- **Why not to re-file:** Landed in commit `ed294ee`. Passed `getTfaSessionToken(targetSnapshotNode.id)` to `fetchNodeSnapshots`, `createNodeSnapshot`, and `deleteNodeSnapshot` in `apps/manager/src/components/modules/TopologyModule.tsx`, closing the remaining #682 consumer gap.
+
+### 2026-09-15 — Flow: manager strict interfaces replacing any (#785) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Replace untyped `any` annotations with strict interfaces in `apps/manager/src/App.tsx` and `apps/manager/src/lib/node-client.ts`.
+- **Why not to re-file:** Landed in commit `149780e`. Defined strict TypeScript interfaces (`NodeHealthFlag`, `NodeReport`, `MemberItem`, `NodeDataPayload`) in `node-client.ts` and removed `any` annotations across state and filter callbacks in `App.tsx`.
+
+### 2026-09-15 — Scout: test coverage commons-reject-project (#781) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `POST /api/local/admin/commons/reject` and `adminRejectProject`.
+- **Why not to re-file:** Landed in merge commit `60e55543`. The tests target `/api/local/admin/commons/reject` and `adminRejectProject`, which SURVIVE the project==enterprise unification (#792) — old routes now serve from the unified model — so this coverage stays valid; the only conflict was the suite-list line in `scripts/test-all.sh`.
+

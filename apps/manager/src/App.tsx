@@ -30,6 +30,9 @@ import {
     setTfaSessionToken,
     type DiagnosticsResponse,
     type GatewayConfig,
+    type NodeHealthFlag,
+    type NodeReport,
+    type NodeDataPayload,
 } from './lib/node-client';
 
 import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
@@ -44,7 +47,7 @@ import { GatewayModule } from './components/modules/GatewayModule';
 import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
 import { InvitesModule } from './components/modules/InvitesModule';
-import { LogsModule } from './components/modules/LogsModule';
+import { LogsModule, type LogEntry } from './components/modules/LogsModule';
 import { AiServicesModule } from './components/modules/AiServicesModule';
 
 /**
@@ -109,7 +112,7 @@ export function App() {
     const [diagError, setDiagError] = useState<string | null>(null);
 
     const [fleetDiags, setFleetDiags] = useState<Record<string, NodeDiagnosticState>>({});
-    const [fleetNodeData, setFleetNodeData] = useState<Record<string, any>>({});
+    const [fleetNodeData, setFleetNodeData] = useState<Record<string, NodeDataPayload>>({});
     const [fleetGateways, setFleetGateways] = useState<Record<string, GatewayConfig>>({});
 
     const [gateway, setGateway] = useState<GatewayConfig | null>(null);
@@ -117,9 +120,9 @@ export function App() {
     const [gatewaySuccess, setGatewaySuccess] = useState<string | null>(null);
     const [gatewaySaving, setGatewaySaving] = useState(false);
 
-    const [nodeData, setNodeData] = useState<any | null>(null);
+    const [nodeData, setNodeData] = useState<NodeDataPayload | null>(null);
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
-    const [nodeLogs, setNodeLogs] = useState<any[]>([]);
+    const [nodeLogs, setNodeLogs] = useState<LogEntry[]>([]);
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
@@ -240,14 +243,14 @@ export function App() {
                 } catch {}
 
                 const flags = (nData?.health?.flags || []).filter(
-                    (f: any) => !savedDismissed.has(f.id || f.type || f.description)
+                    (f: NodeHealthFlag) => !savedDismissed.has(f.id || f.type || f.description || '')
                 );
                 const reports = (nData?.reports || []).filter(
-                    (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
+                    (r: NodeReport) => !savedDismissed.has(r.id || r.targetPubkey || r.reason || '')
                 );
 
-                const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-                const hasWarning = flags.some((f: any) => f.severity === 'warning');
+                const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+                const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
 
                 const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
                 setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
@@ -388,7 +391,7 @@ export function App() {
                 let totpRetry = false;
                 let sessionToken: string | undefined;
                 if (diagRes.status === 401) {
-                    let body: any = null;
+                    let body: Record<string, unknown> | null = null;
                     try { body = await diagRes.json(); } catch {}
                     if (body?.totpRequired) {
                         // Node requires 2FA and we don't have a valid session token.
@@ -502,13 +505,13 @@ export function App() {
 
             const flags = data?.health?.flags || [];
             const reports = data?.reports || [];
-            const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-            const hasWarning = flags.some((f: any) => f.severity === 'warning');
+            const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+            const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
 
             const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
             setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
-        } catch (e: any) {
-            const errMsg = e.message || '';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
                 setNodeData(null);
             }
@@ -657,16 +660,16 @@ export function App() {
     // Node-scoped alerts for active selected node
     const activeNodeData = activeProfileId ? fleetNodeData[activeProfileId] : null;
     const activeMemberCritical = activeNodeData ? (
-        ((activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && (f.severity === 'critical' || f.severity === 'alert')).length) +
-        ((activeNodeData.reports || []).filter((r: any) => !globalDismissed.has(r.id || r.targetPubkey || r.reason)).length)
+        ((activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && (f.severity === 'critical' || f.severity === 'alert')).length) +
+        ((activeNodeData.reports || []).filter((r: NodeReport) => !globalDismissed.has(r.id || r.targetPubkey || r.reason || '')).length)
     ) : 0;
 
     const activeMemberWarning = activeNodeData ? (
-        (activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && f.severity === 'warning').length
+        (activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && f.severity === 'warning').length
     ) : 0;
 
-    const logErrorsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'ERROR').length;
-    const logWarningsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'WARN' || (l.level || '').toUpperCase() === 'WARNING').length;
+    const logErrorsCount = nodeLogs.filter((l: LogEntry) => String(l.level || '').toUpperCase() === 'ERROR').length;
+    const logWarningsCount = nodeLogs.filter((l: LogEntry) => String(l.level || '').toUpperCase() === 'WARN' || String(l.level || '').toUpperCase() === 'WARNING').length;
 
     const activeGatewayData = activeProfileId ? fleetGateways[activeProfileId] || gateway : gateway;
     const activeGatewayCritical = activeGatewayData?.rateLimiting?.enabled === false ? 1 : 0;

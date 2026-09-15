@@ -33,6 +33,46 @@ export interface GatewayConfig {
     };
 }
 
+export interface NodeHealthFlag {
+    id?: string;
+    type?: string;
+    description?: string;
+    severity?: 'critical' | 'alert' | 'warning' | 'info' | string;
+    [key: string]: unknown;
+}
+
+export interface NodeReport {
+    id?: string;
+    targetPubkey?: string;
+    reason?: string;
+    severity?: string;
+    [key: string]: unknown;
+}
+
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    tier?: string;
+    standing?: string;
+    canVouch?: boolean;
+    canOperate?: boolean;
+    creditFrozen?: boolean;
+    isFrozen?: boolean;
+    [key: string]: unknown;
+}
+
+export interface NodeDataPayload {
+    health?: {
+        flags?: NodeHealthFlag[];
+    };
+    reports?: NodeReport[];
+    members?: MemberItem[];
+    profiles?: Record<string, unknown>[];
+    posts?: unknown[];
+    [key: string]: unknown;
+}
+
 export function normalizeNodeUrl(rawUrl: string): string {
     let trimmed = (rawUrl || '').trim();
     if (!trimmed) return 'https://localhost:8443';
@@ -364,7 +404,7 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
     const res = await fetch(endpoint, {
         method: 'POST',

@@ -1221,9 +1221,9 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 router.post('/api/reports', async (ctx) => {
     const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
     const activeReporter = ctx.state.actor || reporterPubkey;
-    if (!activeReporter || !targetPubkey || !reason) {
+    if (!activeReporter || !targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
-        ctx.body = { error: 'reporterPubkey, targetPubkey, and reason are required' };
+        ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
         return;
     }
     const report = submitReport(activeReporter, targetPubkey, reason, targetPostId);

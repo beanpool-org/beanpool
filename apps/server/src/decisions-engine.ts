@@ -253,10 +253,10 @@ export function getActiveMembersCount30d(asOfTime?: number): number {
  * Computes required quorum for a decision:
  * quorum = max( K_min, ceil(ratio * activeMembers_30d) ), K_min = 3.
  */
-export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number): number {
+export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number, activeMembersCount?: number): number {
     if (decision.touches === 'nothing') return 0;
     const ratio = quorumRatioForEffect(decision.effect, decision.touches);
-    const active = getActiveMembersCount30d(asOfTime);
+    const active = activeMembersCount !== undefined ? activeMembersCount : getActiveMembersCount30d(asOfTime);
     return Math.max(3, Math.ceil(ratio * active));
 }
 
@@ -505,13 +505,13 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 /**
  * Tally votes for a decision.
  */
-export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
+export function tallyDecision(decisionId: string, asOfTime?: number, activeMembersCount?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
 
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
-    const quorumRequired = getQuorumRequired(decision, asOfTime);
+    const quorumRequired = getQuorumRequired(decision, asOfTime, activeMembersCount);
     const quorumMet = decision.touches === 'nothing' || totalVoters >= quorumRequired;
 
     let yesWeight = 0;

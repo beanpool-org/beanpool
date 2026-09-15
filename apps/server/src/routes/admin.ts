@@ -695,7 +695,12 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { adminPubkey, reason } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    const signedActor = (ctx.state as any)?.actor || adminPubkey;
+    if (!signedActor || !isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
     if (!reason) {
         ctx.status = 400;
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
@@ -714,7 +719,12 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
 router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { adminPubkey } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    const signedActor = (ctx.state as any)?.actor || adminPubkey;
+    if (!signedActor || !isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = 400;

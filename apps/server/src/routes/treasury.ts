@@ -225,7 +225,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
     const createEnterpriseHandler = async (ctx: any) => {
         const body = (ctx as any).requestBody || {};
-        const actor = (ctx.state?.actor as string) || body.creatorPubkey || body.creator_pubkey || body.proposerPubkey;
+        const actor = ctx.state?.actor as string;
         if (!actor) {
             ctx.status = 401;
             ctx.body = { error: 'Authentication required' };
@@ -246,10 +246,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
 
         try {
+            // Initial enterprise overdraft limit must be 0 per §2.4; extended only via keeper pledges
             const res = createTreasury(
                 enterpriseName,
                 photoUrl || '',
-                Number(creditLine) || 0,
+                0, // creditLine must start at 0
                 {
                     systemCreated: !photoUrl,
                     workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,

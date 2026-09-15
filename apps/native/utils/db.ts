@@ -2014,10 +2014,10 @@ export async function treasuryReject(treasury: string, transactionId: string) {
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
-export async function treasuryPledge(treasury: string, amount: number) {
+export async function treasuryPledge(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount });
 }
-export async function treasuryRelease(treasury: string, amount?: number) {
+export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
 }
 export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {

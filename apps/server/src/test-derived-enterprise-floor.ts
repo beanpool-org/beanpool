@@ -26,7 +26,7 @@ import {
     initStateEngine, createTreasury, createPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance, getMemberTrustProfile,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    adminSetCreditFrozen, adminSetUserStatus,
+    adminSetCreditFrozen, adminSetUserStatus, adminPruneUser,
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking, clearEnterpriseFloorCache,
     runLedgerAudit, payFromCommons,
@@ -428,7 +428,11 @@ async function main() {
     assert(detailRead.status === 200, 'GET /api/treasury/:treasury returned 200');
     assert(detailRead.body?.floor === -30, 'Detail reports floor=-30');
     assert(detailRead.body?.creditLine === 30, 'Detail reports creditLine=30');
+    assert(detailRead.body?.allowance === 30, 'Detail reports allowance=30');
     assert(detailRead.body?.derivedAllowance === 30, 'Detail reports derivedAllowance=30');
+    assert(detailRead.body?.legacyFloor !== undefined, 'Detail reports legacyFloor');
+    assert(detailRead.body?.legacyCreditFloor !== undefined, 'Detail reports legacyCreditFloor alias');
+    assert(detailRead.body?.legacyCreditFloor === detailRead.body?.legacyFloor, 'Detail legacyCreditFloor matches legacyFloor');
     assert(detailRead.body?.pledges.length === 1, 'Detail includes pledges array');
 
     // 6. GET /api/treasuries list read includes creditLine and pledges
@@ -437,6 +441,7 @@ async function main() {
     const farmItem = listRead.body?.treasuries.find((t: any) => t.publicKey === routeEnt);
     assert(farmItem !== undefined, 'RouteFarm present in treasuries list');
     assert(farmItem.creditLine === 30, 'List read reports derived creditLine=30');
+    assert(farmItem.allowance === 30, 'List read reports allowance=30');
     assert(farmItem.legacyFloor !== undefined, 'List read reports legacyFloor');
     assert(farmItem.legacyCreditFloor !== undefined, 'List read reports legacyCreditFloor alias');
     assert(farmItem.legacyFloor === farmItem.legacyCreditFloor, 'legacyFloor matches legacyCreditFloor on list route');
@@ -623,6 +628,37 @@ async function main() {
 
     adminSetUserStatus(KHeadroom, 'active');
     assert(getAvailableBacking(KHeadroom) === remainingHeadroom, 'getAvailableBacking restores headroom when re-activated');
+
+    // 10.7: adminPruneUser invalidates enterpriseFloorCache via setUserStatusRow
+    const { publicKey: pruneEnt } = createTreasury('PruneEnterprise', AVATAR, 0);
+    const KPrune = 'keeper-prune-000000000000000000000000001';
+    seedMember(KPrune, 'KPrune');
+    mtx(KPrune, TradePartner1, 100);
+    mtx(KPrune, TradePartner2, 100);
+    assignKeeper(pruneEnt, KPrune);
+    pledgeEnterpriseBacking(pruneEnt, KPrune, 40);
+
+    // Warm cache
+    const floorBeforePrune = getEnterpriseFloor(pruneEnt);
+    assert(floorBeforePrune.derivedAllowance === 40, 'Floor cache warmed with derivedAllowance 40 before prune');
+    assert(floorBeforePrune.floor === -40, 'Floor before prune is -40');
+
+    // Prune keeper via adminPruneUser
+    adminPruneUser(KPrune);
+
+    // Because setUserStatusRow clears enterpriseFloorCache, immediate read must not return stale 40
+    const floorAfterPrune = getEnterpriseFloor(pruneEnt);
+    assert(floorAfterPrune.derivedAllowance === 0, `Pruned keeper backing immediately dropped from floor (derivedAllowance=${floorAfterPrune.derivedAllowance})`);
+    assert(floorAfterPrune.floor === 0, 'Enterprise floor is 0 after keeper pruned');
+
+    // 10.8: Detail endpoint parity check with allowance and legacyCreditFloor
+    const detailHeadroom = await invokeRoute(getDetailRoute, { treasury: headroomEnt }, undefined);
+    assert(detailHeadroom.status === 200, 'GET /api/treasury/:treasury returns 200');
+    assert(detailHeadroom.body?.allowance !== undefined, 'Detail reports allowance');
+    assert(detailHeadroom.body?.derivedAllowance !== undefined, 'Detail reports derivedAllowance');
+    assert(detailHeadroom.body?.legacyFloor !== undefined, 'Detail reports legacyFloor');
+    assert(detailHeadroom.body?.legacyCreditFloor !== undefined, 'Detail reports legacyCreditFloor');
+    assert(detailHeadroom.body?.legacyCreditFloor === detailHeadroom.body?.legacyFloor, 'Detail legacyCreditFloor equals legacyFloor');
 
 
 

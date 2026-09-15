@@ -3178,11 +3178,11 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'active') {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     }
+    clearEnterpriseFloorCache();
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     setUserStatusRow(publicKey, status);
-    clearEnterpriseFloorCache();
     broadcast({ type: 'profile_updated', publicKey });
 }
 

@@ -130,6 +130,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                             : `/api/avatar/${r.public_key}?size=thumb`)
                         : null,
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+                    allowance: floorInfo.allowance,
                     derivedAllowance: floorInfo.derivedAllowance,
                     legacyFloor: floorInfo.legacyFloor,
                     legacyCreditFloor: floorInfo.legacyFloor,
@@ -203,8 +204,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+            allowance: floorInfo.allowance,
             derivedAllowance: floorInfo.derivedAllowance,
             legacyFloor: floorInfo.legacyFloor,
+            legacyCreditFloor: floorInfo.legacyFloor,
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             earnedSurplus: m.earned_surplus ?? 0,
             workingCapitalCeiling: m.working_capital_ceiling ?? null,

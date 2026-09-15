@@ -60,6 +60,7 @@ import { PeopleSafetySection } from './components/modules/PeopleSafetySection';
 import { EconomySection } from './components/modules/EconomySection';
 import { BulletinSection } from './components/modules/BulletinSection';
 import { ApplianceSection } from './components/modules/ApplianceSection';
+import { ColdStartWizard } from './components/modules/ColdStartWizard';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -246,6 +247,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
+    const [showColdStart, setShowColdStart] = useState<boolean | null>(null);
 
     // 2FA / TOTP prompt state — when a node returns totpRequired, this modal pops up
     const [totpPromptNode, setTotpPromptNode] = useState<{ profileId: string; name: string; url: string } | null>(null);
@@ -891,30 +893,57 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                 <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
                     {!isFleetMode ? (
                         <>
-                            {activeTab === 'home' && (
-                                <HomeScreen
-                                    communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
-                                    publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
-                                    version="1.4.2"
-                                    diag={diag}
-                                    nodeData={nodeData}
-                                    onNavigate={(tab, sub) => {
-                                        setNavSubTab(sub);
-                                        setActiveTab(tab);
-                                    }}
-                                    onInviteMember={() => {
-                                        setNavSubTab('invites');
-                                        setActiveTab('people');
-                                    }}
-                                    onCreateEnterprise={() => {
-                                        setNavSubTab('enterprises');
-                                        setActiveTab('economy');
-                                    }}
-                                    onDownloadBackup={handleDownloadBackup}
-                                    onRunLedgerAudit={handleRunLedgerAudit}
-                                    auditState={auditState}
-                                />
-                            )}
+                            {activeTab === 'home' && (() => {
+                                const isZeroMembers = Array.isArray(nodeData?.members) && nodeData.members.length === 0;
+                                const hasCompletedColdStart = typeof window !== 'undefined'
+                                    ? localStorage.getItem('bp_cold_start_completed') === 'true'
+                                    : false;
+                                const shouldShowColdStart = showColdStart === true ||
+                                    (showColdStart === null && isZeroMembers && !hasCompletedColdStart && !nodeDataLoading);
+
+                                if (shouldShowColdStart) {
+                                    return (
+                                        <ColdStartWizard
+                                            activeNode={activeNode}
+                                            diag={diag}
+                                            nodeData={nodeData}
+                                            onComplete={() => {
+                                                setShowColdStart(false);
+                                                loadNodeData();
+                                                loadDiagnostics();
+                                                setActiveTab('home');
+                                            }}
+                                            onCancel={() => setShowColdStart(false)}
+                                        />
+                                    );
+                                }
+
+                                return (
+                                    <HomeScreen
+                                        communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
+                                        publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
+                                        version="1.4.2"
+                                        diag={diag}
+                                        nodeData={nodeData}
+                                        onNavigate={(tab, sub) => {
+                                            setNavSubTab(sub);
+                                            setActiveTab(tab);
+                                        }}
+                                        onInviteMember={() => {
+                                            setNavSubTab('invites');
+                                            setActiveTab('people');
+                                        }}
+                                        onCreateEnterprise={() => {
+                                            setNavSubTab('enterprises');
+                                            setActiveTab('economy');
+                                        }}
+                                        onDownloadBackup={handleDownloadBackup}
+                                        onRunLedgerAudit={handleRunLedgerAudit}
+                                        auditState={auditState}
+                                        onStartColdStartWizard={() => setShowColdStart(true)}
+                                    />
+                                );
+                            })()}
 
                             {activeTab === 'people' && (
                                 <PeopleSafetySection

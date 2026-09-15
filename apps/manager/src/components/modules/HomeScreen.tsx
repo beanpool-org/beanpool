@@ -13,6 +13,7 @@ interface HomeScreenProps {
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number } | null };
+    onStartColdStartWizard?: () => void;
 }
 
 export function HomeScreen({
@@ -27,6 +28,7 @@ export function HomeScreen({
     onDownloadBackup,
     onRunLedgerAudit,
     auditState,
+    onStartColdStartWizard,
 }: HomeScreenProps) {
     // Action required counts
     const pendingReportsCount = (nodeData?.reports || []).length;
@@ -50,6 +52,17 @@ export function HomeScreen({
             sub: 'moderation',
         });
     }
+
+    const foundingStatus = typeof window !== 'undefined' ? localStorage.getItem('bp_founding_invites_status') : null;
+    if (foundingStatus) {
+        actionItems.push({
+            icon: '🎟️',
+            text: foundingStatus,
+            tab: 'people',
+            sub: 'invites',
+        });
+    }
+
     if (storagePercent >= 80) {
         actionItems.push({
             icon: '💾',
@@ -275,6 +288,19 @@ export function HomeScreen({
                         </div>
                     </button>
                 </div>
+
+                {onStartColdStartWizard && (
+                    <div className="mt-4 pt-4 border-t border-nature-800/80 flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-xs text-nature-400">Need to bootstrap a fresh node setup from scratch?</span>
+                        <button
+                            type="button"
+                            onClick={onStartColdStartWizard}
+                            className="px-3.5 py-1.5 rounded-lg bg-terra-900/30 hover:bg-terra-900/50 text-xs font-bold text-terra-300 border border-terra-700/50 transition-all"
+                        >
+                            Launch Cold-Start Wizard →
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

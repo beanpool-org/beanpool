@@ -266,6 +266,7 @@ async function runTests() {
     // Verify Commons proposal can receive direct pledges via fallback (Comment 5)
     const commonsProp = createProject(testCreator, 'Solar Battery Initiative', 'Power backup', 150);
     testAssert(!!commonsProp, 'Commons proposal created successfully');
+    if (!commonsProp) throw new Error('createProject returned null');
     const propPledgeTxId = 'pledge_prop_' + crypto.randomUUID();
     pledgeToProject(propPledgeTxId, commonsProp.id, testBacker, 50, 'Pledge to commons proposal');
     reconcileLedgerFromDb();

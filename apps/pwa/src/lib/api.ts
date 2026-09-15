@@ -1309,6 +1309,10 @@ export async function createEnterprise(data: {
     return request('POST', '/api/treasury', data);
 }
 
+export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/crowdfund/projects/delete', { id: projectId, creatorPubkey });
+}
+
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {

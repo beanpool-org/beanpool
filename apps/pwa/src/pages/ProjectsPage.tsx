@@ -280,19 +280,25 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                                 <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors truncate">
                                                     {t.name}
                                                 </h3>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                                    t.lifecycle === 'bounded'
-                                                        ? 'bg-amber-950/50 text-amber-300 border-amber-800/60'
-                                                        : 'bg-blue-950/50 text-blue-300 border-blue-800/60'
-                                                }`}>
-                                                    {t.lifecycle === 'bounded' ? '⏱️ Bounded' : '🏛️ Ongoing'}
-                                                </span>
+                                                {isFunded ? (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-950/50 text-emerald-300 border-emerald-800/60">
+                                                        🎉 Funded
+                                                    </span>
+                                                ) : hasGoal || t.lifecycle === 'bounded' ? (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-950/50 text-amber-300 border-amber-800/60">
+                                                        🌱 Project
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
+                                                        🏛️ Ongoing
+                                                    </span>
+                                                )}
                                             </div>
-                                            {t.callsign && (
-                                                <p className="text-xs text-nature-400 mt-0.5">
-                                                    @{t.callsign}
-                                                </p>
-                                            )}
+                                            <p className="text-xs text-nature-400 mt-0.5">
+                                                {t.callsign ? `@${t.callsign} · ` : ''}
+                                                {t.liveOffers ?? 0} live offer{(t.liveOffers ?? 0) === 1 ? '' : 's'}
+                                                {t.keepers && t.keepers.length > 0 ? ` · ${t.keepers.length} keeper${t.keepers.length === 1 ? '' : 's'}` : ''}
+                                            </p>
                                         </div>
                                     </div>
 
@@ -339,7 +345,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                     {hasGoal && (
                                         <div className="space-y-1.5 pt-1">
                                             <div className="flex justify-between items-end text-xs">
-                                                <span className="font-bold text-white">
+                                                <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>
                                                     {currentRaised} 🫘 <span className="font-normal text-nature-400">raised of {t.goalAmount} 🫘</span>
                                                 </span>
                                                 {daysRemaining && (

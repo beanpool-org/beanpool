@@ -38,11 +38,21 @@
   --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
+:root[data-bottom-nav="hidden"],
+[data-bottom-nav="hidden"],
+.bottom-nav-hidden {
+  --bottom-nav-height: 0px;
+  --bottom-nav-offset: env(safe-area-inset-bottom, 0px);
+}
+
 @media (min-width: 768px) {
-  :root {
+  :root,
+  :root[data-bottom-nav="hidden"],
+  [data-bottom-nav="hidden"],
+  .bottom-nav-hidden {
     --nav-height: 0px;
     --bottom-nav-height: 0px;
-    --bottom-nav-offset: 0px;
+    --bottom-nav-offset: 0px !important;
   }
 }
 

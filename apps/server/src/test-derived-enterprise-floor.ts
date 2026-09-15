@@ -523,7 +523,7 @@ async function main() {
     assert(bal(exitedEnt) === -30, 'ExitedEnterprise spends into deficit (-30 beans)');
 
     // Revoke operator while in deficit — backing remains covenant-locked
-    adminRevokeTreasuryOperator(exitedEnt, KExited, 'admin');
+    adminRevokeTreasuryOperator(exitedEnt, KExited);
     const isBound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(exitedEnt, KExited);
     assert(!isBound, 'KExited is no longer in treasury_operators');
     assert(getEnterprisePledges(exitedEnt).length === 1, 'Pledge remains locked to cover deficit');

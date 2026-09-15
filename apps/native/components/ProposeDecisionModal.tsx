@@ -19,6 +19,7 @@ import {
     type DecisionTouch,
     type DecisionEffect,
     createDecision,
+    getBalance,
 } from '../utils/db';
 
 interface Props {
@@ -96,14 +97,31 @@ export function ProposeDecisionModal({
         }
     }, [touches]);
 
+    const [fetchedBalance, setFetchedBalance] = useState<number | null>(null);
+
     // Lookup selected member details for removal preview
     const selectedMember = useMemo(() => {
         if (!subject) return null;
         return members.find(m => m.publicKey === subject || m.callsign?.toLowerCase() === subject.toLowerCase());
     }, [members, subject]);
 
+    useEffect(() => {
+        if (!subject) {
+            setFetchedBalance(null);
+            return;
+        }
+        const pubkey = selectedMember?.publicKey || (subject.length === 64 ? subject : null);
+        if (pubkey) {
+            getBalance(pubkey).then(b => {
+                if (b && typeof b.balance === 'number') {
+                    setFetchedBalance(b.balance);
+                }
+            }).catch(() => {});
+        }
+    }, [subject, selectedMember]);
+
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? -180;
+    const targetBalance = fetchedBalance ?? selectedMember?.balance ?? -180;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
     const poolAmount = Math.round(commonsBalance || 240);
 

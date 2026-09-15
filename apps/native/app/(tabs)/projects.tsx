@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getProjects, getBalance, getActiveVotingRound, getTreasuries, getDecisions, type DecisionWithTally } from '../../utils/db';
+import { getProjects, getBalance, getActiveVotingRound, getTreasuries, getDecisions, getAllCommunityMembers, type DecisionWithTally } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -23,6 +23,7 @@ export default function ProjectsScreen() {
     const [activeRound, setActiveRound] = useState<any>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
+    const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>('decide');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
@@ -196,6 +197,13 @@ export default function ProjectsScreen() {
             setActiveMembers30d(decData.activeMembers30d || 0);
         } catch (err) {
             console.error('[Projects] Failed loading decisions:', err);
+        }
+
+        try {
+            const mems = await getAllCommunityMembers();
+            setMembersList(mems || []);
+        } catch (err) {
+            console.error('[Projects] Failed loading members:', err);
         }
     }, []);
 
@@ -685,6 +693,7 @@ export default function ProjectsScreen() {
                 identity={identity}
                 commonsBalance={balanceState.commons || 0}
                 treasuries={treasuries}
+                members={membersList}
             />
         </View>
     );

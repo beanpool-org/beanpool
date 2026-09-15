@@ -2031,60 +2031,76 @@ export function pledgeEnterpriseBacking(
     keeperPubkey: string,
     amount: number
 ): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
-    const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!t?.is_treasury) throw new Error('Not an enterprise');
-    if (t.status === 'disabled' || t.status === 'pruned') {
-        throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
-    }
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (t.status === 'disabled' || t.status === 'pruned') {
+            throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
+        }
 
-    const km = db.prepare("SELECT status, can_operate FROM members WHERE public_key = ?").get(keeperPubkey) as any;
-    if (!km || km.status === 'disabled' || km.status === 'pruned') {
-        throw new Error('Your account is not active, so you cannot back this enterprise.');
-    }
+        const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+        if (!km || km.status === 'disabled' || km.status === 'pruned') {
+            throw new Error('Your account is not active, so you cannot back this enterprise.');
+        }
+        if (km.credit_frozen === 1) {
+            throw new Error('Your credit is frozen, so you cannot back this enterprise.');
+        }
 
-    if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
-        throw new Error('You are not an authorized keeper of this enterprise');
-    }
+        if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
+            throw new Error('You are not an authorized keeper of this enterprise');
+        }
 
-    const parsedAmount = Number(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        throw new Error('Pledge amount must be a positive number');
-    }
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            throw new Error('Pledge amount must be a positive number');
+        }
 
-    const totalPledgedRow = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-    ).get(keeperPubkey) as any;
-    const totalPledgedAll = Number(totalPledgedRow?.total || 0);
-    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-    const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
+        const totalPledgedRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+        ).get(keeperPubkey) as any;
+        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
+        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
 
-    const activeRow = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as currentTotal FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-    ).get(keeperPubkey, enterprisePubkey) as any;
-    const currentPledge = Number(activeRow?.currentTotal || 0);
+        if (parsedAmount > availableToAdd) {
+            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
+        }
 
-    let pledgeToAdd: number;
-    if (parsedAmount <= availableToAdd) {
-        pledgeToAdd = parsedAmount;
-    } else if (parsedAmount > currentPledge && (parsedAmount - currentPledge) <= availableToAdd) {
-        pledgeToAdd = parsedAmount - currentPledge;
-    } else {
-        throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
-    }
+        const pledgeToAdd = parsedAmount;
+        const pledgeId = crypto.randomUUID();
+        const pledgedAt = new Date().toISOString();
 
-    const pledgeId = crypto.randomUUID();
-    const pledgedAt = new Date().toISOString();
-
-    db.transaction(() => {
         db.prepare(`
             INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
             VALUES (?, ?, ?, ?, ?, NULL)
         `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+
+        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+        if (legacyFloor > 0) {
+            const pledgeSumRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(enterprisePubkey) as any;
+            const totalActiveDerived = Number(pledgeSumRow?.total || 0);
+            if (totalActiveDerived >= legacyFloor) {
+                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
+                broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+            }
+        }
+
+        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
     broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
-    return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
+    return res;
 }
 
 /**
@@ -2096,49 +2112,56 @@ export function releaseEnterpriseBacking(
     keeperPubkey: string,
     amountToRelease?: number
 ): { releasedAmount: number; remainingPledge: number } {
-    const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!t?.is_treasury) throw new Error('Not an enterprise');
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
 
-    const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
-    if (!bound && !isAdminPubkey(keeperPubkey)) {
-        throw new Error('You are not a keeper of this enterprise');
-    }
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(keeperPubkey, enterprisePubkey) as any;
+        const currentKeeperPledge = Number(activeRow?.total || 0);
 
-    const activeRow = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-    ).get(keeperPubkey, enterprisePubkey) as any;
-    const currentKeeperPledge = Number(activeRow?.total || 0);
+        const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
+        const hasActivePledge = currentKeeperPledge > 0;
+        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+            throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
+        }
 
-    if (currentKeeperPledge <= 0) {
-        throw new Error('No active backing pledge found for this enterprise');
-    }
+        if (currentKeeperPledge <= 0) {
+            throw new Error('No active backing pledge found for this enterprise');
+        }
 
-    let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
-    if (!Number.isFinite(toRelease) || toRelease <= 0) {
-        throw new Error('Release amount must be a positive number');
-    }
-    toRelease = Math.min(toRelease, currentKeeperPledge);
+        let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
+        if (!Number.isFinite(toRelease) || toRelease <= 0) {
+            throw new Error('Release amount must be a positive number');
+        }
+        toRelease = Math.min(toRelease, currentKeeperPledge);
 
-    // Covenant check: enterprise balance deficit
-    const balance = getBalance(enterprisePubkey).balance;
-    const deficit = Math.max(0, -balance);
+        // Covenant check: enterprise balance deficit
+        const balance = getBalance(enterprisePubkey).balance;
+        const deficit = Math.max(0, -balance);
 
-    const totalPledgesRow = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL"
-    ).get(enterprisePubkey) as any;
-    const currentTotalPledges = Number(totalPledgesRow?.total || 0);
-    const newTotalPledges = currentTotalPledges - toRelease;
-    const legacyFloor = Number(t.legacy_credit_floor || 0);
+        const totalPledgesRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
+        const newTotalPledges = currentTotalPledges - toRelease;
+        const legacyFloor = Number(t.legacy_credit_floor || 0);
 
-    const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
-    if (newAllowance < deficit) {
-        throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
-    }
+        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
+        }
 
-    const remainingPledge = currentKeeperPledge - toRelease;
-    const nowIso = new Date().toISOString();
+        const remainingPledge = currentKeeperPledge - toRelease;
+        const nowIso = new Date().toISOString();
 
-    db.transaction(() => {
         db.prepare(
             "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
         ).run(nowIso, keeperPubkey, enterprisePubkey);
@@ -2150,11 +2173,13 @@ export function releaseEnterpriseBacking(
                 VALUES (?, ?, ?, ?, ?, NULL)
             `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
         }
+
+        return { releasedAmount: toRelease, remainingPledge };
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
     broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
-    return { releasedAmount: toRelease, remainingPledge };
+    return res;
 }
 
 

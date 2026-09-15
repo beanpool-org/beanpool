@@ -1845,6 +1845,21 @@ export async function treasuryReject(treasury: string, transactionId: string) {
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
+export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+}
+export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+}
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {
+    try {
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
 
 // Voting is being redesigned (see docs/the-commons.md)
 

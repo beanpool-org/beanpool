@@ -242,6 +242,8 @@ export function initSchema() {
     // Enterprise Credit Model (Rules 6 & 7)
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
+    // Grandfathered enterprise floor (Slice 4)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN legacy_credit_floor REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
@@ -352,6 +354,25 @@ export function initSchema() {
             console.error("❌ Ratings fix failed:", err.message);
         }
     }
+
+    // Slice 4 Grandfather migration: existing enterprises keep their fixed line as legacy_credit_floor (min 200)
+    // until keepers' pledges exceed it. Gated behind node_config so it runs strictly once.
+    try {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
+                WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
+        }
+    } catch { }
+
+    // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
+    try {
+        db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();
+    } catch { }
 
     // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
     // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to

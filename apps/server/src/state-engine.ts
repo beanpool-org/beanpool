@@ -3405,7 +3405,6 @@ export function createProject(proposerPubkey: string, title: string, description
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
     const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     projects.push(project);
-    db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
     
     // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
     // A Commons project proposal IS an enterprise with lifecycle = 'bounded'.
@@ -3417,6 +3416,7 @@ export function createProject(proposerPubkey: string, title: string, description
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
 
     db.transaction(() => {
+        db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
         const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
         if (!existingMember) {
             db.prepare(`
@@ -3430,6 +3430,8 @@ export function createProject(proposerPubkey: string, title: string, description
                 project.description || project.title, project.requestedAmount, now
             );
             db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
+            ledger.initializeGenesisAccount(project.id);
+            ledger.setDecayExempt(project.id);
             if (proposerPubkey) {
                 db.prepare(`
                     INSERT OR IGNORE INTO treasury_operators (
@@ -3508,8 +3510,9 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     if (!getMember(voterPubkey)) return { success: false, error: 'Not a member' };
     if (voteCount < 1 || !Number.isInteger(voteCount)) return { success: false, error: 'Vote count must be a positive integer' };
 
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
     if (!project) return { success: false, error: 'Project not found' };
 
     const activeRound = getActiveRound();
@@ -3525,14 +3528,15 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     }
 
     // Remove any existing votes from this voter in this round (they are re-allocating)
-    for (const p of projects) {
+    for (const p of blobProjects) {
         if (activeRound.projectIds.includes(p.id)) {
-            p.votes = p.votes.filter(v => v.pubkey !== voterPubkey);
+            p.votes = (p.votes || []).filter(v => v.pubkey !== voterPubkey);
         }
     }
+    project.votes = project.votes || [];
     project.votes.push({ pubkey: voterPubkey, weight: voteCount, creditsUsed: creditCost });
     
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
     broadcast({ type: 'vote_cast', projectId, voterPubkey, voteCount, creditCost, totalVotes: project.votes.reduce((sum, v) => sum + (v.weight || 1), 0) });
     return { success: true, creditsUsed: creditCost };
 }
@@ -3661,8 +3665,9 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         blobWinner.status = winner.status;
         if (winner.fundedAt) blobWinner.fundedAt = winner.fundedAt;
     }
+    const fundedWinnerId = winner?.status === 'funded' ? winner.id : null;
     for (const c of candidates) {
-        if (c.id !== winner?.id && c.status === 'active') {
+        if (c.id !== fundedWinnerId && c.status === 'active') {
             c.status = 'proposed';
             const bp = blobProjects.find(p => p.id === c.id);
             if (bp) bp.status = 'proposed';

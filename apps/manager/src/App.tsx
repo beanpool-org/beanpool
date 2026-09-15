@@ -137,14 +137,16 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
             id: 'local-node',
             name: rawActiveNode?.name || 'Local Sovereign Node',
             url: singleNodeOrigin,
-            adminPassword: rawActiveNode?.adminPassword || adminToken || undefined,
+            adminPassword: adminToken || rawActiveNode?.adminPassword || undefined,
             isPrimary: true,
         }
         : rawActiveNode;
 
-    // In single-node mode, adopt session admin token if profile does not specify password
-    if (!isFleetMode && activeNode && adminToken && !activeNode.adminPassword) {
+    if (!isFleetMode && activeNode && adminToken) {
         activeNode.adminPassword = adminToken;
+        if (profiles[0] && profiles[0].id === 'local-node' && !profiles[0].adminPassword) {
+            profiles[0].adminPassword = adminToken;
+        }
     }
 
     const [auditState, setAuditState] = useState<{
@@ -224,6 +226,9 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
         } catch {}
         if (!isFleetMode && activeNode) {
             delete activeNode.adminPassword;
+        }
+        if (!isFleetMode && profiles[0] && profiles[0].id === 'local-node') {
+            delete profiles[0].adminPassword;
         }
         setAdminToken(null);
     };

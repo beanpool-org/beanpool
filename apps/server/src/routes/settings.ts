@@ -26,7 +26,13 @@ import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PUBLIC_DIR = path.resolve('public');
+const SERVER_ROOT = path.resolve(__dirname, '../..');
+const resolveServerPath = (subpath: string): string => {
+    const local = path.resolve(subpath);
+    if (fs.existsSync(local)) return local;
+    return path.join(SERVER_ROOT, subpath);
+};
+const PUBLIC_DIR = resolveServerPath('public');
 
 export function createSettingsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -96,10 +102,15 @@ router.get('/.well-known/assetlinks.json', async (ctx) => {
 
 // ===================== SETTINGS PAGE =====================
 
-router.get('/settings', async (ctx) => {
-    const publicPath = path.resolve('public/settings.html');
-    const staticPath = path.resolve('static/settings.html');
-    const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
+router.get(['/settings', '/settings/(.*)'], async (ctx) => {
+    // If request has a file extension (e.g. .js, .css, .png) and is under /settings/, let static middleware handle it
+    if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
+        return;
+    }
+    const managerPath = resolveServerPath('public/settings/index.html');
+    const publicPath = resolveServerPath('public/settings.html');
+    const staticPath = resolveServerPath('static/settings.html');
+    const resolvedPath = fs.existsSync(managerPath) ? managerPath : (fs.existsSync(publicPath) ? publicPath : staticPath);
 
     if (fs.existsSync(resolvedPath)) {
         ctx.type = 'html';
@@ -107,13 +118,25 @@ router.get('/settings', async (ctx) => {
         ctx.body = fs.createReadStream(resolvedPath);
     } else {
         ctx.status = 404;
-        ctx.body = 'Settings page not found. Ensure settings.html is in the public directory.';
+        ctx.body = 'Settings page not found. Ensure manager build or settings.html exists.';
+    }
+});
+
+router.get('/settings-legacy', async (ctx) => {
+    const staticPath = resolveServerPath('static/settings.html');
+    if (fs.existsSync(staticPath)) {
+        ctx.type = 'html';
+        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        ctx.body = fs.createReadStream(staticPath);
+    } else {
+        ctx.status = 404;
+        ctx.body = 'Legacy settings page not found.';
     }
 });
 
 router.get('/settings.js', async (ctx) => {
-    const publicPath = path.resolve('public/settings.js');
-    const staticPath = path.resolve('static/settings.js');
+    const publicPath = resolveServerPath('public/settings.js');
+    const staticPath = resolveServerPath('static/settings.js');
     const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
 
     if (fs.existsSync(resolvedPath)) {

@@ -26,39 +26,128 @@ describe('App Component', () => {
         }));
     });
 
-    it('renders App with FleetSidebar and default Overview module', async () => {
-        await act(async () => {
-            render(<App />);
+    describe('Fleet Mode (isFleetMode = true)', () => {
+        it('renders App with FleetSidebar and default Overview module', async () => {
+            await act(async () => {
+                render(<App isFleetMode={true} />);
+            });
+
+            expect(screen.getByText('BeanPool')).toBeInTheDocument();
+            expect(screen.getByText('Fleet Manager v1.2')).toBeInTheDocument();
+            expect(screen.getAllByRole('button', { name: /fleet telemetry/i }).length).toBeGreaterThanOrEqual(1);
         });
 
-        expect(screen.getByText('BeanPool')).toBeInTheDocument();
-        expect(screen.getByText('Fleet Manager v1.2')).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: /fleet telemetry/i }).length).toBeGreaterThanOrEqual(1);
+        it('switches tabs when tab navigation buttons are clicked', async () => {
+            await act(async () => {
+                render(<App isFleetMode={true} />);
+            });
+
+            const gatewayTab = screen.getByRole('button', { name: /gateway security/i });
+            await act(async () => {
+                fireEvent.click(gatewayTab);
+            });
+
+            expect(screen.getByText('Target Control Node:')).toBeInTheDocument();
+        });
+
+        it('opens Add Node modal when clicking + Add Node button in sidebar', async () => {
+            await act(async () => {
+                render(<App isFleetMode={true} />);
+            });
+
+            const addButton = screen.getByRole('button', { name: /\+ add node/i });
+            await act(async () => {
+                fireEvent.click(addButton);
+            });
+
+            expect(screen.getByText('Connect Sovereign Node')).toBeInTheDocument();
+        });
     });
 
-    it('switches tabs when tab navigation buttons are clicked', async () => {
-        await act(async () => {
-            render(<App />);
+    describe('Single Node Mode (isFleetMode = false)', () => {
+        it('renders AdminLoginCard when unauthenticated', async () => {
+            sessionStorage.clear();
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+
+            expect(screen.getByText('Node Settings')).toBeInTheDocument();
+            expect(screen.getByPlaceholderText(/enter node admin password/i)).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+            expect(screen.getByText('Switch to Legacy Settings Page')).toHaveAttribute('href', '/settings-legacy');
         });
 
-        const gatewayTab = screen.getByRole('button', { name: /gateway security/i });
-        await act(async () => {
-            fireEvent.click(gatewayTab);
+        it('renders single-node shell with HomeScreen when authenticated', async () => {
+            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+
+            expect(screen.getByText('BeanPool')).toBeInTheDocument();
+            expect(screen.getByText('Node Settings')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /home/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /people & safety/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /shared projects & economy/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /bulletin & news/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /appliance & data/i })).toBeInTheDocument();
+
+            // Home screen elements from settings-ia.md §2
+            expect(screen.getByText('Action Required')).toBeInTheDocument();
+            expect(screen.getByText('Quick Actions')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /invite a member/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /create an enterprise/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /run ledger audit/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /download backup/i })).toBeInTheDocument();
         });
 
-        expect(screen.getByText('Target Control Node:')).toBeInTheDocument();
-    });
+        it('navigates across the 4 plain-English sections', async () => {
+            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
 
-    it('opens Add Node modal when clicking + Add Node button in sidebar', async () => {
-        await act(async () => {
-            render(<App />);
+            // Navigate to People & Safety
+            const peopleTab = screen.getByRole('button', { name: /people & safety/i });
+            await act(async () => {
+                fireEvent.click(peopleTab);
+            });
+            expect(screen.getByText(/member directory, trust tiers/i)).toBeInTheDocument();
+
+            // Navigate to Shared Projects & Economy
+            const economyTab = screen.getByRole('button', { name: /shared projects & economy/i });
+            await act(async () => {
+                fireEvent.click(economyTab);
+            });
+            expect(screen.getByText(/commons pool, shared enterprises/i)).toBeInTheDocument();
+
+            // Navigate to Bulletin & News
+            const bulletinTab = screen.getByRole('button', { name: /bulletin & news/i });
+            await act(async () => {
+                fireEvent.click(bulletinTab);
+            });
+            expect(screen.getByText(/announcements with severity/i)).toBeInTheDocument();
+
+            // Navigate to Appliance & Data
+            const applianceTab = screen.getByRole('button', { name: /appliance & data/i });
+            await act(async () => {
+                fireEvent.click(applianceTab);
+            });
+            expect(screen.getByText(/backups & restore wizard/i)).toBeInTheDocument();
         });
 
-        const addButton = screen.getByRole('button', { name: /\+ add node/i });
-        await act(async () => {
-            fireEvent.click(addButton);
-        });
+        it('logs out and clears session token', async () => {
+            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
 
-        expect(screen.getByText('Connect Sovereign Node')).toBeInTheDocument();
+            const logoutBtn = screen.getByRole('button', { name: /log out/i });
+            await act(async () => {
+                fireEvent.click(logoutBtn);
+            });
+
+            expect(screen.getByText(/unlock settings/i)).toBeInTheDocument();
+            expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
+        });
     });
 });

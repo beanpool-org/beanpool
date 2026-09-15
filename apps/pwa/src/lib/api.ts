@@ -702,6 +702,7 @@ export interface BalanceInfo {
     avgRating?: number;       // reputation multiplier inputs
     reviewCount?: number;
     commonsBalance: number;
+    commons?: number;
     callsign: string;
     trustStats?: {
         tradeCount: number;
@@ -1242,12 +1243,23 @@ export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredi
 export interface Treasury {
     publicKey: string;
     name: string;
+    callsign?: string;
     avatar?: string | null;
+    avatarUrl?: string | null;
     balance: number;
     creditLine: number;
     liveOffers: number;
     earnedSurplus?: number;
     workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    description?: string | null;
+    goalAmount?: number | null;
+    currentAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: string;
+    status?: string;
+    paused?: boolean;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role: string }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -1278,6 +1290,25 @@ export async function getTreasury(publicKey: string): Promise<any> {
     return request('GET', `/api/treasury/${encodeURIComponent(publicKey)}`);
 }
 
+export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+}
+
+export async function createEnterprise(data: {
+    name: string;
+    avatar?: string;
+    photos?: string[];
+    purpose?: string;
+    description?: string;
+    goalAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    creditLine?: number;
+    workingCapitalCeiling?: number | null;
+}): Promise<any> {
+    return request('POST', '/api/treasury', data);
+}
+
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean }): Promise<{ success: boolean; post: any }> {
@@ -1303,41 +1334,6 @@ export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; active
     return request('GET', '/api/commons/rounds');
 }
 
-// ===================== CROWDFUNDING =====================
-
-export interface CrowdfundProject {
-    id: string;
-    creator_pubkey: string;
-    title: string;
-    description: string;
-    photos: string; // JSON string array
-    goal_amount: number;
-    current_amount: number;
-    commons_allocation?: number; // Amount allocated from the Commons Pool (admin-triggered)
-    deadline_at: string | null;
-    status: string;
-    created_at: string;
-}
-
-export async function getCrowdfundProjects(): Promise<{ projects: CrowdfundProject[], maxProjectExpiryDays: number }> {
-    return request('GET', '/api/crowdfund/projects');
-}
-
-export async function getCrowdfundProject(id: string): Promise<{ project: CrowdfundProject }> {
-    return request('GET', `/api/crowdfund/projects/${id}`);
-}
-
-export async function createCrowdfundProject(creatorPubkey: string, title: string, description: string, photos: string[], goalAmount: number, deadlineAt: string | null): Promise<{ success: boolean; project: CrowdfundProject }> {
-    return request('POST', '/api/crowdfund/projects', { creatorPubkey, title, description, photos, goalAmount, deadlineAt });
-}
-
-export async function updateCrowdfundProject(id: string, creatorPubkey: string, title: string, description: string, photos: string[], goalAmount: number, deadlineAt: string | null = null): Promise<{ success: boolean; project: CrowdfundProject }> {
-    return request('POST', '/api/crowdfund/projects/update', { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt });
-}
-
-export async function pledgeToCrowdfundProject(projectId: string, fromPubkey: string, amount: number, memo: string): Promise<{ success: boolean; txId: string }> {
-    return request('POST', `/api/crowdfund/projects/${projectId}/pledge`, { fromPubkey, amount, memo });
-}
 
 // ===================== NODE CONFIG =====================
 

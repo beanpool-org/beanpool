@@ -2020,8 +2020,14 @@ export async function treasuryPledge(treasury: string, amount: number) {
 export async function treasuryRelease(treasury: string, amount?: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
 }
-export async function getTreasuryPledges(treasury: string) {
-    return signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {
+    try {
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
 }
 
 // Voting is being redesigned (see docs/the-commons.md)

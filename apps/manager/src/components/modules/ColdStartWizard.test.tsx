@@ -73,6 +73,18 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             fireEvent.click(nextStep1Button);
         });
 
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/update-identity'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    password: 'admin-password',
+                    communityName: 'Mullumbimby Commons',
+                    callsign: 'mullum-node',
+                }),
+            })
+        );
+
         // -------------------------------------------------------------
         // Step 2: Enrol Owner Key & Break-Glass Kit
         // -------------------------------------------------------------

@@ -195,8 +195,9 @@ export function ColdStartWizard({
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    communityName,
-                    name: diag?.callsign || 'node-genesis',
+                    password: activeNode.adminPassword,
+                    communityName: communityName.trim(),
+                    callsign: diag?.callsign || 'node-genesis',
                 }),
             }).catch(() => null);
             if (res && !res.ok) {

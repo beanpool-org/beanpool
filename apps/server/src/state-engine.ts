@@ -43,6 +43,58 @@ export {
     type NodeRoleRecord,
 };
 import {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+} from './decisions-engine.js';
+export {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+};
+import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
@@ -474,6 +526,15 @@ export function initStateEngine(): void {
         setInterval(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
         }, 60 * 60 * 1000);
+
+        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+        // evaluate passed grants queue, and fire expired grace-period prunes.
+        setTimeout(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 30 * 1000);
+        setInterval(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 60 * 1000);
     }
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;

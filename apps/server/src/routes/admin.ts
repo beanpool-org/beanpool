@@ -21,6 +21,7 @@ import {
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
     createVotingRound, closeVotingRound, adminRejectProject,
+    adminHaltDecision, adminAccelerateDecision,
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
     runLedgerAudit,
@@ -688,6 +689,39 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
         ctx.status = 400;
         ctx.body = { error: e?.message || 'Failed to reject project' };
     }
+});
+
+// Admin: halt a community decision (§3.7)
+router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { adminPubkey, reason } = (ctx as any).requestBody || {};
+    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!reason) {
+        ctx.status = 400;
+        ctx.body = { error: 'reason (signed justification) required to halt decision' };
+        return;
+    }
+    const result = adminHaltDecision(ctx.params.id, signedActor, reason);
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true };
+});
+
+// Admin: accelerate a pending grace removal decision (§3.7)
+router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { adminPubkey } = (ctx as any).requestBody || {};
+    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    const result = adminAccelerateDecision(ctx.params.id, signedActor);
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true };
 });
 
 // Admin: get all projects (unified — reads from crowdfund SQL table)

@@ -43,6 +43,7 @@ import {
     adminPruneUser,
     broadcast,
     isNodeAdmin,
+    isSoleOwner,
     persistDecayEvents,
     persistCommonsBalance,
 } from './state-engine.js';
@@ -184,6 +185,28 @@ export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
     return '1m1v';
 }
 
+export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
+    poll: 'nothing',
+    set_rule: 'rule',
+    set_levy: 'rule',
+    grant_enterprise: 'pool',
+    grant_hardship: 'pool',
+    write_off_deficit: 'pool',
+    suspend_member: 'member',
+    unsuspend_member: 'member',
+    freeze_credit: 'member',
+    unfreeze_credit: 'member',
+    remove_member: 'member',
+    reinstate_member: 'member',
+    grant_voucher: 'member',
+    revoke_voucher: 'member',
+    grant_tier: 'member',
+    revoke_tier: 'member',
+    grant_elder: 'member',
+    revoke_elder: 'member',
+    remove_lead_keeper: 'member',
+};
+
 /**
  * Returns required pass threshold per §3.4:
  * - remove_member: 66% (0.66)
@@ -191,16 +214,17 @@ export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
  * - pool / rule / member actions: 60% (0.60)
  * - poll (nothing): simple majority (> 0.50)
  */
-export function thresholdForEffect(effect: DecisionEffect, touches: DecisionTouch): number {
-    if (touches === 'nothing') return 0.50;
+export function thresholdForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.66;
     if (
         effect === 'unsuspend_member' ||
         effect === 'unfreeze_credit' ||
-        effect === 'reinstate_member'
+        effect === 'reinstate_member' ||
+        effect === 'poll'
     ) {
         return 0.50;
     }
+    if (touches === 'nothing') return 0.50;
     return 0.60;
 }
 
@@ -210,9 +234,9 @@ export function thresholdForEffect(effect: DecisionEffect, touches: DecisionTouc
  * - others: 30% (0.30)
  * - nothing (poll): 0 (no quorum)
  */
-export function quorumRatioForEffect(effect: DecisionEffect, touches: DecisionTouch): number {
-    if (touches === 'nothing') return 0;
+export function quorumRatioForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.25;
+    if (effect === 'poll' || touches === 'nothing') return 0;
     return 0.30;
 }
 
@@ -323,7 +347,7 @@ export function getDecisionVoiceCredits(decisionId: string, voterPubkey: string)
     return {
         totalCredits,
         usedCredits: currentCreditsUsed,
-        availableCredits: Math.max(0, totalCredits),
+        availableCredits: Math.max(0, totalCredits - currentCreditsUsed),
     };
 }
 
@@ -353,6 +377,10 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(check.error || 'Cannot propose decision');
     }
 
+    if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
+        throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
+    }
+
     const id = crypto.randomUUID();
     const franchise = franchiseForTouch(opts.touches);
     const now = new Date();
@@ -368,8 +396,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         finalParams = {
             ...opts.params,
             memberName,
-            debt: opts.params?.debt !== undefined ? opts.params.debt : debt,
-            commonsPool: opts.params?.commonsPool !== undefined ? opts.params.commonsPool : Math.round(commonsPoolBal),
+            debt, // Authoritatively computed from ledger
+            commonsPool: Math.round(commonsPoolBal), // Authoritatively computed from ledger
         };
     }
     const serializedParams = finalParams !== undefined ? JSON.stringify(finalParams) : null;
@@ -432,12 +460,15 @@ export function castDecisionVote(
 ): { success: boolean; creditsUsed: number; error?: string } {
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
-    if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
+    if (decision.status !== 'open' || new Date(decision.closesAt).getTime() <= Date.now()) {
+        return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
+    }
 
     const elig = checkVoterEligibility(voterPubkey);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
 
-    const count = Math.max(1, Math.floor(voteCount));
+    const parsedCount = Number(voteCount);
+    const count = Number.isFinite(parsedCount) ? Math.max(1, Math.floor(parsedCount)) : 1;
     let weight = 1;
     let creditCost = 1;
 
@@ -560,8 +591,18 @@ export function preflightAssert(decision: Decision): {
     if (decision.touches === 'member') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
         const member = getMember(decision.subject);
-        if (!member || member.status === 'pruned') {
+        if (decision.effect !== 'reinstate_member' && (!member || member.status === 'pruned')) {
             return { status: 'void', reason: 'Subject member does not exist or was already pruned' };
+        }
+        if (decision.effect === 'reinstate_member' && !member) {
+            return { status: 'void', reason: 'Subject member does not exist' };
+        }
+    }
+
+    if (decision.effect === 'remove_member') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
+        if (isSoleOwner(decision.subject)) {
+            return { status: 'blocked', reason: 'Cannot remove sole node owner via community vote' };
         }
     }
 
@@ -581,12 +622,30 @@ export function preflightAssert(decision: Decision): {
     }
 
     if (decision.effect === 'grant_hardship') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing hardship grant recipient' };
+        const recipient = getMember(decision.subject);
+        if (!recipient || recipient.status === 'pruned' || recipient.isTreasury) {
+            return { status: 'void', reason: 'Invalid or missing hardship recipient member' };
+        }
         const amount = Number(decision.params?.amount);
         if (!amount || amount <= 0 || !Number.isFinite(amount)) {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
         }
         if (getCommonsBalanceExact() < amount) {
             return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact().toFixed(2)}` };
+        }
+    }
+
+    if (decision.effect === 'write_off_deficit') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing enterprise subject' };
+        const enterprise = getMember(decision.subject);
+        if (!enterprise || !enterprise.isTreasury) {
+            return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
+        }
+        const entAccount = ledger.getAccount(decision.subject);
+        const deficit = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+        if (deficit > 0 && getCommonsBalanceExact() < deficit) {
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${deficit}, available ${getCommonsBalanceExact().toFixed(2)}` };
         }
     }
 
@@ -677,6 +736,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     setUserStatusRow(decision.subject!, 'active');
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
                     // Cancel any pending removal grace periods for this subject
+                    const cancelledDecisions = db.prepare(
+                        "SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
+                    ).all(decision.subject!) as any[];
+
                     db.prepare(`
                         UPDATE decisions SET
                             status = 'failed',
@@ -684,6 +747,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                             updated_at = ?
                         WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
                     `).run(now, decision.subject!);
+
+                    for (const cd of cancelledDecisions) {
+                        broadcast({ type: 'decision_updated', decision: getDecision(cd.id)! });
+                    }
                     break;
                 }
                 case 'freeze_credit': {
@@ -726,8 +793,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'remove_lead_keeper': {
-                    const entPubkey = decision.params?.enterprisePubkey || decision.subject!;
+                    const entPubkey = decision.params?.enterprisePubkey;
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
+                    if (!entPubkey) throw new Error('enterprisePubkey required for remove_lead_keeper');
                     db.prepare(
                         "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
                     ).run(entPubkey, leadPubkey);
@@ -785,9 +853,31 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     persistCommonsBalance();
                     break;
                 }
+                case 'write_off_deficit': {
+                    const entPubkey = decision.subject!;
+                    const entAccount = ledger.getAccount(entPubkey);
+                    if (entAccount && entAccount.balance < 0) {
+                        const deficit = Math.abs(entAccount.balance);
+                        if (!ledger.deductFromCommons(deficit)) {
+                            throw new Error('Insufficient commons funds to write off deficit');
+                        }
+                        entAccount.balance = 0;
+                        db.prepare(`
+                            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                            VALUES (?, 0, ?, ?)
+                            ON CONFLICT(public_key) DO UPDATE SET balance = 0, last_updated_at = excluded.last_updated_at
+                        `).run(entPubkey, entAccount.lastDemurrageEpoch, now);
+                        db.prepare(`
+                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                            VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
+                        `).run(crypto.randomUUID(), entPubkey, deficit, `Deficit write-off: ${decision.title.slice(0, 80)}`, now, authSigner);
+                        persistDecayEvents();
+                        persistCommonsBalance();
+                    }
+                    break;
+                }
                 case 'poll':
                 case 'set_rule':
-                case 'write_off_deficit':
                 case 'set_levy':
                     // Rule updates or parameter updates
                     break;

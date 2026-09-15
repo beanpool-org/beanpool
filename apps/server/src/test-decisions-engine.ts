@@ -57,6 +57,7 @@ import {
     adminSetUserStatus,
 } from './state-engine.js';
 import { db } from './db/db.js';
+import { ledger } from './engine/ledger.js';
 import { setCommonsBalance } from '@beanpool/core';
 
 let testsRun = 0;
@@ -111,6 +112,10 @@ function recordTestActivity(buyer: string, seller: string, amount: number) {
         INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
     `).run(txId, postId, buyer, seller, amount, now, now);
+}
+
+function closeForTick(id: string) {
+    db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
 
 async function runDecisionsSuite() {
@@ -273,11 +278,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'suspend_member',
         subject: targetUser,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decSuspend.id, voterA, true);
     castDecisionVote(decSuspend.id, voterB, true);
     castDecisionVote(decSuspend.id, voterC, true);
+    closeForTick(decSuspend.id);
     tickDecisions();
     testAssert(getDecision(decSuspend.id)!.status === 'executed', 'Suspend decision executed on tick');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(targetUser) as any).status === 'disabled', 'Target member status updated to disabled');
@@ -290,12 +295,12 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'unsuspend_member',
         subject: targetUser,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     testAssert(decUnsuspend.effect === 'unsuspend_member', 'Unsuspend restoration created');
     castDecisionVote(decUnsuspend.id, voterA, true);
     castDecisionVote(decUnsuspend.id, voterB, true);
     castDecisionVote(decUnsuspend.id, voterC, false); // 2 yes, 1 no = 66% (> 50% simple majority)
+    closeForTick(decUnsuspend.id);
     tickDecisions();
     testAssert(getDecision(decUnsuspend.id)!.status === 'executed', 'Unsuspend decision executed with simple majority');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(targetUser) as any).status === 'active', 'Target member status restored to active');
@@ -308,11 +313,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'freeze_credit',
         subject: targetUser,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decFreeze.id, voterA, true);
     castDecisionVote(decFreeze.id, voterB, true);
     castDecisionVote(decFreeze.id, voterC, true);
+    closeForTick(decFreeze.id);
     tickDecisions();
     testAssert((db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(targetUser) as any).credit_frozen === 1, 'Member credit frozen by decision');
 
@@ -323,11 +328,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'unfreeze_credit',
         subject: targetUser,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decUnfreeze.id, voterA, true);
     castDecisionVote(decUnfreeze.id, voterB, true);
     castDecisionVote(decUnfreeze.id, voterC, true);
+    closeForTick(decUnfreeze.id);
     tickDecisions();
     testAssert((db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(targetUser) as any).credit_frozen === 0, 'Member credit unfrozen by restoration decision');
 
@@ -339,11 +344,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'grant_voucher',
         subject: m1,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decVoucher.id, voterA, true);
     castDecisionVote(decVoucher.id, voterB, true);
     castDecisionVote(decVoucher.id, voterC, true);
+    closeForTick(decVoucher.id);
     tickDecisions();
     testAssert((db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(m1) as any).can_vouch === 1, 'Alice granted can_vouch=1');
 
@@ -354,11 +359,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'revoke_voucher',
         subject: m1,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decRevokeVoucher.id, voterA, true);
     castDecisionVote(decRevokeVoucher.id, voterB, true);
     castDecisionVote(decRevokeVoucher.id, voterC, true);
+    closeForTick(decRevokeVoucher.id);
     tickDecisions();
     testAssert((db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(m1) as any).can_vouch === 0, 'Alice voucher capability revoked (can_vouch=0)');
 
@@ -374,7 +379,6 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'suspend_member',
         subject: deadMember,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decDead.id, voterA, true);
     castDecisionVote(decDead.id, voterB, true);
@@ -382,6 +386,7 @@ async function runDecisionsSuite() {
 
     // Prune deadMember before tick
     adminSetUserStatus(deadMember, 'pruned');
+    closeForTick(decDead.id);
     tickDecisions();
 
     const decDeadAfter = getDecision(decDead.id)!;
@@ -405,12 +410,12 @@ async function runDecisionsSuite() {
         effect: 'grant_enterprise',
         subject: bigGrantEnterprise,
         params: { amount: bigAmount },
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decBigGrant.id, voterA, true, 5);
     castDecisionVote(decBigGrant.id, voterB, true, 5);
     castDecisionVote(decBigGrant.id, voterC, true, 5);
 
+    closeForTick(decBigGrant.id);
     tickDecisions();
     const decQueued = getDecision(decBigGrant.id)!;
     testAssert(decQueued.status === 'passed_queued_for_funds', 'Underfunded grant queued at passed_queued_for_funds (§3.7)');
@@ -437,11 +442,11 @@ async function runDecisionsSuite() {
         effect: 'grant_enterprise',
         subject: staleGrantEnterprise,
         params: { amount: 500 },
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decStale.id, voterA, true, 2);
     castDecisionVote(decStale.id, voterB, true, 2);
     castDecisionVote(decStale.id, voterC, true, 2);
+    closeForTick(decStale.id);
     tickDecisions();
     testAssert(getDecision(decStale.id)!.status === 'passed_queued_for_funds', 'Stale grant entered queue');
 
@@ -469,12 +474,12 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'remove_member',
         subject: rogueMember,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decRemoval.id, voterA, true);
     castDecisionVote(decRemoval.id, voterB, true);
     castDecisionVote(decRemoval.id, voterC, true);
 
+    closeForTick(decRemoval.id);
     tickDecisions();
     const decRemovalGrace = getDecision(decRemoval.id)!;
     testAssert(decRemovalGrace.status === 'execution_pending_grace', 'Passed member removal enters execution_pending_grace (§3.7)');
@@ -498,11 +503,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'remove_member',
         subject: rogueMember,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decRemoval2.id, voterA, true);
     castDecisionVote(decRemoval2.id, voterB, true);
     castDecisionVote(decRemoval2.id, voterC, true);
+    closeForTick(decRemoval2.id);
     tickDecisions();
     testAssert(getDecision(decRemoval2.id)!.status === 'execution_pending_grace', 'Round 2 enters grace');
 
@@ -528,11 +533,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'remove_member',
         subject: memberToRevert,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decRemoval3.id, voterA, true);
     castDecisionVote(decRemoval3.id, voterB, true);
     castDecisionVote(decRemoval3.id, voterC, true);
+    closeForTick(decRemoval3.id);
     tickDecisions();
     testAssert(getDecision(decRemoval3.id)!.status === 'execution_pending_grace', 'RevertMe entered grace');
 
@@ -544,11 +549,11 @@ async function runDecisionsSuite() {
         touches: 'member',
         effect: 'reinstate_member',
         subject: memberToRevert,
-        closesAt: new Date(Date.now() - 1000).toISOString(),
     });
     castDecisionVote(decReinstate.id, voterA, true);
     castDecisionVote(decReinstate.id, voterB, true);
     castDecisionVote(decReinstate.id, voterC, true);
+    closeForTick(decReinstate.id);
     tickDecisions();
 
     testAssert(getDecision(decReinstate.id)!.status === 'executed', 'Reinstate decision executed');
@@ -586,6 +591,134 @@ async function runDecisionsSuite() {
 
     const rounds = getVotingRounds();
     testAssert(rounds.some(r => r.id === legacyRound!.id), 'getVotingRounds reads legacy round data');
+
+    // ── 11. Governance Security, Parameter Decoupling & Ledger Hardening ────
+    console.log('\n--- 11. Security, Parameter Decoupling & Ledger Hardening ---');
+
+    // 11a. Parameter Decoupling: cannot propose remove_member with touches='nothing'
+    let decouplingCaught = false;
+    try {
+        createDecision({
+            authorPubkey: admin,
+            title: 'Spoofed touches',
+            description: 'Try to bypass quorum',
+            touches: 'nothing',
+            effect: 'remove_member',
+            subject: m1,
+        });
+    } catch (e: any) {
+        decouplingCaught = e.message.includes('Invalid touch');
+    }
+    testAssert(decouplingCaught, 'Mismatched touches and effect rejected by createDecision');
+
+    // 11b. Expired voting window: castDecisionVote rejects votes after closesAt
+    const decExpired = createDecision({
+        authorPubkey: admin,
+        title: 'Expiring vote',
+        description: 'Test expiration',
+        touches: 'member',
+        effect: 'suspend_member',
+        subject: m2,
+    });
+    closeForTick(decExpired.id);
+    const expiredVoteRes = castDecisionVote(decExpired.id, voterA, true);
+    testAssert(!expiredVoteRes.success && expiredVoteRes.error === 'Voting window has closed', 'castDecisionVote rejects vote on expired decision');
+    tickDecisions(); // Closes decExpired as unresolved
+
+    // 11c. voteCount NaN poisoning protection
+    const decVoteSan = createDecision({
+        authorPubkey: admin,
+        title: 'Sanitized count test',
+        description: 'Testing NaN count',
+        touches: 'member',
+        effect: 'suspend_member',
+        subject: m2,
+    });
+    const nanVoteRes = castDecisionVote(decVoteSan.id, voterA, true, NaN as any);
+    testAssert(nanVoteRes.success && nanVoteRes.creditsUsed === 1, 'NaN voteCount falls back safely to count 1');
+    closeForTick(decVoteSan.id);
+    tickDecisions(); // Closes decVoteSan
+
+    // 11d. Net unspent credits in getDecisionVoiceCredits
+    const decQCredits = createDecision({
+        authorPubkey: admin,
+        title: 'Voice credits calculation test',
+        description: 'Testing net unspent credits',
+        touches: 'pool',
+        effect: 'grant_enterprise',
+        subject: enterprise1,
+        params: { amount: 10 },
+    });
+    const initialCredits = getDecisionVoiceCredits(decQCredits.id, voterA);
+    castDecisionVote(decQCredits.id, voterA, true, 3); // 9 credits
+    const remainingCredits = getDecisionVoiceCredits(decQCredits.id, voterA);
+    testAssert(remainingCredits.usedCredits === 9, 'usedCredits tracks 9 credits spent');
+    testAssert(remainingCredits.availableCredits === initialCredits.totalCredits - 9, 'availableCredits deducts spent credits');
+    closeForTick(decQCredits.id);
+    tickDecisions(); // Closes decQCredits
+
+    // 11e. Sole node owner removal blocked in preflight
+    const decSoleOwnerRemoval = createDecision({
+        authorPubkey: admin,
+        title: 'Attempt removal of sole node owner',
+        description: 'Should be blocked in preflight',
+        touches: 'member',
+        effect: 'remove_member',
+        subject: admin,
+    });
+    castDecisionVote(decSoleOwnerRemoval.id, voterA, true);
+    castDecisionVote(decSoleOwnerRemoval.id, voterB, true);
+    castDecisionVote(decSoleOwnerRemoval.id, voterC, true);
+    closeForTick(decSoleOwnerRemoval.id);
+    tickDecisions();
+    const soleOwnerDec = getDecision(decSoleOwnerRemoval.id)!;
+    testAssert(soleOwnerDec.status === 'execution_blocked', 'Sole owner removal blocked before grace window or suspension');
+    testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(admin) as any).status === 'active', 'Sole node owner remains active');
+
+    // 11f. Hardship grant validates recipient is not treasury or missing
+    const decBadHardship = createDecision({
+        authorPubkey: admin,
+        title: 'Hardship grant to enterprise',
+        description: 'Invalid recipient',
+        touches: 'pool',
+        effect: 'grant_hardship',
+        subject: enterprise1, // Enterprise, not member!
+        params: { amount: 50 },
+    });
+    castDecisionVote(decBadHardship.id, voterA, true, 2);
+    castDecisionVote(decBadHardship.id, voterB, true, 2);
+    castDecisionVote(decBadHardship.id, voterC, true, 2);
+    closeForTick(decBadHardship.id);
+    tickDecisions();
+    testAssert(getDecision(decBadHardship.id)!.status === 'execution_void', 'Hardship grant with treasury subject transitions to execution_void');
+
+    // 11g. Write off deficit financial execution
+    const insolventEnt = 'ent_insolvent_' + Date.now();
+    seedTestMember(insolventEnt, 'Insolvent Shop', { isTreasury: true });
+    // Give negative balance
+    const acctInsolvent = ledger.getAccount(insolventEnt);
+    acctInsolvent.balance = -150;
+    db.prepare("UPDATE accounts SET balance = -150 WHERE public_key = ?").run(insolventEnt);
+    setCommonsBalance(500);
+
+    const decWriteOff = createDecision({
+        authorPubkey: admin,
+        title: 'Write off Insolvent Shop deficit',
+        description: 'Clear -150 deficit from Commons pool',
+        touches: 'pool',
+        effect: 'write_off_deficit',
+        subject: insolventEnt,
+    });
+    castDecisionVote(decWriteOff.id, voterA, true, 4);
+    castDecisionVote(decWriteOff.id, voterB, true, 4);
+    castDecisionVote(decWriteOff.id, voterC, true, 4);
+    closeForTick(decWriteOff.id);
+    tickDecisions();
+    testAssert(getDecision(decWriteOff.id)!.status === 'executed', 'write_off_deficit executed successfully');
+    testAssert(ledger.getAccount(insolventEnt).balance === 0, 'Insolvent enterprise balance reset to 0');
+    testAssert(getCommonsBalance() === 350, 'Commons pool debited 150 beans to cover deficit');
+    const writeOffTx = db.prepare("SELECT * FROM transactions WHERE to_pubkey = ? AND auth_signer = ?").get(insolventEnt, `system:decision:${decWriteOff.id}`) as any;
+    testAssert(writeOffTx != null && writeOffTx.amount === 150, 'Deficit write-off transaction recorded with provenance');
 
     console.log(`\n🎉 All ${testsPassed}/${testsRun} Decisions Engine tests PASSED!`);
 }

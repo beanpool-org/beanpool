@@ -200,6 +200,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                     name: newEnterpriseName.trim(),
                     avatar: newEnterpriseAvatar.trim() || '🌾',
                     workingCapitalCeiling: ceilingNum,
+                    purpose: newEnterprisePurpose.trim() || undefined,
                 },
                 activeNode.adminPassword,
                 getTfaSessionToken(activeNode.id)

@@ -203,6 +203,7 @@ TOTP Secret:    ${totpSecret}
                     name: enterpriseName.trim(),
                     avatar: enterpriseAvatar.trim(),
                     workingCapitalCeiling: 250,
+                    purpose: enterprisePurpose.trim() || undefined,
                 },
                 activeNode.adminPassword,
                 getTfaSessionToken(activeNode.id)

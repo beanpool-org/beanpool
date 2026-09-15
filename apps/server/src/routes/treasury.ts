@@ -368,7 +368,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Admin (password-gated) ---------------------------------------------------------
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const { name, avatar, creditLine, workingCapitalCeiling } = (ctx as any).requestBody || {};
+        const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         try {
             ctx.body = {
@@ -377,7 +377,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     String(name),
                     String(avatar),
                     Number(creditLine) || 0,
-                    { workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null }
+                    {
+                        workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null,
+                        purpose: purpose ? String(purpose) : undefined,
+                    }
                 ),
             };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }

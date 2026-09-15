@@ -687,7 +687,7 @@ export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury
 
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null },
+    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {

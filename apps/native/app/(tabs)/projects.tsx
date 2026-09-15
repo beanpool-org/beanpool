@@ -41,6 +41,17 @@ export default function ProjectsScreen() {
         headerTitle: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
+        treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+        treasuryCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        treasuryAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface.subtle },
+        treasuryAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+        treasuryName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        treasuryMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        treasuryBalance: { fontSize: 14, fontWeight: '800' },
+        treasuryBalancePos: { color: colors.brand.primary },
+        treasuryBalanceNeg: { color: colors.feedback.warning.solid },
+        operatorBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.brand.tint, borderRadius: 10, padding: 8, marginTop: 2 },
+        operatorBadgeText: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', flex: 1 },
 
         statCardRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         statCard: { flex: 1, minWidth: 0, backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: colors.border.default },
@@ -395,7 +406,6 @@ export default function ProjectsScreen() {
                             <Text style={styles.headerDesc}>
                                 Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.
                             </Text>
-                            </Text>
                         </View>
 
                         {/* Commons Pool + My Governance Credits */}
@@ -552,20 +562,14 @@ export default function ProjectsScreen() {
                         loading ? (
                             <View style={{ gap: 16 }}>
                                 <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonHero} />
-                                    <View style={styles.skeletonBody}>
-                                        <View style={styles.skeletonLineTitle} />
-                                        <View style={styles.skeletonLineDesc} />
-                                        <View style={styles.skeletonLineProgress} />
-                                    </View>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
                                 </View>
                                 <View style={styles.skeletonCard}>
-                                    <View style={styles.skeletonHero} />
-                                    <View style={styles.skeletonBody}>
-                                        <View style={styles.skeletonLineTitle} />
-                                        <View style={styles.skeletonLineDesc} />
-                                        <View style={styles.skeletonLineProgress} />
-                                    </View>
+                                    <View style={styles.skeletonLineTitle} />
+                                    <View style={styles.skeletonLineDesc} />
+                                    <View style={styles.skeletonLineProgress} />
                                 </View>
                             </View>
                         ) : (

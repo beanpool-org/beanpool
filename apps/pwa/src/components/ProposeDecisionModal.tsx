@@ -305,12 +305,15 @@ export function ProposeDecisionModal({
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
                             Specific Action / Effect
                         </label>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        <div role="radiogroup" aria-label="Governance effect" className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
-                                <div
+                                <button
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={effect === eff.id}
                                     key={eff.id}
                                     onClick={() => setEffect(eff.id)}
-                                    className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                                    className={`w-full text-left p-2.5 rounded-xl border transition-all ${
                                         effect === eff.id
                                             ? 'bg-emerald-500/15 border-emerald-500'
                                             : 'bg-nature-800/40 border-nature-700 hover:border-nature-600'
@@ -322,7 +325,7 @@ export function ProposeDecisionModal({
                                     <div className="text-xs text-nature-400 leading-tight mt-0.5">
                                         {eff.desc}
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>

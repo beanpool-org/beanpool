@@ -481,9 +481,11 @@ export function DecideSection({
     return (
         <View style={styles.container}>
             {/* View Switcher: Open Decisions vs History */}
-            <View style={styles.viewSelector}>
+            <View style={styles.viewSelector} accessibilityRole="tablist" accessibilityLabel="Decisions view">
                 <Pressable
-                    accessibilityRole="button"
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeView === 'open' }}
+                    accessibilityLabel="Open Decisions"
                     style={[styles.viewTab, activeView === 'open' && styles.viewTabActive]}
                     onPress={() => onChangeView('open')}
                 >
@@ -503,7 +505,9 @@ export function DecideSection({
                 </Pressable>
 
                 <Pressable
-                    accessibilityRole="button"
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeView === 'history' }}
+                    accessibilityLabel="Decisions History"
                     style={[styles.viewTab, activeView === 'history' && styles.viewTabActive]}
                     onPress={() => onChangeView('history')}
                 >
@@ -634,7 +638,12 @@ export function DecideSection({
                                                     {tally.quorumMet ? 'Met ✅' : 'Pending'}
                                                 </Text>
                                             </View>
-                                            <View style={styles.barBg}>
+                                            <View
+                                                style={styles.barBg}
+                                                accessibilityRole="progressbar"
+                                                accessibilityValue={{ min: 0, max: 100, now: Math.min(100, quorumPct) }}
+                                                accessibilityLabel="Quorum progress"
+                                            >
                                                 <View
                                                     style={[
                                                         styles.barFill,
@@ -654,7 +663,12 @@ export function DecideSection({
                                                     Needs {thresholdPct}%
                                                 </Text>
                                             </View>
-                                            <View style={styles.barBg}>
+                                            <View
+                                                style={styles.barBg}
+                                                accessibilityRole="progressbar"
+                                                accessibilityValue={{ min: 0, max: 100, now: Math.min(100, supportPct) }}
+                                                accessibilityLabel="Support progress"
+                                            >
                                                 <View
                                                     style={[
                                                         styles.barFill,

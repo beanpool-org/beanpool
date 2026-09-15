@@ -76,7 +76,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setCommonsBalance(commonsData.balance || 0);
             if (balData) setBalanceInfo(balData);
             if (Array.isArray(membersData)) {
-                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign })));
+                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
             }
         } catch (err: any) {
             setError(err.message || 'Failed to fetch community enterprises');

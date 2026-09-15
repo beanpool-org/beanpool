@@ -452,19 +452,22 @@ export function ProposeDecisionModal({
 
                         {/* Effect Selector */}
                         <Text style={styles.sectionLabel}>Select Specific Effect</Text>
-                        {EFFECTS_BY_TOUCH[touches].map(eff => (
-                            <Pressable
-                                key={eff.id}
-                                accessibilityRole="button"
-                                style={[styles.effectCard, effect === eff.id && styles.effectCardActive]}
-                                onPress={() => setEffect(eff.id)}
-                            >
-                                <Text style={[styles.effectLabel, effect === eff.id && styles.effectLabelActive]}>
-                                    {eff.label}
-                                </Text>
-                                <Text style={styles.effectDesc}>{eff.desc}</Text>
-                            </Pressable>
-                        ))}
+                        <View accessibilityRole="radiogroup" accessibilityLabel="Governance effect">
+                            {EFFECTS_BY_TOUCH[touches].map(eff => (
+                                <Pressable
+                                    key={eff.id}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ checked: effect === eff.id }}
+                                    style={[styles.effectCard, effect === eff.id && styles.effectCardActive]}
+                                    onPress={() => setEffect(eff.id)}
+                                >
+                                    <Text style={[styles.effectLabel, effect === eff.id && styles.effectLabelActive]}>
+                                        {eff.label}
+                                    </Text>
+                                    <Text style={styles.effectDesc}>{eff.desc}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
 
                         {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
                         {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (

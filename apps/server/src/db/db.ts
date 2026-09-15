@@ -347,13 +347,17 @@ export function initSchema() {
     }
 
     // Slice 4 Grandfather migration: existing enterprises keep their fixed line as legacy_credit_floor (min 200)
-    // until keepers' pledges exceed it. Community Eggs on test and enterprises on mullum never lose credit.
+    // until keepers' pledges exceed it. Gated behind node_config so it runs strictly once.
     try {
-        db.prepare(`
-            UPDATE members
-            SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
-            WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
-        `).run();
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
+                WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
+        }
     } catch { }
 
     // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)

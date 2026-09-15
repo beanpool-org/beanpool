@@ -37,6 +37,7 @@ import { ledger } from './engine/ledger.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
+    getBalance,
     getMember,
     setUserStatusRow,
     adminPruneUser,
@@ -357,7 +358,21 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     const now = new Date();
     const opensAt = now.toISOString();
     const closesAt = opts.closesAt || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const serializedParams = opts.params !== undefined ? JSON.stringify(opts.params) : null;
+    let finalParams = opts.params;
+    if (opts.effect === 'remove_member' && opts.subject) {
+        const member = getMember(opts.subject);
+        const memberBalance = getBalance(opts.subject)?.balance ?? 0;
+        const commonsPoolBal = getCommonsBalanceExact();
+        const memberName = member?.callsign || opts.params?.memberName || opts.subject.slice(0, 8);
+        const debt = memberBalance < 0 ? Math.abs(memberBalance) : 0;
+        finalParams = {
+            ...opts.params,
+            memberName,
+            debt: opts.params?.debt !== undefined ? opts.params.debt : debt,
+            commonsPool: opts.params?.commonsPool !== undefined ? opts.params.commonsPool : Math.round(commonsPoolBal),
+        };
+    }
+    const serializedParams = finalParams !== undefined ? JSON.stringify(finalParams) : null;
 
     db.prepare(`
         INSERT INTO decisions (

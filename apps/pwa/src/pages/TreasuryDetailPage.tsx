@@ -3,6 +3,7 @@ import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
     treasuryPostOffer, treasuryPostNeed, treasuryPledge,
+    deleteCrowdfundProject,
     type BalanceInfo
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -33,6 +34,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [pledgeAmount, setPledgeAmount] = useState('');
     const [pledgeMemo, setPledgeMemo] = useState('');
     const [pledging, setPledging] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
 
     // Post Modal State
@@ -200,6 +202,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
             setActionFeedback({ type: 'error', message: e.message || 'Failed to release payment.' });
         } finally {
             setActionState(null);
+        }
+    };
+
+    const handleCancelInitiative = async () => {
+        if (!pubkey || cancelling) return;
+        const confirmed = window.confirm(
+            'Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.'
+        );
+        if (!confirmed) return;
+        try {
+            setCancelling(true);
+            setActionFeedback(null);
+            await deleteCrowdfundProject(pubkey, identity?.publicKey);
+            alert('Initiative Cancelled 🌱\n\nPledges have been refunded to backers.');
+            onBack();
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e.message || 'Could not cancel initiative.' });
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -669,6 +690,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                         </div>
                                     </div>
                                 )}
+
+                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                    <div className="pt-4 border-t border-emerald-500/20">
+                                        <button
+                                            type="button"
+                                            onClick={handleCancelInitiative}
+                                            disabled={cancelling}
+                                            className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            <span aria-hidden="true">🛑</span>
+                                            {cancelling ? 'Cancelling & Refunding Backers…' : 'Cancel Initiative & Refund Escrow'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -681,7 +716,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => (
                                         <div
-                                            key={k.publicKey}
+                                            key={k.publicKey || k.pubkey}
                                             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200"
                                         >
                                             <span aria-hidden="true">👤</span>

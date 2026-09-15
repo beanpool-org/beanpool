@@ -111,6 +111,7 @@ vi.mock('../lib/api', () => ({
     treasuryComplete: vi.fn(async () => ({ success: true })),
     treasuryPostOffer: vi.fn(async () => ({ success: true })),
     treasuryPostNeed: vi.fn(async () => ({ success: true })),
+    deleteCrowdfundProject: vi.fn(async () => ({ success: true })),
     request: vi.fn(),
 }));
 
@@ -247,5 +248,38 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
         expect(screen.getByRole('button', { name: /Post Offer/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Post Need/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /To Commons/i })).toBeInTheDocument();
+    });
+
+    it('renders cancel initiative button for keeper of bounded unfunded project and triggers deletion', async () => {
+        const handleBack = vi.fn();
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+        render(<TreasuryDetailPage identity={creatorIdentity} pubkey="treasury-mine" onBack={handleBack} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i })).toBeInTheDocument();
+        });
+
+        const cancelBtn = screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i });
+        fireEvent.click(cancelBtn);
+
+        await waitFor(() => {
+            expect(handleBack).toHaveBeenCalled();
+        });
+    });
+
+    it('renders live offer count and badge parity on enterprise cards in ProjectsPage', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        });
+
+        // Project badge
+        expect(screen.getAllByText('🌱 Project').length).toBeGreaterThan(0);
+
+        // Live offers count
+        expect(screen.getByText(/1 live offer/i)).toBeInTheDocument();
     });
 });

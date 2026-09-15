@@ -106,6 +106,31 @@ export function App() {
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
+
+    useEffect(() => {
+        if (typeof document !== 'undefined') {
+            if (isBottomNavVisible) {
+                document.documentElement.removeAttribute('data-bottom-nav');
+                document.documentElement.classList.remove('bottom-nav-hidden');
+                document.documentElement.style.removeProperty('--bottom-nav-height');
+                document.documentElement.style.removeProperty('--bottom-nav-offset');
+            } else {
+                document.documentElement.setAttribute('data-bottom-nav', 'hidden');
+                document.documentElement.classList.add('bottom-nav-hidden');
+                document.documentElement.style.setProperty('--bottom-nav-height', '0px');
+                document.documentElement.style.setProperty('--bottom-nav-offset', 'env(safe-area-inset-bottom, 0px)');
+            }
+        }
+        return () => {
+            if (typeof document !== 'undefined') {
+                document.documentElement.removeAttribute('data-bottom-nav');
+                document.documentElement.classList.remove('bottom-nav-hidden');
+                document.documentElement.style.removeProperty('--bottom-nav-height');
+                document.documentElement.style.removeProperty('--bottom-nav-offset');
+            }
+        };
+    }, [isBottomNavVisible]);
     const [theme, toggleTheme] = useTheme();
     const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
     const [totalUnread, setTotalUnread] = useState(0);
@@ -374,7 +399,16 @@ export function App() {
     ];
 
     return (
-        <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
+        <div 
+            className={`flex h-screen overflow-hidden bg-bg-primary text-text-primary ${!isBottomNavVisible ? 'bottom-nav-hidden' : ''}`}
+            data-bottom-nav={isBottomNavVisible ? 'visible' : 'hidden'}
+            style={{
+                ...(!isBottomNavVisible ? {
+                    '--bottom-nav-height': '0px',
+                    '--bottom-nav-offset': 'env(safe-area-inset-bottom, 0px)',
+                } : {})
+            } as React.CSSProperties}
+        >
             {/* Desktop Left Sidebar (Visible on md and larger) */}
             <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">
                 {/* Brand Logo Header */}
@@ -596,7 +630,7 @@ export function App() {
                     flex: 1,
                     minHeight: 0,
                     overflowY: (activeTab === 'map' && !showSettings) ? 'hidden' : 'auto',
-                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : '4rem',
+                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : 'var(--bottom-nav-offset)',
                     position: 'relative',
                 }} className="md:pb-0">
                     {showSettings && (
@@ -717,8 +751,11 @@ export function App() {
                 </main>
 
                 {/* Bottom nav — mobile only */}
-                <nav className="relative md:hidden" style={{
-                    display: (openProfilePubkey || openTreasuryPubkey) ? 'none' : 'flex',
+                <nav 
+                    className={`relative md:hidden bottom-nav-bar ${!isBottomNavVisible ? 'hidden' : ''}`}
+                    data-testid="mobile-bottom-nav"
+                    style={{
+                        display: isBottomNavVisible ? 'flex' : 'none',
                     position: 'fixed',
                     bottom: 0,
                     left: 0,
@@ -728,7 +765,7 @@ export function App() {
                     backgroundPosition: 'center',
                     borderTop: '1px solid #111',
                     zIndex: 100,
-                    padding: '0.2rem 4px',
+                    padding: '0.2rem 4px calc(0.2rem + env(safe-area-inset-bottom, 0px))',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-0.5 sm:gap-1">

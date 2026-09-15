@@ -242,6 +242,8 @@ export function initSchema() {
     // Enterprise Credit Model (Rules 6 & 7)
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
+    // Grandfathered enterprise floor (Slice 4)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN legacy_credit_floor REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
@@ -352,6 +354,25 @@ export function initSchema() {
             console.error("❌ Ratings fix failed:", err.message);
         }
     }
+
+    // Slice 4 Grandfather migration: existing enterprises keep their fixed line as legacy_credit_floor (min 200)
+    // until keepers' pledges exceed it. Gated behind node_config so it runs strictly once.
+    try {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
+                WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
+        }
+    } catch { }
+
+    // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
+    try {
+        db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();
+    } catch { }
 
     // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
     // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
@@ -865,6 +886,8 @@ export interface ProjectRow {
     deadline_at: string | null;
     status: string;
     created_at: string;
+    enterprise_pubkey?: string;
+    migrated_at?: string | null;
 }
 
 function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
@@ -877,17 +900,10 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     }
     const goalAmount = Number(e.goal_amount ?? legacyP?.goal_amount ?? 0);
 
-    let currentAmount = 0;
-    if (legacyP && legacyP.current_amount != null) {
-        currentAmount = Number(legacyP.current_amount);
-    }
+    let currentAmount = Number(legacyP?.current_amount || 0);
     try {
-        const txSum = (db.prepare(`
-            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
-        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
-        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, txSum, accBal);
+        const escBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(`escrow_${e.public_key}`) as any)?.balance || 0;
+        currentAmount = Math.max(currentAmount, Number(escBal));
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -903,6 +919,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         deadline_at: e.deadline_at ?? legacyP?.deadline_at ?? null,
         status,
         created_at: e.joined_at ?? legacyP?.created_at ?? new Date().toISOString(),
+        enterprise_pubkey: e.public_key || legacyP?.enterprise_pubkey || legacyP?.id,
     };
 }
 
@@ -954,16 +971,15 @@ export function createCrowdfundProject(
 ) {
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();
+    const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
+    const existingCallsign = db.prepare(
+        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(baseCallsign, id) as any;
+    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
     db.transaction(() => {
         const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
         if (!existing) {
-            const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-            const existingCallsign = db.prepare(
-                "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-            ).get(baseCallsign, id) as any;
-            const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
-
             db.prepare(`
                 INSERT INTO members (
                     public_key, callsign, joined_at, avatar_url, bio, status,
@@ -1044,8 +1060,17 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
 
-    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
-    if (!project) throw new Error("Project not found");
+    let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
+    if (!project) {
+        const memberEnterprise = db.prepare(`SELECT public_key, callsign, purpose, bio, goal_amount, deadline_at, status FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).get(projectId) as any;
+        if (!memberEnterprise) throw new Error("Project not found");
+        const lead = (db.prepare(`SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead' LIMIT 1`).get(projectId) as any)?.member_pubkey || memberEnterprise.public_key;
+        db.prepare(`
+            INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, '[]', ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
+        project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
+    }
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow
@@ -1058,7 +1083,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // out of beans demurrage has already taken — the member spends them once and is charged for them again on
     // their next read. Settling the payer was already unavoidable in the creator-pledges-to-their-own-project
     // case, so excluding it for everyone else would only have made the same path behave two different ways.
-    onSettleDemurrage?.([project.creator_pubkey, fromPubkey]);
+    const targetAccount = project.enterprise_pubkey || projectId;
+    onSettleDemurrage?.([targetAccount, project.creator_pubkey, fromPubkey]);
 
     const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
@@ -1106,14 +1132,14 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
+                // Credit Enterprise Treasury Account
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
 
-                // Record atomic Sweep Transaction
+                // Record atomic Sweep Transaction to the enterprise
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`sweep_${txId}`, escrowPubkey, project.creator_pubkey, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
+                `).run(`sweep_${txId}`, escrowPubkey, targetAccount, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
         }
     });
@@ -1186,6 +1212,11 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // #139: Unlink transactions from the project before deletion to prevent SQLITE_CONSTRAINT_FOREIGNKEY
         // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
+
+        const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+        if (acc && Math.abs(acc.balance) > 1e-9) {
+            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+        }
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);

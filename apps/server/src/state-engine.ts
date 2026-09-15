@@ -382,6 +382,7 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    clearEnterpriseFloorCache();
     migrateLegacyState();
     seedPulseCurated();
     
@@ -1920,6 +1921,14 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: stri
  * never silently inert. `grantedBy` records the granting admin's pubkey today, and is deliberately
  * untyped so an `appoint` Decision id can be recorded here later without a migration.
  */
+export function clearEnterpriseFloorCache(enterprisePubkey?: string): void {
+    engine.clearEnterpriseFloorCache(db, enterprisePubkey);
+}
+
+export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseFloorInfo {
+    return engine.getEnterpriseFloor(db, enterprisePubkey);
+}
+
 export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
     const member = getMember(memberPubkey);
     if (!member) throw new Error('Member not found');
@@ -1932,6 +1941,7 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
                     VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
@@ -1942,6 +1952,8 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
  *
  * Clears can_operate once a member keeps nothing, so `canOperate()` keeps meaning "is a keeper"
  * and the fleet manager's display stays truthful.
+ *
+ * Handles keeper exit backing release/covenant lock (docs/the-commons.md §2.6).
  */
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
     db.transaction(() => {
@@ -1950,10 +1962,298 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
         const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
             .get(memberPubkey) as any;
         if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
+
+        // Keeper exit (docs/the-commons.md §2.6):
+        // Solvent: leave immediately, backing released, floor recalculates.
+        // In deficit: backing is locked to the extent the deficit needs it (Rule 3).
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(memberPubkey, treasuryPubkey) as any;
+        const keeperPledge = Number(activeRow?.total || 0);
+
+        if (keeperPledge > 0) {
+            const balance = getBalance(treasuryPubkey).balance;
+            const deficit = Math.max(0, -balance);
+            const totalRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.keeper != ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(treasuryPubkey, memberPubkey) as any;
+            const otherPledges = Number(totalRow?.total || 0);
+            const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
+            const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+            const otherAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+
+            if (otherAllowance >= deficit) {
+                // Solvent or remaining keepers cover deficit: full release
+                db.prepare(
+                    "UPDATE enterprise_pledges SET released_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                ).run(memberPubkey, treasuryPubkey);
+            } else {
+                // In deficit: lock what deficit needs (deficit - otherAllowance), release excess
+                const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
+                const toRelease = keeperPledge - lockedNeeded;
+                if (toRelease > 0) {
+                    const nowIso = new Date().toISOString();
+                    db.prepare(
+                        "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                    ).run(nowIso, memberPubkey, treasuryPubkey);
+                    db.prepare(`
+                        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                        VALUES (?, ?, ?, ?, ?, NULL)
+                    `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                }
+            }
+        }
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
+
+/**
+ * Available earned credit that a keeper can pledge to back enterprises (docs/the-commons.md §2.4 Rule 3).
+ * A keeper's earned credit is never deducted from their personal floor, but is counted once across all
+ * enterprises they keep.
+ * Pledges are incremental: headroom is earned credit minus ALL active pledges across all enterprises.
+ * Returns 0 if account is inactive (disabled/pruned) or credit-frozen.
+ */
+export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: string): number {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+    if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
+        return 0;
+    }
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+    ).get(keeperPubkey) as any;
+    const totalPledged = Number(row?.total || 0);
+    return Math.max(0, earnedCredit - totalPledged);
+}
+
+/**
+ * List active pledges backing an enterprise.
+ */
+export function getEnterprisePledges(enterprisePubkey: string): Array<{
+    id: string;
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(enterprisePubkey) as any[]).map(r => ({
+        id: r.id,
+        keeper: r.keeper,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.keeper}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * List active pledges made by a keeper.
+ */
+export function getKeeperPledges(keeperPubkey: string): Array<{
+    id: string;
+    enterprise: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.enterprise
+        WHERE p.keeper = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(keeperPubkey) as any[]).map(r => ({
+        id: r.id,
+        enterprise: r.enterprise,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.enterprise}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * Explicit, once-only backing pledge of a keeper's earned credit to back an enterprise (docs/the-commons.md §2.4 Rules 1-4).
+ * Gated by keepership (must have a treasury_operators row and can_operate = 1).
+ */
+export function pledgeEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amount: number
+): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (t.status === 'disabled' || t.status === 'pruned') {
+            throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
+        }
+
+        const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+        if (!km || km.status === 'disabled' || km.status === 'pruned') {
+            throw new Error('Your account is not active, so you cannot back this enterprise.');
+        }
+        if (km.credit_frozen === 1) {
+            throw new Error('Your credit is frozen, so you cannot back this enterprise.');
+        }
+
+        if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
+            throw new Error('You are not an authorized keeper of this enterprise');
+        }
+
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            throw new Error('Pledge amount must be a positive number');
+        }
+
+        const totalPledgedRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+        ).get(keeperPubkey) as any;
+        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
+        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
+
+        if (parsedAmount > availableToAdd) {
+            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
+        }
+
+        const pledgeToAdd = parsedAmount;
+        const pledgeId = crypto.randomUUID();
+        const pledgedAt = new Date().toISOString();
+
+        db.prepare(`
+            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+
+        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+        if (legacyFloor > 0) {
+            const pledgeSumRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(enterprisePubkey) as any;
+            const totalActiveDerived = Number(pledgeSumRow?.total || 0);
+            if (totalActiveDerived >= legacyFloor) {
+                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
+                broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+            }
+        }
+
+        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
+/**
+ * Release backing pledge from an enterprise (docs/the-commons.md §2.4 Rule 3).
+ * Covenant: a keeper can release only what leaves the enterprise above its current deficit.
+ */
+export function releaseEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amountToRelease?: number
+): { releasedAmount: number; remainingPledge: number } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(keeperPubkey, enterprisePubkey) as any;
+        const currentKeeperPledge = Number(activeRow?.total || 0);
+
+        const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
+        const hasActivePledge = currentKeeperPledge > 0;
+        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+            throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
+        }
+
+        if (currentKeeperPledge <= 0) {
+            throw new Error('No active backing pledge found for this enterprise');
+        }
+
+        let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
+        if (!Number.isFinite(toRelease) || toRelease <= 0) {
+            throw new Error('Release amount must be a positive number');
+        }
+        toRelease = Math.min(toRelease, currentKeeperPledge);
+
+        // Covenant check: enterprise balance deficit
+        const balance = getBalance(enterprisePubkey).balance;
+        const deficit = Math.max(0, -balance);
+
+        const totalPledgesRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
+        const newTotalPledges = currentTotalPledges - toRelease;
+        const legacyFloor = Number(t.legacy_credit_floor || 0);
+
+        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
+        }
+
+        const remainingPledge = currentKeeperPledge - toRelease;
+        const nowIso = new Date().toISOString();
+
+        db.prepare(
+            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).run(nowIso, keeperPubkey, enterprisePubkey);
+
+        if (remainingPledge > 0) {
+            const newPledgeId = crypto.randomUUID();
+            db.prepare(`
+                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                VALUES (?, ?, ?, ?, ?, NULL)
+            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        }
+
+        return { releasedAmount: toRelease, remainingPledge };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
 
 /**
  * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
@@ -2203,7 +2503,9 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
 }
 
 export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
+    const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
+    if (res) clearEnterpriseFloorCache();
+    return res;
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
@@ -2388,10 +2690,11 @@ export function getFriends(pubkey: string): FriendEntry[] {
 
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): AbuseReport | null {
     if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
+    const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, reason.slice(0, 500), createdAt);
-    return { id, reporterPubkey, targetPubkey, targetPostId, reason: reason.slice(0, 500), createdAt, status: 'pending' };
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, safeReason, createdAt);
+    return { id, reporterPubkey, targetPubkey, targetPostId, reason: safeReason, createdAt, status: 'pending' };
 }
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
@@ -2937,6 +3240,7 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'active') {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     }
+    clearEnterpriseFloorCache();
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
@@ -2946,6 +3250,8 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
 
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
     db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
+    clearEnterpriseFloorCache(publicKey);
+    clearEnterpriseFloorCache();
     broadcast({ type: 'profile_updated', publicKey });
 }
 
@@ -3066,27 +3372,23 @@ export function createTreasury(
     const paused = opts.paused ? 1 : 0;
 
     let pubKeyHex = opts.publicKeyHex;
-    let privKeyHex = '';
     if (!pubKeyHex) {
-        const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
+        const { publicKey } = crypto.generateKeyPairSync('ed25519', {
             publicKeyEncoding: { type: 'spki', format: 'pem' },
             privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
         });
         pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-        privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
     }
 
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
         // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, paused)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, purpose, goalAmount, deadlineAt, lifecycle, paused);
+        // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
-        if (privKeyHex) {
-            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
-        }
         if (opts.leadKeeperPubkey) {
             db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
@@ -3094,6 +3396,7 @@ export function createTreasury(
         }
     })();
 
+    clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
     ledger.setDecayExempt(pubKeyHex);
     broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
@@ -3466,9 +3769,9 @@ export function createProject(proposerPubkey: string, title: string, description
     
     // For simplicity, we store projects as JSON in node_config (since they are rare)
     // Or normally we'd make a table for them. Let's store in config to avoid more schema migrations for now.
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     projects.push(project);
-    db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
     
     // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
     // A Commons project proposal IS an enterprise with lifecycle = 'bounded'.
@@ -3480,6 +3783,7 @@ export function createProject(proposerPubkey: string, title: string, description
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
 
     db.transaction(() => {
+        db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
         const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
         if (!existingMember) {
             db.prepare(`
@@ -3493,6 +3797,8 @@ export function createProject(proposerPubkey: string, title: string, description
                 project.description || project.title, project.requestedAmount, now
             );
             db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
+            ledger.initializeGenesisAccount(project.id);
+            ledger.setDecayExempt(project.id);
             if (proposerPubkey) {
                 db.prepare(`
                     INSERT OR IGNORE INTO treasury_operators (
@@ -3510,7 +3816,8 @@ export function createProject(proposerPubkey: string, title: string, description
 
 export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
     if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
@@ -3541,12 +3848,17 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
 }
 
 export function deleteProject(proposerPubkey: string, projectId: string): boolean {
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
     if (projects[index].status !== 'proposed') return false;
 
+    const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (acc && Math.abs(acc.balance) > 1e-9) {
+        throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+    }
     const acct = ledger.getAccount(projectId);
     if (acct && Math.abs(acct.balance) > 0.0001) {
         throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
@@ -3569,8 +3881,9 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     if (!getMember(voterPubkey)) return { success: false, error: 'Not a member' };
     if (voteCount < 1 || !Number.isInteger(voteCount)) return { success: false, error: 'Vote count must be a positive integer' };
 
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
     if (!project) return { success: false, error: 'Project not found' };
 
     const activeRound = getActiveRound();
@@ -3586,14 +3899,15 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     }
 
     // Remove any existing votes from this voter in this round (they are re-allocating)
-    for (const p of projects) {
+    for (const p of blobProjects) {
         if (activeRound.projectIds.includes(p.id)) {
-            p.votes = p.votes.filter(v => v.pubkey !== voterPubkey);
+            p.votes = (p.votes || []).filter(v => v.pubkey !== voterPubkey);
         }
     }
+    project.votes = project.votes || [];
     project.votes.push({ pubkey: voterPubkey, weight: voteCount, creditsUsed: creditCost });
     
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
     broadcast({ type: 'vote_cast', projectId, voterPubkey, voteCount, creditCost, totalVotes: project.votes.reduce((sum, v) => sum + (v.weight || 1), 0) });
     return { success: true, creditsUsed: creditCost };
 }
@@ -3635,12 +3949,14 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
     if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
 
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     for (const pid of projectIds) {
-        const p = projects.find(pr => pr.id === pid && pr.status === 'proposed');
+        const p = blobProjects.find(pr => pr.id === pid && pr.status === 'proposed');
         if (p) p.status = 'active';
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ? AND is_treasury = 1 AND status = 'proposed'").run(pid);
     }
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     const round: VotingRound = { id: crypto.randomUUID(), status: 'open', closesAt, projectIds, createdBy: adminPubkey, createdAt: new Date().toISOString() };
     const rounds = getVotingRounds();
@@ -3669,56 +3985,31 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
     const winner = candidates[0];
 
     if (winner && voteWeight(winner) > 0) {
-        // A2-5: the commons→proposer grant was previously credited to the proposer's
-        // IN-MEMORY ledger account only — no DB write, no transaction row. A crash
-        // before the proposer's next transfer lost the grant; with no txn row the
-        // ledger could never reconcile to balances, and the conservation audit
-        // drifted. Perform it atomically: debit commons, credit the proposer in
-        // memory AND in the DB, and record a COMMONS_POOL→proposer transaction — so
-        // the grant is durable, auditable, and conservation-consistent.
+        // A2-5: the commons→enterprise grant is credited to the enterprise's
+        // IN-MEMORY ledger account AND DB row atomically, with a COMMONS_POOL→enterprise
+        // transaction — so the grant is durable, auditable, and conservation-consistent.
         const ts = new Date().toISOString();
         const txId = crypto.randomUUID();
-        // #138 review: the grant now commits as ONE unit — the Commons debit, the proposer's credit, both
-        // rows, the decay rows and the Commons row. `persistDecayEvents()` and `persistCommonsBalance()` used
-        // to run after the transaction had already committed, leaving a window in which the proposer's credit
-        // was durable while the Commons debit was not. A restart in that window restores the pot from its
-        // unwritten, pre-grant row — so the grant becomes newly minted beans, which is the one thing a mutual
-        // credit ledger must never do.
-        //
-        // `conservingTransaction` rather than `db.transaction`, and the DEDUCT moved inside it. Both halves of
-        // this grant live in memory as well as in rows, and a SQLite rollback touches only the rows; the
-        // snapshot has to be taken before the deduct, or a rollback would restore an already-debited pot
-        // alongside a reverted credit and destroy the beans instead.
+        const isProposerTreasury = ((db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(winner.proposerPubkey) as any)?.is_treasury === 1);
+        const targetAccount = isProposerTreasury ? winner.proposerPubkey : ((winner as any).enterprisePubkey || winner.id);
         const funded = conservingTransaction(() => {
             if (!ledger.deductFromCommons(winner.requestedAmount)) return false;
-            const account = ledger.getAccount(winner.proposerPubkey);
+            const account = ledger.getAccount(targetAccount);
             account.balance += winner.requestedAmount;
-                // #138: the epoch travels with the balance, on BOTH arms. This wrote a literal 0 on insert
-                // and omitted the column entirely from the DO UPDATE, so the grant landed on a row whose
-                // demurrage window was still open — and the proposer's next read charged the whole stale
-                // interval against the granted amount. `account` came from ledger.getAccount() above, which
-                // already settled what was genuinely owed and stamped the epoch, so this just carries that
-                // settlement into the row. The old `VALUES (…, 0)` was worse than stale on the insert arm:
-                // epoch 0 is 1970, which invites ~56 years of compound decay against a balance that is NOT
-                // zero here. (Elsewhere an epoch-0 insert is harmless because the balance is 0 and
-                // applyDecay's no-decay branch stamps the epoch before anything can be charged.)
-                db.prepare(`
-                    INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(public_key) DO UPDATE SET
-                        balance = excluded.balance,
-                        last_demurrage_epoch = excluded.last_demurrage_epoch,
-                        last_updated_at = excluded.last_updated_at
-                `).run(winner.proposerPubkey, account.balance, account.lastDemurrageEpoch, ts);
+            // #138 & Slice 3: the epoch travels with the balance, on BOTH arms. The grant lands on the
+            // enterprise treasury targetAccount (or enterprise proposer) rather than creator's personal wallet.
+            db.prepare(`
+                INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(public_key) DO UPDATE SET
+                    balance = excluded.balance,
+                    last_demurrage_epoch = excluded.last_demurrage_epoch,
+                    last_updated_at = excluded.last_updated_at
+            `).run(targetAccount, account.balance, account.lastDemurrageEpoch, ts);
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
-                .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
-            // The getAccount() above may have queued a decay event, and this path DESTROYS BEANS without
-            // draining it. Measured by reverting this line: 1.99 beans gone. #137 made `loadState` unwind an
-            // undrained Commons credit along with its debit, which is right when the debit lives only in
-            // memory — but the UPSERT above has already written the post-decay balance to the row, so the
-            // debit is durable and the unwind takes back a credit that had a real counterpart. Draining here
-            // settles both halves before anything can resync. It also gives the collection its `demurrage_`
-            // transaction row, without which the demurrage is invisible to an audit.
+                .run(txId, 'COMMONS_POOL', targetAccount, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
+            // #137: persistDecayEvents drains any demurrage event collected during getAccount, settling both halves
+            // before anything can resync and giving the collection its demurrage_ transaction row.
             persistDecayEvents();
             persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
             return true;
@@ -3738,20 +4029,46 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         }
     }
 
-    for (const c of candidates) if (c.id !== winner?.id && c.status === 'active') c.status = 'proposed';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const blobWinner = blobProjects.find(p => p.id === winner?.id);
+    if (blobWinner && winner) {
+        blobWinner.status = winner.status;
+        if (winner.fundedAt) blobWinner.fundedAt = winner.fundedAt;
+    }
+    const fundedWinnerId = winner?.status === 'funded' ? winner.id : null;
+    for (const c of candidates) {
+        if (c.id !== fundedWinnerId && c.status === 'active') {
+            c.status = 'proposed';
+            const bp = blobProjects.find(p => p.id === c.id);
+            if (bp) bp.status = 'proposed';
+            try {
+                db.prepare("UPDATE members SET status = 'proposed' WHERE public_key = ? AND status = 'active' AND is_treasury = 1").run(c.id);
+            } catch { }
+        }
+    }
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     broadcast({ type: 'voting_round_closed', roundId, winnerId: winner?.status === 'funded' ? winner.id : null });
     return { success: true, winner: winner?.status === 'funded' ? winner : undefined };
 }
 
 export function adminRejectProject(projectId: string): boolean {
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return false;
-    project.status = 'rejected';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-    return true;
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
+    let found = false;
+    if (project) {
+        project.status = 'rejected';
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
+        found = true;
+    }
+    const member = db.prepare("SELECT public_key FROM members WHERE public_key = ? AND is_treasury = 1").get(projectId);
+    if (member) {
+        db.prepare("UPDATE members SET status = 'rejected' WHERE public_key = ?").run(projectId);
+        found = true;
+    }
+    return found;
 }
 
 export function getProjects(): CommunityProject[] {
@@ -3774,9 +4091,16 @@ export function getAllProjects(): CommunityProject[] {
         `).all() as any[];
 
         for (const e of enterprises) {
-            if (!knownIds.has(e.public_key)) {
-                const lead = e.lead_keeper || e.any_keeper || e.public_key;
-                const leadMember = getMember(lead);
+            const lead = e.lead_keeper || e.any_keeper || e.public_key;
+            const leadMember = getMember(lead);
+            const existing = blobProjects.find(p => p.id === e.public_key);
+            if (existing) {
+                // Keep live values from members table so blob doesn't shadow SQL
+                existing.title = e.callsign || existing.title;
+                existing.description = e.purpose || e.bio || existing.description;
+                if (e.goal_amount != null) existing.requestedAmount = Number(e.goal_amount);
+                if (e.status) existing.status = e.status.toLowerCase() as any;
+            } else {
                 blobProjects.push({
                     id: e.public_key,
                     title: e.callsign,

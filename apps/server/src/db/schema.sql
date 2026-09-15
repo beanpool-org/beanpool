@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- Enterprise Credit Model (Rules 6 & 7)
     earned_surplus REAL DEFAULT 0,
     working_capital_ceiling REAL DEFAULT NULL,
+    -- Grandfathered credit floor for enterprises (docs/the-commons.md §2.4, §6 Slice 4).
+    -- Auto-cleared once keepers' pledges exceed it.
+    legacy_credit_floor REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
@@ -557,7 +560,9 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
+    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
+    legacy_credit_floor,
+    purpose, goal_amount, deadline_at, lifecycle, paused
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -1127,3 +1132,17 @@ CREATE TABLE IF NOT EXISTS decision_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
 -- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix
+
+-- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
+-- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.
+-- Counted once across enterprises; locked if enterprise is in deficit.
+CREATE TABLE IF NOT EXISTS enterprise_pledges (
+    id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL REFERENCES members(public_key),
+    enterprise TEXT NOT NULL REFERENCES members(public_key),
+    amount REAL NOT NULL CHECK (amount > 0),
+    pledged_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    released_at DATETIME DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_enterprise ON enterprise_pledges(enterprise, released_at);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_keeper ON enterprise_pledges(keeper, released_at);

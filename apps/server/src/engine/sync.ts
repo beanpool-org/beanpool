@@ -166,6 +166,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
             return r.changes > 0;
         }
+        case 'members': {
+            const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
+            db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -188,6 +193,10 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const [postId, orderNum] = rowKey.split('|');
             if (!postId || orderNum === undefined) return null;
             const r = db.prepare(`SELECT updated_at AS ts FROM post_photos WHERE post_id=? AND order_num=?`).get(postId, Number(orderNum)) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        case 'members': {
+            const r = db.prepare(`SELECT updated_at AS ts FROM members WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         default:

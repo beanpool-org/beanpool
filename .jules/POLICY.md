@@ -274,3 +274,94 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** MARGINAL / JUDGEMENT
 - **Claim:** replace `array.find()` with a pre-computed `Map`.
 - **Why not to re-file blindly:** #766 was worth it — the lookup sat inside a **recursive tree render**, so it was O(M·(M+P)). #745 replaced a **single** lookup per render, where building the Map costs as much as the scan it saves. Both are harmless and both landed, but a `.find()` → `Map` rewrite is only a win when the lookup is in a loop or recursion. Do not file these against one-shot lookups.
+
+### 2026-09-15 — Atlas: manager node-client unit tests (#777) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing unit tests for node client helpers (`loginToNode`, `fetchNodeTreasuries`, `createNodeTreasury`, `fetchNodeSnapshots`, `createNodeSnapshot`, `deleteNodeSnapshot`, `updateNodeReplicationCadence`, `forceNodeResync`) in `apps/manager/src/lib/node-client.ts`.
+- **Why not to re-file:** Landed in commit `e3a9f47`. Added unit tests in `apps/manager/src/lib/node-client.test.ts` covering authentication, treasury management, snapshot operations, and replication cadence helpers.
+
+### 2026-09-15 — Shield: pairing relay uses shared shouldBlockCleartextNodeUrl (#778) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Enforce secure transport for pairing relay URLs in `apps/native/app/pair-device.tsx`.
+- **Why not to re-file:** Landed in commit `60d1424`. Replaced custom hostname parsing with `shouldBlockCleartextNodeUrl(targetNode)` in `apps/native/app/pair-device.tsx` to block insecure cleartext HTTP/WS pairing relays on non-private hosts.
+
+### 2026-09-15 — Forge: validate report reason type in submitReport (#779) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Validate report reason type in `submitReport` to prevent runtime `TypeError` when calling `.slice()`.
+- **Why not to re-file:** Landed in commit `daa3989`. Validates `typeof reason === 'string' && reason.trim()` in `apps/server/src/routes/community.ts` and safely coerces reason via `String(reason ?? '')` before slicing in `apps/server/src/state-engine.ts`.
+
+### 2026-09-15 — Palette: OnboardingGuide decorative emojis hidden, WCAG 2.5.3 name preserved (#780) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Hide decorative emojis in `apps/pwa/src/components/OnboardingGuide.tsx` from screen readers while preserving accessible names under WCAG 2.5.3.
+- **Why not to re-file:** Landed in commit `7d09b2e`. Wrapped decorative emojis in `<span aria-hidden="true">` across cards in `OnboardingGuide.tsx` while preserving accessible button names under WCAG 2.5.3, verified by unit tests in `OnboardingGuide.test.tsx`.
+
+### 2026-09-15 — Bolt: avatarUrl in getFriends response (#782) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Include `avatarUrl` in `getFriends` response to avoid $O(M)$ member directory fetch.
+- **Why not to re-file:** Landed in commit `b393517`. Added `m.avatar_url` to the `getFriends` SQL query in `packages/beanpool-engine/src/social.ts` and updated `FriendEntry` interfaces, enabling $O(1)$ friend avatar rendering in PWA `PeoplePage.tsx`.
+
+### 2026-09-15 — Pixel: create-poll button accessibilityLabel/hint/state (#783) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Add missing `accessibilityLabel`, `accessibilityHint`, and `accessibilityState` to the create-poll submit button in `apps/native/components/NewPollModal.tsx`.
+- **Why not to re-file:** Landed in commit `8eed2fa`. Added dynamic `accessibilityLabel` ("Create poll" / "Creating poll"), `accessibilityHint`, and `accessibilityState={{ disabled: submitting, busy: submitting }}` to the submit button in `NewPollModal.tsx`.
+
+### 2026-09-15 — Vault: 2FA session token forwarded on snapshot ops — closes the #682 gap (#784) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Snapshot operations in `apps/manager/src/components/modules/TopologyModule.tsx` failed with 401 on 2FA-enabled nodes because `getTfaSessionToken` was not forwarded.
+- **Why not to re-file:** Landed in commit `ed294ee`. Passed `getTfaSessionToken(targetSnapshotNode.id)` to `fetchNodeSnapshots`, `createNodeSnapshot`, and `deleteNodeSnapshot` in `apps/manager/src/components/modules/TopologyModule.tsx`, closing the remaining #682 consumer gap.
+
+### 2026-09-15 — Flow: manager strict interfaces replacing any (#785) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Replace untyped `any` annotations with strict interfaces in `apps/manager/src/App.tsx` and `apps/manager/src/lib/node-client.ts`.
+- **Why not to re-file:** Landed in commit `149780e`. Defined strict TypeScript interfaces (`NodeHealthFlag`, `NodeReport`, `MemberItem`, `NodeDataPayload`) in `node-client.ts` and removed `any` annotations across state and filter callbacks in `App.tsx`.
+
+### 2026-09-15 — Scout: test coverage commons-reject-project (#781) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `POST /api/local/admin/commons/reject` and `adminRejectProject`.
+- **Why not to re-file:** Landed in merge commit `60e55543`. The tests target `/api/local/admin/commons/reject` and `adminRejectProject`, which SURVIVE the project==enterprise unification (#792) — old routes now serve from the unified model — so this coverage stays valid; the only conflict was the suite-list line in `scripts/test-all.sh`.
+
+### 2026-09-16 — Atlas: manager TopologyModule unit tests (#798) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing unit test coverage for `TopologyModule` in `apps/manager/src/components/modules/TopologyModule.tsx`.
+- **Why not to re-file:** Landed in merge commit `e7b52dc7`. Added unit tests in `apps/manager/src/components/modules/TopologyModule.test.tsx` covering tab switching across module views (On-Node Snapshots, Replication & Standby, Domain Name Claims, Disaster Recovery Runbook), domain name claim approval flow, and on-node snapshot fetching and creation. The module survives #808 behind `IS_FLEET_MODE`.
+
+### 2026-09-16 — Forge: admin post delete returns 404 for missing post (#799) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing HTTP 404 status code in `POST /api/local/admin/posts/:id/delete` when the post to delete is not found.
+- **Why not to re-file:** Landed in merge commit `22692a4d`. In `apps/server/src/routes/admin.ts`, returns HTTP status 404 `{ success: false, error: 'Post not found' }` if `adminDeletePost(ctx.params.id)` returns `false`, with regression coverage in `apps/server/src/test-moderation-admin.ts`.
+
+### 2026-09-16 — Sentinel: authenticated caller message send IDOR (#800) — LANDED, BUT CLAIM WAS FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** An authenticated caller can send a message as another member (IDOR on send).
+- **Why not to re-file:** Landed in merge commit `d2a6b3ed`. `requireSignature` in `apps/server/src/https-server.ts` already rejects any request whose identity field (`authorPubkey` ends in `'pubkey'`) differs from the signing key with 403 `'Identity mismatch'`; verified against main before the PR. The PR landed only a redundant route-level guard plus a regression assertion in the already-registered `test-messaging-idor.ts`, so this is defence in depth, not a vulnerability fix.
+
+### 2026-09-16 — Expo: native treasury-detail exports ErrorBoundary and refines params (#801) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing `ErrorBoundary` export in `apps/native/app/treasury-detail.tsx` and fragile parameter handling for array/scalar routes.
+- **Why not to re-file:** Landed in merge commit `b5792ac1`. Exports `ErrorBoundary` from `expo-router` in `apps/native/app/treasury-detail.tsx` to enable screen-level error handling, and refines parameter typing/extraction to safely handle both scalar string and array parameter edge cases.
+
+### 2026-09-16 — Palette: PulseFeedCard focus rings and touch targets, WCAG 2.5.3 name preserved (#802) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Interactive controls in `apps/pwa/src/components/PulseFeedCard.tsx` lacked minimum 44px touch target sizing and focus-visible rings.
+- **Why not to re-file:** Landed in merge commit `b4cd8c5e`. Added minimum 44px touch target height and focus-visible rings to interactive controls in `PulseFeedCard.tsx` while preserving accessible names under WCAG 2.5.3, verified by unit tests in `PulseFeedCard.test.tsx`.
+
+### 2026-09-16 — Bolt: O(1) invite-code lookups in native offline invite sync (#803) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Nested $O(N \times M)$ array scans (`find()` and `some()`) during offline invite sync in `apps/native/app/(tabs)/people.tsx`.
+- **Why not to re-file:** Landed in merge commit `7d2395ee`. Replaced nested array searches in `loadOfflineInvites()` with pre-computed `serverInvitesMap` (`Map`) and `updatedCodes` (`Set`), reducing invite code lookups from $O(N \times M)$ to $O(N + M)$ during offline invite synchronization on native devices.
+
+### 2026-09-16 — Flow: manager OnboardingModule empty state when no fleet profiles exist (#804) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing empty state UI in `apps/manager/src/components/modules/OnboardingModule.tsx` when the node profiles list is empty or no active profile is selected.
+- **Why not to re-file:** Landed in merge commit `7e4ee012`. Added accessible empty state UI in `OnboardingModule.tsx` guiding the operator to configure a node profile in Fleet Settings when no profiles exist.
+
+### 2026-09-16 — Pixel: accessibilityRole/label on native clear-deadline button in propose-project (#805) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing `accessibilityRole` and `accessibilityLabel` on the clear deadline `Pressable` in `apps/native/app/propose-project.tsx`.
+- **Why not to re-file:** Landed in merge commit `9dbe8dbc`. Added `accessibilityRole="button"` and `accessibilityLabel="Clear deadline"` to the clear deadline `Pressable` in `apps/native/app/propose-project.tsx`, which survives the #792 project-enterprise unification.
+
+### 2026-09-16 — Scout: test coverage commons projects update and delete (#807) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `POST /api/commons/projects/update` and `POST /api/commons/projects/delete` routes in `apps/server/src/routes/commons.ts`.
+- **Why not to re-file:** Landed in merge commit `365a909c`. Added integration test suite `apps/server/src/test-commons-projects-update-delete.ts` covering owner updates/deletions, non-owner rejections (400), field validation, and duplicate deletion guards, registered in `scripts/test-all.sh`. Commons project update/delete routes survive the #792 unification; only a suite-list conflict occurred.
+

@@ -2,19 +2,25 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject } from '../utils/db';
+import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { useTheme, useStyles } from './ThemeContext';
 
-// A community treasury's detail screen. Everyone sees the transparency view (balance, credit line,
-// live listings, recent activity — the Commons is meant to be legible). A member holding the
-// keepership of THIS enterprise additionally gets the keeper controls: post its Offer/Need and
-// sweep its surplus into the shared Commons pool.
+// A community enterprise's detail screen. Everyone sees the transparency view (balance, credit line,
+// purpose, goal progress if bounded, live listings, recent activity — the Commons is meant to be legible).
+// A member holding the keepership of THIS enterprise additionally gets the keeper controls: post its
+// Offer/Need and sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
-    const params = useLocalSearchParams<{ publicKey?: string; name?: string; avatar?: string }>();
+    const params = useLocalSearchParams<{ publicKey?: string | string[]; id?: string | string[]; name?: string | string[]; avatar?: string | string[] }>();
+    const rawKey = params.publicKey || params.id;
+    const treasuryKey = typeof rawKey === 'string' ? rawKey : Array.isArray(rawKey) ? rawKey[0] : undefined;
+    const nameParam = typeof params.name === 'string' ? params.name : Array.isArray(params.name) ? params.name[0] : undefined;
+    const avatarParam = typeof params.avatar === 'string' ? params.avatar : Array.isArray(params.avatar) ? params.avatar[0] : undefined;
     const { theme, colors } = useTheme();
 
     const [detail, setDetail] = useState<any>(null);
@@ -25,6 +31,14 @@ export default function TreasuryDetailScreen() {
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
     const [hourlyDealPrompt, setHourlyDealPrompt] = useState<any | null>(null);
     const [hourlyDealHours, setHourlyDealHours] = useState('');
+    const [pledgeAmount, setPledgeAmount] = useState('');
+    const [pledgeMemo, setPledgeMemo] = useState('');
+    const [pledging, setPledging] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
+    const [showReportForm, setShowReportForm] = useState(false);
+    const [reportReason, setReportReason] = useState('');
+    const [reporting, setReporting] = useState(false);
+    const [identity, setIdentity] = useState<any>(null);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -38,6 +52,34 @@ export default function TreasuryDetailScreen() {
         avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
         name: { fontSize: 20, fontWeight: '800', color: colors.text.heading },
         subtitle: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
+
+        purposeCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        purposeLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 },
+        purposeText: { fontSize: 14, color: colors.text.body, lineHeight: 21 },
+
+        progressCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 },
+        currentAmt: { fontSize: 20, fontWeight: '800', color: colors.text.body },
+        progressLabel: { fontSize: 13, fontWeight: 'normal', color: colors.text.secondary },
+        goalAmt: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
+        deadlineBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, backgroundColor: colors.brand.tint, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+        deadlineExpired: { color: colors.feedback.danger.solid, backgroundColor: colors.surface.subtle },
+        progressBarBg: { height: 8, backgroundColor: colors.surface.subtle, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
+        progressBarFill: { height: '100%', borderRadius: 4 },
+        escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
+        pledgeBox: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default },
+        pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+        pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
+        pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
+        pledgeButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        pledgeButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
+
+        keepersCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
+        keepersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+        keeperChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface.app, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default },
+        keeperCallsign: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
+        keeperRole: { fontSize: 11, color: colors.text.secondary },
 
         balanceCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -89,42 +131,41 @@ export default function TreasuryDetailScreen() {
     const load = useCallback(() => {
         let active = true;
         setLoading(true);
-        if (params.publicKey) {
-            getTreasuryDetail(params.publicKey)
+        if (treasuryKey) {
+            getTreasuryDetail(treasuryKey)
                 .then((d) => { if (active) { setDetail(d); setLoading(false); } })
                 .catch(() => { if (active) setLoading(false); });
         } else {
             setLoading(false);
         }
         loadIdentity().then((id: any) => {
+            if (!active) return;
+            setIdentity(id);
             if (id?.publicKey) {
-                // #106: gate on keepership of THIS enterprise, not the coarse "is a keeper
-                // of something" flag — otherwise a keeper of one enterprise sees operate
-                // controls on every other one and their action 403s.
                 getBalance(id.publicKey).then((b: any) => {
                     if (!active) return;
                     const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                    setIsKeeperOfThis(!!params.publicKey && mine.includes(params.publicKey));
+                    setIsKeeperOfThis(!!treasuryKey && mine.includes(treasuryKey));
                 }).catch(() => {});
             }
         });
         return () => { active = false; };
-    }, [params.publicKey]);
+    }, [treasuryKey]);
 
     useFocusEffect(load);
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || params.name || 'Community Treasury';
-    const avatar = detail?.avatar || params.avatar;
+    const name = detail?.name || nameParam || 'Community Treasury';
+    const avatar = detail?.avatar || avatarParam;
 
     const handleSweep = async () => {
-        if (!params.publicKey) return;
+        if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
         if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
         if (amt > balance) { Alert.alert('Not enough surplus', `This treasury only holds ${balance} 🫘.`); return; }
         setSweeping(true);
         try {
-            await treasurySweep(params.publicKey, amt);
+            await treasurySweep(treasuryKey, amt);
             Alert.alert('Swept to the Commons 🌱', `${amt} 🫘 moved from ${name} into the shared Commons pool.`);
             setSweepAmount('');
             load();
@@ -135,8 +176,64 @@ export default function TreasuryDetailScreen() {
         }
     };
 
+    const handlePledge = async () => {
+        if (!treasuryKey || pledging) return;
+        const amt = Number(pledgeAmount);
+        if (isNaN(amt) || amt <= 0) {
+            Alert.alert('Invalid Amount', 'Please enter a positive number of Beans to pledge.');
+            return;
+        }
+        setPledging(true);
+        try {
+            await treasuryPledge(treasuryKey, amt, pledgeMemo.trim() || undefined);
+            Alert.alert('Pledge Successful! 🌱', `Thank you for pledging ${amt} 🫘 to ${name}.`);
+            setPledgeAmount('');
+            setPledgeMemo('');
+            load();
+        } catch (e: any) {
+            Alert.alert('Pledge Failed', e.message || 'Could not complete pledge.');
+        } finally {
+            setPledging(false);
+        }
+    };
+
+    const handleCancelInitiative = () => {
+        if (!treasuryKey || cancelling) return;
+        Alert.alert(
+            'Cancel Initiative & Refund Backers?',
+            'This will close the initiative and immediately refund all escrowed pledges back to their backers.',
+            [
+                { text: 'Keep Initiative', style: 'cancel' },
+                {
+                    text: 'Cancel & Refund',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setCancelling(true);
+                        try {
+                            await deleteCrowdfundProjectApi(treasuryKey);
+                            Alert.alert('Initiative Cancelled 🌱', 'Pledges have been refunded to backers.');
+                            router.back();
+                        } catch (e: any) {
+                            Alert.alert('Cancellation Failed', e.message || 'Could not cancel initiative.');
+                        } finally {
+                            setCancelling(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const getDaysRemaining = (deadline: string | null) => {
+        if (!deadline) return null;
+        const diff = new Date(deadline).getTime() - new Date().getTime();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (days < 0) return 'Expired';
+        if (days === 0) return 'Ends today';
+        return `${days} days left`;
+    };
+
     const handleApproveBid = async (txId: string) => {
-        const treasuryKey = params.publicKey;
         if (!treasuryKey) return;
         setActionState({ id: txId, type: 'approve' });
         try {
@@ -151,7 +248,6 @@ export default function TreasuryDetailScreen() {
     };
 
     const handleRejectBid = (txId: string) => {
-        const treasuryKey = params.publicKey;
         if (!treasuryKey) return;
         Alert.alert(
             'Decline Bid?',
@@ -179,7 +275,6 @@ export default function TreasuryDetailScreen() {
     };
 
     const handleCompleteDeal = (d: any) => {
-        const treasuryKey = params.publicKey;
         if (!treasuryKey) return;
         if (d.price_type && d.price_type !== 'fixed') {
             setHourlyDealHours(d.hours ? String(d.hours) : '1');
@@ -250,13 +345,108 @@ export default function TreasuryDetailScreen() {
                             {avatar ? (
                                 <Image source={{ uri: avatar }} style={styles.avatar} accessibilityLabel="Treasury avatar" />
                             ) : (
-                                <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>🏛️</Text></View>
+                                <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>{detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}</Text></View>
                             )}
                             <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
                                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.subtitle}>Community treasury · run by the Commons</Text>
+                                <Text style={styles.subtitle}>{detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}</Text>
                             </View>
                         </View>
+
+                        {/* Purpose Statement (docs/the-commons.md §2.1) */}
+                        {!!detail?.purpose && (
+                            <View style={styles.purposeCard}>
+                                <Text style={styles.purposeLabel}>PURPOSE</Text>
+                                <Text style={styles.purposeText}>{detail.purpose}</Text>
+                            </View>
+                        )}
+
+                        {/* Funding Progress (for Bounded Enterprises with a goal) */}
+                        {detail?.goalAmount != null && detail.goalAmount > 0 && (() => {
+                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
+                            const goal = detail.goalAmount;
+                            const progress = Math.min(100, (current / goal) * 100);
+                            const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
+                            const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            return (
+                                <View style={styles.progressCard}>
+                                    <View style={styles.progressHeader}>
+                                        <View>
+                                            <Text style={[styles.currentAmt, isFunded && { color: colors.brand.primary }]}>
+                                                {current} 🫘 <Text style={styles.progressLabel}>raised</Text>
+                                            </Text>
+                                            <Text style={styles.goalAmt}>Goal: {goal} 🫘</Text>
+                                        </View>
+                                        {daysRemaining && (
+                                            <Text style={[styles.deadlineBadge, daysRemaining === 'Expired' && styles.deadlineExpired]}>
+                                                ⏳ {daysRemaining}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <View style={styles.progressBarBg}>
+                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.primary : colors.accent.primary }]} />
+                                    </View>
+                                    <Text style={styles.escrowNotice}>
+                                        {isFunded 
+                                            ? "🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise account."
+                                            : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
+                                    </Text>
+
+                                    {/* Inline Pledge Beans Input */}
+                                    <View style={styles.pledgeBox}>
+                                        <View style={styles.pledgeInputRow}>
+                                            <TextInput
+                                                accessibilityLabel="Pledge amount"
+                                                style={styles.pledgeAmountInput}
+                                                placeholder="Amount (🫘)"
+                                                placeholderTextColor={colors.text.muted}
+                                                keyboardType="numeric"
+                                                value={pledgeAmount}
+                                                onChangeText={setPledgeAmount}
+                                            />
+                                            <TextInput
+                                                accessibilityLabel="Pledge memo"
+                                                style={styles.pledgeMemoInput}
+                                                placeholder="Memo (optional)"
+                                                placeholderTextColor={colors.text.muted}
+                                                value={pledgeMemo}
+                                                onChangeText={setPledgeMemo}
+                                            />
+                                        </View>
+                                        <Pressable
+                                            style={[styles.pledgeButton, (pledging || !pledgeAmount.trim()) && { opacity: 0.6 }]}
+                                            disabled={pledging || !pledgeAmount.trim()}
+                                            onPress={handlePledge}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Pledge Beans"
+                                            accessibilityState={{ disabled: pledging || !pledgeAmount.trim(), busy: pledging }}
+                                        >
+                                            {pledging ? (
+                                                <ActivityIndicator color={colors.text.inverse} />
+                                            ) : (
+                                                <Text style={styles.pledgeButtonText}>PLEDGE BEANS 🌱</Text>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            );
+                        })()}
+
+                        {/* Accountable Keepers */}
+                        {detail?.keepers && detail.keepers.length > 0 && (
+                            <View style={styles.keepersCard}>
+                                <Text style={styles.keepersLabel}>ACCOUNTABLE KEEPERS ({detail.keepers.length})</Text>
+                                <View style={styles.keepersList}>
+                                    {detail.keepers.map((k: any) => (
+                                        <View key={k.publicKey || k.pubkey} style={styles.keeperChip}>
+                                            <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                            <Text style={styles.keeperCallsign}>{k.callsign}</Text>
+                                            <Text style={styles.keeperRole}>({k.role || 'keeper'})</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
 
                         {/* Balance */}
                         <View style={styles.balanceCard}>
@@ -444,6 +634,29 @@ export default function TreasuryDetailScreen() {
                                 <Text style={styles.opHint}>
                                     Post the treasury's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
+
+                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                    <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
+                                        <Pressable
+                                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
+                                            onPress={handleCancelInitiative}
+                                            disabled={cancelling}
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Cancel initiative and refund escrow"
+                                        >
+                                            {cancelling ? (
+                                                <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                            ) : (
+                                                <>
+                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.solid} />
+                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid }}>
+                                                        Cancel Initiative & Refund Escrow
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </Pressable>
+                                    </View>
+                                )}
                             </View>
                         )}
 
@@ -488,6 +701,47 @@ export default function TreasuryDetailScreen() {
                                 </Text>
                             </View>
                         ))}
+                        {/* Report Enterprise Action */}
+                        <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
+                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel="Report Enterprise">
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.solid} />
+                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '600' }}>Report Enterprise</Text>
+                            </Pressable>
+                            {showReportForm && (
+                                <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.solid, marginBottom: 8, letterSpacing: 0.5 }}>REPORT REASON</Text>
+                                    <TextInput
+                                        accessibilityLabel="Report reason"
+                                        style={{ backgroundColor: colors.surface.card, height: 40, borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
+                                        placeholder="Why are you reporting this enterprise?"
+                                        placeholderTextColor={colors.text.muted}
+                                        value={reportReason}
+                                        onChangeText={setReportReason}
+                                    />
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        style={{ backgroundColor: reportReason ? colors.feedback.danger.solid : colors.surface.subtle, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
+                                        disabled={!reportReason || reporting}
+                                        onPress={async () => {
+                                            if (!identity?.publicKey || !treasuryKey) return;
+                                            setReporting(true);
+                                            try {
+                                                await reportAbuse(identity.publicKey, treasuryKey, reportReason, treasuryKey);
+                                                setShowReportForm(false);
+                                                setReportReason('');
+                                                Alert.alert('Reported', 'This enterprise has been flagged for review.');
+                                            } catch (e: any) {
+                                                Alert.alert('Error', e.message || 'Could not submit report.');
+                                            } finally {
+                                                setReporting(false);
+                                            }
+                                        }}
+                                    >
+                                        <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>{reporting ? 'Reporting...' : 'Submit Report'}</Text>
+                                    </Pressable>
+                                </View>
+                            )}
+                        </View>
                     </ScrollView>
                 </KeyboardAvoidingView>
             )}
@@ -529,7 +783,6 @@ export default function TreasuryDetailScreen() {
                                             return;
                                         }
                                         const deal = hourlyDealPrompt;
-                                        const treasuryKey = params.publicKey;
                                         setHourlyDealPrompt(null);
                                         if (!treasuryKey) return;
                                         setActionState({ id: deal.id, type: 'complete' });

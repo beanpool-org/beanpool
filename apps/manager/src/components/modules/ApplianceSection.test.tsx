@@ -478,4 +478,79 @@ describe('ApplianceSection Component', () => {
 
         expect(alertSpy).toHaveBeenCalledWith('Node reset failed: Unauthorized reset attempt');
     });
+
+    it('stores issued 2FA session token upon successful 2FA verification to prevent lockout', async () => {
+        const setTokenSpy = vi.spyOn(nodeClient, 'setTfaSessionToken');
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/2fa/setup')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        qrDataUrl: 'data:image/png;base64,mockqr',
+                        secret: 'JBSWY3DPEHPK3PXP',
+                    }),
+                });
+            }
+            if (url.includes('/api/local/admin/2fa/verify')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        success: true,
+                        totpEnabled: true,
+                        tfaSessionToken: 'mock-tfa-session-token-12345',
+                    }),
+                });
+            }
+            if (url.includes('/api/local/admin/2fa/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true, totpEnabled: false }),
+                });
+            }
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ connectors: [] }),
+            });
+        }));
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="access"
+                />
+            );
+        });
+
+        // Click setup button to show the verify input
+        const setupBtn = screen.getByRole('button', { name: /setup 2fa authenticator/i });
+        await act(async () => {
+            fireEvent.click(setupBtn);
+        });
+
+        // Enter totp code
+        const codeInput = screen.getByPlaceholderText('Enter 6-digit code to verify');
+        fireEvent.change(codeInput, { target: { value: '123456' } });
+
+        const verifyBtn = screen.getByRole('button', { name: /verify & enable/i });
+        await act(async () => {
+            fireEvent.click(verifyBtn);
+        });
+
+        expect(setTokenSpy).toHaveBeenCalledWith(mockProfile.id, 'mock-tfa-session-token-12345');
+        expect(sessionStorage.getItem('bp-2fa-session')).toBe('mock-tfa-session-token-12345');
+    });
 });

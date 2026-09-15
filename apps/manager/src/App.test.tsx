@@ -202,5 +202,44 @@ describe('App Component', () => {
                 expect(profiles.some((p: any) => p.adminPassword === 'secret-pass-123')).toBe(false);
             }
         });
+
+        it('prioritizes session adminToken over stale localStorage profile password in single-node mode', async () => {
+            sessionStorage.clear();
+            localStorage.clear();
+            // Pre-seed localStorage with a stale password
+            localStorage.setItem('bp_fleet_profiles', JSON.stringify([{
+                id: 'local-node',
+                name: 'Local Sovereign Node',
+                url: 'http://localhost',
+                adminPassword: 'stale-password-from-storage',
+            }]));
+            sessionStorage.setItem('bp-admin-token', 'fresh-authenticated-password');
+
+            let lastAdminHeaders: Record<string, string> = {};
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: any) => {
+                if (url.includes('/api/local/admin/ledger-audit')) {
+                    lastAdminHeaders = opts?.headers || {};
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ success: true, ok: true, drift: 0 }),
+                    });
+                }
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }),
+                });
+            }));
+
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+
+            const auditBtn = screen.getByRole('button', { name: /run ledger audit/i });
+            await act(async () => {
+                fireEvent.click(auditBtn);
+            });
+
+            expect(lastAdminHeaders['X-Admin-Password']).toBe('fresh-authenticated-password');
+        });
     });
 });

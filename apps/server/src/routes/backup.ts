@@ -430,13 +430,17 @@ router.post('/api/local/admin/backup/verify', async (ctx) => {
             }
             const Database = (await import('better-sqlite3')).default;
             const snapDb = new Database(target, { readonly: true });
-            const check = snapDb.pragma('integrity_check') as any[];
-            snapDb.close();
-            const ok = check.length === 1 && check[0].integrity_check === 'ok';
+            let check: any[];
+            try {
+                check = snapDb.pragma('integrity_check') as any[];
+            } finally {
+                snapDb.close();
+            }
+            const ok = Array.isArray(check) && check.length === 1 && check[0]?.integrity_check === 'ok';
             ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
         } else {
             const check = db.pragma('integrity_check') as any[];
-            const ok = check.length === 1 && check[0].integrity_check === 'ok';
+            const ok = Array.isArray(check) && check.length === 1 && check[0]?.integrity_check === 'ok';
             ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
         }
     } catch (e: any) {

@@ -150,13 +150,14 @@ export function HomeScreen({
             {/* 3. Four cards — Members · Commons pool · Shared enterprises · Circulation this week */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Members Card */}
-                <div
+                <button
+                    type="button"
                     onClick={() => onNavigate('people')}
-                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group"
+                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Members</span>
-                        <span className="text-lg">👥</span>
+                        <span className="text-lg" aria-hidden="true">👥</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
                         {membersCount}
@@ -164,16 +165,17 @@ export function HomeScreen({
                     <p className="text-xs text-nature-400 m-0">
                         {membersCount === 1 ? '1 active sovereign member' : `${membersCount} active sovereign members`}
                     </p>
-                </div>
+                </button>
 
                 {/* Commons Pool Card */}
-                <div
+                <button
+                    type="button"
                     onClick={() => onNavigate('economy')}
-                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group"
+                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Commons Pool</span>
-                        <span className="text-lg">🏛️</span>
+                        <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
                         {auditState.result?.sumBalances !== undefined ? Math.abs(auditState.result.sumBalances).toFixed(1) : '240.0'}{' '}
@@ -182,16 +184,17 @@ export function HomeScreen({
                     <p className="text-xs text-emerald-400 m-0 font-medium">
                         ✓ 0 drift · 100% backed
                     </p>
-                </div>
+                </button>
 
                 {/* Shared Enterprises Card */}
-                <div
+                <button
+                    type="button"
                     onClick={() => onNavigate('economy')}
-                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group"
+                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Shared Enterprises</span>
-                        <span className="text-lg">🌾</span>
+                        <span className="text-lg" aria-hidden="true">🌾</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
                         {/* Enterprises count */}
@@ -200,16 +203,17 @@ export function HomeScreen({
                     <p className="text-xs text-nature-400 m-0">
                         Community projects &amp; co-ops
                     </p>
-                </div>
+                </button>
 
                 {/* Circulation Card */}
-                <div
+                <button
+                    type="button"
                     onClick={() => onNavigate('appliance', 'diagnostics')}
-                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group"
+                    className="p-5 rounded-2xl bg-nature-900/70 hover:bg-nature-900 border border-nature-800 hover:border-nature-700 cursor-pointer transition-all shadow-md group text-left w-full focus:outline-none focus:ring-2 focus:ring-terra-500"
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-nature-400 uppercase tracking-wider">Circulation</span>
-                        <span className="text-lg">🔄</span>
+                        <span className="text-lg" aria-hidden="true">🔄</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
                         148.5 <span className="text-xs font-normal text-nature-400">beans</span>
@@ -217,7 +221,7 @@ export function HomeScreen({
                     <p className="text-xs text-nature-400 m-0">
                         Active trade volume this week
                     </p>
-                </div>
+                </button>
             </div>
 
             {/* 4. Quick actions — Invite a member · Create an enterprise · Run ledger audit · Download backup */}

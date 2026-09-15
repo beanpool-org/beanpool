@@ -50,10 +50,10 @@ CREATE TABLE IF NOT EXISTS members (
     archetype TEXT,
     -- Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
     purpose TEXT,
-    goal_amount REAL DEFAULT NULL,
+    goal_amount REAL DEFAULT NULL CHECK (goal_amount IS NULL OR goal_amount >= 0),
     deadline_at DATETIME DEFAULT NULL,
-    lifecycle TEXT DEFAULT 'ongoing',
-    paused INTEGER DEFAULT 0,
+    lifecycle TEXT DEFAULT 'ongoing' CHECK (lifecycle IN ('ongoing', 'bounded')),
+    paused INTEGER DEFAULT 0 CHECK (paused IN (0, 1)),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -335,11 +335,13 @@ CREATE TABLE IF NOT EXISTS projects (
     deadline_at DATETIME,
     status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'FUNDED', 'FAILED', 'COMPLETED'
     migrated_at DATETIME,
-    enterprise_pubkey TEXT,
+    enterprise_pubkey TEXT REFERENCES members(public_key),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
+CREATE INDEX IF NOT EXISTS idx_projects_unmigrated ON projects(id) WHERE migrated_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_enterprise ON projects(enterprise_pubkey);
 
 -- 10. Invite Links (Deferred Deep Linking Shortener)
 CREATE TABLE IF NOT EXISTS invite_links (
@@ -1107,17 +1109,21 @@ CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
 CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
+CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
+CREATE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     voter_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     support       INTEGER NOT NULL CHECK (support IN (0, 1)),
-    weight        REAL NOT NULL DEFAULT 1,
-    credits_used  REAL NOT NULL DEFAULT 1,
+    weight        REAL NOT NULL DEFAULT 1 CHECK (weight >= 0),
+    credits_used  REAL NOT NULL DEFAULT 1 CHECK (credits_used >= 0),
     signature     TEXT,
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (decision_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
-CREATE INDEX IF NOT EXISTS idx_decision_votes_decision ON decision_votes(decision_id);
+-- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix

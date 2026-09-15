@@ -955,20 +955,20 @@ export function createCrowdfundProject(
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();
 
-    db.prepare(`
-        INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
-    `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
+    db.transaction(() => {
+        db.prepare(`
+            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
 
-    const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
-    if (!existing) {
-        const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-        const existingCallsign = db.prepare(
-            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-        ).get(baseCallsign, id) as any;
-        const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
+        const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
+        if (!existing) {
+            const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
+            const existingCallsign = db.prepare(
+                "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+            ).get(baseCallsign, id) as any;
+            const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
-        db.transaction(() => {
             db.prepare(`
                 INSERT INTO members (
                     public_key, callsign, joined_at, avatar_url, bio, status,
@@ -985,8 +985,8 @@ export function createCrowdfundProject(
                 `).run(id, creator_pubkey, now);
                 db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
             }
-        })();
-    }
+        }
+    })();
 }
 
 export function updateCrowdfundProject(
@@ -1130,6 +1130,17 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
 
+    // Guard against deleting funded/completed projects
+    if (project.status !== 'ACTIVE') {
+        throw new Error('Cannot delete a project that is already funded or completed');
+    }
+
+    // Guard against non-zero account balance to maintain ledger conservation
+    const account = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (account && Math.abs(account.balance) > 0.0001) {
+        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
+    }
+
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
     // on any of them becomes a retrospective tax on money they are merely getting back.
@@ -1179,9 +1190,10 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
     });
 
     executeDelete();

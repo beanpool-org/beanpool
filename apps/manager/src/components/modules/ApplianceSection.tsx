@@ -151,7 +151,7 @@ export function ApplianceSection({
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
-                setConnectors(data.connectors || []);
+                setConnectors(Array.isArray(data) ? data : data.connectors || []);
             }
         } catch {}
     };
@@ -243,9 +243,6 @@ export function ApplianceSection({
         setRestoreStatus(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
-            const formData = new FormData();
-            formData.append('backup', restoreFile);
-
             const headers: Record<string, string> = {};
             if (activeNode.adminPassword) headers['X-Admin-Password'] = activeNode.adminPassword;
             const token = getTfaSessionToken(activeNode.id);
@@ -254,7 +251,7 @@ export function ApplianceSection({
             const res = await fetch(url, {
                 method: 'POST',
                 headers,
-                body: formData,
+                body: restoreFile,
             });
 
             if (res.ok) {
@@ -282,8 +279,9 @@ export function ApplianceSection({
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    name: identityName,
-                    communityName,
+                    password: activeNode.adminPassword,
+                    callsign: identityName.trim(),
+                    communityName: communityName.trim(),
                 }),
             });
             if (res.ok) {
@@ -346,6 +344,7 @@ export function ApplianceSection({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ password: activeNode.adminPassword }),
             });
             const data = await res.json();
             if (data.updateAvailable) {
@@ -427,7 +426,10 @@ export function ApplianceSection({
             await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ address: peerAddress.trim() }),
+                body: JSON.stringify({
+                    password: activeNode.adminPassword,
+                    address: peerAddress.trim(),
+                }),
             });
             setPeerAddress('');
             await loadConnectors();
@@ -446,6 +448,9 @@ export function ApplianceSection({
             await fetch(url, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({
+                    password: activeNode.adminPassword,
+                }),
             });
             alert('Node has been reset. Refreshing page.');
             window.location.reload();

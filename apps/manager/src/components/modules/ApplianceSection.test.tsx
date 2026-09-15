@@ -174,4 +174,173 @@ describe('ApplianceSection Component', () => {
         const placeholderButton = screen.getByRole('button', { name: /Enrol Device Key via Break-Glass/i });
         expect(placeholderButton).toBeDisabled();
     });
+
+    it('sends password in POST body when checking for updates', async () => {
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="diagnostics"
+                />
+            );
+        });
+
+        const checkUpdateBtn = screen.getByRole('button', { name: /check release updates/i });
+        await act(async () => {
+            fireEvent.click(checkUpdateBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/admin/check-update'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ password: mockProfile.adminPassword }),
+            })
+        );
+    });
+
+    it('sends password and callsign in body when saving node identity in identity tab', async () => {
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="identity"
+                />
+            );
+        });
+
+        const saveIdentityBtn = screen.getByRole('button', { name: /save identity/i });
+        await act(async () => {
+            fireEvent.click(saveIdentityBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/update-identity'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    password: mockProfile.adminPassword,
+                    callsign: mockDiag.callsign,
+                    communityName: mockDiag.communityName,
+                }),
+            })
+        );
+    });
+
+    it('sends password and peer address in body when adding peer connector', async () => {
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="gateway"
+                />
+            );
+        });
+
+        const peerInput = screen.getByPlaceholderText(/wss:\/\/peer\.beanpool\.org/i);
+        fireEvent.change(peerInput, { target: { value: 'wss://peer.example.org:8443' } });
+
+        const connectBtn = screen.getByRole('button', { name: /add peer/i });
+        await act(async () => {
+            fireEvent.click(connectBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/connectors/connect'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    password: mockProfile.adminPassword,
+                    address: 'wss://peer.example.org:8443',
+                }),
+            })
+        );
+    });
+
+    it('sends raw binary body instead of FormData when restoring database archive', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+
+        const dummyFile = new File(['fake-tarball-data'], 'backup.tar.gz', { type: 'application/gzip' });
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+        });
+
+        const restoreSubmitBtn = screen.getByRole('button', { name: /restore from backup/i });
+        await act(async () => {
+            fireEvent.click(restoreSubmitBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/restore'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: { 'X-Admin-Password': mockProfile.adminPassword },
+                body: dummyFile,
+            })
+        );
+    });
 });

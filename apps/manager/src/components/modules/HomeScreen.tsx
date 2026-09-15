@@ -34,8 +34,8 @@ export function HomeScreen({
     const pendingReportsCount = (nodeData?.reports || []).length;
     
     // Calculate unclaimed invites from nodeData or invites count
-    const membersCount = (nodeData?.members || []).length;
-    const enterprisesCount = (nodeData?.members || []).filter((m: any) => m.isTreasury).length;
+    const membersCount = (nodeData?.members || []).filter((m: any) => !m.isTreasury).length;
+    const enterprisesCount = ((nodeData as any)?.enterprises?.length ?? (nodeData?.members || []).filter((m: any) => m.isTreasury).length);
 
     const circulationVolume = (() => {
         if (typeof (nodeData as any)?.tradeVolume === 'number') {
@@ -196,7 +196,11 @@ export function HomeScreen({
                         <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
-                        {auditState.result?.sumBalances !== undefined ? Math.abs(auditState.result.sumBalances).toFixed(1) : '240.0'}{' '}
+                        {auditState.result?.sumBalances !== undefined
+                            ? Math.abs(auditState.result.sumBalances).toFixed(1)
+                            : (typeof (nodeData as any)?.commonsBalance === 'number'
+                                ? (nodeData as any).commonsBalance.toFixed(1)
+                                : '0.0')}{' '}
                         <span className="text-xs font-normal text-nature-400">beans</span>
                     </div>
                     <p className="text-xs text-emerald-400 m-0 font-medium">

@@ -177,4 +177,32 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(localStorage.getItem('bp_cold_start_completed')).toBe('true');
         expect(localStorage.getItem('bp_founding_invites_status')).toBe('1/3 founding invites claimed · node ready for trade');
     });
+
+    it('sets reachabilityStatus to error and displays warning when reachability check fails', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/community/health')) {
+                return Promise.resolve({ ok: false, status: 503 });
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) });
+        }));
+
+        await act(async () => {
+            render(
+                <ColdStartWizard
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    nodeData={{ members: [] }}
+                    onComplete={vi.fn()}
+                />
+            );
+        });
+
+        const verifyBtn = screen.getByRole('button', { name: /Verify Reachable/i });
+        await act(async () => {
+            fireEvent.click(verifyBtn);
+        });
+
+        expect(screen.getByText(/Public endpoint unreachable or health check failed/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Public endpoint verified reachable/i)).not.toBeInTheDocument();
+    });
 });

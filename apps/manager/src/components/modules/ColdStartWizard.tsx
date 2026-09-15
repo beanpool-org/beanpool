@@ -179,10 +179,10 @@ export function ColdStartWizard({
             if (res && (res.ok || res.status === 200)) {
                 setReachabilityStatus('reachable');
             } else {
-                setReachabilityStatus('reachable'); // Sovereign local fallback
+                setReachabilityStatus('error');
             }
         } catch {
-            setReachabilityStatus('reachable');
+            setReachabilityStatus('error');
         }
     };
 
@@ -494,6 +494,13 @@ TOTP Secret:    ${totpSecret}
                                 <div className="mt-2 text-xs text-emerald-400 flex items-center gap-1.5 font-medium">
                                     <span>✓</span>
                                     <span>Public endpoint verified reachable.</span>
+                                </div>
+                            )}
+
+                            {reachabilityStatus === 'error' && (
+                                <div className="mt-2 text-xs text-red-400 flex items-center gap-1.5 font-medium">
+                                    <span>⚠️</span>
+                                    <span>Public endpoint unreachable or health check failed. Verify domain, port forwarding, and network settings.</span>
                                 </div>
                             )}
                         </div>

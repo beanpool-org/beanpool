@@ -865,6 +865,8 @@ export interface ProjectRow {
     deadline_at: string | null;
     status: string;
     created_at: string;
+    enterprise_pubkey?: string;
+    migrated_at?: string | null;
 }
 
 function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
@@ -903,6 +905,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         deadline_at: e.deadline_at ?? legacyP?.deadline_at ?? null,
         status,
         created_at: e.joined_at ?? legacyP?.created_at ?? new Date().toISOString(),
+        enterprise_pubkey: e.public_key || legacyP?.enterprise_pubkey || legacyP?.id,
     };
 }
 
@@ -956,7 +959,7 @@ export function createCrowdfundProject(
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
     `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
 
@@ -1058,7 +1061,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // out of beans demurrage has already taken — the member spends them once and is charged for them again on
     // their next read. Settling the payer was already unavoidable in the creator-pledges-to-their-own-project
     // case, so excluding it for everyone else would only have made the same path behave two different ways.
-    onSettleDemurrage?.([project.creator_pubkey, fromPubkey]);
+    const targetAccount = project.enterprise_pubkey || projectId;
+    onSettleDemurrage?.([targetAccount, project.creator_pubkey, fromPubkey]);
 
     const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
@@ -1106,14 +1110,14 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
+                // Credit Enterprise Treasury Account
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
 
-                // Record atomic Sweep Transaction
+                // Record atomic Sweep Transaction to the enterprise
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`sweep_${txId}`, escrowPubkey, project.creator_pubkey, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
+                `).run(`sweep_${txId}`, escrowPubkey, targetAccount, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
         }
     });
@@ -1176,12 +1180,18 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
 
+        const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+        if (acc && Math.abs(acc.balance) > 1e-9) {
+            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+        }
+
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
         db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
         db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
         writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
     });
 
     executeDelete();

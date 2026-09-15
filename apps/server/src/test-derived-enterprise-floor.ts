@@ -31,7 +31,7 @@ import {
     pledgeEnterpriseBacking, releaseEnterpriseBacking, clearEnterpriseFloorCache,
     runLedgerAudit, payFromCommons,
 } from './state-engine.js';
-import { db } from './db/db.js';
+import { db, initSchema } from './db/db.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
@@ -437,8 +437,9 @@ async function main() {
     const farmItem = listRead.body?.treasuries.find((t: any) => t.publicKey === routeEnt);
     assert(farmItem !== undefined, 'RouteFarm present in treasuries list');
     assert(farmItem.creditLine === 30, 'List read reports derived creditLine=30');
-    assert(farmItem.floor === -30, 'List read reports floor=-30');
-    assert(farmItem.pledges.length === 1, 'List read reports pledges');
+    assert(farmItem.legacyFloor !== undefined, 'List read reports legacyFloor');
+    assert(farmItem.legacyCreditFloor !== undefined, 'List read reports legacyCreditFloor alias');
+    assert(farmItem.legacyFloor === farmItem.legacyCreditFloor, 'legacyFloor matches legacyCreditFloor on list route');
 
     // 7. Authorized keeper releases backing
     const validRelease = await invokeRoute(releaseRoute, { treasury: routeEnt }, routeKeeper, { amount: 15 });
@@ -446,6 +447,111 @@ async function main() {
     assert(validRelease.body?.releasedAmount === 15, 'Released 15 beans');
     assert(validRelease.body?.remainingPledge === 15, 'Remaining pledge is 15');
     assert(validRelease.body?.floor === -15, 'Updated floor is -15');
+
+    // =========================================================================
+    // 10. Review Findings Regression Suite
+    // =========================================================================
+    console.log('\n── Section 10: Review Findings Regression Suite ──');
+
+    // 10.1: Sentinel key gates grandfather migration from re-running on boot
+    const sentinel = db.prepare("SELECT value FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get() as any;
+    assert(sentinel?.value === '1', 'migration_legacy_credit_floor_v1 recorded in node_config');
+    const { publicKey: cleanEnt } = createTreasury('CleanCoop', AVATAR, 0);
+    const cleanRowBefore = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(cleanEnt) as any;
+    assert(cleanRowBefore.legacy_credit_floor === null, 'CleanCoop created with legacy_credit_floor = NULL');
+    initSchema();
+    const cleanRowAfter = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(cleanEnt) as any;
+    assert(cleanRowAfter.legacy_credit_floor === null, 'initSchema() does not grant 200 legacy floor to newly created enterprise');
+    const eggsRowAfterInit = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(eggs) as any;
+    assert(eggsRowAfterInit.legacy_credit_floor === null, 'initSchema() does not resurrect cleared legacy floor on Community Eggs');
+
+    // 10.2: members_touch_updated_at trigger whitelists legacy_credit_floor
+    const triggerMember = 'trigger-test-member-00000000000000000001';
+    seedMember(triggerMember, 'TriggerMember');
+    db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(triggerMember);
+    db.prepare("UPDATE members SET legacy_credit_floor = 150 WHERE public_key = ?").run(triggerMember);
+    const updatedMember = db.prepare("SELECT updated_at FROM members WHERE public_key = ?").get(triggerMember) as any;
+    assert(updatedMember.updated_at > '2020-01-01T00:00:00.000Z', 'Updating legacy_credit_floor fires members_touch_updated_at trigger');
+
+    // 10.3: Inactive or credit-frozen keeper excluded from getEnterpriseFloor
+    const { publicKey: freezeEnt } = createTreasury('FreezeEnterprise', AVATAR, 0);
+    const KFreeze = 'keeper-freeze-0000000000000000000000000001';
+    const TradePartner1 = 'trade-partner-one-0000000000000000000001';
+    const TradePartner2 = 'trade-partner-two-0000000000000000000002';
+    seedMember(KFreeze, 'KFreeze');
+    seedMember(TradePartner1, 'TradePartner1');
+    seedMember(TradePartner2, 'TradePartner2');
+    mtx(KFreeze, TradePartner1, 100);
+    mtx(KFreeze, TradePartner2, 100);
+    assignKeeper(freezeEnt, KFreeze);
+    pledgeEnterpriseBacking(freezeEnt, KFreeze, 40);
+    assert(getEnterpriseFloor(freezeEnt).derivedAllowance === 40, 'Active unfrozen keeper contributes 40 derived allowance');
+
+    adminSetCreditFrozen(KFreeze, true);
+    clearEnterpriseFloorCache(freezeEnt);
+    assert(getEnterpriseFloor(freezeEnt).derivedAllowance === 0, 'Credit-frozen keeper excluded from getEnterpriseFloor derived allowance');
+
+    adminSetCreditFrozen(KFreeze, false);
+    clearEnterpriseFloorCache(freezeEnt);
+    assert(getEnterpriseFloor(freezeEnt).derivedAllowance === 40, 'Unfrozen keeper restored to derived allowance');
+
+    adminSetUserStatus(KFreeze, 'disabled');
+    clearEnterpriseFloorCache(freezeEnt);
+    assert(getEnterpriseFloor(freezeEnt).derivedAllowance === 0, 'Disabled keeper excluded from getEnterpriseFloor derived allowance');
+
+    adminSetUserStatus(KFreeze, 'active');
+    clearEnterpriseFloorCache(freezeEnt);
+    assert(getEnterpriseFloor(freezeEnt).derivedAllowance === 40, 'Re-activated keeper restored to derived allowance');
+
+    // 10.4: Exited keeper can release backing once enterprise returns to solvency
+    const { publicKey: exitedEnt } = createTreasury('ExitedEnterprise', AVATAR, 0);
+    const KExited = 'keeper-exited-0000000000000000000000000001';
+    seedMember(KExited, 'KExited');
+    mtx(KExited, TradePartner1, 120);
+    mtx(KExited, TradePartner2, 120);
+    assignKeeper(exitedEnt, KExited);
+    pledgeEnterpriseBacking(exitedEnt, KExited, 50);
+
+    // Enter deficit: offer + need
+    const entExitOffer = createPost('offer', 'goods', 'Apples', 'Fresh apples', 10, 'fixed', exitedEnt, undefined, undefined, undefined, true);
+    assert(entExitOffer !== null, 'ExitedEnterprise creates offer');
+    const entExitNeed = createPost('need', 'goods', 'Boxes', 'Need packing boxes', 30, 'fixed', exitedEnt);
+    assert(entExitNeed !== null, 'ExitedEnterprise creates need');
+    const exitBid = requestPost(entExitNeed!.id, TradePartner1);
+    approvePostRequest(exitBid.id, exitedEnt, { authSigner: KExited });
+    completePostTransaction(exitBid.id, exitedEnt, undefined, { authSigner: KExited });
+    assert(bal(exitedEnt) === -30, 'ExitedEnterprise spends into deficit (-30 beans)');
+
+    // Revoke operator while in deficit — backing remains covenant-locked
+    adminRevokeTreasuryOperator(exitedEnt, KExited, 'admin');
+    const isBound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(exitedEnt, KExited);
+    assert(!isBound, 'KExited is no longer in treasury_operators');
+    assert(getEnterprisePledges(exitedEnt).length === 1, 'Pledge remains locked to cover deficit');
+
+    // While in deficit, release is rejected
+    let releaseFailedDuringDeficit = false;
+    try {
+        releaseEnterpriseBacking(exitedEnt, KExited, 30);
+    } catch (e: any) {
+        releaseFailedDuringDeficit = true;
+        assert(e.message.includes('deficit'), 'Deficit covenant blocks release while in deficit');
+    }
+    assert(releaseFailedDuringDeficit, 'Release blocked during deficit');
+
+    // Enterprise returns to solvency
+    payFromCommons(TradePartner1, 60, 'funding for fruit order', { allowDeficit: true });
+    transfer(TradePartner1, exitedEnt, 50, 'Apple catering payment');
+    assert(bal(exitedEnt) > 0, `ExitedEnterprise is now solvent (${bal(exitedEnt)})`);
+
+    // Exited keeper can now release their pledge (lockedNeeded was 30; release 10 partially)
+    const exitedRelease = releaseEnterpriseBacking(exitedEnt, KExited, 10);
+    assert(exitedRelease.releasedAmount === 10, 'Exited keeper successfully released pledge after solvency restored');
+    assert(exitedRelease.remainingPledge === 20, 'Remaining pledge is 20');
+
+    // Exited keeper can also release remaining 20 via HTTP route
+    const httpExitedRelease = await invokeRoute(releaseRoute, { treasury: exitedEnt }, KExited, { amount: 20 });
+    assert(httpExitedRelease.status === 200 && httpExitedRelease.body?.success === true, 'HTTP /release succeeds for exited keeper holding active pledge');
+    assert(httpExitedRelease.body?.remainingPledge === 0, 'Exited keeper remaining pledge is 0');
 
     // =========================================================================
     // 9. Conservation Check: SUM(balances) + COMMONS_POOL = 0

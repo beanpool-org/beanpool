@@ -1913,10 +1913,17 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
         if (keeperPledge > 0) {
             const balance = getBalance(treasuryPubkey).balance;
             const deficit = Math.max(0, -balance);
-            const totalRow = db.prepare(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL"
-            ).get(treasuryPubkey) as any;
-            const otherPledges = Number(totalRow?.total || 0) - keeperPledge;
+            const totalRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.keeper != ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(treasuryPubkey, memberPubkey) as any;
+            const otherPledges = Number(totalRow?.total || 0);
             const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
             const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
             const otherAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));

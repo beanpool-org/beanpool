@@ -553,6 +553,41 @@ async function main() {
     assert(httpExitedRelease.status === 200 && httpExitedRelease.body?.success === true, 'HTTP /release succeeds for exited keeper holding active pledge');
     assert(httpExitedRelease.body?.remainingPledge === 0, 'Exited keeper remaining pledge is 0');
 
+    // 10.5: adminRevokeTreasuryOperator ignores inactive/frozen keepers for deficit covenant
+    const { publicKey: revokeEnt } = createTreasury('RevokeEnterprise', AVATAR, 0);
+    const KRevoke1 = 'keeper-revoke-1-0000000000000000000000001';
+    const KRevoke2 = 'keeper-revoke-2-0000000000000000000000002';
+    seedMember(KRevoke1, 'KRevoke1');
+    seedMember(KRevoke2, 'KRevoke2');
+    mtx(KRevoke1, TradePartner1, 100);
+    mtx(KRevoke1, TradePartner2, 100);
+    mtx(KRevoke2, TradePartner1, 100);
+    mtx(KRevoke2, TradePartner2, 100);
+    assignKeeper(revokeEnt, KRevoke1);
+    assignKeeper(revokeEnt, KRevoke2);
+    pledgeEnterpriseBacking(revokeEnt, KRevoke1, 50);
+    pledgeEnterpriseBacking(revokeEnt, KRevoke2, 50);
+
+    // Enter deficit of 40
+    const revOffer = createPost('offer', 'goods', 'Honey', 'Raw honey', 10, 'fixed', revokeEnt, undefined, undefined, undefined, true);
+    assert(revOffer !== null, 'RevokeEnterprise creates offer');
+    const revNeed = createPost('need', 'goods', 'Supplies', 'Need supplies', 40, 'fixed', revokeEnt);
+    const revBid = requestPost(revNeed!.id, TradePartner1);
+    approvePostRequest(revBid.id, revokeEnt, { authSigner: KRevoke1 });
+    completePostTransaction(revBid.id, revokeEnt, undefined, { authSigner: KRevoke1 });
+    assert(bal(revokeEnt) === -40, 'RevokeEnterprise is in deficit (-40 beans)');
+
+    // Freeze KRevoke2 so their 50 pledge is inactive/phantom backing
+    adminSetCreditFrozen(KRevoke2, true);
+
+    // KRevoke1 exits. Because KRevoke2 is credit-frozen, otherAllowance is 0.
+    // Deficit is 40. KRevoke1 must have 40 locked to cover deficit, and 10 released.
+    adminRevokeTreasuryOperator(revokeEnt, KRevoke1);
+    const k1Pledges = getEnterprisePledges(revokeEnt).filter(p => p.keeper === KRevoke1);
+    assert(k1Pledges.length === 1, 'KRevoke1 pledge remains to cover deficit when co-keeper is frozen');
+    assert(k1Pledges[0].amount === 40, `KRevoke1 locked pledge is exactly 40 (deficit requirement), got ${k1Pledges[0]?.amount}`);
+
+
     // =========================================================================
     // 9. Conservation Check: SUM(balances) + COMMONS_POOL = 0
     // =========================================================================

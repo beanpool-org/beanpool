@@ -176,6 +176,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         }
     }
 
+    const rolesList = listNodeRoles();
+    const rolesByPubkey = new Map<string, MemberNodeRole>();
+    for (const r of rolesList) {
+        rolesByPubkey.set(r.member_pubkey, r.role);
+    }
+
     ctx.body = {
         members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
             const isVoucher = canVouch(m.publicKey);
@@ -189,6 +195,7 @@ router.post('/api/local/admin/data', async (ctx) => {
                 tier,
                 standing: tier,
                 canVouch: isVoucher,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
                 platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
             };
         }),
@@ -586,7 +593,7 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         return;
     }
     const deleted = adminBulkDeletePosts(postIds);
-    ctx.body = { success: true, deleted };
+    ctx.body = { success: true, deleted, deletedCount: deleted };
 });
 
 
@@ -793,14 +800,15 @@ router.get('/api/local/admin/pulse/channels', async (ctx) => {
 
 router.post('/api/local/admin/pulse/channels', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { url, category, platform } = (ctx as any).requestBody || {};
-    if (!url || typeof url !== 'string' || !url.trim()) {
+    const { url, feedUrl, category, platform } = (ctx as any).requestBody || {};
+    const rawUrl = url || feedUrl;
+    if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'url is required' };
         return;
     }
 
-    const trimmedUrl = url.trim();
+    const trimmedUrl = rawUrl.trim();
     const cat = (category && typeof category === 'string' && category.trim()) ? category.trim() : 'learn';
     const plat = (platform && typeof platform === 'string' && platform.trim())
         ? platform.trim()
@@ -853,14 +861,15 @@ router.post('/api/local/admin/pulse/channels', async (ctx) => {
 
 router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { id } = (ctx as any).requestBody || {};
-    if (!id || typeof id !== 'string') {
+    const { id, channelId } = (ctx as any).requestBody || {};
+    const targetId = id || channelId;
+    if (!targetId || typeof targetId !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'id is required' };
         return;
     }
 
-    if (id === BEANPOOL_LEARN_CHANNEL_ID) {
+    if (targetId === BEANPOOL_LEARN_CHANNEL_ID) {
         ctx.status = 400;
         ctx.body = { error: 'The seeded BeanPool learn channel cannot be removed (it is recreated on boot).' };
         return;
@@ -868,7 +877,7 @@ router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
 
     const owner = ensureBeanPoolIdentity();
     try {
-        const deleted = deleteChannel(owner, id);
+        const deleted = deleteChannel(owner, targetId);
         if (!deleted) {
             ctx.status = 404;
             ctx.body = { error: 'Channel not found or already removed' };
@@ -913,9 +922,9 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: 'pubkey and role are required' };
         return;
     }
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 
@@ -935,9 +944,9 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     const signedActor = (ctx.state as any)?.actor;
     const effectiveActor = signedActor || 'owner:password';
 
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 

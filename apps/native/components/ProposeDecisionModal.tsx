@@ -83,6 +83,7 @@ export function ProposeDecisionModal({
     const [touches, setTouches] = useState<DecisionTouch>('member');
     const [effect, setEffect] = useState<DecisionEffect>('suspend_member');
     const [subject, setSubject] = useState('');
+    const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
     const [tier, setTier] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [ruleKey, setRuleKey] = useState('');
@@ -121,9 +122,9 @@ export function ProposeDecisionModal({
     }, [subject, selectedMember]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = fetchedBalance ?? selectedMember?.balance ?? -180;
+    const targetBalance = fetchedBalance ?? selectedMember?.balance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance || 240);
+    const poolAmount = Math.round(commonsBalance ?? 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
@@ -329,7 +330,15 @@ export function ProposeDecisionModal({
         } else if (effect === 'grant_tier') {
             params = { tier };
         } else if (effect === 'remove_lead_keeper') {
-            params = { enterprisePubkey: subject, leadPubkey: subject };
+            if (!enterprisePubkey.trim()) {
+                Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
+                return;
+            }
+            if (!subject.trim()) {
+                Alert.alert('Missing Lead Keeper', 'Please enter the lead keeper callsign or public key to remove.');
+                return;
+            }
+            params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: subject.trim() };
         } else if (effect === 'set_rule') {
             params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
@@ -357,6 +366,7 @@ export function ProposeDecisionModal({
                 setTitle('');
                 setDescription('');
                 setSubject('');
+                setEnterprisePubkey('');
                 setGrantAmount('');
                 onCreated();
                 onClose();
@@ -444,13 +454,49 @@ export function ProposeDecisionModal({
                             </Pressable>
                         ))}
 
+                        {/* Enterprise Input for remove_lead_keeper */}
+                        {effect === 'remove_lead_keeper' && (
+                            <>
+                                <Text style={styles.sectionLabel}>Target Enterprise Public Key</Text>
+                                {treasuries && treasuries.length > 0 && (
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                        {treasuries.map(t => (
+                                            <Pressable
+                                                key={t.publicKey}
+                                                accessibilityRole="button"
+                                                style={[
+                                                    styles.segmentBtn,
+                                                    enterprisePubkey === t.publicKey && styles.segmentBtnActive,
+                                                    { paddingHorizontal: 10, paddingVertical: 6 }
+                                                ]}
+                                                onPress={() => setEnterprisePubkey(t.publicKey)}
+                                            >
+                                                <Text style={[styles.segmentText, enterprisePubkey === t.publicKey && styles.segmentTextActive, { fontSize: 12 }]}>
+                                                    {t.name}
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Enter enterprise pubkey..."
+                                    placeholderTextColor={colors.text.muted}
+                                    value={enterprisePubkey}
+                                    onChangeText={setEnterprisePubkey}
+                                />
+                            </>
+                        )}
+
                         {/* Subject Input */}
                         {touches === 'member' && (
                             <>
-                                <Text style={styles.sectionLabel}>Target Member Public Key or Callsign</Text>
+                                <Text style={styles.sectionLabel}>
+                                    {effect === 'remove_lead_keeper' ? 'Lead Keeper Callsign or Public Key to Remove' : 'Target Member Public Key or Callsign'}
+                                </Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Enter member callsign or pubkey..."
+                                    placeholder={effect === 'remove_lead_keeper' ? 'Enter lead keeper callsign or pubkey...' : 'Enter member callsign or pubkey...'}
                                     placeholderTextColor={colors.text.muted}
                                     value={subject}
                                     onChangeText={setSubject}

@@ -75,7 +75,7 @@ export function DecideSection({
         const count = selectedVoteCount[decision.id] || 1;
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
-            const available = balanceInfo?.earnedCredit || 0;
+            const available = balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0;
             if (cost > available) {
                 setVoteError(`Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
                 return;
@@ -268,7 +268,14 @@ export function DecideSection({
                                                         {tally.quorumMet ? 'Quorum Met ✅' : 'Pending Quorum'}
                                                     </span>
                                                 </div>
-                                                <div className="h-2 bg-nature-800 rounded-full overflow-hidden">
+                                                <div
+                                                    role="progressbar"
+                                                    aria-valuenow={Math.min(100, quorumPct)}
+                                                    aria-valuemin={0}
+                                                    aria-valuemax={100}
+                                                    aria-label="Quorum progress"
+                                                    className="h-2 bg-nature-800 rounded-full overflow-hidden"
+                                                >
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-300 ${tally.quorumMet ? 'bg-emerald-500' : 'bg-sky-500'}`}
                                                         style={{ width: `${quorumPct}%` }}
@@ -286,7 +293,14 @@ export function DecideSection({
                                                         Threshold required: {thresholdPct}%
                                                     </span>
                                                 </div>
-                                                <div className="h-2 bg-nature-800 rounded-full overflow-hidden">
+                                                <div
+                                                    role="progressbar"
+                                                    aria-valuenow={Math.min(100, supportPct)}
+                                                    aria-valuemin={0}
+                                                    aria-valuemax={100}
+                                                    aria-label="Support progress"
+                                                    className="h-2 bg-nature-800 rounded-full overflow-hidden"
+                                                >
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-300 ${tally.passed ? 'bg-emerald-500' : 'bg-amber-500'}`}
                                                         style={{ width: `${supportPct}%` }}
@@ -300,7 +314,7 @@ export function DecideSection({
                                             {item.franchise === 'quadratic_trade' && (
                                                 <div className="flex items-center justify-between bg-nature-800/60 border border-nature-700/60 rounded-xl px-3 py-2 text-xs">
                                                     <span className="text-nature-300 font-medium">
-                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {balanceInfo?.earnedCredit || 0})
+                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0})
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button
@@ -309,7 +323,7 @@ export function DecideSection({
                                                                 ...prev,
                                                                 [item.id]: Math.max(1, (prev[item.id] || 1) - 1),
                                                             }))}
-                                                            className="w-7 h-7 rounded-lg bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
+                                                            className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Decrease votes"
                                                         >
                                                             -
@@ -320,7 +334,7 @@ export function DecideSection({
                                                                 ...prev,
                                                                 [item.id]: (prev[item.id] || 1) + 1,
                                                             }))}
-                                                            className="w-7 h-7 rounded-lg bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
+                                                            className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Increase votes"
                                                         >
                                                             +

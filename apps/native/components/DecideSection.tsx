@@ -19,7 +19,7 @@ interface Props {
     decisions: DecisionWithTally[];
     activeMembers30d: number;
     identity: any;
-    balanceState: { earnedCredit: number; commons: number };
+    balanceState: { earnedCredit: number; commons: number; qualifiedValue?: number };
     onRefresh: () => Promise<void>;
     onOpenPropose: () => void;
     canPropose: boolean;
@@ -82,7 +82,7 @@ export function DecideSection({
         const count = selectedVoteCount[decision.id] || 1;
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
-            const available = balanceState.earnedCredit || 0;
+            const available = balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
             if (cost > available) {
                 Alert.alert('Insufficient Credits', `Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
                 return;
@@ -670,7 +670,7 @@ export function DecideSection({
                                         {item.franchise === 'quadratic_trade' && (
                                             <View style={styles.qvStepper}>
                                                 <Text style={styles.qvLabel}>
-                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits)
+                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 8 }}>
                                                     <Pressable

@@ -1458,62 +1458,6 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
     } catch { /* not in a RN runtime */ }
 }
 
-export async function getProjects() {
-    const database = await getDb();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
-    const rows = await database.getAllAsync<any>(`
-        SELECT p.*, m.callsign as creator_callsign, m.avatar_url as creator_avatar
-        FROM projects p
-        LEFT JOIN members m ON p.creator_pubkey = m.public_key
-        ORDER BY p.created_at DESC
-    `);
-    return rows.map(row => {
-        let parsedPhotos = row.photos;
-        if (typeof row.photos === 'string') {
-            try { 
-                parsedPhotos = JSON.parse(row.photos); 
-                if (Array.isArray(parsedPhotos)) {
-                    parsedPhotos = parsedPhotos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
-                }
-            } catch (e) { parsedPhotos = []; }
-        }
-        return {
-            ...row,
-            photos: parsedPhotos,
-            goal: row.goal_amount,
-            current: row.current_amount,
-            type: 'community' // fallback mapping
-        };
-    });
-}
-
-export async function getProjectById(id: string) {
-    const database = await getDb();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
-    const row = await database.getFirstAsync<any>(`
-        SELECT p.*, m.callsign as creator_callsign, m.avatar_url as creator_avatar
-        FROM projects p
-        LEFT JOIN members m ON p.creator_pubkey = m.public_key
-        WHERE p.id = ?;
-    `, [id]);
-    if (!row) return null;
-    let parsedPhotos = row.photos;
-    if (typeof row.photos === 'string') {
-        try { 
-            parsedPhotos = JSON.parse(row.photos); 
-            if (Array.isArray(parsedPhotos)) {
-                parsedPhotos = parsedPhotos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
-            }
-        } catch (e) { parsedPhotos = []; }
-    }
-    return {
-        ...row,
-        photos: parsedPhotos,
-        goal: row.goal_amount,
-        current: row.current_amount,
-        type: 'community'
-    };
-}
 
 /** #143 step 4 — which communities a listing can be aimed at (peers this node settles with).
  *  Returns empty on non-federated nodes, which hides the reach chooser in the composer. */
@@ -1743,216 +1687,37 @@ export async function closePoll(postId: string) {
     return json;
 }
 
+export async function createEnterpriseApi(data: {
+    name: string;
+    purpose?: string;
+    description?: string;
+    lifecycle?: 'ongoing' | 'bounded';
+    goalAmount?: number | null;
+    deadlineAt?: string | null;
+    avatar?: string;
+    photos?: string[];
+}) {
+    return _signedRequest('/api/enterprise', data);
+}
+
 export async function createProject(project: {
     title: string;
     description: string;
-    goal_amount: number;
+    goal_amount?: number;
     photos?: string[];
     deadline_at?: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
 }) {
-    await waitForInit();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to propose your project.');
-    }
-
-    const identity = await loadIdentity();
-    if (!identity) {
-        throw new Error('No identity found.');
-    }
-
-    const projectId = Crypto.randomUUID();
-
-    const body = {
-        id: projectId,
-        creatorPubkey: identity.publicKey,
-        title: project.title,
+    return createEnterpriseApi({
+        name: project.title,
+        purpose: project.description,
         description: project.description,
-        photos: project.photos || [],
+        lifecycle: project.lifecycle || (project.goal_amount ? 'bounded' : 'ongoing'),
         goalAmount: project.goal_amount,
-        deadlineAt: project.deadline_at || null,
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects', bodyString, identity.privateKey, identity.publicKey);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-        res = await fetch(`${anchorUrl}/api/crowdfund/projects`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-            signal: controller.signal,
-        });
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to propose projects.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) {
-        const txt = await res.text();
-        let errMsg = 'Network request failed or server rejected the project.';
-        try {
-            const json = JSON.parse(txt);
-            if (json.error) errMsg = json.error;
-        } catch (e) {
-            if (txt) errMsg = txt;
-        }
-        throw new Error(errMsg);
-    }
-
-    // Save to SQLite
-    await acquireSyncLock({ urgent: true }); // user pressed "create" — jump the sync queue
-    try {
-        const database = await getDb();
-        await database.runAsync(
-             `INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, status, created_at, deadline_at)
-              VALUES (?, ?, ?, ?, ?, ?, 0, 'ACTIVE', ?, ?)`,
-             [projectId, identity.publicKey, project.title, project.description, JSON.stringify(project.photos || []), project.goal_amount, new Date().toISOString(), project.deadline_at || null]
-        );
-    } finally {
-        releaseSyncLock();
-    }
-}
-
-
-export async function updateCrowdfundProjectApi(
-    projectId: string,
-    title: string,
-    description: string,
-    photos: string[],
-    goalAmount: number,
-    deadlineAt?: string | null
-) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to update your project.');
-    }
-
-    const identity = await loadIdentity();
-    if (!identity) {
-        throw new Error('No identity found.');
-    }
-
-    const body = {
-        id: projectId,
-        creatorPubkey: identity.publicKey,
-        title,
-        description,
-        photos,
-        goalAmount,
-        deadlineAt: deadlineAt || null,
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/update', bodyString, identity.privateKey, identity.publicKey);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-        res = await fetch(`${anchorUrl}/api/crowdfund/projects/update`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-            signal: controller.signal,
-        });
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to update projects.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || 'Failed to update project.');
-    }
-
-    // Update local SQLite
-    const database = await getDb();
-    if (deadlineAt !== undefined) {
-         await database.runAsync(
-             `UPDATE projects SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?
-              WHERE id = ? AND creator_pubkey = ?`,
-             [title, description, JSON.stringify(photos), goalAmount, deadlineAt, projectId, identity.publicKey]
-         );
-    } else {
-         await database.runAsync(
-             `UPDATE projects SET title = ?, description = ?, photos = ?, goal_amount = ?
-              WHERE id = ? AND creator_pubkey = ?`,
-             [title, description, JSON.stringify(photos), goalAmount, projectId, identity.publicKey]
-         );
-    }
-}
-
-export async function deleteCrowdfundProjectApi(projectId: string) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to delete your project.');
-    }
-
-    const identity = await loadIdentity();
-    if (!identity) {
-        throw new Error('No identity found.');
-    }
-
-    const body = {
-        id: projectId,
-        creatorPubkey: identity.publicKey
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/delete', bodyString, identity.privateKey, identity.publicKey);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-        res = await fetch(`${anchorUrl}/api/crowdfund/projects/delete`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-            signal: controller.signal,
-        });
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to delete projects.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-    
-    if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Failed to delete project: ${errorText}`);
-    }
-    
-    // Local SQLite Cascade Delete
-    const database = await getDb();
-    await database.runAsync(`DELETE FROM projects WHERE id = ?;`, [projectId]);
-}
-
-export async function pledgeToCrowdfundProjectApi(projectId: string, amount: number, memo: string) {
-    const identity = await loadIdentity();
-    if (!identity) throw new Error("No identity block found");
-
-    const res = await _signedRequest(`/api/crowdfund/projects/${projectId}/pledge`, { 
-        fromPubkey: identity.publicKey, 
-        amount: amount, 
-        memo: memo 
+        deadlineAt: project.deadline_at,
+        photos: project.photos,
+        avatar: project.photos && project.photos.length > 0 ? project.photos[0] : undefined,
     });
-
-    const database = await getDb();
-    await database.runAsync(
-        'UPDATE projects SET current_amount = current_amount + ? WHERE id = ?',
-        [amount, projectId]
-    );
-
-    const txId = Crypto.randomUUID();
-    const dt = new Date().toISOString();
-    await database.runAsync('INSERT INTO ledger_entries (id, timestamp, pubkey, amount, balance_after, memo, reference_id, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
-        txId, dt, identity.publicKey, -Math.abs(amount), 0, memo, projectId, 'pledge'
-    ]);
-
-    return res;
 }
 
 export async function getActiveVotingRound(): Promise<{ id: string; status: string; closesAt: string; projectIds: string[]; createdAt: string } | null> {

@@ -2,11 +2,17 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     getCrowdfundProjects, createCrowdfundProject, pledgeToCrowdfundProject,
     type CrowdfundProject, getAllMembers, request,
-    getTreasuries, type Treasury
+    getTreasuries, type Treasury,
+    getDecisions, type DecisionWithTally,
+    getBalance, type BalanceInfo,
+    getCommonsBalance,
+    type MemberSummary,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { DecideSection } from '../components/DecideSection';
+import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -26,6 +32,14 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     } | null>(null);
     
     // UI States
+    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>('decide');
+    const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
+    const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
+    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
+    const [commonsBalance, setCommonsBalance] = useState<number>(0);
+    const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
+    const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [selectedProject, setSelectedProject] = useState<CrowdfundProject | null>(null);
     const [showNewProject, setShowNewProject] = useState(false);
 
@@ -85,20 +99,28 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
     const fetchProjects = async () => {
         try {
             setLoading(true);
-            const [data, members, tres] = await Promise.all([
+            const [data, members, tres, decData, commonsData, balData] = await Promise.all([
                 getCrowdfundProjects(),
                 getAllMembers(),
                 getTreasuries().catch(() => ({ treasuries: [] })), // graceful on older nodes
+                getDecisions().catch(() => ({ decisions: [], activeMembers30d: 0 })),
+                getCommonsBalance().catch(() => ({ balance: 0 })),
+                identity?.publicKey ? getBalance(identity.publicKey).catch(() => null) : null,
             ]);
             setProjects(data.projects);
             setTreasuries(tres.treasuries || []);
+            setDecisions(decData.decisions || []);
+            setActiveMembers30d(decData.activeMembers30d || 0);
+            setCommonsBalance(commonsData.balance || 0);
+            if (balData) setBalanceInfo(balData);
             if (data.maxProjectExpiryDays) setMaxExpiryDays(data.maxProjectExpiryDays);
             
             const profs: Record<string, { callsign: string, homeNodeUrl?: string }> = {};
-            members.forEach(m => {
+            (members as MemberSummary[]).forEach((m: MemberSummary) => {
                 profs[m.publicKey] = { callsign: m.callsign };
             });
             setProfiles(profs);
+            setAllMembersList((members as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign })));
         } catch (err: any) {
             setError(err.message || 'Failed to fetch projects');
         } finally {
@@ -106,9 +128,18 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
         }
     };
 
+    const canProposeDecision = (balanceInfo?.earnedCredit || 0) > 0;
+    const hasOpenDecision = useMemo(() => {
+        if (!identity?.publicKey) return false;
+        return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
+    }, [decisions, identity]);
+    const openDecisionsCount = useMemo(() => {
+        return decisions.filter(d => d.status === 'open').length;
+    }, [decisions]);
+
     useEffect(() => {
         fetchProjects();
-    }, []);
+    }, [identity]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -277,13 +308,27 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                            <span>🌱</span> Community Projects
+                            <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Crowdfund shared goals with Beans</p>
+                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, pooled circulation, and shared enterprises</p>
                     </div>
                     {identity && (
                         <button
-                            onClick={() => setShowNewProject(true)}
+                            onClick={() => {
+                                if (activeSection === 'decide') {
+                                    if (!canProposeDecision) {
+                                        alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        return;
+                                    }
+                                    if (hasOpenDecision) {
+                                        alert('You already have an open decision (limit 1 open decision per author).');
+                                        return;
+                                    }
+                                    setShowProposeDecision(true);
+                                } else {
+                                    setShowNewProject(true);
+                                }
+                            }}
                             className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
                             + Propose
@@ -292,6 +337,79 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                 </div>
             </header>
 
+            {/* Commons Pool + Governance Credits Stats */}
+            <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full pb-0">
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-nature-900 border border-nature-800 rounded-xl p-3">
+                        <div className="text-nature-400 text-xs font-semibold">Commons Pool</div>
+                        <div className="text-white font-bold text-lg mt-1">{commonsBalance.toFixed(2)} 🫘</div>
+                    </div>
+                    <div className="bg-nature-900 border border-nature-800 rounded-xl p-3">
+                        <div className="text-nature-400 text-xs font-semibold">My Governance Credits</div>
+                        <div className="text-white font-bold text-lg mt-1">{balanceInfo?.earnedCredit ?? 0}</div>
+                    </div>
+                </div>
+
+                {/* Section Switcher: Decide vs Enterprises */}
+                <div className="flex bg-nature-950 p-1 rounded-xl border border-nature-800 mb-2">
+                    <button
+                        onClick={() => setActiveSection('decide')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                            activeSection === 'decide'
+                                ? 'bg-nature-800 text-white shadow-sm'
+                                : 'text-nature-400 hover:text-white'
+                        }`}
+                    >
+                        <span>🗳️</span>
+                        <span>Decide</span>
+                        {openDecisionsCount > 0 && (
+                            <span className="bg-accent text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                                {openDecisionsCount}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveSection('enterprises')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                            activeSection === 'enterprises'
+                                ? 'bg-nature-800 text-white shadow-sm'
+                                : 'text-nature-400 hover:text-white'
+                        }`}
+                    >
+                        <span>🏛️</span>
+                        <span>Enterprises</span>
+                    </button>
+                </div>
+            </div>
+
+            {activeSection === 'decide' ? (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                    <DecideSection
+                        decisions={decisions}
+                        activeMembers30d={activeMembers30d}
+                        identity={identity}
+                        balanceInfo={balanceInfo}
+                        commonsBalance={commonsBalance}
+                        onRefresh={fetchProjects}
+                        onOpenPropose={() => {
+                            if (!canProposeDecision) {
+                                alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                return;
+                            }
+                            if (hasOpenDecision) {
+                                alert('You already have an open decision (limit 1 open decision per author).');
+                                return;
+                            }
+                            setShowProposeDecision(true);
+                        }}
+                        canPropose={canProposeDecision}
+                        hasOpenDecision={hasOpenDecision}
+                        activeView={activeDecideView}
+                        onChangeView={setActiveDecideView}
+                    />
+                </div>
+            ) : (
+                <>
             {treasuries.length > 0 && (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
@@ -487,6 +605,8 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                         );
                     })}
                 </div>
+            )}
+                </>
             )}
 
             {/* FULL SCREEN MODAL: New Project */}
@@ -894,6 +1014,15 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                     onClose={() => setLightboxState(null)}
                 />
             )}
+            <ProposeDecisionModal
+                isOpen={showProposeDecision}
+                onClose={() => setShowProposeDecision(false)}
+                onCreated={fetchProjects}
+                identity={identity}
+                commonsBalance={commonsBalance}
+                treasuries={treasuries}
+                members={allMembersList}
+            />
         </div>
     );
 }

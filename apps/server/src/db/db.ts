@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
+import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -245,6 +246,14 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
     try { db.prepare(`ALTER TABLE members ADD COLUMN archetype TEXT`).run(); } catch { }
+    // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN purpose TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN goal_amount REAL DEFAULT NULL`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN deadline_at DATETIME DEFAULT NULL`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN lifecycle TEXT DEFAULT 'ongoing'`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused INTEGER DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE projects ADD COLUMN migrated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE projects ADD COLUMN enterprise_pubkey TEXT`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
@@ -498,7 +507,15 @@ export function initSchema() {
     } catch (err) {
         console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
     }
+
+    try {
+        migrateProjectsAndCommonsToEnterprises(db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not run unify projects migration:', err);
+    }
 }
+
+export { migrateProjectsAndCommonsToEnterprises };
 
 /**
  * #106 treasury keepership — seed the join table from the legacy node-wide flag.
@@ -850,14 +867,80 @@ export interface ProjectRow {
     created_at: string;
 }
 
+function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
+    const creator = e.lead_keeper || e.any_keeper || legacyP?.creator_pubkey || e.public_key;
+    const title = e.callsign;
+    const description = e.purpose || e.bio || legacyP?.description || '';
+    let photos = legacyP?.photos;
+    if (!photos) {
+        photos = e.avatar_url ? JSON.stringify([e.avatar_url]) : '[]';
+    }
+    const goalAmount = Number(e.goal_amount ?? legacyP?.goal_amount ?? 0);
+
+    let currentAmount = 0;
+    if (legacyP && legacyP.current_amount != null) {
+        currentAmount = Number(legacyP.current_amount);
+    }
+    try {
+        const txSum = (db.prepare(`
+            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
+            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
+        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
+        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
+        currentAmount = Math.max(currentAmount, txSum, accBal);
+    } catch { }
+
+    const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
+
+    return {
+        id: e.public_key,
+        creator_pubkey: creator,
+        title,
+        description,
+        photos,
+        goal_amount: goalAmount,
+        current_amount: currentAmount,
+        deadline_at: e.deadline_at ?? legacyP?.deadline_at ?? null,
+        status,
+        created_at: e.joined_at ?? legacyP?.created_at ?? new Date().toISOString(),
+    };
+}
+
 export function getCrowdfundProjects(): ProjectRow[] {
-    // A2-25: cap the full-table read so a request path can't pull an unbounded
-    // result set. Projects are low-cardinality; 200 is generous for the public list.
-    return db.prepare(`SELECT * FROM projects ORDER BY created_at DESC LIMIT 200`).all() as ProjectRow[];
+    const enterprises = db.prepare(`
+        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+               m.goal_amount, m.deadline_at, m.status, m.joined_at,
+               (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
+               (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
+        FROM members m
+        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+        ORDER BY m.joined_at DESC
+        LIMIT 200
+    `).all() as any[];
+
+    const projectMap = new Map<string, any>();
+    try {
+        const pRows = db.prepare("SELECT * FROM projects").all() as any[];
+        for (const p of pRows) projectMap.set(p.id, p);
+    } catch { }
+
+    return enterprises.map(e => rowToProjectRow(e, projectMap.get(e.public_key)));
 }
 
 export function getCrowdfundProject(id: string): ProjectRow | undefined {
-    return db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as ProjectRow | undefined;
+    const e = db.prepare(`
+        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+               m.goal_amount, m.deadline_at, m.status, m.joined_at,
+               (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
+               (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
+        FROM members m
+        WHERE m.public_key = ? AND m.is_treasury = 1
+    `).get(id) as any;
+
+    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as any;
+    if (!e && !legacyP) return undefined;
+    if (e) return rowToProjectRow(e, legacyP);
+    return legacyP as ProjectRow;
 }
 
 export function createCrowdfundProject(
@@ -869,10 +952,41 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+    const now = new Date().toISOString();
+
     db.prepare(`
-        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at);
+        INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+    `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
+
+    const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
+    if (!existing) {
+        const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
+        const existingCallsign = db.prepare(
+            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+        ).get(baseCallsign, id) as any;
+        const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
+
+        db.transaction(() => {
+            db.prepare(`
+                INSERT INTO members (
+                    public_key, callsign, joined_at, avatar_url, bio, status,
+                    is_treasury, earned_credit, earned_surplus,
+                    purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+            `).run(id, callsign, now, photoUrl, description || '', description || title.trim(), goal_amount, deadline_at, now);
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
+            if (creator_pubkey) {
+                db.prepare(`
+                    INSERT OR IGNORE INTO treasury_operators (
+                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                    ) VALUES (?, ?, 'lead', ?, 'creator')
+                `).run(id, creator_pubkey, now);
+                db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
+            }
+        })();
+    }
 }
 
 export function updateCrowdfundProject(
@@ -892,19 +1006,36 @@ export function updateCrowdfundProject(
         throw new Error("Cannot change funding goal after receiving pledges");
     }
 
-    if (deadline_at !== undefined) {
-        db.prepare(`
-            UPDATE projects
-            SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?
-            WHERE id = ? AND creator_pubkey = ?
-        `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, id, creator_pubkey);
-    } else {
-        db.prepare(`
-            UPDATE projects
-            SET title = ?, description = ?, photos = ?, goal_amount = ?
-            WHERE id = ? AND creator_pubkey = ?
-        `).run(title, description, JSON.stringify(photos), goal_amount, id, creator_pubkey);
-    }
+    const now = new Date().toISOString();
+    const photoUrl = photos && photos.length > 0 ? photos[0] : '';
+
+    db.transaction(() => {
+        if (deadline_at !== undefined) {
+            db.prepare(`
+                UPDATE projects
+                SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
+                WHERE id = ? AND creator_pubkey = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, deadline_at, now, id, creator_pubkey);
+
+            db.prepare(`
+                UPDATE members
+                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, deadline_at = ?, updated_at = ?
+                WHERE public_key = ?
+            `).run(title.trim(), description, description, photoUrl || null, goal_amount, deadline_at, now, id);
+        } else {
+            db.prepare(`
+                UPDATE projects
+                SET title = ?, description = ?, photos = ?, goal_amount = ?, updated_at = ?
+                WHERE id = ? AND creator_pubkey = ?
+            `).run(title, description, JSON.stringify(photos), goal_amount, now, id, creator_pubkey);
+
+            db.prepare(`
+                UPDATE members
+                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, updated_at = ?
+                WHERE public_key = ?
+            `).run(title.trim(), description, description, photoUrl || null, goal_amount, now, id);
+        }
+    })();
 }
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
@@ -964,17 +1095,18 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         db.prepare(`UPDATE projects SET current_amount = current_amount + ? WHERE id = ?`).run(amount, projectId);
 
         const updatedProject = db.prepare(`SELECT current_amount, goal_amount FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
-        if (updatedProject.current_amount >= updatedProject.goal_amount && project.status === 'ACTIVE') {
+        if (updatedProject && updatedProject.current_amount >= updatedProject.goal_amount && project.status === 'ACTIVE') {
             db.prepare(`UPDATE projects SET status = 'FUNDED' WHERE id = ?`).run(projectId);
+            db.prepare(`UPDATE members SET status = 'funded' WHERE public_key = ?`).run(projectId);
 
-            // Auto-Sweep Escrow to Creator sequentially
+            // Auto-Sweep Escrow to Enterprise Account (Slice 3: pledges land in enterprise account!)
             const escrowBalanceRow = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(escrowPubkey) as { balance: number };
             const escrowBalance = escrowBalanceRow ? escrowBalanceRow.balance : Math.max(0, updatedProject.current_amount);
 
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit actual Creator
+                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
                 db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
 
                 // Record atomic Sweep Transaction
@@ -1046,6 +1178,9 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
 
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
+        db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
+        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
         writeTombstone('projects', projectId);
     });
 

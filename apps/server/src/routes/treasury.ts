@@ -101,9 +101,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
 
     // ---- Public transparency reads ------------------------------------------------------
-    router.get('/api/treasuries', async (ctx) => {
+    const listTreasuriesHandler = async (ctx: any) => {
         const rows = db.prepare(
-            "SELECT public_key, callsign, avatar_url, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
+            "SELECT public_key, callsign, avatar_url, earned_credit, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -129,6 +129,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
                     earnedSurplus: r.earned_surplus ?? 0,
                     workingCapitalCeiling: r.working_capital_ceiling ?? null,
+                    purpose: r.purpose ?? null,
+                    goalAmount: r.goal_amount != null ? Number(r.goal_amount) : null,
+                    deadlineAt: r.deadline_at ?? null,
+                    lifecycle: r.lifecycle ?? 'ongoing',
+                    status: r.status ?? 'active',
+                    paused: !!r.paused,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
@@ -136,11 +142,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 };
             }),
         };
-    });
+    };
+    router.get('/api/treasuries', listTreasuriesHandler);
+    router.get('/api/enterprises', listTreasuriesHandler);
 
-    router.get('/api/treasury/:treasury', async (ctx) => {
+    const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const posts = db.prepare(
@@ -197,6 +205,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             earnedSurplus: m.earned_surplus ?? 0,
             workingCapitalCeiling: m.working_capital_ceiling ?? null,
+            purpose: m.purpose ?? null,
+            goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
+            deadlineAt: m.deadline_at ?? null,
+            lifecycle: m.lifecycle ?? 'ongoing',
+            status: m.status ?? 'active',
+            paused: !!m.paused,
             deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
@@ -204,7 +218,83 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
             link: linkDetail(treasury),
         };
-    });
+    };
+    router.get('/api/treasury/:treasury', getTreasuryHandler);
+    router.get('/api/enterprise/:treasury', getTreasuryHandler);
+
+    // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
+    const createEnterpriseHandler = async (ctx: any) => {
+        const body = (ctx as any).requestBody || {};
+        const actor = (ctx.state?.actor as string) || body.creatorPubkey || body.creator_pubkey || body.proposerPubkey;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        const { name, title, avatar, photos, creditLine, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
+        const enterpriseName = String(name || title || '').trim();
+        if (!enterpriseName || enterpriseName.length < 2) {
+            ctx.status = 400;
+            ctx.body = { error: 'name must be at least 2 characters' };
+            return;
+        }
+        let photoUrl = avatar;
+        if (!photoUrl && Array.isArray(photos) && photos.length > 0) photoUrl = photos[0];
+        const enterprisePurpose = String(purpose || description || enterpriseName).trim();
+        const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
+        const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
+        const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
+
+        try {
+            const res = createTreasury(
+                enterpriseName,
+                photoUrl || '',
+                Number(creditLine) || 0,
+                {
+                    systemCreated: !photoUrl,
+                    workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,
+                    purpose: enterprisePurpose,
+                    lifecycle: parsedLifecycle,
+                    goalAmount: parsedGoal,
+                    deadlineAt: parsedDeadline,
+                    leadKeeperPubkey: actor,
+                }
+            );
+
+            if (parsedLifecycle === 'bounded') {
+                try {
+                    db.prepare(`
+                        INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                    `).run(
+                        res.publicKey,
+                        actor,
+                        enterpriseName,
+                        enterprisePurpose,
+                        photoUrl ? JSON.stringify([photoUrl]) : '[]',
+                        parsedGoal || 0,
+                        parsedDeadline,
+                        res.publicKey
+                    );
+                } catch { }
+            }
+
+            ctx.body = {
+                success: true,
+                publicKey: res.publicKey,
+                name: enterpriseName,
+                purpose: enterprisePurpose,
+                lifecycle: parsedLifecycle,
+                goalAmount: parsedGoal,
+                deadlineAt: parsedDeadline,
+            };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to create enterprise' };
+        }
+    };
+    router.post('/api/treasury', createEnterpriseHandler);
+    router.post('/api/enterprise', createEnterpriseHandler);
 
     // ---- Admin (password-gated) ---------------------------------------------------------
     router.post('/api/local/admin/treasury', async (ctx) => {

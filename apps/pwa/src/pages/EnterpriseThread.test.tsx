@@ -105,6 +105,17 @@ describe('Enterprise Discussion Thread (PWA)', () => {
                 type: 'text',
                 timestamp: '2026-09-17T10:05:00.000Z',
             },
+            {
+                id: 'msg-3',
+                conversationId: 'enterprise-bakery-pubkey',
+                authorPubkey: 'citizen-dan-pubkey',
+                authorCallsign: 'DanActive',
+                authorAvatar: null,
+                ciphertext: Buffer.from('🫘 Fresh sourdough available! 🌱', 'utf8').toString('base64'),
+                nonce: 'plaintext-v1',
+                type: 'text',
+                timestamp: '2026-09-17T10:10:00.000Z',
+            },
         ];
 
         vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({
@@ -129,7 +140,8 @@ describe('Enterprise Discussion Thread (PWA)', () => {
         // Messages rendered
         expect(screen.getByText('Who has the flour sacks?')).toBeInTheDocument();
         expect(screen.getByText('I picked them up from the mill!')).toBeInTheDocument();
-        expect(screen.getByText('DanActive')).toBeInTheDocument();
+        expect(screen.getByText('🫘 Fresh sourdough available! 🌱')).toBeInTheDocument();
+        expect(screen.getAllByText('DanActive').length).toBeGreaterThanOrEqual(1);
         expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
     });
 
@@ -192,6 +204,7 @@ describe('Enterprise Discussion Thread (PWA)', () => {
             success: true,
             message: { ...mockMessages[0], type: 'removed' },
         });
+        const confirmSpy = vi.spyOn(window, 'confirm');
 
         render(
             <TreasuryDetailPage
@@ -207,8 +220,16 @@ describe('Enterprise Discussion Thread (PWA)', () => {
 
         const removeButton = screen.getByTitle('Remove message');
         expect(removeButton).toBeInTheDocument();
-        fireEvent.click(removeButton);
 
+        // 1. Cancelling confirmation does not remove
+        confirmSpy.mockReturnValueOnce(false);
+        fireEvent.click(removeButton);
+        expect(confirmSpy).toHaveBeenCalledWith('Are you sure you want to remove this message? It will show as "removed by a keeper".');
+        expect(removeSpy).not.toHaveBeenCalled();
+
+        // 2. Confirming calls remove
+        confirmSpy.mockReturnValueOnce(true);
+        fireEvent.click(removeButton);
         expect(removeSpy).toHaveBeenCalledWith('enterprise-bakery-pubkey', 'msg-to-remove');
     });
 

@@ -19,7 +19,9 @@ import { ReportModal } from '../components/ReportModal';
 function decodeThreadText(ciphertext: string, type: string): string {
     if (type === 'removed') return 'removed by a keeper';
     try {
-        return atob(ciphertext);
+        const binString = atob(ciphertext);
+        const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
     } catch {
         return ciphertext;
     }
@@ -207,12 +209,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
 
     const handleRemoveThreadMessage = async (messageId: string) => {
         if (!pubkey || threadRemovingId) return;
+        if (!window.confirm('Are you sure you want to remove this message? It will show as "removed by a keeper".')) return;
         setThreadRemovingId(messageId);
+        setThreadError(null);
         try {
             await removeEnterpriseThreadMessage(pubkey, messageId);
             await loadThread();
         } catch (e: any) {
-            alert(e?.message || 'Could not remove message');
+            setThreadError(e?.message || 'Could not remove message');
         } finally {
             setThreadRemovingId(null);
         }
@@ -1502,10 +1506,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
-                                        <span>💬</span>
+                                    <h3 className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5 m-0">
+                                        <span aria-hidden="true">💬</span>
                                         <span>Enterprise Discussion</span>
-                                    </div>
+                                    </h3>
                                     <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
                                         Public coordination for this enterprise
                                     </p>
@@ -1524,7 +1528,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                             )}
 
                             {threadMessages.length === 0 ? (
-                                <p className="text-xs text-nature-400 italic py-2">No messages yet. Start the conversation!</p>
+                                <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2">No messages yet. Start the conversation!</p>
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {threadMessages.map((m) => {
@@ -1555,7 +1559,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                                 type="button"
                                                                 onClick={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
-                                                                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                                                aria-label={`Remove message from ${authorName}`}
+                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 title="Remove message"
                                                             >
                                                                 {threadRemovingId === m.id ? 'Removing...' : 'Remove'}
@@ -1582,11 +1587,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
+                                            aria-label="Message the enterprise"
                                             value={threadInput}
                                             onChange={(e) => setThreadInput(e.target.value)}
+                                            disabled={threadPosting}
                                             placeholder="Message the enterprise..."
                                             maxLength={2000}
-                                            className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
                                         <button
                                             type="submit"

@@ -538,7 +538,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </p>
                                 {(detail.pauseWarning || (detail.pauseDaysRemaining !== null && detail.pauseDaysRemaining !== undefined && detail.pauseDaysRemaining <= 14)) && (
                                     <div className="pt-2 border-t border-amber-300/60 dark:border-amber-700/60 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                                        <span>⚠️</span>
+                                        <span aria-hidden="true">⚠️</span>
                                         <span>{detail.pauseWarning || (detail.pauseDaysRemaining === 0 ? 'Pause credit floor snapshot has expired' : `Pause credit floor snapshot expires in ${detail.pauseDaysRemaining} day${detail.pauseDaysRemaining === 1 ? '' : 's'}`)}</span>
                                     </div>
                                 )}
@@ -1216,7 +1216,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                             key={period}
                                             type="button"
                                             onClick={() => setLedgerPeriod(period)}
-                                            className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors ${
+                                            className={`px-3 py-2.5 text-xs font-bold rounded-lg transition-colors ${
                                                 ledgerPeriod === period
                                                     ? 'bg-white dark:bg-nature-700 text-nature-900 dark:text-white shadow-xs'
                                                     : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'

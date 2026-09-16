@@ -2805,8 +2805,12 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error('Enterprise must be in winding_up state to finalise');
     }
 
-    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
-        throw new Error('Not authorised to finalise wind-up');
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = !!op && opCount === 1;
+    const isLead = !!op && op.role === 'lead';
+    if (!isLead && !isSoleKeeper && !isAdminPubkey(actorPubkey)) {
+        throw new Error('Only the lead keeper may finalise wind-up');
     }
 
     const initiatedAt = member.wind_up_initiated_at ? new Date(member.wind_up_initiated_at).getTime() : 0;
@@ -2820,6 +2824,14 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
     }
 
+    // Deliberately OUTSIDE conservingTransaction. This is an ordinary precondition — a keeper
+    // finalising while trades are still open is a normal thing to do, not an exceptional one — and
+    // conservingTransaction treats any throw as a possible conservation breach: it rolls back and
+    // then runs a full reconcileLedgerFromDb() to resync memory to rows, halting the process if
+    // that resync fails. Rebuilding the in-memory ledger every time someone clicks finalise too
+    // early is a steep price for a 400. The atomicity it would buy is illusory anyway: the sweep
+    // re-reads the balance inside the transaction, and the transaction holds the write lock, so no
+    // escrow can open between this check and the sweep.
     const openEscrows = db.prepare(`
         SELECT COUNT(*) as c FROM marketplace_transactions
         WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending', 'disputed')

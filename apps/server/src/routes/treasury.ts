@@ -232,7 +232,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Lightweight statuses endpoint for marketplace / search / map filtering without balance computation & keeper lookups
     const listEnterpriseStatusesHandler = async (ctx: any) => {
         const rows = db.prepare(
-            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
+            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
         ).all() as any[];
         ctx.body = {
             enterprises: rows.map(r => ({

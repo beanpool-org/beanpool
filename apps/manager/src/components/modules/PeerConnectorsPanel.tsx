@@ -523,7 +523,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleToggleMode(c)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all"
+                                            className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
                                         >
                                             💤 Make Passive
                                         </button>
@@ -544,7 +544,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleToggleMode(c)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all"
+                                            className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
                                         >
                                             ⚡ Make Active
                                         </button>
@@ -558,7 +558,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleDisconnect(safeAddress)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-200 border border-nature-700 transition-all disabled:opacity-50 min-h-[40px]"
+                                            className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-200 border border-nature-700 transition-all disabled:opacity-50 min-h-[44px]"
                                         >
                                             {currentAction === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
                                         </button>
@@ -567,7 +567,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleConnect(safeAddress)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[40px]"
+                                            className="px-3 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[44px]"
                                         >
                                             {currentAction === 'connecting' ? 'Connecting…' : 'Connect'}
                                         </button>
@@ -577,7 +577,7 @@ export function PeerConnectorsPanel({
                                         type="button"
                                         onClick={() => handleToggleMode(c)}
                                         disabled={Boolean(currentAction)}
-                                        className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-200 border border-nature-700 transition-all disabled:opacity-50 min-h-[40px]"
+                                        className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-200 border border-nature-700 transition-all disabled:opacity-50 min-h-[44px]"
                                     >
                                         {currentAction === 'toggling-mode'
                                             ? 'Updating mode…'
@@ -590,7 +590,7 @@ export function PeerConnectorsPanel({
                                         type="button"
                                         onClick={() => requestRemoveConfirmation(c)}
                                         disabled={Boolean(currentAction)}
-                                        className="px-3 py-1.5 rounded-xl bg-red-950/50 hover:bg-red-900/60 text-xs font-bold text-red-400 hover:text-red-300 border border-red-800/60 transition-all disabled:opacity-50 min-h-[40px]"
+                                        className="px-3 py-2 rounded-xl bg-red-950/50 hover:bg-red-900/60 text-xs font-bold text-red-400 hover:text-red-300 border border-red-800/60 transition-all disabled:opacity-50 min-h-[44px]"
                                     >
                                         {currentAction === 'removing' ? 'Removing…' : 'Remove'}
                                     </button>

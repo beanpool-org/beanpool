@@ -724,5 +724,53 @@ describe('PeerConnectorsPanel Component', () => {
         });
         expect(screen.queryByText(/Removed connector/i)).not.toBeInTheDocument();
     });
+
+    it('applies min-h-[44px] touch targets to connector action buttons and collision/deadlock alerts', async () => {
+        const testConnectors = [
+            {
+                address: 'wss://touch-target.beanpool.org:8443',
+                callsign: 'Touch Target Peer',
+                connected: true,
+                enabled: true,
+                remoteActive: true,
+            },
+        ];
+
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(testConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+        });
+
+        const disconnectBtn = screen.getByRole('button', { name: 'Disconnect' });
+        const removeBtn = screen.getByRole('button', { name: 'Remove' });
+
+        expect(disconnectBtn.className).toContain('min-h-[44px]');
+        expect(removeBtn.className).toContain('min-h-[44px]');
+
+        // Check collision quick-action button and action row toggle button both have min-h-[44px]
+        const passiveButtons = screen.getAllByRole('button', { name: /💤 Make Passive/i });
+        expect(passiveButtons.length).toBe(2);
+        for (const btn of passiveButtons) {
+            expect(btn.className).toContain('min-h-[44px]');
+        }
+    });
 });
+
 

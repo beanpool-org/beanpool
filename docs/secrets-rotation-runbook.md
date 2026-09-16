@@ -107,12 +107,16 @@ flowchart TD
     ```
 
 #### 1.3 Google Cloud Platform (Maps API Key & Play Service Account)
+
+> [!CAUTION]
+> Do NOT immediately delete or revoke the existing Google Maps API key. Native mobile clients embed this key in distributed binaries; revoking it immediately breaks map rendering for installed users. Generate the replacement key alongside the existing one, update via EAS Secrets (`eas secret:create --name GOOGLE_MAPS_API_KEY --value <key>`), release the new build, and revoke the old key only after an adoption grace period.
+
 *   **Where to generate:**
     1. In [Google Cloud Console](https://console.cloud.google.com/), select the BeanPool project.
     2. **Maps API Key:** Go to **APIs & Services** $\to$ **Credentials**. Create or regenerate API key restricted to package `org.beanpool.pillar` and SHA-256 fingerprint.
     3. **Play Service Account:** Go to **IAM & Admin** $\to$ **Service Accounts**, select the Google Play publish service account, navigate to **Keys** $\to$ **Add Key** $\to$ **Create new key** (JSON).
 *   **Places to update:**
-    - `apps/native/eas.json`: Update `GOOGLE_MAPS_API_KEY` under build profiles.
+    - EAS Secrets: Set `GOOGLE_MAPS_API_KEY` via `eas secret:create --scope project --name GOOGLE_MAPS_API_KEY --value <key>` (do not commit plaintext keys to `apps/native/eas.json`).
     - Local workstation: Replace `./pc-api-key.json` for EAS submit.
 *   **How to verify:**
     Run native TypeScript checks:
@@ -149,7 +153,12 @@ flowchart TD
     2. Locate existing tunnels (`qld`, `vic`, per-node tunnels).
     3. If rotating tunnel credentials: click **Configure**, rotate the connector token, or provision replacement tunnel connectors.
 *   **Places to update:**
-    - On target node: write token directly to `/root/BeanPool-<Name>/data/tunnel-token` with permissions `chmod 600`.
+    - On target node: write token directly to `/root/BeanPool-<Name>/data/tunnel-token` with permissions `chmod 644` (required because the `cloudflared` container runs as non-root UID 65532), then restart the tunnel container:
+      ```bash
+      echo "<new_tunnel_token>" > /root/BeanPool-<Name>/data/tunnel-token
+      chmod 644 /root/BeanPool-<Name>/data/tunnel-token
+      docker compose -p beanpool-<name> restart cloudflared
+      ```
     - Note: Only `test` and `yarravalley` currently run `cloudflared` container sidecars.
 *   **How to verify:**
     ```bash
@@ -192,7 +201,7 @@ flowchart TD
     ```
 *   **How to verify:**
     ```bash
-    curl -s -H "x-admin-secret: <new_admin_secret>" https://beanpool.org/api/local/admin/registrar/allocations | head -c 100
+    curl -s -H "x-admin-secret: <new_admin_secret>" https://beanpool.org/api/local/admin/registrar/pending | head -c 100
     ```
 
 ---
@@ -203,32 +212,36 @@ flowchart TD
 When `ADMIN_PASSWORD` is initialized on first boot, the server creates an scrypt hash in `/root/BeanPool-<Name>/data/local-config.json` and sets `"isLocked": true`.  
 **Subsequent changes to `ADMIN_PASSWORD` in `.env` are IGNORED by the server while `isLocked` is true.**
 
+`scripts/rotate-node-env.sh` automatically detects when `ADMIN_PASSWORD` is being updated and atomically resets `isLocked` in `data/local-config.json` before recreating the container, allowing `initAdminPassword()` to hash and lock the new password in a single pass.
+
 To rotate `ADMIN_PASSWORD` on an existing node:
-1. Generate new strong password: `NEW_PW=$(openssl rand -base64 24)`
-2. Update `.env` using `scripts/rotate-node-env.sh`:
+1. Generate new strong password matching `validatePasswordStrength()` requirements:
+   ```bash
+   NEW_PW="$(openssl rand -base64 16 | tr '+/' '!_')#$(openssl rand -hex 4)"
+   ```
+2. Update `.env` using `scripts/rotate-node-env.sh` (handles atomic lock reset and container recreation in one step):
    ```bash
    bash scripts/rotate-node-env.sh --nodes test ADMIN_PASSWORD="$NEW_PW" CF_API_TOKEN="<new_cf_token>"
    ```
-3. Reset the password lock in `local-config.json` on the node:
+3. If rotating manually without `rotate-node-env.sh`, atomically clear lock on node prior to container update:
    ```bash
    ssh root@ssh-qld.beanpool.org "node -e '
      const fs = require(\"fs\");
      const p = \"/root/BeanPool-Test/data/local-config.json\";
+     const tmp = p + \".tmp.\" + process.pid;
      if (fs.existsSync(p)) {
        const cfg = JSON.parse(fs.readFileSync(p, \"utf8\"));
        cfg.isLocked = false;
        delete cfg.adminHash;
        delete cfg.salt;
-       fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-       console.log(\"Lock cleared\");
+       fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+       fs.renameSync(tmp, p);
+       console.log(\"Lock cleared atomically\");
      }
    '"
-   ```
-4. Restart the node container so `initAdminPassword` re-hashes and re-locks with the new password:
-   ```bash
    ssh root@ssh-qld.beanpool.org "cd /root/BeanPool-Test && docker compose -p beanpool-test up -d --no-deps --force-recreate beanpool-node"
    ```
-5. On any backup node replicate: update `BACKUP_ADMIN_PASSWORD` to match the primary's new `ADMIN_PASSWORD`.
+4. On any backup node replicate: update `BACKUP_ADMIN_PASSWORD` to match the primary's new `ADMIN_PASSWORD`.
 
 ---
 
@@ -243,7 +256,7 @@ Run these commands after completing the rotation sweep:
 | **Admin Authentication** | `curl -sk -H "x-admin-password: $NEW_PW" https://test.beanpool.org/api/local/admin/status` | HTTP 200 with node status payload (HTTP 401 with bad password) |
 | **Backup Pull Convergence** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 30 beanpool-test-mirror-beanpool-node-1"` | `[Backup] ⬇️ Pulled snapshot` (no 401 Unauthorized) |
 | **Cloudflare Tunnel Status** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 20 beanpool-test-cloudflared-1"` | `Registered tunnel connection` / 0 errors |
-| **Registrar Attestation** | `curl -sk -H "x-admin-secret: $NEW_ADMIN_SECRET" https://beanpool.org/api/local/admin/registrar/allocations` | HTTP 200 list of allocations |
+| **Registrar Attestation** | `curl -sk -H "x-admin-secret: $NEW_ADMIN_SECRET" https://beanpool.org/api/local/admin/registrar/pending` | HTTP 200 list of pending leases |
 | **CI Secrets Guard** | `bash scripts/test-all.sh` | Secrets guard check passes with 0 leaks |
 
 ---

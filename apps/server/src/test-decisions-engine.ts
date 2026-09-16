@@ -490,6 +490,27 @@ async function runDecisionsSuite() {
     testAssert(decHalted.adminHaltReason?.includes('Evidence was forged'), 'Public halt justification recorded');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(rogueMember) as any).status === 'active', 'Member reinstated to active upon admin halt');
 
+    // Test admin halt on an OPEN removal decision does not activate a previously disabled/frozen member
+    const disabledMember = 'disabled_member_' + Date.now();
+    seedTestMember(disabledMember, 'DisabledDave');
+    db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
+
+    const decOpenRemoval = createDecision({
+        authorPubkey: admin,
+        title: 'Remove already disabled member',
+        description: 'Testing halt on open decision',
+        touches: 'member',
+        effect: 'remove_member',
+        subject: disabledMember,
+        closesAt: new Date(Date.now() + 100000).toISOString(),
+    });
+    testAssert(decOpenRemoval.status === 'open', 'Decision is open');
+    const haltOpenRes = adminHaltDecision(decOpenRemoval.id, admin, 'Halted while open; member remains disabled');
+    testAssert(haltOpenRes.success, 'Halted open decision');
+    const disabledMemberCheck = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(disabledMember) as any;
+    testAssert(disabledMemberCheck.status === 'disabled', 'Halting OPEN decision does NOT reactivate a disabled member');
+    testAssert(disabledMemberCheck.credit_frozen === 1, 'Halting OPEN decision does NOT unfreeze credit for a frozen member');
+
     // Second removal decision — test auto-execution when grace period ends
     const decRemoval2 = createDecision({
         authorPubkey: admin,

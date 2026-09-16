@@ -867,13 +867,13 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         `).run(now, adminPubkey, reason.trim(), now, decisionId);
 
         // If member was suspended in grace window, restore them
-        if (decision.effect === 'remove_member' && decision.subject) {
+        if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
         }
     });
 
-    if (decision.subject) {
+    if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
         broadcast({ type: 'profile_updated', publicKey: decision.subject });
     }
     broadcast({ type: 'decision_halted', decisionId, adminPubkey, reason });

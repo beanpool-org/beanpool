@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     fetchOffboardPreviewApi,
     executeOffboardApi,
@@ -82,13 +82,17 @@ export function OffboardMemberWizard({
         giftRecipient.toLowerCase() === currentAdminPubkey.toLowerCase()
     );
 
+    const submittingRef = useRef(false);
+
     const handleConfirmOffboard = async () => {
         if (!preview) return;
+        if (submittingRef.current || submitting) return;
         if (isSelfDealing) {
             setError('Two-person rule: You cannot gift this balance to yourself.');
             return;
         }
 
+        submittingRef.current = true;
         setSubmitting(true);
         setError(null);
 
@@ -117,6 +121,7 @@ export function OffboardMemberWizard({
         } catch (err: any) {
             setError(err?.message || 'Failed to offboard member');
         } finally {
+            submittingRef.current = false;
             setSubmitting(false);
         }
     };
@@ -333,15 +338,15 @@ export function OffboardMemberWizard({
                             </button>
                             <button
                                 type="button"
-                                disabled={submitting || preview.isSoleOwner || isSelfDealing || (preview.pendingEscrowsCount > 0)}
+                                disabled={submitting || submittingRef.current || preview.isSoleOwner || isSelfDealing || (preview.pendingEscrowsCount > 0)}
                                 onClick={handleConfirmOffboard}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg text-xs ${
-                                    !submitting && !preview.isSoleOwner && !isSelfDealing && (preview.pendingEscrowsCount === 0)
+                                    !submitting && !submittingRef.current && !preview.isSoleOwner && !isSelfDealing && (preview.pendingEscrowsCount === 0)
                                         ? 'bg-red-600 hover:bg-red-500 text-white'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                 }`}
                             >
-                                {submitting ? 'Offboarding...' : 'Confirm & Prune Member'}
+                                {submitting || submittingRef.current ? 'Offboarding...' : 'Confirm & Prune Member'}
                             </button>
                         </div>
 

@@ -528,6 +528,45 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
     };
 }
 
+function getPreviousOffboardResult(
+    cleanPub: string,
+    callsign: string,
+    requestedResolution: string
+): { success: boolean; memberPubkey: string; callsign: string; resolution: string; balanceSettled: number } {
+    try {
+        const row = db.prepare(`
+            SELECT metadata FROM system_logs
+            WHERE category = 'ADMIN'
+              AND (
+                  json_extract(metadata, '$.memberPubkey') = ?
+                  OR message LIKE ?
+              )
+            ORDER BY timestamp DESC LIMIT 1
+        `).get(cleanPub, `%Member ${callsign}%offboarded%`) as { metadata?: string } | undefined;
+
+        if (row?.metadata) {
+            const meta = JSON.parse(row.metadata);
+            return {
+                success: true,
+                memberPubkey: cleanPub,
+                callsign,
+                resolution: meta.resolution || requestedResolution,
+                balanceSettled: typeof meta.balanceSettled === 'number' ? meta.balanceSettled : 0,
+            };
+        }
+    } catch {
+        // Fall back to default
+    }
+
+    return {
+        success: true,
+        memberPubkey: cleanPub,
+        callsign,
+        resolution: requestedResolution,
+        balanceSettled: 0,
+    };
+}
+
 /**
  * Executes member offboarding:
  * - Positive balance: Donate to Commons OR Gift to active member
@@ -548,7 +587,8 @@ export function executeOffboard(
         throw new Error('Member not found');
     }
     if (member.status === 'pruned') {
-        throw new Error('Member is already pruned');
+        // Idempotent: already pruned member is a no-op that returns the first result
+        return getPreviousOffboardResult(cleanPub, member.callsign, options.resolution);
     }
     if (isSoleOwner(cleanPub)) {
         throw new Error('Cannot offboard the sole node owner; appoint another owner first');
@@ -562,9 +602,16 @@ export function executeOffboard(
 
     const resolution = options.resolution;
     let balanceSettled = 0;
+    let idempotentResult: { success: boolean; memberPubkey: string; callsign: string; resolution: string; balanceSettled: number } | null = null;
 
     // Execute in conservingTransaction to guarantee SUM(balances) + COMMONS_POOL = 0
     conservingTransaction(() => {
+        const liveMember = getMember(cleanPub);
+        if (liveMember?.status === 'pruned') {
+            idempotentResult = getPreviousOffboardResult(cleanPub, member.callsign, resolution);
+            return;
+        }
+
         // Read balance INSIDE conservingTransaction so that any concurrent mutations are captured
         const balanceInfo = getBalance(cleanPub);
         const balance = balanceInfo.balance;
@@ -658,6 +705,10 @@ export function executeOffboard(
             })
         );
     });
+
+    if (idempotentResult) {
+        return idempotentResult;
+    }
 
     logger.info('ADMIN', `[Offboard] Offboarded member ${member.callsign} (${cleanPub}) with resolution ${resolution}`);
 

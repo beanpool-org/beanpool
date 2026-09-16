@@ -452,6 +452,18 @@ async function main() {
     const auditCharlie = runLedgerAudit();
     assert(auditCharlie.ok === true && Math.abs(auditCharlie.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after donation');
 
+    // REGRESSION TEST (Item 1): Double-click / Idempotency check:
+    // Calling executeOffboard a second time on already-pruned member is an idempotent no-op returning the first result.
+    const commonsAfterFirst = getCommonsBalanceExact();
+    const secondCallRes = executeOffboard(charlieKey, { resolution: 'donate_to_commons' }, operatorPubkey);
+    assert(secondCallRes.success === true, 'Second offboard call succeeds idempotently');
+    assert(secondCallRes.memberPubkey === charlieKey.toLowerCase(), 'Second call returns memberPubkey');
+    assert(secondCallRes.resolution === 'donate_to_commons', 'Second call returns original resolution');
+    assert(secondCallRes.balanceSettled === 75, 'Second call returns original balanceSettled (75)');
+    const commonsAfterSecond = getCommonsBalanceExact();
+    assert(commonsAfterSecond === commonsAfterFirst, 'Commons pool moved exactly once after two calls in a row');
+    assert(nodeTotal() === 0, 'Zero-sum conserved after second idempotent call');
+
     // Member 2: Positive balance -> Gift to Member + Two-Person Rule Check
     const daveKey = generateValidPubkey();
     makeMember('dave', daveKey);

@@ -220,4 +220,59 @@ describe('OffboardMemberWizard', () => {
             expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
         });
     });
+
+    it('prevents double-click race condition on confirm button', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: {
+                publicKey: mockMember.publicKey,
+                callsign: 'dave',
+                status: 'active',
+                joinedAt: '2026-01-01',
+            },
+            balance: 0,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 500,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [],
+        });
+
+        let resolveOffboard: (val: any) => void;
+        const offboardPromise = new Promise((resolve) => {
+            resolveOffboard = resolve;
+        });
+        const executeSpy = vi.spyOn(nodeClient, 'executeOffboardApi').mockImplementation(() => offboardPromise as any);
+
+        render(
+            <OffboardMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Confirm & Prune Member/ })).toBeDefined();
+        });
+
+        const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ });
+        // Rapid double click
+        fireEvent.click(submitBtn);
+        fireEvent.click(submitBtn);
+
+        expect(executeSpy).toHaveBeenCalledTimes(1);
+
+        resolveOffboard!({
+            success: true,
+            memberPubkey: mockMember.publicKey,
+            callsign: 'dave',
+            resolution: 'prune_zero_balance',
+            balanceSettled: 0,
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Member Offboarded')).toBeDefined();
+        });
+    });
 });

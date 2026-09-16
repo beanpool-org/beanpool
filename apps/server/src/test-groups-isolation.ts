@@ -577,6 +577,26 @@ async function runTests() {
         }
         assert(nonMemberAcceptFailed, '10s-accept. Non-member Carol CANNOT accept a group-scoped post');
 
+        // Regression test for Defect 3: Observer in group CANNOT request or accept group post
+        db.prepare("INSERT OR REPLACE INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'observer', 'active', 'now', 'now')")
+            .run(gardenGroup.id, dave.pubKeyHex);
+
+        let observerReqFailed = false;
+        try {
+            requestPost(gardenOffer!.id, dave.pubKeyHex);
+        } catch (e: any) {
+            observerReqFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(observerReqFailed, '10s-observer-req. Observer Dave CANNOT request a group-scoped post');
+
+        let observerAcceptFailed = false;
+        try {
+            acceptPost(gardenOffer!.id, dave.pubKeyHex);
+        } catch (e: any) {
+            observerAcceptFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(observerAcceptFailed, '10s-observer-accept. Observer Dave CANNOT accept a group-scoped post');
+
         // Direct post to Dave cannot be requested or accepted by Carol
         const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
         let nonTargetReqFailed = false;

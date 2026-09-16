@@ -114,7 +114,7 @@ export function requestPost(
 
     if (audienceScope === 'group' && targetGroupId) {
         const isMem = db.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, requesterPublicKey);
         if (!isMem && authorPubkey !== requesterPublicKey) {
             throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
@@ -447,7 +447,7 @@ export function acceptPost(
 
     if (audienceScope === 'group' && targetGroupId) {
         const isMem = db.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(targetGroupId, buyerPublicKey);
         if (!isMem) {
             throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');

@@ -908,7 +908,18 @@ export function broadcast(event: any, recipients?: string[]): void {
 
 export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
+    const cleanKey = typeof publicKey === 'string' ? publicKey.trim().toLowerCase() : '';
+    try {
+        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+        if (invalidated) {
+            const rekeyDetail = invalidated.rekeyed_to ? ` and re-keyed to ${invalidated.rekeyed_to}` : '';
+            throw new Error(`Device key has been invalidated (${invalidated.reason}${rekeyDetail}). Please re-enrol using your replacement device.`);
+        }
+    } catch (e: any) {
+        if (e?.message?.includes('Device key has been invalidated')) throw e;
+        // If table does not exist during early boot or mock, ignore
+    }
+    const member = db.prepare("SELECT status FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
@@ -1371,7 +1382,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -1393,7 +1404,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
     // #104: a bridge_<peer> account is the local payer when settling a visitor's purchase. It has no
     // trust profile, so the completed-trade gate would block every cross-node settlement.
-    if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
+    const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
+    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -3741,6 +3754,7 @@ export function adminPruneUser(publicKey: string) {
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });

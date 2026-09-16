@@ -1616,3 +1616,192 @@ export async function resolveEscrowDisputeApi(
     }
     return res.json();
 }
+
+// ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
+
+export interface RekeyStatusResponse {
+    isInvalidated: boolean;
+    invalidatedInfo: {
+        public_key: string;
+        reason: string;
+        invalidated_at: string;
+        rekeyed_to: string | null;
+    } | null;
+    pendingRequest: {
+        id: number;
+        code: string;
+        old_pubkey: string;
+        new_pubkey: string | null;
+        operator_pubkey: string;
+        status: string;
+        created_at: string;
+        expires_at: string;
+    } | null;
+    history: Array<{
+        id: number;
+        old_pubkey: string;
+        new_pubkey: string;
+        reenrollment_code: string;
+        operator_pubkey: string;
+        performed_at: string;
+        completed_at: string | null;
+        details: string | null;
+    }>;
+}
+
+export interface IssueRekeyCodeResponse {
+    success: boolean;
+    code: string;
+    oldPubkey: string;
+    callsign: string;
+    expiresAt: string;
+    operator: string;
+}
+
+export interface CompleteRekeyResponse {
+    success: boolean;
+    oldPubkey: string;
+    newPubkey: string;
+    callsign: string;
+}
+
+export interface OffboardPreviewResponse {
+    member: {
+        publicKey: string;
+        callsign: string;
+        status: string;
+        joinedAt: string;
+    };
+    balance: number;
+    commonsBalance: number;
+    costToCommunity: number;
+    projectedCommonsBalance: number;
+    pendingEscrowsCount: number;
+    isSoleOwner: boolean;
+    activeMembers: Array<{
+        publicKey: string;
+        callsign: string;
+    }>;
+}
+
+export interface OffboardResponse {
+    success: boolean;
+    memberPubkey: string;
+    callsign: string;
+    resolution: string;
+    balanceSettled: number;
+}
+
+export async function fetchRekeyStatusApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<RekeyStatusResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/status`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function issueRekeyCodeApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<IssueRekeyCodeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function completeRekeyApi(
+    nodeUrl: string,
+    pubkey: string,
+    code: string,
+    newPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<CompleteRekeyResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code, newPubkey }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchOffboardPreviewApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<OffboardPreviewResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard/preview`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function executeOffboardApi(
+    nodeUrl: string,
+    pubkey: string,
+    payload: {
+        resolution: 'donate_to_commons' | 'gift_to_member' | 'write_off_commons' | 'prune_zero_balance';
+        giftRecipientPubkey?: string;
+    },
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<OffboardResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const err: any = new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+        err.code = body.code;
+        err.status = res.status;
+        throw err;
+    }
+    return res.json();
+}

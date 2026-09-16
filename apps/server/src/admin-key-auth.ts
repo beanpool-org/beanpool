@@ -467,6 +467,18 @@ export function revokeAdminSession(sessionId: string): void {
     adminSessions.delete(sessionId);
 }
 
+/**
+ * Purges all active in-memory admin sessions for a specific member public key.
+ */
+export function purgeMemberSessions(memberPubkey: string): void {
+    if (!memberPubkey) return;
+    for (const [sid, sess] of adminSessions.entries()) {
+        if (sess.memberPubkey === memberPubkey) {
+            adminSessions.delete(sid);
+        }
+    }
+}
+
 // ===================== PER-OWNER BREAK-GLASS PROTOCOL =====================
 
 /**

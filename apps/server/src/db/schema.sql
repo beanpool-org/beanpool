@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS members (
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (
@@ -1224,3 +1225,41 @@ BEGIN
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     WHERE target_group_id = OLD.id;
 END;
+
+-- 26. Member Re-Keying & Key Invalidation (docs/settings-ia.md §5 item 1, Item 9b)
+-- Operator-assisted flow to bind an existing member's balance, history, roles and keeperships
+-- to a replacement device public key after in-person verification.
+CREATE TABLE IF NOT EXISTS rekey_requests (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    code             TEXT NOT NULL UNIQUE,
+    old_pubkey       TEXT NOT NULL,
+    new_pubkey       TEXT,
+    operator_pubkey  TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
+    created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    expires_at       DATETIME NOT NULL,
+    completed_at     DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
+CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);
+
+CREATE TABLE IF NOT EXISTS rekey_audit_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    old_pubkey        TEXT NOT NULL,
+    new_pubkey        TEXT NOT NULL,
+    reenrollment_code TEXT NOT NULL,
+    operator_pubkey   TEXT NOT NULL,
+    performed_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    completed_at      DATETIME,
+    details           TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_old ON rekey_audit_log(old_pubkey);
+CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_new ON rekey_audit_log(new_pubkey);
+
+CREATE TABLE IF NOT EXISTS invalidated_keys (
+    public_key     TEXT PRIMARY KEY,
+    reason         TEXT NOT NULL,
+    invalidated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    rekeyed_to     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_invalidated_keys_rekeyed_to ON invalidated_keys(rekeyed_to);

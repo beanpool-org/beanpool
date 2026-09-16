@@ -104,8 +104,10 @@ export function StandbyReplicationPanel({
             if (primaryPassword) {
                 body.primaryPassword = primaryPassword;
             }
-            if (primaryToken.trim()) {
+            if (primaryToken !== undefined && primaryToken !== '') {
                 body.primaryToken = primaryToken.trim();
+            } else if (hasExistingToken && primaryToken === '') {
+                body.primaryToken = '';
             }
 
             const res = await fetch(url, {
@@ -119,7 +121,11 @@ export function StandbyReplicationPanel({
                 setPrimaryPassword('');
                 setPrimaryToken('');
                 setHasExistingPassword(true);
-                if (primaryToken.trim()) setHasExistingToken(true);
+                if (body.primaryToken === '') {
+                    setHasExistingToken(false);
+                } else if (primaryToken.trim()) {
+                    setHasExistingToken(true);
+                }
                 loadData();
                 onRefreshDiag?.();
             } else {
@@ -337,20 +343,22 @@ export function StandbyReplicationPanel({
                     </button>
 
                     {/* Resync Trigger */}
-                    <button
-                        type="button"
-                        id="backup-resync-btn"
-                        onClick={() => setShowResyncConfirm(true)}
-                        className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-800 text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                    >
-                        <span>🔄</span>
-                        <span>Force Full Resync</span>
-                    </button>
+                    {isStandby && (
+                        <button
+                            type="button"
+                            id="backup-resync-btn"
+                            onClick={() => setShowResyncConfirm(true)}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-800 text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                        >
+                            <span>🔄</span>
+                            <span>Force Full Resync</span>
+                        </button>
+                    )}
                 </div>
             </form>
 
             {/* Resync Confirmation Modal */}
-            {showResyncConfirm && (
+            {isStandby && showResyncConfirm && (
                 <div
                     role="dialog"
                     aria-modal="true"

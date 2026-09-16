@@ -184,6 +184,10 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
             />
         );
 
+        await waitFor(() => {
+            expect(screen.getByText('Standby Replica')).toBeInTheDocument();
+        });
+
         const resyncTriggerBtn = screen.getByRole('button', { name: /Force Full Resync/i });
         await userEvent.click(resyncTriggerBtn);
 
@@ -192,5 +196,80 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         // Click Cancel
         await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByText('Confirm Full Replication Resync')).not.toBeInTheDocument();
+    });
+
+    it('does not render Force Full Resync button on primary nodes', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({ role: 'primary' }),
+            })
+        );
+
+        render(
+            <StandbyReplicationPanel
+                activeNode={mockNode}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Primary Node')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByRole('button', { name: /Force Full Resync/i })).not.toBeInTheDocument();
+    });
+
+    it('sends empty string primaryToken when token field is cleared to revoke token', async () => {
+        const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes('/api/local/admin/backup-status')) {
+                return {
+                    ok: true,
+                    json: async () => ({ role: 'backup', primaryUrl: 'https://primary.example.com' }),
+                };
+            }
+            if (url.includes('/api/local/admin/replication-config/get')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        primaryUrl: 'https://primary.example.com',
+                        hasPassword: true,
+                        hasToken: true,
+                    }),
+                };
+            }
+            if (url.includes('/api/local/admin/replication-config/save')) {
+                return {
+                    ok: true,
+                    json: async () => ({ success: true }),
+                };
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(
+            <StandbyReplicationPanel
+                activeNode={mockNode}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('Standby Replica')).toBeInTheDocument();
+        });
+
+        // Token field is left blank while hasToken is true -> saving should explicitly send primaryToken: ""
+        const saveBtn = screen.getByRole('button', { name: /Save Connection/i });
+        await userEvent.click(saveBtn);
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/api/local/admin/replication-config/save'),
+                expect.objectContaining({
+                    method: 'POST',
+                    body: expect.stringContaining('"primaryToken":""'),
+                })
+            );
+        });
     });
 });

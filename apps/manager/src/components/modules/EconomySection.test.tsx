@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
@@ -34,6 +34,7 @@ const mockNodeData: nodeClient.NodeDataPayload = {
 
 describe('EconomySection Component', () => {
     beforeEach(() => {
+        sessionStorage.clear();
         vi.clearAllMocks();
         vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(mockTreasuries);
         vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(['member_pk_alice']);
@@ -47,6 +48,10 @@ describe('EconomySection Component', () => {
             ok: true,
             json: () => Promise.resolve({ proposed: [], activeRound: null, pastRounds: [] }),
         }));
+    });
+
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     it('renders enterprises and displays keeper information', async () => {
@@ -287,6 +292,13 @@ describe('EconomySection Component', () => {
         await act(async () => {
             fireEvent.click(manageButton);
         });
+
+        expect(nodeClient.fetchTreasuryKeepers).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            mockProfile.adminPassword,
+            'tfa-prop-xyz'
+        );
 
         const select = screen.getByLabelText(/Select Member/i);
         await act(async () => {

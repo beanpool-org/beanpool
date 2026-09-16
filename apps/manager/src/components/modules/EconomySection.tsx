@@ -256,7 +256,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                 activeNode.url,
                 t.publicKey,
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
             setKeepersMap((prev) => ({ ...prev, [t.publicKey]: keepers }));
         } catch {

@@ -7,9 +7,19 @@ import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'exp
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi } from '../utils/db';
+import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi, getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage } from '../utils/db';
+import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
 import { useTheme, useStyles } from './ThemeContext';
+
+function decodeThreadMessage(ciphertext: string, type: string): string {
+    if (type === 'removed') return 'removed by a keeper';
+    try {
+        return decodeUtf8(decodeBase64(ciphertext));
+    } catch {
+        return ciphertext;
+    }
+}
 
 // A community enterprise's detail screen. Everyone sees the transparency view (balance, credit line,
 // purpose, goal progress if bounded, live listings, recent activity — the Commons is meant to be legible).
@@ -39,6 +49,13 @@ export default function TreasuryDetailScreen() {
     const [reportReason, setReportReason] = useState('');
     const [reporting, setReporting] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+
+    // Enterprise Discussion Thread State
+    const [threadMessages, setThreadMessages] = useState<any[]>([]);
+    const [threadReadOnly, setThreadReadOnly] = useState(false);
+    const [threadInput, setThreadInput] = useState('');
+    const [threadPosting, setThreadPosting] = useState(false);
+    const [threadRemovingId, setThreadRemovingId] = useState<string | null>(null);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -124,6 +141,26 @@ export default function TreasuryDetailScreen() {
         flowTime: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
         flowAmount: { fontSize: 15, fontWeight: '800' },
 
+        threadCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginTop: 20 },
+        threadHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+        threadTitle: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
+        threadSubtitle: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        threadReadOnlyBanner: { backgroundColor: colors.surface.subtle, padding: 10, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
+        threadReadOnlyText: { fontSize: 12, fontStyle: 'italic', color: colors.text.muted, textAlign: 'center' },
+        threadMsgRow: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+        threadMsgAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface.subtle },
+        threadMsgContent: { flex: 1, minWidth: 0 },
+        threadMsgMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
+        threadMsgAuthor: { fontSize: 12, fontWeight: '700', color: colors.text.heading },
+        threadMsgTime: { fontSize: 10, color: colors.text.muted },
+        threadMsgText: { fontSize: 13, color: colors.text.body, lineHeight: 18 },
+        threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
+        threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
+        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 42, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
+        threadSendBtn: { height: 42, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
+        threadRemoveBtn: { padding: 4, marginLeft: 4 },
+
         emptyNote: { fontSize: 13, color: colors.text.muted, fontStyle: 'italic', paddingVertical: 12 },
         centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     }));
@@ -149,8 +186,66 @@ export default function TreasuryDetailScreen() {
                 }).catch(() => {});
             }
         });
+        loadThread();
         return () => { active = false; };
     }, [treasuryKey]);
+
+    const loadThread = useCallback(async () => {
+        if (!treasuryKey) return;
+        try {
+            const res = await getEnterpriseThread(treasuryKey);
+            if (res) {
+                setThreadMessages(res.messages || []);
+                setThreadReadOnly(!!res.readOnly);
+            }
+        } catch {
+            // ignore
+        }
+    }, [treasuryKey]);
+
+    const handlePostThreadMessage = async () => {
+        if (!treasuryKey || threadPosting || !threadInput.trim()) return;
+        setThreadPosting(true);
+        try {
+            const res = await postEnterpriseThreadMessage(treasuryKey, threadInput.trim());
+            if (res?.success) {
+                setThreadInput('');
+                await loadThread();
+            } else {
+                Alert.alert('Could not post', (res as any)?.error || 'Failed to post message');
+            }
+        } catch (e: any) {
+            Alert.alert('Error', e.message || 'Could not post message');
+        } finally {
+            setThreadPosting(false);
+        }
+    };
+
+    const handleRemoveThreadMessage = (messageId: string) => {
+        Alert.alert(
+            'Remove Message',
+            'Are you sure you want to remove this message? It will show as "removed by a keeper".',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (!treasuryKey) return;
+                        setThreadRemovingId(messageId);
+                        try {
+                            await removeEnterpriseThreadMessage(treasuryKey, messageId);
+                            await loadThread();
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Could not remove message');
+                        } finally {
+                            setThreadRemovingId(null);
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     useFocusEffect(load);
 
@@ -701,6 +796,107 @@ export default function TreasuryDetailScreen() {
                                 </Text>
                             </View>
                         ))}
+
+                        {/* Enterprise Discussion Thread (Slice 6) */}
+                        <View style={styles.threadCard}>
+                            <View style={styles.threadHeader}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.threadTitle}>Discussion</Text>
+                                    <Text style={styles.threadSubtitle}>Public coordination for this enterprise</Text>
+                                </View>
+                                <MaterialCommunityIcons name="forum-outline" size={22} color={colors.brand.primary} />
+                            </View>
+
+                            {threadReadOnly && (
+                                <View style={styles.threadReadOnlyBanner}>
+                                    <Text style={styles.threadReadOnlyText}>
+                                        Enterprise has wound up — discussion thread is read-only.
+                                    </Text>
+                                </View>
+                            )}
+
+                            {threadMessages.length === 0 ? (
+                                <Text style={styles.emptyNote}>No messages yet. Start the conversation!</Text>
+                            ) : (
+                                threadMessages.map((m: any, idx: number) => {
+                                    const isRemoved = m.type === 'removed';
+                                    const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
+                                    const authorAvatar = m.authorAvatar;
+                                    const textContent = decodeThreadMessage(m.ciphertext, m.type);
+                                    return (
+                                        <View key={m.id || idx} style={[styles.threadMsgRow, idx === threadMessages.length - 1 && { borderBottomWidth: 0 }]}>
+                                            {authorAvatar ? (
+                                                <Image source={{ uri: authorAvatar }} style={styles.threadMsgAvatar} />
+                                            ) : (
+                                                <View style={[styles.threadMsgAvatar, styles.avatarPlaceholder]}>
+                                                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text.secondary }}>
+                                                        {authorName.charAt(0).toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <View style={styles.threadMsgContent}>
+                                                <View style={styles.threadMsgMeta}>
+                                                    <Text style={styles.threadMsgAuthor} numberOfLines={1}>{authorName}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                        <Text style={styles.threadMsgTime}>{formatTime(m.timestamp)}</Text>
+                                                        {isKeeperOfThis && !isRemoved && (
+                                                            <Pressable
+                                                                style={styles.threadRemoveBtn}
+                                                                onPress={() => handleRemoveThreadMessage(m.id)}
+                                                                disabled={threadRemovingId === m.id}
+                                                                accessibilityRole="button"
+                                                                accessibilityLabel="Remove message"
+                                                            >
+                                                                {threadRemovingId === m.id ? (
+                                                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                                                ) : (
+                                                                    <MaterialCommunityIcons name="trash-can-outline" size={14} color={colors.feedback.danger.solid} />
+                                                                )}
+                                                            </Pressable>
+                                                        )}
+                                                    </View>
+                                                </View>
+                                                <Text style={isRemoved ? styles.threadMsgRemoved : styles.threadMsgText}>
+                                                    {textContent}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    );
+                                })
+                            )}
+
+                            {!threadReadOnly && (
+                                <View style={styles.threadInputRow}>
+                                    <TextInput
+                                        style={styles.threadInput}
+                                        placeholder="Message the enterprise..."
+                                        placeholderTextColor={colors.text.muted}
+                                        value={threadInput}
+                                        onChangeText={setThreadInput}
+                                        maxLength={2000}
+                                        returnKeyType="send"
+                                        onSubmitEditing={handlePostThreadMessage}
+                                    />
+                                    <Pressable
+                                        style={[
+                                            styles.threadSendBtn,
+                                            (!threadInput.trim() || threadPosting) && { opacity: 0.5 }
+                                        ]}
+                                        disabled={!threadInput.trim() || threadPosting}
+                                        onPress={handlePostThreadMessage}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Send message"
+                                    >
+                                        {threadPosting ? (
+                                            <ActivityIndicator size="small" color={colors.text.inverse} />
+                                        ) : (
+                                            <Text style={styles.threadSendBtnText}>Send</Text>
+                                        )}
+                                    </Pressable>
+                                </View>
+                            )}
+                        </View>
+
                         {/* Report Enterprise Action */}
                         <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
                             <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel="Report Enterprise">

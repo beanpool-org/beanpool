@@ -215,7 +215,14 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     // Check if called with an active admin session or password auth
     const isAuthed = await checkAdminAuth(ctx as any);
     if (isAuthed) {
-        targetPubkey = targetPubkey || (ctx.state as any)?.actor || getFirstNodeAdminPubkey();
+        const callerPubkey = (ctx.state as any)?.actor;
+        const callerRole = (ctx.state as any)?.adminRole;
+        if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
+            ctx.status = 403;
+            ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature)
         const pubKeyHex = ctx.get('X-Public-Key');

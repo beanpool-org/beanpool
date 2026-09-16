@@ -713,6 +713,28 @@ async function main() {
         });
         assert(daveToggleBg.status === 403, 'Non-owner admin cannot toggle break-glass mode (got 403)');
 
+        // 12.6b Non-owner admin cannot revoke sessions of another admin (Comment 4021421361)
+        const daveRevokeAlice = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-session': daveExch.sessionId!,
+            },
+            body: JSON.stringify({ memberPubkey: aliceKeys.pub }),
+        });
+        assert(daveRevokeAlice.status === 403, 'Non-owner admin cannot revoke another admin sessions (got 403)');
+
+        // Non-owner admin can revoke their own sessions
+        const daveRevokeSelf = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-session': daveExch.sessionId!,
+            },
+            body: JSON.stringify({ memberPubkey: daveKeys.pub }),
+        });
+        assert(daveRevokeSelf.status === 200, 'Non-owner admin can revoke their own sessions (got 200)');
+
         // 12.7 Routine password enrolment when breakGlassMode=false does NOT emit alert (Comment 5)
         const graceKeys = createKeyPair();
         seedMember(graceKeys.pub, 'GraceMember');

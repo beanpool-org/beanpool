@@ -518,7 +518,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         </div>
 
                         {/* State banners everyone can see */}
-                        {detail.paused && (
+                        {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                             <div
                                 role="alert"
                                 aria-live="polite"
@@ -804,7 +804,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     >
                                         <span>🤝</span> Post Need
                                     </button>
-                                    {detail.paused && (
+                                    {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded-lg">
                                             Paused for the season — posting new listings is disabled.
                                         </div>
@@ -1278,16 +1278,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    <div className="overflow-x-auto -mx-5 px-5">
+                                    <div className="overflow-x-auto -mx-5 px-5" tabIndex={0} role="region" aria-label="Enterprise ledger transactions">
                                         <table className="w-full text-left text-xs border-collapse min-w-[500px]">
                                             <thead>
                                                 <tr className="border-b border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 font-bold uppercase text-[10px] tracking-wider">
-                                                    <th className="py-2 pr-3">When</th>
-                                                    <th className="py-2 px-3">What for</th>
-                                                    <th className="py-2 px-3">With</th>
-                                                    <th className="py-2 px-3 text-right">Came in</th>
-                                                    <th className="py-2 px-3 text-right">Went out</th>
-                                                    <th className="py-2 pl-3 text-right">Running balance</th>
+                                                    <th scope="col" className="py-2 pr-3">When</th>
+                                                    <th scope="col" className="py-2 px-3">What for</th>
+                                                    <th scope="col" className="py-2 px-3">With</th>
+                                                    <th scope="col" className="py-2 px-3 text-right">Came in</th>
+                                                    <th scope="col" className="py-2 px-3 text-right">Went out</th>
+                                                    <th scope="col" className="py-2 pl-3 text-right">Running balance</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-nature-100 dark:divide-nature-800">
@@ -1351,7 +1351,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     {post.repeatable && (
                                                         <span className="text-[10px] text-nature-400 font-semibold">🔄 recurring</span>
                                                     )}
-                                                    {detail.paused && (
+                                                    {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
                                                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
                                                             ⏸️ Paused
                                                         </span>

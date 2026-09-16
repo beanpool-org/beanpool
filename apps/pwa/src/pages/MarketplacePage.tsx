@@ -1516,19 +1516,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     className="w-full py-3.5 rounded-xl font-bold text-white text-[15px] bg-nature-400 dark:bg-nature-700 cursor-not-allowed opacity-60 flex items-center justify-center gap-2"
                                 >
                                     <span>
-                                        {authorEnterpriseInactive.paused
-                                            ? '⏸️ Enterprise Paused for Season'
+                                        {authorEnterpriseInactive.status === 'completed'
+                                            ? '🏁 Enterprise Closed'
                                             : authorEnterpriseInactive.status === 'winding_up'
                                                 ? '⏳ Enterprise Winding Up'
-                                                : '🏁 Enterprise Closed'}
+                                                : authorEnterpriseInactive.paused
+                                                    ? '⏸️ Enterprise Paused for Season'
+                                                    : ''}
                                     </span>
                                 </button>
                                 <p className="text-xs text-nature-500 dark:text-nature-400 text-center font-medium">
-                                    {authorEnterpriseInactive.paused
-                                        ? 'This community enterprise is paused for the season and not taking orders.'
+                                    {authorEnterpriseInactive.status === 'completed'
+                                        ? 'This community enterprise has wound up.'
                                         : authorEnterpriseInactive.status === 'winding_up'
                                             ? 'This community enterprise is winding down and no longer accepting deals.'
-                                            : 'This community enterprise has wound up.'}
+                                            : authorEnterpriseInactive.paused
+                                                ? 'This community enterprise is paused for the season and not taking orders.'
+                                                : ''}
                                 </p>
                             </div>
                         ) : (

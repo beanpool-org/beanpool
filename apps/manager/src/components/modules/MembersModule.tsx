@@ -155,7 +155,7 @@ export function getMemberDisplayName(m: MemberItem | null | undefined, profiles:
             const lower = pub.toLowerCase();
             profile = profiles.find((p) => {
                 if (!p) return false;
-                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey;
+                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey || (p as any).memberPubkey;
                 return typeof pk === 'string' && pk.trim().toLowerCase() === lower;
             });
         }

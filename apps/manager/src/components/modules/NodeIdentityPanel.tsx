@@ -126,7 +126,9 @@ export function NodeIdentityPanel({
         const initialZoom = (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) ? 10 : 2;
 
         try {
-            const map = L.map(mapContainerRef.current).setView(initialCenter, initialZoom);
+            const map = L.map(mapContainerRef.current, {
+                scrollWheelZoom: false,
+            }).setView(initialCenter, initialZoom);
             mapInstanceRef.current = map;
 
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -172,6 +174,7 @@ export function NodeIdentityPanel({
                         setLng(parseFloat(next.lng.toFixed(6)));
                     });
                     markerRef.current = m;
+                    map.setView(pos, 10);
                 } catch {}
             }
 

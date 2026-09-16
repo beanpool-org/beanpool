@@ -393,9 +393,11 @@ const handleEnrol = async (ctx: any) => {
             success: true,
             memberPubkey: res.memberPubkey,
             role: res.role,
-            breakGlassCode: res.breakGlassCode,
+            ...(res.breakGlassCode ? {
+                breakGlassCode: res.breakGlassCode,
+                message: 'Store this break-glass code securely. It will only be shown once.',
+            } : {}),
             alertEmitted: res.alertEmitted,
-            message: 'Store this break-glass code securely. It will only be shown once.',
         };
     } catch (e: any) {
         ctx.status = 400;

@@ -539,7 +539,7 @@ export function enrolAdminOwnerKey(params: {
     success: boolean;
     memberPubkey: string;
     role: MemberNodeRole;
-    breakGlassCode: string;
+    breakGlassCode?: string;
     alertEmitted?: boolean;
 } {
     const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner' } = params;
@@ -555,10 +555,15 @@ export function enrolAdminOwnerKey(params: {
         grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'));
     }
 
-    // Generate per-owner break-glass code
-    const breakGlassCode = generateBreakGlassCode();
-    const hash = hashBreakGlassCode(breakGlassCode);
-    setNodeRoleBreakGlassHash(targetPubkey, hash);
+    // Generate per-owner break-glass code only for owners
+    let breakGlassCode: string | undefined;
+    if (role === 'owner') {
+        breakGlassCode = generateBreakGlassCode();
+        const hash = hashBreakGlassCode(breakGlassCode);
+        setNodeRoleBreakGlassHash(targetPubkey, hash);
+    } else {
+        setNodeRoleBreakGlassHash(targetPubkey, null);
+    }
 
     let alertEmitted = false;
     if (isBreakGlass) {
@@ -573,7 +578,7 @@ export function enrolAdminOwnerKey(params: {
         success: true,
         memberPubkey: targetPubkey,
         role,
-        breakGlassCode,
+        ...(breakGlassCode ? { breakGlassCode } : {}),
         alertEmitted,
     };
 }

@@ -782,6 +782,24 @@ async function main() {
         const routineBody: any = await routineEnrol.json();
         assert(routineBody.alertEmitted === false, 'Routine password enrolment does not emit false emergency alert');
 
+        // 12.7b Non-owner enrolment does NOT return breakGlassCode or populate break_glass_hash (Comment 4021421370)
+        const henryKeys = createKeyPair();
+        seedMember(henryKeys.pub, 'HenryAdmin');
+        const adminEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': testPassword,
+            },
+            body: JSON.stringify({ memberPubkey: henryKeys.pub, role: 'admin' }),
+        });
+        assert(adminEnrol.status === 200, 'Admin enrolment succeeds');
+        const adminEnrolBody: any = await adminEnrol.json();
+        assert(adminEnrolBody.role === 'admin', 'Enrolled role is admin');
+        assert(adminEnrolBody.breakGlassCode === undefined, 'Non-owner enrolment does not return breakGlassCode');
+        assert(adminEnrolBody.message === undefined, 'Non-owner enrolment does not return break-glass storage message');
+        assert(getNodeRoleBreakGlassHash(henryKeys.pub) === null, 'Non-owner admin has null break_glass_hash in DB');
+
         // 12.8 Role demotion bumps session_epoch and clears break_glass_hash (Comment 11)
         const graceEpochBefore = getNodeRoleSessionEpoch(graceKeys.pub);
         const graceHashBefore = getNodeRoleBreakGlassHash(graceKeys.pub);

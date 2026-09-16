@@ -243,7 +243,7 @@ async function runTests() {
     console.log('\n─── CONSUMER 6: Activity Feed Isolation ───');
     {
         const getRecentActivities = () => {
-            return db.prepare("SELECT * FROM activity_feed WHERE event_type = 'post_created' ORDER BY created_at DESC").all() as any[];
+            return db.prepare("SELECT * FROM activity_feed WHERE event_type = 'post_created' ORDER BY created_at DESC, id DESC").all() as any[];
         };
 
         const initialCount = getRecentActivities().length;
@@ -591,6 +591,52 @@ async function runTests() {
         const cleanedPostRow = db.prepare("SELECT target_group_id, audience_scope FROM posts WHERE id = ?").get(tempPost.id) as any;
         assert(cleanedPostRow.target_group_id === null && cleanedPostRow.audience_scope === 'public',
             '10aa. posts_cleanup_on_group_delete resets target_group_id to NULL and audience_scope to public');
+
+        // 13. Poll audience scope and franchise tests:
+        // Set Dave as observer in gardenGroup
+        db.prepare("INSERT OR REPLACE INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'observer', 'active', 'now', 'now')")
+            .run(gardenGroup.id, dave.pubKeyHex);
+        const groupPoll = createPost('poll', 'community', 'Garden Poll Question', '', 0, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: gardenGroup.id,
+            pollOptions: [{ id: 'opt_1', text: 'Option 1' }, { id: 'opt_2', text: 'Option 2' }]
+        })!;
+
+        // Observer Dave attempts to vote on group poll -> MUST fail
+        let observerVoteFailed = false;
+        try {
+            votePoll(groupPoll.id, dave.pubKeyHex, 'opt_1');
+        } catch (e: any) {
+            observerVoteFailed = e.message.includes('UNAUTHORIZED') && e.message.includes('Must be an active convenor or member');
+        }
+        assert(observerVoteFailed, '10bb. Observer in group CANNOT vote on group-scoped poll');
+
+        // Active member Bob votes on group poll -> MUST succeed
+        const memberVote = votePoll(groupPoll.id, bob.pubKeyHex, 'opt_1');
+        assert(memberVote.success, '10cc. Active group member Bob CAN vote on group-scoped poll');
+
+        // Close group poll so Alice can create another poll
+        closePoll(groupPoll.id, alice.pubKeyHex);
+
+        // Direct poll addressed to Dave
+        const directPoll = createPost('poll', 'community', 'Direct Poll For Dave', '', 0, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'direct',
+            targetPubkey: dave.pubKeyHex,
+            pollOptions: [{ id: 'opt_yes', text: 'Yes' }, { id: 'opt_no', text: 'No' }]
+        })!;
+
+        // Bob (not target or assigned) attempts to vote on direct poll -> MUST fail
+        let nonTargetVoteFailed = false;
+        try {
+            votePoll(directPoll.id, bob.pubKeyHex, 'opt_yes');
+        } catch (e: any) {
+            nonTargetVoteFailed = e.message.includes('UNAUTHORIZED') && e.message.includes('direct poll is not addressed to you');
+        }
+        assert(nonTargetVoteFailed, '10dd. Non-target Bob CANNOT vote on direct-scoped poll');
+
+        // Target Dave votes on direct poll -> MUST succeed
+        const targetVote = votePoll(directPoll.id, dave.pubKeyHex, 'opt_yes');
+        assert(targetVote.success, '10ee. Addressed target Dave CAN vote on direct-scoped poll');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

@@ -539,12 +539,20 @@ export function votePoll(
     if (post.status !== 'active') {
         throw new Error('This poll is closed');
     }
-    if (post.audienceScope === 'group' && post.targetGroupId) {
+    if (post.audienceScope === 'group') {
+        if (!post.targetGroupId) {
+            throw new Error('UNAUTHORIZED: Group-scoped poll missing target group');
+        }
         const isMem = db.prepare(
-            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
         ).get(post.targetGroupId, voterPublicKey);
         if (!isMem && post.authorPublicKey !== voterPublicKey) {
-            throw new Error('UNAUTHORIZED: Must be an active member of the group to vote in this poll');
+            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to vote in this poll');
+        }
+    } else if (post.audienceScope === 'direct') {
+        const isTarget = post.targetPubkey === voterPublicKey || post.assignedTo === voterPublicKey || post.authorPublicKey === voterPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct poll is not addressed to you');
         }
     }
     const nowIso = new Date().toISOString();

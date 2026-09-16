@@ -38,7 +38,7 @@ export function OnboardingGuide() {
                     <div>
                         <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
                         <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                            Positive balances above 200 Beans decay by 1.5% monthly (progressive circulation). This prevents hoarding and funds local community projects.
+                            Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                         </p>
                     </div>
                 </div>

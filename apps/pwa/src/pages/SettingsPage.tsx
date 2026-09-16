@@ -992,7 +992,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             </p>
                             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
                                 Safari clears site data after <strong>7 days of inactivity</strong>, and clearing browsing data
-                                erases your identity permanently. Write these words on paper — it's the only backup
+                                wipes your local keys. Write these words on paper — it's the only offline backup
                                 that can't be wiped by your browser.
                             </p>
                         </div>

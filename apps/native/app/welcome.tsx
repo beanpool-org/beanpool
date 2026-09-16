@@ -1268,7 +1268,7 @@ export default function WelcomeScreen() {
                                 <View style={guideStyles.bulletContent}>
                                     <Text style={guideStyles.bulletTitle}>Community Commons Pool</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Positive balances above 200 Beans decay by 1.5% monthly (progressive circulation). This prevents hoarding and funds local community projects.
+                                        Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                     </Text>
                                 </View>
                             </View>

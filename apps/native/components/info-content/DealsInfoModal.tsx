@@ -155,7 +155,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>💡</Text>
                         <Text style={styles.infoBoxText}>
-                            If there is a dispute and the goods aren't delivered, the buyer can cancel the trust hold to get their credits back, or involve a Guardian for arbitration.
+                            If there is a dispute and the goods aren't delivered, the buyer can cancel the trust hold directly to receive a refund of their credits.
                         </Text>
                     </View>
                 </View>
@@ -180,7 +180,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            Repeated bad reviews or failing to release funds held in trust will result in an automatic review by Network Guardians, which may lead to account suspension.
+                            Repeated bad reviews lower your standing with trading partners, and unresolved disputes or misconduct can be reported to community moderators for review.
                         </Text>
                     </View>
                 </View>

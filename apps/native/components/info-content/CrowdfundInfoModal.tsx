@@ -139,22 +139,22 @@ export function CrowdfundInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        <Text style={styles.boldWhiteText}>Crowdfund Projects</Text> are initiatives proposed by the community to improve the local area. Instead of members paying for them directly, they are funded by the <Text style={styles.boldWhiteText}>Community Commons Fund</Text>.
+                        <Text style={styles.boldWhiteText}>Enterprises & Projects</Text> are community initiatives that create shared local value. When they need capital, they can request grants funded by the <Text style={styles.boldWhiteText}>Community Commons Pool</Text>.
                     </Text>
 
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>HOW IT WORKS</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1.">Members propose public goods projects.</ListItem>
-                            <ListItem prefix="2.">You use your personal credits to <Text style={styles.boldWhiteText}>vote</Text> on projects you support.</ListItem>
-                            <ListItem prefix="3.">Your votes signal the network to direct funds from the Commons Fund to those projects.</ListItem>
+                            <ListItem prefix="1.">Members propose pool grants for community enterprises and projects.</ListItem>
+                            <ListItem prefix="2.">You cast votes using <Text style={styles.boldWhiteText}>voice credits</Text> derived from your earned trade standing.</ListItem>
+                            <ListItem prefix="3.">When a Decision passes, the Commons pool automatically funds the enterprise.</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>💡</Text>
                         <Text style={styles.infoBoxText}>
-                            You are NOT spending your own credits to fund the project directly! You are using a small amount of your credits to "buy" votes, which directs a much larger pool of Commons funds.
+                            Liquid beans never buy votes! Your voting voice comes strictly from completed trades you've settled with neighbours, and voting does not spend your spendable balance.
                         </Text>
                     </View>
                 </View>
@@ -166,23 +166,23 @@ export function CrowdfundInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        BeanPool uses <Text style={styles.boldWhiteText}>Quadratic Voting</Text>. This means you can vote multiple times for the same project, but each additional vote costs more.
+                        Decisions that spend pool money use <Text style={styles.boldWhiteText}>Quadratic Voting</Text>. Casting N votes costs N² voice credits from your earned trade standing.
                     </Text>
 
                     <View style={styles.processContainer}>
-                        <Text style={styles.processLabel}>VOTING COSTS</Text>
+                        <Text style={styles.processLabel}>VOICE CREDIT COSTS</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem><Text style={styles.boldWhiteText}>1st vote:</Text> <Text style={styles.boldWhiteText}>1</Text> <CurrencyDisplay hideAmount={true} /></ListItem>
-                            <ListItem><Text style={styles.boldWhiteText}>2nd vote:</Text> <Text style={styles.boldWhiteText}>4</Text> <CurrencyDisplay hideAmount={true} /></ListItem>
-                            <ListItem><Text style={styles.boldWhiteText}>3rd vote:</Text> <Text style={styles.boldWhiteText}>9</Text> <CurrencyDisplay hideAmount={true} /></ListItem>
-                            <ListItem><Text style={styles.boldWhiteText}>4th vote:</Text> <Text style={styles.boldWhiteText}>16</Text> <CurrencyDisplay hideAmount={true} /></ListItem>
+                            <ListItem><Text style={styles.boldWhiteText}>1 vote:</Text> <Text style={styles.boldWhiteText}>1</Text> voice credit</ListItem>
+                            <ListItem><Text style={styles.boldWhiteText}>2 votes:</Text> <Text style={styles.boldWhiteText}>4</Text> voice credits</ListItem>
+                            <ListItem><Text style={styles.boldWhiteText}>3 votes:</Text> <Text style={styles.boldWhiteText}>9</Text> voice credits</ListItem>
+                            <ListItem><Text style={styles.boldWhiteText}>4 votes:</Text> <Text style={styles.boldWhiteText}>16</Text> voice credits</ListItem>
                         </View>
                     </View>
 
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚖️</Text>
                         <Text style={styles.warningText}>
-                            This system prevents a few wealthy members from dominating the vote. It strongly favors projects that have broad support from many different people!
+                            Quadratic counting ensures that broad community consensus always outweighs concentrated votes from a single high-volume trader.
                         </Text>
                     </View>
                 </View>
@@ -194,7 +194,7 @@ export function CrowdfundInfoModal({ isOpen, onClose }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title="Crowdfund Projects"
+            title="Enterprises & Projects"
             icon="🏗️"
             tabs={tabs}
         />

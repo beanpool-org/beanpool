@@ -28,8 +28,8 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
         { icon: <MaterialCommunityIcons name="percent" size={24} color={colors.brand.primary} />, label: 'Transaction Fee', desc: 'Flat 1.5% fee on completed marketplace trades (direct member transfers are free)' },
         { icon: <MaterialCommunityIcons name="leaf" size={24} color={colors.brand.primary} />, label: 'Circulation Fee', desc: 'Progressive monthly contribution from positive balances' },
         { icon: <MaterialCommunityIcons name="bank" size={24} color={palette.amber300} />, label: 'Commons Pool', desc: 'Community fund growing from all community and circulation fee contributions' },
-        { icon: <MaterialCommunityIcons name="vote" size={24} color={palette.blue500} />, label: 'My Vote', desc: 'Quadratic Voting: N votes costs N² credits' },
-        { icon: <MaterialCommunityIcons name="rocket-launch" size={24} color={colors.accent.primary} />, label: 'Community Project', desc: 'Winning projects funded from the Commons Pool' },
+        { icon: <MaterialCommunityIcons name="vote" size={24} color={palette.blue500} />, label: 'Decisions & Polls', desc: 'Binding Decisions and feed Polls (1m1v for roles/polls; QV for pool grants)' },
+        { icon: <MaterialCommunityIcons name="rocket-launch" size={24} color={colors.accent.primary} />, label: 'Enterprises & Grants', desc: 'Passed initiatives funded automatically from the Commons Pool' },
     ];
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -391,10 +391,10 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                     <View style={styles.processContainer}>
                         <Text style={styles.processLabel}>PROCESS</Text>
                         <Text style={styles.processText}>
-                            1. Members propose projects{'\n'}
-                            2. Admin opens a voting round with a close date{'\n'}
-                            3. Members allocate votes to projects{'\n'}
-                            4. At round end, the top-voted project is paid its requested amount from the Commons Pool. Any leftover stays in the pool for future rounds.
+                            1. Any active trader can open a binding Decision{'\n'}
+                            2. 7-day voting window with a 48h discussion period{'\n'}
+                            3. Members vote using earned trade standing (voice credits){'\n'}
+                            4. At close, passed Decisions execute automatically — the node transfers approved funds to the enterprise account.
                         </Text>
                     </View>
                 </View>

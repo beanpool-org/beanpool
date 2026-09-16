@@ -18,8 +18,8 @@ const FLOW_STEPS = [
     { icon: '٪', label: 'Transaction Fee', desc: 'Flat 1.5% fee on completed marketplace trades (direct member transfers are free)' },
     { icon: '🌿', label: 'Circulation Fee', desc: 'Progressive monthly contribution from positive balances' },
     { icon: '🏛️', label: 'Commons Pool', desc: 'Community fund growing from all community and circulation fee contributions' },
-    { icon: '🗳️', label: 'My Vote', desc: 'Quadratic Voting: N votes costs N² credits' },
-    { icon: '🚀', label: 'Community Project', desc: 'Winning projects funded from the Commons Pool' },
+    { icon: '🗳️', label: 'Decisions & Polls', desc: 'Binding Decisions and feed Polls (1m1v for roles/polls; QV for pool grants)' },
+    { icon: '🚀', label: 'Enterprises & Grants', desc: 'Passed initiatives funded automatically from the Commons Pool' },
 ];
 
 interface Props {
@@ -277,11 +277,11 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>Process</div>
                                 <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    1. Members propose projects<br />
-                                    2. Admin opens a voting round<br />
-                                    3. Members allocate votes with QV credits<br />
-                                    4. Round closes → winning project receives Commons funds<br />
-                                    <em style={{ color: '#9ca3af' }}>Fund release is admin-triggered to ensure ledger integrity.</em>
+                                    1. Any active trader can propose a Decision<br />
+                                    2. 7-day open voting window with 48h discussion<br />
+                                    3. Members vote using earned trade standing (voice credits)<br />
+                                    4. Round closes → passed Decisions execute automatically<br />
+                                    <em style={{ color: '#9ca3af' }}>Fund release is self-executing by the node when quorum and majority are met.</em>
                                 </div>
                             </div>
                         </div>

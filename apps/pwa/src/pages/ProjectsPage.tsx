@@ -412,7 +412,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                 <>
             {treasuries.length > 0 && (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
-                    <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
+                    <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Enterprises</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map(t => (
                             <div

@@ -86,6 +86,15 @@ export function EscrowDisputesPanel({
         setReason('');
     };
 
+    useEffect(() => {
+        if (!selectedDispute) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !resolving) handleCloseResolveModal();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedDispute, resolving]);
+
     const handleConfirmResolve = async () => {
         if (!selectedDispute || !selectedAction || !activeNode?.url) return;
 
@@ -296,8 +305,12 @@ export function EscrowDisputesPanel({
                 {filteredDisputes.map((dispute) => {
                     const isPending = dispute.status === 'pending';
                     const isChatExpanded = Boolean(expandedChat[dispute.id]);
-                    const buyerLabel = dispute.buyerCallsign || dispute.buyerName || `${dispute.buyerPubkey.slice(0, 8)}...`;
-                    const sellerLabel = dispute.sellerCallsign || dispute.sellerName || `${dispute.sellerPubkey.slice(0, 8)}...`;
+                    const buyerPubkey = dispute.buyerPubkey || (dispute as any).parties?.buyer?.pubkey || '';
+                    const sellerPubkey = dispute.sellerPubkey || (dispute as any).parties?.seller?.pubkey || '';
+                    const buyerCallsign = dispute.buyerCallsign || (dispute as any).parties?.buyer?.callsign;
+                    const sellerCallsign = dispute.sellerCallsign || (dispute as any).parties?.seller?.callsign;
+                    const buyerLabel = buyerCallsign || dispute.buyerName || (buyerPubkey ? `${buyerPubkey.slice(0, 8)}...` : 'Buyer');
+                    const sellerLabel = sellerCallsign || dispute.sellerName || (sellerPubkey ? `${sellerPubkey.slice(0, 8)}...` : 'Seller');
                     const postTitle = dispute.post?.title || 'Marketplace Item';
                     const postDesc = dispute.post?.description || '';
 
@@ -352,13 +365,13 @@ export function EscrowDisputesPanel({
                                         <div className="flex items-center justify-between">
                                             <span className="text-nature-400">Buyer:</span>
                                             <span className="font-semibold text-white">
-                                                {buyerLabel} <span className="text-nature-500 font-mono text-[10px]">({dispute.buyerPubkey.slice(0, 6)}...)</span>
+                                                {buyerLabel} {buyerPubkey ? <span className="text-nature-500 font-mono text-[10px]">({buyerPubkey.slice(0, 6)}...)</span> : null}
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between">
                                             <span className="text-nature-400">Seller:</span>
                                             <span className="font-semibold text-white">
-                                                {sellerLabel} <span className="text-nature-500 font-mono text-[10px]">({dispute.sellerPubkey.slice(0, 6)}...)</span>
+                                                {sellerLabel} {sellerPubkey ? <span className="text-nature-500 font-mono text-[10px]">({sellerPubkey.slice(0, 6)}...)</span> : null}
                                             </span>
                                         </div>
                                     </div>
@@ -376,31 +389,34 @@ export function EscrowDisputesPanel({
 
                             {/* Chat Context Box */}
                             <div className="bg-nature-950/40 border border-nature-800/80 rounded-xl overflow-hidden">
-                                <div
+                                <button
+                                    type="button"
                                     onClick={() => toggleChat(dispute.id)}
-                                    className="p-3 bg-nature-950/80 flex items-center justify-between cursor-pointer hover:bg-nature-950 transition select-none"
+                                    aria-expanded={isChatExpanded}
+                                    aria-controls={`chat-context-${dispute.id}`}
+                                    className="w-full p-3 bg-nature-950/80 flex items-center justify-between hover:bg-nature-950 transition text-left focus:outline-none focus:ring-1 focus:ring-terra-500 rounded-t-xl"
                                 >
                                     <div className="flex items-center gap-2 text-xs font-bold text-nature-200">
                                         <span>💬</span>
                                         <span>Direct Chat Context ({dispute.chatContext?.length || 0} messages)</span>
                                     </div>
-                                    <button className="text-xs text-nature-400 hover:text-white font-semibold">
+                                    <span className="text-xs text-nature-400 font-semibold">
                                         {isChatExpanded ? 'Hide Chat ▲' : 'View Chat ▼'}
-                                    </button>
-                                </div>
+                                    </span>
+                                </button>
 
                                 {isChatExpanded && (
-                                    <div className="p-3 space-y-2 border-t border-nature-800/80 max-h-60 overflow-y-auto">
+                                    <div id={`chat-context-${dispute.id}`} className="p-3 space-y-2 border-t border-nature-800/80 max-h-60 overflow-y-auto">
                                         {(!dispute.chatContext || dispute.chatContext.length === 0) ? (
                                             <p className="text-xs text-nature-500 italic m-0">
                                                 No direct chat messages between buyer and seller found.
                                             </p>
                                         ) : (
                                             dispute.chatContext.map((msg) => {
-                                                const isBuyer = msg.senderPubkey === dispute.buyerPubkey;
-                                                const isSeller = msg.senderPubkey === dispute.sellerPubkey;
+                                                const isBuyer = Boolean(buyerPubkey && msg.senderPubkey === buyerPubkey);
+                                                const isSeller = Boolean(sellerPubkey && msg.senderPubkey === sellerPubkey);
                                                 const senderTag = isBuyer ? 'Buyer' : isSeller ? 'Seller' : 'System';
-                                                const senderName = msg.senderCallsign || msg.senderName || `${msg.senderPubkey.slice(0, 8)}...`;
+                                                const senderName = msg.senderCallsign || msg.senderName || (msg.senderPubkey ? `${msg.senderPubkey.slice(0, 8)}...` : 'Unknown');
 
                                                 return (
                                                     <div
@@ -512,11 +528,16 @@ export function EscrowDisputesPanel({
             {/* Resolve Confirmation Modal */}
             {selectedDispute && selectedAction && (
                 <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans">
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="resolve-dialog-title"
+                        className="bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
+                    >
                         {/* Modal Header */}
                         <div className="flex items-start justify-between">
                             <div className="space-y-1">
-                                <h3 className="text-lg font-black text-white m-0 flex items-center gap-2">
+                                <h3 id="resolve-dialog-title" className="text-lg font-black text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span> Confirm Escrow Resolution
                                 </h3>
                                 <p className="text-xs text-nature-400 m-0">

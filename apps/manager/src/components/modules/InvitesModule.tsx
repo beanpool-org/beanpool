@@ -283,6 +283,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                     type="number"
                                     min={1}
                                     max={100}
+                                    disabled={isGenerating}
                                     value={inviteCount}
                                     onChange={(e) => {
                                         const raw = e.target.value;
@@ -296,7 +297,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                         }
                                     }}
                                     aria-label="Custom quantity"
-                                    className="w-16 bg-nature-950 border border-nature-800 rounded-xl px-2.5 py-1.5 text-white font-mono font-bold text-xs text-center focus:outline-none focus:border-terra-500"
+                                    className="w-16 bg-nature-950 border border-nature-800 rounded-xl px-2.5 py-1.5 text-white font-mono font-bold text-xs text-center focus:outline-none focus:border-terra-500 disabled:opacity-50"
                                 />
                             </div>
                         </div>
@@ -400,11 +401,16 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
             {/* Printable QR Sheet Modal */}
             {showPrintSheet && generatedTokens.length > 0 && (
-                <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="printable-sheet-title"
+                    className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto"
+                >
                     <div className="bg-nature-900 border border-nature-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl my-8">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-4">
                             <div>
-                                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                <h3 id="printable-sheet-title" className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>📄</span>
                                     <span>Printable QR Onboarding Sheet ({generatedTokens.length} Passes)</span>
                                 </h3>

@@ -993,7 +993,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             onAcknowledgeShutdown={async () => {
                                                 if (activeNode) {
                                                     await acknowledgeShutdownStatus(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
-                                                    refreshFleetDiagnostics({ manual: true });
+                                                    await refreshFleetDiagnostics({ manual: true });
                                                 }
                                             }}
                                         />

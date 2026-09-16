@@ -11,7 +11,7 @@
 import { db } from './db.js';
 import { bumpActivityVersion } from '../engine/versions.js';
 
-export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created';
+export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created' | 'dispute_resolved';
 
 export interface ActivityFeedItem {
     id: number;

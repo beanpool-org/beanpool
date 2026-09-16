@@ -397,6 +397,42 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
     }
 
+    // Escrow dispute arbitration (§5 item 2, §6 correction 2)
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_by TEXT`).run(); } catch { }
+
+    // activity_feed: ensure check constraint allows 'dispute_resolved'
+    try {
+        const afSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_feed'").get() as any;
+        if (afSql?.sql && !afSql.sql.includes('dispute_resolved')) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS activity_feed_migration;
+                    CREATE TABLE activity_feed_migration (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created', 'dispute_resolved')),
+                        actor_pubkey  TEXT NOT NULL,
+                        target_pubkey TEXT,
+                        metadata      TEXT,
+                        created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    );
+                    INSERT INTO activity_feed_migration (id, event_type, actor_pubkey, target_pubkey, metadata, created_at)
+                        SELECT id, event_type, actor_pubkey, target_pubkey, metadata, created_at FROM activity_feed;
+                    INSERT OR REPLACE INTO sqlite_sequence (name, seq)
+                        SELECT 'activity_feed_migration', seq FROM sqlite_sequence WHERE name = 'activity_feed';
+                    DROP TABLE activity_feed;
+                    ALTER TABLE activity_feed_migration RENAME TO activity_feed;
+                    CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
+                    CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
+                `);
+            })();
+            console.log('[DB] ✅ Migrated activity_feed CHECK constraint to allow dispute_resolved');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
+    }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

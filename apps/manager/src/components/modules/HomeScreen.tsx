@@ -76,6 +76,18 @@ export function HomeScreen({
         });
     }
 
+    const pendingDisputesCount = typeof (nodeData as any)?.escrowDisputesCount === 'number'
+        ? (nodeData as any).escrowDisputesCount
+        : 0;
+    if (pendingDisputesCount > 0) {
+        actionItems.push({
+            icon: '⚖️',
+            text: `${pendingDisputesCount} escrow dispute${pendingDisputesCount > 1 ? 's' : ''} pending`,
+            tab: 'economy',
+            sub: 'disputes',
+        });
+    }
+
     const foundingStatus = typeof window !== 'undefined' ? localStorage.getItem('bp_founding_invites_status') : null;
     if (foundingStatus) {
         actionItems.push({

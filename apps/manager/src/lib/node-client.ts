@@ -82,6 +82,7 @@ export interface NodeDataPayload {
     profiles?: Record<string, unknown>[];
     posts?: unknown[];
     reportCount?: number;
+    escrowDisputesCount?: number;
     memberStats?: Record<string, unknown>;
     tradeVolume?: number;
     circulation?: number;
@@ -422,11 +423,17 @@ export async function updateGatewayConfig(
 }
 
 export function normalizeKeeperPubkey(keeper: unknown): string {
-    if (typeof keeper === 'string') return keeper;
+    if (typeof keeper === 'string') return keeper.trim();
     if (typeof keeper === 'object' && keeper !== null) {
-        const obj = keeper as { publicKey?: unknown; pubkey?: unknown };
-        if (typeof obj.publicKey === 'string') return obj.publicKey;
-        if (typeof obj.pubkey === 'string') return obj.pubkey;
+        const obj = keeper as Record<string, unknown>;
+        const candidate = [
+            obj.publicKey,
+            obj.pubkey,
+            obj.public_key,
+            obj.member_pubkey,
+            obj.memberPubkey,
+        ].find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        if (candidate) return candidate.trim();
     }
     return '';
 }
@@ -447,13 +454,23 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
         result.members = Array.isArray(data.members)
             ? data.members.map((m: any) => {
                 if (!m || typeof m !== 'object') return { publicKey: '', standing: 'Newcomer' };
-                const pubkey = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
+                const pubkey = normalizeKeeperPubkey(m);
+                const rawName = typeof m.name === 'string'
+                    ? m.name
+                    : (typeof m.displayName === 'string'
+                        ? m.displayName
+                        : (typeof m.callsign === 'string' ? m.callsign : undefined));
+                const rawCallsign = typeof m.callsign === 'string'
+                    ? m.callsign
+                    : (typeof m.displayName === 'string'
+                        ? m.displayName
+                        : (typeof m.name === 'string' ? m.name : undefined));
                 return {
                     ...m,
                     publicKey: pubkey,
                     pubkey: pubkey,
-                    name: typeof m.name === 'string' ? m.name : (typeof m.displayName === 'string' ? m.displayName : (typeof m.callsign === 'string' ? m.callsign : undefined)),
-                    callsign: typeof m.callsign === 'string' ? m.callsign : undefined,
+                    name: rawName,
+                    callsign: rawCallsign,
                     tier: typeof m.tier === 'string' ? m.tier : (typeof m.standing === 'string' ? m.standing : 'Newcomer'),
                     standing: typeof m.standing === 'string' ? m.standing : (typeof m.tier === 'string' ? m.tier : 'Newcomer'),
                     canVouch: Boolean(m.canVouch ?? m.isVoucher),
@@ -516,6 +533,10 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
             flags,
             healthScore,
         };
+    }
+
+    if (typeof data.escrowDisputesCount === 'number') {
+        result.escrowDisputesCount = data.escrowDisputesCount;
     }
 
     return result;
@@ -775,7 +796,7 @@ export async function fetchTreasuryKeepers(
     treasuryPubkey: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<string[]> {
+): Promise<any[]> {
     const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
     const res = await fetch(url, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
@@ -784,7 +805,7 @@ export async function fetchTreasuryKeepers(
         throw new Error('Failed to fetch keepers');
     }
     const data = await res.json().catch(() => ({}));
-    return normalizeKeepers(data.keepers);
+    return Array.isArray(data.keepers) ? data.keepers : [];
 }
 
 export async function assignTreasuryKeeper(
@@ -793,7 +814,7 @@ export async function assignTreasuryKeeper(
     memberPubkey: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<string[]> {
+): Promise<any[]> {
     const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
     const res = await fetch(url, {
         method: 'POST',
@@ -804,7 +825,7 @@ export async function assignTreasuryKeeper(
     if (!res.ok) {
         throw new Error(data.error || 'Failed to assign keeper');
     }
-    return normalizeKeepers(data.keepers);
+    return Array.isArray(data.keepers) ? data.keepers : [];
 }
 
 export async function revokeTreasuryKeeper(
@@ -813,7 +834,7 @@ export async function revokeTreasuryKeeper(
     memberPubkey: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<string[]> {
+): Promise<any[]> {
     const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(memberPubkey)}`);
     const res = await fetch(url, {
         method: 'DELETE',
@@ -823,7 +844,7 @@ export async function revokeTreasuryKeeper(
     if (!res.ok) {
         throw new Error(data.error || 'Failed to revoke keeper');
     }
-    return normalizeKeepers(data.keepers);
+    return Array.isArray(data.keepers) ? data.keepers : [];
 }
 
 export interface NodeTreasury {
@@ -836,7 +857,7 @@ export interface NodeTreasury {
     liveOffers: number;
     workingCapitalCeiling?: number | null;
     purpose?: string | null;
-    keepers?: string[];
+    keepers?: any[];
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
@@ -849,7 +870,7 @@ export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury
         if (!t || typeof t !== 'object') return t;
         const normalized: any = { ...t };
         if ('keepers' in t && t.keepers !== undefined) {
-            normalized.keepers = normalizeKeepers(t.keepers);
+            normalized.keepers = Array.isArray(t.keepers) ? t.keepers : normalizeKeepers(t.keepers);
         }
         return normalized;
     });
@@ -1354,4 +1375,101 @@ export async function getReplicationAccess(
     return res.json();
 }
 
+// ======================== ESCROW DISPUTES ========================
 
+export interface EscrowDisputeItem {
+    id: string;
+    postId: string;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    buyerName?: string;
+    sellerCallsign?: string;
+    sellerName?: string;
+    credits: number;
+    status: string;
+    createdAt: number;
+    daysStuck: number;
+    post: {
+        id: string;
+        title: string;
+        description: string;
+        authorPubkey: string;
+        authorName?: string;
+        authorCallsign?: string;
+        priceCredits: number;
+        unitPrice: number;
+        category: string;
+        imageUrl?: string;
+    } | null;
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey: string;
+        senderName?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
+    resolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+}
+
+export interface EscrowDisputesResponse {
+    disputes: EscrowDisputeItem[];
+    total: number;
+    minDays: number;
+}
+
+export async function fetchEscrowDisputes(
+    nodeUrl: string,
+    minDays = 7,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<EscrowDisputesResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', { minDays: String(minDays) });
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export interface ResolveEscrowDisputeResponse {
+    success: boolean;
+    transactionId: string;
+    resolution: 'release_to_seller' | 'refund_to_buyer' | 'split';
+    authSigner: string;
+    transaction: any;
+}
+
+export async function resolveEscrowDisputeApi(
+    nodeUrl: string,
+    disputeId: string,
+    action: 'release_to_seller' | 'refund_to_buyer' | 'split',
+    reason?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ResolveEscrowDisputeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/disputes/${encodeURIComponent(disputeId)}/resolve`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action, reason }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}

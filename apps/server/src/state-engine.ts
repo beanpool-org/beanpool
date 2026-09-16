@@ -237,7 +237,9 @@ import {
     cancelPostRequest as cancelPostRequestEngine,
     acceptPost as acceptPostEngine,
     completePostTransaction as completePostTransactionEngine,
-    cancelPostTransaction as cancelPostTransactionEngine
+    cancelPostTransaction as cancelPostTransactionEngine,
+    resolveEscrowDispute as resolveEscrowDisputeEngine,
+    type EscrowDisputeAction
 } from './engine/escrow.js';
 import {
     createConversation as createConversationEngine,
@@ -2558,6 +2560,220 @@ export function cancelPostTransaction(transactionId: string, cancellerPublicKey:
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
 }
 
+export type { EscrowDisputeAction };
+
+export function resolveEscrowDispute(
+    transactionId: string,
+    action: EscrowDisputeAction,
+    adminSigner: string,
+    opts?: { reason?: string }
+): MarketplaceTransaction {
+    const res = resolveEscrowDisputeEngine(getEscrowCb(), transactionId, action, adminSigner, opts);
+    clearEnterpriseFloorCache();
+    return res;
+}
+
+export interface EscrowDisputeContext {
+    id: string;
+    postId: string;
+    credits: number;
+    hours?: number;
+    status: string;
+    createdAt: string;
+    daysInEscrow: number;
+    daysStuck: number;
+    isStalled: boolean;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    sellerCallsign?: string;
+    resolution?: EscrowDisputeAction | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+    disputeResolution?: EscrowDisputeAction | null;
+    disputeResolvedAt?: string | null;
+    disputeResolvedBy?: string | null;
+    post: {
+        id: string;
+        title: string;
+        description: string;
+        type: string;
+        category: string;
+        priceType: string;
+        credits: number;
+        authorPubkey: string;
+        photos: string[];
+    } | null;
+    parties: {
+        buyer: {
+            pubkey: string;
+            callsign: string;
+            avatarUrl?: string | null;
+        };
+        seller: {
+            pubkey: string;
+            callsign: string;
+            avatarUrl?: string | null;
+        };
+    };
+    chat?: {
+        conversationId: string | null;
+        messages: Message[];
+    };
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
+}
+
+function mapDisputeRow(r: any): EscrowDisputeContext {
+    const createdTime = new Date(r.created_at).getTime();
+    const now = Date.now();
+    const daysInEscrow = Math.max(0, (now - createdTime) / (86400 * 1000));
+    const isStalled = daysInEscrow >= 7;
+
+    const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
+        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+
+    // Chat context between buyer and seller
+    const convRow = db.prepare(`
+        SELECT c.id FROM conversations c
+        JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
+        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        LIMIT 1
+    `).get(r.buyer_pubkey, r.seller_pubkey) as any;
+
+    let chat: { conversationId: string | null; messages: Message[] } | undefined = undefined;
+    if (convRow?.id) {
+        const msgs = getConversationMessages(convRow.id, 50, 0);
+        chat = {
+            conversationId: convRow.id,
+            messages: msgs
+        };
+    }
+
+    const chatContext = (chat?.messages || []).map(m => ({
+        id: m.id,
+        senderPubkey: m.authorPubkey,
+        recipientPubkey: m.authorPubkey === r.buyer_pubkey ? r.seller_pubkey : r.buyer_pubkey,
+        senderCallsign: m.authorPubkey === r.buyer_pubkey ? (r.buyer_callsign || 'Buyer') : (m.authorPubkey === r.seller_pubkey ? (r.seller_callsign || 'Seller') : 'System'),
+        content: m.ciphertext,
+        createdAt: new Date(m.timestamp).getTime(),
+        type: m.type
+    }));
+
+    return {
+        id: r.id,
+        postId: r.post_id,
+        credits: r.credits,
+        hours: r.hours ?? undefined,
+        status: r.status,
+        createdAt: r.created_at,
+        daysInEscrow,
+        daysStuck: Math.floor(daysInEscrow),
+        isStalled,
+        buyerPubkey: r.buyer_pubkey,
+        sellerPubkey: r.seller_pubkey,
+        buyerCallsign: r.buyer_callsign || 'Anonymous',
+        sellerCallsign: r.seller_callsign || 'Anonymous',
+        resolution: r.dispute_resolution || null,
+        resolvedAt: r.dispute_resolved_at ? new Date(r.dispute_resolved_at).getTime() : null,
+        resolvedBy: r.dispute_resolved_by || null,
+        disputeResolution: r.dispute_resolution || null,
+        disputeResolvedAt: r.dispute_resolved_at || null,
+        disputeResolvedBy: r.dispute_resolved_by || null,
+        post: (r.post_title || r.post_id) ? {
+            id: r.post_id,
+            title: r.post_title || 'Untitled Post',
+            description: r.post_description || '',
+            type: r.post_type || 'offer',
+            category: r.post_category || 'general',
+            priceType: r.post_price_type || 'fixed',
+            credits: r.post_credits ?? r.credits,
+            authorPubkey: r.post_author_pubkey || r.seller_pubkey,
+            photos
+        } : null,
+        parties: {
+            buyer: {
+                pubkey: r.buyer_pubkey,
+                callsign: r.buyer_callsign || 'Anonymous',
+                avatarUrl: r.buyer_avatar_url || null
+            },
+            seller: {
+                pubkey: r.seller_pubkey,
+                callsign: r.seller_callsign || 'Anonymous',
+                avatarUrl: r.seller_avatar_url || null
+            }
+        },
+        chat,
+        chatContext
+    };
+}
+
+export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: 'all' | 'pending' | 'resolved' = 'all'): EscrowDisputeContext[] {
+    let query = `
+        SELECT mt.*,
+               p.title AS post_title,
+               p.description AS post_description,
+               p.type AS post_type,
+               p.category AS post_category,
+               p.price_type AS post_price_type,
+               p.credits AS post_credits,
+               p.author_pubkey AS post_author_pubkey,
+               buyer.callsign AS buyer_callsign,
+               buyer.avatar_url AS buyer_avatar_url,
+               seller.callsign AS seller_callsign,
+               seller.avatar_url AS seller_avatar_url
+        FROM marketplace_transactions mt
+        LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
+        LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+    `;
+    const params: any[] = [status, status, status];
+    if (minDays > 0) {
+        query += ` AND (julianday('now') - julianday(mt.created_at)) >= ?`;
+        params.push(minDays);
+    }
+    query += ` ORDER BY mt.created_at ASC LIMIT ? OFFSET ?`;
+    params.push(Math.max(1, Math.min(200, limit)), Math.max(0, offset));
+
+    const rows = db.prepare(query).all(...params) as any[];
+    return rows.map(mapDisputeRow);
+}
+
+export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
+    const row = db.prepare(`
+        SELECT mt.*,
+               p.title AS post_title,
+               p.description AS post_description,
+               p.type AS post_type,
+               p.category AS post_category,
+               p.price_type AS post_price_type,
+               p.credits AS post_credits,
+               p.author_pubkey AS post_author_pubkey,
+               buyer.callsign AS buyer_callsign,
+               buyer.avatar_url AS buyer_avatar_url,
+               seller.callsign AS seller_callsign,
+               seller.avatar_url AS seller_avatar_url
+        FROM marketplace_transactions mt
+        LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
+        LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
+        WHERE mt.id = ?
+    `).get(transactionId) as any;
+
+    if (!row) return null;
+    return mapDisputeRow(row);
+}
+
 export function pausePost(postId: string, authorPublicKey: string): boolean {
     return pausePostEngine(broadcast, postId, authorPublicKey);
 }
@@ -4606,6 +4822,11 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         [SystemMessageType.DISPUTE_OPENED]: {
             title: '⚠️ Dispute Opened',
             body: `A dispute has been opened for "${postTitle}"`,
+            data: { screen: 'post', postId }
+        },
+        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: {
+            title: '⚖️ Dispute Resolved',
+            body: `Dispute arbitrated by admin for "${postTitle}": ${meta.resolution || 'Resolved'}`,
             data: { screen: 'post', postId }
         },
         [SystemMessageType.REVIEW_LEFT]: {

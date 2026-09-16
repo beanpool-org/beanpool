@@ -189,9 +189,11 @@ export function initShutdownRecovery(options?: {
         process.once('exit', onExit);
         process.once('SIGINT', () => {
             markCleanShutdown();
+            process.exit(0);
         });
         process.once('SIGTERM', () => {
             markCleanShutdown();
+            process.exit(0);
         });
     }
 

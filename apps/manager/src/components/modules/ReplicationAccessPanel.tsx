@@ -191,11 +191,32 @@ export function ReplicationAccessPanel({
 
     const handleCopyToken = () => {
         if (!revealedToken) return;
-        navigator.clipboard.writeText(revealedToken).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 3000);
-        });
+        navigator.clipboard.writeText(revealedToken)
+            .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 3000);
+            })
+            .catch((err) => {
+                console.error('Failed to copy replication token:', err);
+                setStatusMsg({
+                    text: 'Failed to copy to clipboard. Please select and copy the token manually.',
+                    isError: true,
+                });
+            });
     };
+
+    useEffect(() => {
+        if (!showGenConfirm && !showClearConfirm) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !generating && !clearing) {
+                e.preventDefault();
+                setShowGenConfirm(false);
+                setShowClearConfirm(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showGenConfirm, showClearConfirm, generating, clearing]);
 
     const hasToken = Boolean(accessData?.hasToken);
     const tokenOnly = Boolean(accessData?.tokenOnly);
@@ -353,8 +374,9 @@ export function ReplicationAccessPanel({
                             <button
                                 type="button"
                                 onClick={() => setRevealedToken(null)}
-                                className="text-xs text-nature-400 hover:text-white p-1"
+                                className="text-xs text-nature-400 hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-nature-800/50 transition-colors"
                                 title="Dismiss reveal"
+                                aria-label="Dismiss revealed token"
                             >
                                 ✕
                             </button>
@@ -470,13 +492,27 @@ export function ReplicationAccessPanel({
                     aria-modal="true"
                     aria-labelledby="gen-token-title"
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && !generating) setShowGenConfirm(false);
+                    }}
                 >
                     <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
-                        <div className="flex items-center gap-3 text-amber-400">
-                            <span className="text-2xl">⚠️</span>
-                            <h3 id="gen-token-title" className="text-base font-bold m-0 text-white">
-                                Generate / Rotate Replication Token?
-                            </h3>
+                        <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="flex items-center gap-3 text-amber-400">
+                                <span className="text-2xl">⚠️</span>
+                                <h3 id="gen-token-title" className="text-base font-bold m-0 text-white">
+                                    Generate / Rotate Replication Token?
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { if (!generating) setShowGenConfirm(false); }}
+                                disabled={generating}
+                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                aria-label="Close generate confirmation"
+                            >
+                                ✕
+                            </button>
                         </div>
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
                             Any existing replication token stops working immediately. You will need to paste the new token into every standby backup server&apos;s connection configuration.
@@ -518,13 +554,27 @@ export function ReplicationAccessPanel({
                     aria-modal="true"
                     aria-labelledby="clear-token-title"
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && !clearing) setShowClearConfirm(false);
+                    }}
                 >
                     <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
-                        <div className="flex items-center gap-3 text-red-400">
-                            <span className="text-2xl">🗑️</span>
-                            <h3 id="clear-token-title" className="text-base font-bold m-0 text-white">
-                                Remove Replication Token?
-                            </h3>
+                        <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
+                            <div className="flex items-center gap-3 text-red-400">
+                                <span className="text-2xl">🗑️</span>
+                                <h3 id="clear-token-title" className="text-base font-bold m-0 text-white">
+                                    Remove Replication Token?
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { if (!clearing) setShowClearConfirm(false); }}
+                                disabled={clearing}
+                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                aria-label="Close clear confirmation"
+                            >
+                                ✕
+                            </button>
                         </div>
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
                             Removing the token turns off token authentication. Replicas will only be able to authenticate using the master admin password if token-only mode is disabled.

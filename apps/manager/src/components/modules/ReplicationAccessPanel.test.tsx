@@ -223,4 +223,96 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         const rejected = document.getElementById('rep-rejected');
         expect(rejected?.textContent).toBe('0');
     });
+
+    it('shows status message when clipboard copy rejects', async () => {
+        const clipboardWriteText = vi.fn().mockRejectedValue(new Error('Permission denied'));
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: clipboardWriteText,
+            },
+        });
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes('/api/local/admin/replication-token/generate')) {
+                return {
+                    ok: true,
+                    json: async () => ({ success: true, token: 'rep_fail_token' }),
+                };
+            }
+            return { ok: true, json: async () => ({ hasToken: true }) };
+        }));
+
+        render(
+            <ReplicationAccessPanel
+                activeNode={mockNode}
+            />
+        );
+
+        const genBtn = screen.getByRole('button', { name: /Generate \/ rotate token/i });
+        await userEvent.click(genBtn);
+
+        const confirmGenBtn = screen.getByRole('button', { name: /Generate Token/i });
+        await userEvent.click(confirmGenBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Copy this token now/i)).toBeInTheDocument();
+        });
+
+        const copyBtn = screen.getByRole('button', { name: /Copy/i });
+        await userEvent.click(copyBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Failed to copy to clipboard/i)).toBeInTheDocument();
+        });
+
+        // Dismiss reveal button has aria-label and closes reveal box
+        const dismissBtn = screen.getByRole('button', { name: /Dismiss revealed token/i });
+        expect(dismissBtn).toBeInTheDocument();
+        await userEvent.click(dismissBtn);
+        expect(screen.queryByText(/Copy this token now/i)).not.toBeInTheDocument();
+    });
+
+    it('allows closing confirmation modals via Escape key and close buttons', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ hasToken: true }),
+        }));
+
+        render(
+            <ReplicationAccessPanel
+                activeNode={mockNode}
+            />
+        );
+
+        // 1. Generate modal with Escape
+        const genBtn = screen.getByRole('button', { name: /Generate \/ rotate token/i });
+        await userEvent.click(genBtn);
+        expect(screen.getByText(/Generate \/ Rotate Replication Token\?/i)).toBeInTheDocument();
+
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByText(/Generate \/ Rotate Replication Token\?/i)).not.toBeInTheDocument();
+
+        // 2. Generate modal with Close button
+        await userEvent.click(genBtn);
+        expect(screen.getByText(/Generate \/ Rotate Replication Token\?/i)).toBeInTheDocument();
+        const closeGenBtn = screen.getByRole('button', { name: /Close generate confirmation/i });
+        await userEvent.click(closeGenBtn);
+        expect(screen.queryByText(/Generate \/ Rotate Replication Token\?/i)).not.toBeInTheDocument();
+
+        // 3. Clear modal with Escape
+        const clearBtn = screen.getByRole('button', { name: /Remove Token/i });
+        await userEvent.click(clearBtn);
+        expect(screen.getByText(/Remove Replication Token\?/i)).toBeInTheDocument();
+
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByText(/Remove Replication Token\?/i)).not.toBeInTheDocument();
+
+        // 4. Clear modal with Close button
+        await userEvent.click(clearBtn);
+        expect(screen.getByText(/Remove Replication Token\?/i)).toBeInTheDocument();
+        const closeClearBtn = screen.getByRole('button', { name: /Close clear confirmation/i });
+        await userEvent.click(closeClearBtn);
+        expect(screen.queryByText(/Remove Replication Token\?/i)).not.toBeInTheDocument();
+    });
 });
+

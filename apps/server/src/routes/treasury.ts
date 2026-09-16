@@ -83,6 +83,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // their authority withdrawn. Neither should be able to move value.
     const statusOf = (pk: string): string | undefined =>
         (db.prepare('SELECT status FROM members WHERE public_key=?').get(pk) as any)?.status;
+    // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
+    const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
     const requireOperator = (ctx: any, treasury: string): string | null => {
         const actor = ctx.state?.actor;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
@@ -91,8 +93,6 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'You are not a keeper of this enterprise' };
             return null;
         }
-        // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
-        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
@@ -1022,7 +1022,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const requestJoinHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so it can no longer be joined.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
         const { pledgedBacking, amount, backing } = (ctx as any).requestBody || {};
         const pledge = pledgedBacking ?? amount ?? backing ?? 0;
         try {
@@ -1052,9 +1063,20 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/enterprise/:treasury/keepers/requests', listKeeperRequestsHandler);
 
     const approveKeeperRequestHandler = async (ctx: any) => {
-        const { treasury: _treasury, requestId } = ctx.params;
+        const { treasury, requestId } = ctx.params;
         const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
         try {
             const res = approveKeeperRequest(requestId, actor);
             ctx.body = { success: true, ...res };
@@ -1068,9 +1090,20 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/enterprise/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
 
     const declineKeeperRequestHandler = async (ctx: any) => {
-        const { treasury: _treasury, requestId } = ctx.params;
+        const { treasury, requestId } = ctx.params;
         const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
         try {
             const res = declineKeeperRequest(requestId, actor);
             ctx.body = { success: true, ...res };
@@ -1101,7 +1134,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const proposeSuccessionHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its lead role can no longer be modified.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
         const { candidatePubkey } = (ctx as any).requestBody || {};
         if (!candidatePubkey) { ctx.status = 400; ctx.body = { error: 'candidatePubkey is required' }; return; }
         try {
@@ -1117,9 +1161,20 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/enterprise/:treasury/succession/propose', proposeSuccessionHandler);
 
     const voteSuccessionHandler = async (ctx: any) => {
-        const { treasury: _treasury, proposalId } = ctx.params;
+        const { treasury, proposalId } = ctx.params;
         const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its lead role can no longer be modified.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
         try {
             const res = voteLeadSuccession(proposalId, actor);
             ctx.body = { success: true, ...res };

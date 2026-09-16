@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS members (
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (

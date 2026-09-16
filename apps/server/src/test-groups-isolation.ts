@@ -466,6 +466,17 @@ async function runTests() {
             nonTargetReqFailed = e.message.includes('UNAUTHORIZED');
         }
         assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post');
+
+        // 7. Public posts clear foreign target fields:
+        const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'public',
+            targetGroupId: gardenGroup.id,
+            targetPubkey: dave.pubKeyHex,
+            assignedTo: dave.pubKeyHex
+        });
+        const taintedRow = db.prepare("SELECT target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(taintedPublic!.id) as any;
+        assert(taintedRow.target_group_id === null && taintedRow.target_pubkey === null && taintedRow.assigned_to === null,
+            '10u. Public post clears foreign target_group_id, target_pubkey, and assigned_to in database');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

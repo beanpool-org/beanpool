@@ -246,9 +246,9 @@ export function createPost(
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
             pollClosesAt,
             audienceScope,
-            options?.targetGroupId ?? null,
-            options?.targetPubkey ?? null,
-            options?.assignedTo ?? null,
+            audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
+            audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
+            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
             options?.targetArchetypes ?? null
         );
 

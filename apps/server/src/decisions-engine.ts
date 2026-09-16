@@ -728,11 +728,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'remove_lead_keeper': {
-                    const entPubkey = decision.params?.enterprisePubkey || decision.subject!;
+                    const entPubkey = decision.params?.enterprisePubkey;
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
-                    db.prepare(
-                        "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
-                    ).run(entPubkey, leadPubkey);
+                    if (entPubkey && entPubkey !== leadPubkey) {
+                        db.prepare(
+                            "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
+                        ).run(entPubkey, leadPubkey);
+                    } else {
+                        db.prepare(
+                            "DELETE FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'"
+                        ).run(leadPubkey);
+                    }
+                    const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?").get(leadPubkey) as any;
+                    if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(leadPubkey);
                     break;
                 }
                 case 'grant_enterprise': {

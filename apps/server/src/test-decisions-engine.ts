@@ -643,6 +643,34 @@ async function runDecisionsSuite() {
     testAssert(getDecision(brokenExpiredDec.id)!.status === 'execution_blocked', 'Failing expired decision isolated as execution_blocked');
     testAssert(getDecision(goodExpiredDec.id)!.status === 'executed', 'Subsequent expired decision executed successfully without HOL blocking');
 
+    // Test remove_lead_keeper execution with conflated params (subject as member)
+    const keeperMember = 'keeper_' + Date.now();
+    const entPubkey = 'enterprise_test_' + Date.now();
+    seedTestMember(keeperMember, 'TestKeeper');
+    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by) VALUES (?, ?, 'lead', ?, 'admin')")
+        .run(entPubkey, keeperMember, Date.now());
+    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(keeperMember);
+
+    const removeKeeperDec = createDecision({
+        authorPubkey: admin,
+        title: 'Remove rogue lead keeper',
+        description: 'Remove rogue lead keeper',
+        touches: 'member',
+        effect: 'remove_lead_keeper',
+        subject: keeperMember,
+        params: { enterprisePubkey: keeperMember, leadPubkey: keeperMember },
+        closesAt: new Date(Date.now() - 1000).toISOString(),
+    });
+    castDecisionVote(removeKeeperDec.id, voterA, true, 1);
+    castDecisionVote(removeKeeperDec.id, voterB, true, 1);
+    castDecisionVote(removeKeeperDec.id, admin, true, 1);
+    const execKeeperRes = executeDecision(removeKeeperDec.id);
+    testAssert(execKeeperRes.success, 'remove_lead_keeper executed successfully');
+    const remainingRoles = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'").get(keeperMember) as any;
+    testAssert(remainingRoles.c === 0, 'Lead keeper role deleted from treasury_operators');
+    const memberAfterRemoval = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(keeperMember) as any;
+    testAssert(memberAfterRemoval.can_operate === 0, 'can_operate reset to 0 when member has no remaining roles');
+
     // ── 10. Backward Compatibility: Legacy Voting Rounds ─────────────────────
     console.log('\n--- 10. Backward Compatibility ---');
 

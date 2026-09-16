@@ -239,12 +239,7 @@ export default function ProposeProjectModal() {
                                     />
                                 )}
                                 {deadlineDate && (
-                                    <Pressable
-                                        onPress={() => setDeadlineDate(null)}
-                                        style={{ marginTop: 4 }}
-                                        accessibilityRole="button"
-                                        accessibilityLabel="Clear deadline"
-                                    >
+                                    <Pressable onPress={() => setDeadlineDate(null)} style={{ marginTop: 4 }}>
                                         <Text style={{ fontSize: 12, color: colors.feedback.danger.solid }}>Clear deadline</Text>
                                     </Pressable>
                                 )}

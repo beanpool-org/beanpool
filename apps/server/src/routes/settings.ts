@@ -18,7 +18,6 @@ import {
     getGatewayConfig,
 } from '../config/local-config.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken } from '../admin-auth.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -27,13 +26,7 @@ import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SERVER_ROOT = path.resolve(__dirname, '../..');
-const resolveServerPath = (subpath: string): string => {
-    const local = path.resolve(subpath);
-    if (fs.existsSync(local)) return local;
-    return path.join(SERVER_ROOT, subpath);
-};
-const PUBLIC_DIR = resolveServerPath('public');
+const PUBLIC_DIR = path.resolve('public');
 
 export function createSettingsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -103,15 +96,10 @@ router.get('/.well-known/assetlinks.json', async (ctx) => {
 
 // ===================== SETTINGS PAGE =====================
 
-router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
-    // If request has a file extension (e.g. .js, .css, .png) and is under /settings/, let static middleware handle it
-    if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
-        return next();
-    }
-    const managerPath = resolveServerPath('public/settings/index.html');
-    const publicPath = resolveServerPath('public/settings.html');
-    const staticPath = resolveServerPath('static/settings.html');
-    const resolvedPath = fs.existsSync(managerPath) ? managerPath : (fs.existsSync(publicPath) ? publicPath : staticPath);
+router.get('/settings', async (ctx) => {
+    const publicPath = path.resolve('public/settings.html');
+    const staticPath = path.resolve('static/settings.html');
+    const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
 
     if (fs.existsSync(resolvedPath)) {
         ctx.type = 'html';
@@ -119,27 +107,13 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
         ctx.body = fs.createReadStream(resolvedPath);
     } else {
         ctx.status = 404;
-        ctx.body = 'Settings page not found. Ensure manager build or settings.html exists.';
-    }
-});
-
-router.get('/settings-legacy', async (ctx) => {
-    const staticPath = resolveServerPath('static/settings.html');
-    const publicPath = resolveServerPath('public/settings.html');
-    const resolvedPath = fs.existsSync(staticPath) ? staticPath : publicPath;
-    if (fs.existsSync(resolvedPath)) {
-        ctx.type = 'html';
-        ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        ctx.body = fs.createReadStream(resolvedPath);
-    } else {
-        ctx.status = 404;
-        ctx.body = 'Legacy settings page not found.';
+        ctx.body = 'Settings page not found. Ensure settings.html is in the public directory.';
     }
 });
 
 router.get('/settings.js', async (ctx) => {
-    const publicPath = resolveServerPath('public/settings.js');
-    const staticPath = resolveServerPath('static/settings.js');
+    const publicPath = path.resolve('public/settings.js');
+    const staticPath = path.resolve('static/settings.js');
     const resolvedPath = fs.existsSync(publicPath) ? publicPath : staticPath;
 
     if (fs.existsSync(resolvedPath)) {
@@ -522,16 +496,8 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
-    const tfaSessionToken = issue2faSessionToken();
-    ctx.set('X-Admin-2FA-Session', tfaSessionToken);
     console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
-    ctx.body = {
-        success: true,
-        message: '2FA enabled successfully',
-        totpEnabled: true,
-        tfaSessionToken,
-        sessionToken: tfaSessionToken,
-    };
+    ctx.body = { success: true, message: '2FA enabled successfully', totpEnabled: true };
 });
 
 /**

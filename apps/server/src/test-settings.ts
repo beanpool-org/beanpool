@@ -111,20 +111,6 @@ async function main(): Promise<void> {
     });
     assert(adminConfigRes.status === 401 || adminConfigRes.status === 200, 'POST /api/local/admin/node/config handles auth guard correctly');
 
-    // ── 7. Settings HTML and Legacy Routes ────────────────────────
-    const settingsRes = await fetch(`${BASE}/settings`);
-    assert(settingsRes.status === 200, 'GET /settings returns 200');
-    const settingsHtml = await settingsRes.text();
-    assert(settingsHtml.includes('<html') || settingsHtml.includes('<!DOCTYPE') || settingsHtml.includes('BeanPool') || settingsHtml.includes('root'), 'GET /settings returns HTML document');
-
-    const settingsSubRes = await fetch(`${BASE}/settings/people`);
-    assert(settingsSubRes.status === 200, 'GET /settings/people SPA fallback returns 200');
-
-    const legacyRes = await fetch(`${BASE}/settings-legacy`);
-    assert(legacyRes.status === 200, 'GET /settings-legacy returns 200');
-    const legacyHtml = await legacyRes.text();
-    assert(legacyHtml.includes('settings.js') || legacyHtml.includes('Settings'), 'GET /settings-legacy serves legacy settings page');
-
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {
         throw new Error(`${run - passed} check(s) failed`);

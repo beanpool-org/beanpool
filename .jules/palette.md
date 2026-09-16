@@ -145,7 +145,3 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-14 - OnboardingGuide Decorative Emoji Hiding
 **Learning:** `OnboardingGuide.tsx` rendered decorative emojis (`⚡`, `🟢`, `🫘`, `🪙`, `🤝`, `🌾`, `⏱️`, `🔒`, `🚀`, `📍`, `💬`, `➕`, `💳`) in headings and paragraph texts without hiding them from assistive technology, causing screen readers to announce character names and create noise during onboarding navigation.
 **Action:** Wrapped all decorative emojis in `OnboardingGuide.tsx` with `<span aria-hidden="true">` and added `OnboardingGuide.test.tsx` verifying decorative emoji hiding.
-
-## 2026-09-15 - PulseFeedCard Focus Rings and Touch Target Sizing
-**Learning:** `PulseFeedCard.tsx` interactive buttons (author profile trigger, hide/delete action buttons, and modal confirmation triggers) lacked minimum touch target sizing (< 44px) and focus-visible outline rings for keyboard users.
-**Action:** Added `min-h-[44px]` touch target sizing and `focus-visible:outline-none focus-visible:ring-2` focus rings across interactive controls in `PulseFeedCard.tsx`, and added component test coverage.

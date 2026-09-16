@@ -109,7 +109,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 <button
                     type="button"
                     onClick={handleAuthorClick}
-                    className="flex items-center gap-2.5 min-w-0 flex-1 text-left bg-transparent border-none p-1 -m-1 rounded-lg cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                    className="flex items-center gap-2.5 min-w-0 flex-1 text-left bg-transparent border-none p-0 cursor-pointer group"
                     aria-label={`View ${authorName}'s public profile`}
                 >
                     <div className="w-9 h-9 rounded-full overflow-hidden bg-oat-100 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 flex items-center justify-center shrink-0">
@@ -160,7 +160,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 <button
                                     type="button"
                                     onClick={handleMuteClick}
-                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                    className="text-xs font-semibold px-2 py-1 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border border-nature-200 dark:border-nature-700 cursor-pointer transition-colors"
                                     aria-label="Hide this item from feed"
                                 >
                                     Hide
@@ -170,7 +170,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 <button
                                     type="button"
                                     onClick={handleDeleteClick}
-                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                    className="text-xs font-semibold px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors"
                                     aria-label="Delete this post"
                                 >
                                     Delete
@@ -192,7 +192,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         handleOpenPost();
                     }
                 }}
-                className="cursor-pointer group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                className="cursor-pointer group block focus:outline-none focus:ring-2 focus:ring-terra-400"
                 aria-label={`Open post on ${platMeta.label}`}
             >
                 <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
@@ -258,14 +258,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             <button
                                 type="button"
                                 onClick={() => setShowMuteConfirm(false)}
-                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer"
                             >
                                 Keep post
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmMute}
-                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-nature-800 hover:bg-nature-900 dark:bg-nature-700 dark:hover:bg-nature-600 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                className="px-4 py-2 rounded-xl text-sm font-bold bg-nature-800 hover:bg-nature-900 dark:bg-nature-700 dark:hover:bg-nature-600 text-white transition-colors cursor-pointer"
                             >
                                 Hide from feed
                             </button>
@@ -297,14 +297,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             <button
                                 type="button"
                                 onClick={() => setShowDeleteConfirm(false)}
-                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 transition-colors cursor-pointer"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="button"
                                 onClick={confirmDelete}
-                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer"
                             >
                                 Delete permanently
                             </button>

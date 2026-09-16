@@ -105,11 +105,6 @@ router.post('/api/messages/send', async (ctx) => {
         ctx.body = { error: 'conversationId, authorPubkey, ciphertext, and nonce are required' };
         return;
     }
-    if (ctx.state.actor && ctx.state.actor !== authorPubkey) {
-        ctx.status = 403;
-        ctx.body = { error: 'authorPubkey must match authenticated signer' };
-        return;
-    }
     // Optional client-generated message id (see sendMessage). Strict UUID v4
     // only — anything else is rejected rather than silently ignored, so a
     // malformed id can't slip through as a server-generated one.

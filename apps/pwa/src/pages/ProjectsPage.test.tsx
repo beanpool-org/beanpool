@@ -112,12 +112,6 @@ vi.mock('../lib/api', () => ({
     treasuryPostOffer: vi.fn(async () => ({ success: true })),
     treasuryPostNeed: vi.fn(async () => ({ success: true })),
     deleteCrowdfundProject: vi.fn(async () => ({ success: true })),
-    getDecisions: vi.fn(async () => ({ decisions: [], activeMembers30d: 5 })),
-    getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
-    getAllMembers: vi.fn(async () => []),
-    createDecision: vi.fn(async () => ({ success: true, decision: { id: 'dec-1' } })),
-    proposeDecision: vi.fn(async () => ({ success: true })),
-    castDecisionVote: vi.fn(async () => ({ success: true })),
     request: vi.fn(),
 }));
 

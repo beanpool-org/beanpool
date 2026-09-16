@@ -169,6 +169,7 @@ async function main(): Promise<void> {
     const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
     let lastEmbedUserAgent: string | undefined;
+    let tombstoneMidRecoveryId = '';
 
     const mockFetchFn = async (url: string, opts?: any): Promise<SsrfSafeResponse> => {
         upstreamFetchCount++;
@@ -234,6 +235,37 @@ async function main(): Promise<void> {
                 url,
                 buffer: async () => Buffer.from('Not found'),
                 text: async () => 'Not found',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('instagram.com/p/TOMBSTONE_MID/embed/')) {
+            const embedHtml = `
+                <div class="EmbeddedMedia">
+                    <img class="EmbeddedMediaImage" src="https://cdn.instagram.com/fresh-tombstone.jpg" />
+                </div>
+            `;
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from(embedHtml),
+                text: async () => embedHtml,
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('fresh-tombstone.jpg')) {
+            // Simulate item deletion occurring while fresh image download is in flight
+            scrubPulseItems({ id: tombstoneMidRecoveryId }, new Date().toISOString());
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'image/jpeg' },
+                url,
+                buffer: async () => sampleJpeg,
+                text: async () => sampleJpeg.toString(),
                 json: async <T = any>(): Promise<T> => ({} as T),
             };
         }
@@ -410,6 +442,20 @@ async function main(): Promise<void> {
     const resUnrecoverable = await callRouter(router, 'GET', `/api/pulse/items/${igUnrecoverableItemId}/thumbnail`);
     assert(resUnrecoverable.status === 403, 'Unrecoverable Instagram item falls back to 403');
     assert(resUnrecoverable.body?.error === 'Upstream refused: HTTP 403', 'Unrecoverable item reports upstream refusal');
+
+    // Tombstone guard: item deleted while recovery is in flight must NOT be resurrected
+    tombstoneMidRecoveryId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/TOMBSTONE_MID/',
+        externalId: 'TOMBSTONE_MID',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+    const resTombstoneMid = await callRouter(router, 'GET', `/api/pulse/items/${tombstoneMidRecoveryId}/thumbnail`);
+    assert(resTombstoneMid.status >= 400, 'Item deleted while recovery was in flight is refused');
+    assert(thumbnailService.cache.get(tombstoneMidRecoveryId) === null, 'Tombstoned mid-recovery item is NOT cached in L1');
+    const midRow = db.prepare('SELECT thumbnail_url, deleted_at FROM pulse_items WHERE id = ?').get(tombstoneMidRecoveryId) as any;
+    assert(midRow.thumbnail_url === null, 'Tombstoned item thumbnail_url remains null and was not resurrected');
+    assert(midRow.deleted_at !== null, 'Tombstoned item deleted_at remains set');
 
     // Unit tests for embed URL and HTML extraction functions
     assert(

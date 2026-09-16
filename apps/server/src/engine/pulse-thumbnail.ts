@@ -522,16 +522,23 @@ export class PulseThumbnailService {
                                 if (ALLOWED_IMAGE_CONTENT_TYPES.includes(mimeType)) {
                                     const buffer = await imgRes.buffer();
                                     if (buffer.length <= this.maxEntryBytes) {
+                                        try {
+                                            const info = db.prepare(
+                                                `UPDATE pulse_items SET thumbnail_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND deleted_at IS NULL`
+                                            ).run(freshUrl, itemId);
+                                            if (info.changes === 0) {
+                                                // Item was deleted or tombstoned while recovery was in flight — discard bytes
+                                                return null;
+                                            }
+                                        } catch {
+                                            return null;
+                                        }
+
                                         const entry = this.cache.set(itemId, buffer, mimeType);
                                         const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
                                         if (this.diskStore) {
                                             await this.diskStore.set(itemId, buffer, mimeType, etag);
                                         }
-                                        try {
-                                            db.prepare(
-                                                `UPDATE pulse_items SET thumbnail_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
-                                            ).run(freshUrl, itemId);
-                                        } catch {}
                                         if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                                             return { status: 304 };
                                         }

@@ -686,5 +686,166 @@ describe('NodeIdentityPanel Component', () => {
             expect(numberInput.value).toBe('0');
         });
     });
+
+    describe('Bucket 2 Item 6: Community Public Contact Details (Email & Phone)', () => {
+        it('renders with real payload and updates contact email, phone and community name on save', async () => {
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            communityName: 'Northern Rivers Eco',
+                            contactEmail: 'info@eco.org',
+                            contactPhone: '+61 400 999 888',
+                            callsign: 'nrivers',
+                        }),
+                    });
+                }
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            serviceRadius: { lat: -28.64, lng: 153.61, radiusKm: 20 },
+                        }),
+                    });
+                }
+                if (url.includes('/api/local/update-identity') || url.includes('/api/local/admin/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ success: true }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            const nameInput = document.getElementById('community-name') as HTMLInputElement;
+            const emailInput = document.getElementById('contact-email') as HTMLInputElement;
+            const phoneInput = document.getElementById('contact-phone') as HTMLInputElement;
+
+            await waitFor(() => {
+                expect(nameInput.value).toBe('Northern Rivers Eco');
+                expect(emailInput.value).toBe('info@eco.org');
+                expect(phoneInput.value).toBe('+61 400 999 888');
+            });
+
+            // Update contact fields
+            await act(async () => {
+                fireEvent.change(nameInput, { target: { value: 'Northern Rivers Exchange' } });
+                fireEvent.change(emailInput, { target: { value: 'admin@eco.org' } });
+                fireEvent.change(phoneInput, { target: { value: '+61 411 222 333' } });
+            });
+
+            expect(nameInput.value).toBe('Northern Rivers Exchange');
+            expect(emailInput.value).toBe('admin@eco.org');
+            expect(phoneInput.value).toBe('+61 411 222 333');
+
+            // Save
+            const saveBtn = screen.getByRole('button', { name: /save identity/i });
+            await act(async () => {
+                fireEvent.click(saveBtn);
+            });
+
+            await waitFor(() => {
+                expect(fetchMock).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/local/update-identity'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        body: expect.stringContaining('"communityName":"Northern Rivers Exchange"'),
+                    })
+                );
+                expect(fetchMock).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/local/update-identity'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        body: expect.stringContaining('"contactEmail":"admin@eco.org"'),
+                    })
+                );
+                expect(fetchMock).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/local/update-identity'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        body: expect.stringContaining('"contactPhone":"+61 411 222 333"'),
+                    })
+                );
+            });
+        });
+
+        it('renders safely with an empty payload for contact fields', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info') || url.includes('/api/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({}),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            }));
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            const nameInput = document.getElementById('community-name') as HTMLInputElement;
+            const emailInput = document.getElementById('contact-email') as HTMLInputElement;
+            const phoneInput = document.getElementById('contact-phone') as HTMLInputElement;
+
+            expect(nameInput.value).toBe('');
+            expect(emailInput.value).toBe('');
+            expect(phoneInput.value).toBe('');
+        });
+
+        it('renders safely with wrong-typed contact payload', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            communityName: 99999,
+                            contactEmail: true,
+                            contactPhone: { nested: 'phone-obj' },
+                        }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            }));
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            const nameInput = document.getElementById('community-name') as HTMLInputElement;
+            const emailInput = document.getElementById('contact-email') as HTMLInputElement;
+            const phoneInput = document.getElementById('contact-phone') as HTMLInputElement;
+
+            // Handled safely without throwing
+            expect(nameInput).toBeInTheDocument();
+            expect(emailInput).toBeInTheDocument();
+            expect(phoneInput).toBeInTheDocument();
+        });
+    });
 });
+
 

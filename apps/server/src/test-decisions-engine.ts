@@ -117,7 +117,6 @@ function recordTestActivity(buyer: string, seller: string, amount: number) {
 function closeForTick(id: string) {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
-
 async function runDecisionsSuite() {
     console.log('🏛️ Running Community Decisions Engine Test Suite (§3.2–§3.8)...\n');
 
@@ -414,7 +413,6 @@ async function runDecisionsSuite() {
     castDecisionVote(decBigGrant.id, voterA, true, 5);
     castDecisionVote(decBigGrant.id, voterB, true, 5);
     castDecisionVote(decBigGrant.id, voterC, true, 5);
-
     closeForTick(decBigGrant.id);
     tickDecisions();
     const decQueued = getDecision(decBigGrant.id)!;
@@ -478,7 +476,6 @@ async function runDecisionsSuite() {
     castDecisionVote(decRemoval.id, voterA, true);
     castDecisionVote(decRemoval.id, voterB, true);
     castDecisionVote(decRemoval.id, voterC, true);
-
     closeForTick(decRemoval.id);
     tickDecisions();
     const decRemovalGrace = getDecision(decRemoval.id)!;
@@ -494,6 +491,30 @@ async function runDecisionsSuite() {
     testAssert(decHalted.status === 'admin_halted', 'Decision status updated to admin_halted');
     testAssert(decHalted.adminHaltReason?.includes('Evidence was forged'), 'Public halt justification recorded');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(rogueMember) as any).status === 'active', 'Member reinstated to active upon admin halt');
+
+    // Test admin halt on an OPEN removal decision does not activate a previously disabled/frozen member
+    const disabledMember = 'disabled_member_' + Date.now();
+    seedTestMember(disabledMember, 'DisabledDave');
+    db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
+
+    const decOpenRemoval = createDecision({
+        authorPubkey: admin,
+        title: 'Remove already disabled member',
+        description: 'Testing halt on open decision',
+        touches: 'member',
+        effect: 'remove_member',
+        subject: disabledMember,
+        closesAt: new Date(Date.now() + 100000).toISOString(),
+    });
+    testAssert(decOpenRemoval.status === 'open', 'Decision is open');
+    testAssert(decOpenRemoval.params?.debt === 75, 'Canonical debt of 75 beans populated on removal decision from accounts ledger');
+    testAssert(decOpenRemoval.params?.memberName === 'DisabledDave', 'Member callsign populated in params.memberName');
+    const haltOpenRes = adminHaltDecision(decOpenRemoval.id, admin, 'Halted while open; member remains disabled');
+    testAssert(haltOpenRes.success, 'Halted open decision');
+    const disabledMemberCheck = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(disabledMember) as any;
+    testAssert(disabledMemberCheck.status === 'disabled', 'Halting OPEN decision does NOT reactivate a disabled member');
+    testAssert(disabledMemberCheck.credit_frozen === 1, 'Halting OPEN decision does NOT unfreeze credit for a frozen member');
 
     // Second removal decision — test auto-execution when grace period ends
     const decRemoval2 = createDecision({
@@ -581,6 +602,104 @@ async function runDecisionsSuite() {
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
 
+    // ── 9b. Robustness & Preflight Invariants ─────────────────────────────────
+    console.log('\n--- 9b. Robustness & Preflight Invariants ---');
+
+    // NaN vote count rejected
+    const decForVoteCheck = createDecision({
+        authorPubkey: admin,
+        title: 'Vote check decision',
+        description: 'Testing vote validation',
+        touches: 'nothing',
+        effect: 'poll',
+    });
+    const nanVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, NaN);
+    testAssert(!nanVoteRes.success && nanVoteRes.error?.includes('positive finite integer'), 'NaN vote count rejected');
+
+    const negVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, -5);
+    testAssert(!negVoteRes.success && negVoteRes.error?.includes('positive finite integer'), 'Negative vote count rejected');
+    closeForTick(decForVoteCheck.id);
+    tickDecisions();
+
+    // grant_hardship without valid member fails preflight with void
+    const fakeRecipient = 'nonexistent_pubkey_' + Date.now();
+    const hardshipDec = createDecision({
+        authorPubkey: voterA,
+        title: 'Hardship grant to ghost member',
+        description: 'Testing preflight',
+        touches: 'pool',
+        effect: 'grant_hardship',
+        subject: fakeRecipient,
+        params: { amount: 50 },
+    });
+    const execHardshipRes = executeDecision(hardshipDec.id);
+    testAssert(execHardshipRes.status === 'execution_void', 'Hardship to nonexistent recipient halts at execution_void');
+
+    // Head-of-line blocking resilience in tickDecisions:
+    // Create an expired decision with broken params that throws, plus a normal valid expired decision
+    const brokenExpiredDec = createDecision({
+        authorPubkey: voterB,
+        title: 'Broken expired decision',
+        description: 'Throws on execution',
+        touches: 'member',
+        effect: 'grant_tier',
+        subject: m1,
+        params: { tier: 'CorruptTier' as any },
+    });
+    castDecisionVote(brokenExpiredDec.id, voterA, true, 1);
+    castDecisionVote(brokenExpiredDec.id, voterC, true, 1);
+    castDecisionVote(brokenExpiredDec.id, admin, true, 1);
+    closeForTick(brokenExpiredDec.id);
+
+    const targetGoodMember = 'good_target_' + Date.now();
+    seedTestMember(targetGoodMember, 'GoodTarget', { earnedCredit: 50 });
+    const goodExpiredDec = createDecision({
+        authorPubkey: voterC,
+        title: 'Good expired decision following broken one',
+        description: 'Should still execute',
+        touches: 'member',
+        effect: 'grant_voucher',
+        subject: targetGoodMember,
+        params: {},
+    });
+    castDecisionVote(goodExpiredDec.id, voterA, true, 1);
+    castDecisionVote(goodExpiredDec.id, voterB, true, 1);
+    castDecisionVote(goodExpiredDec.id, admin, true, 1);
+    closeForTick(goodExpiredDec.id);
+
+    tickDecisions();
+    testAssert(getDecision(brokenExpiredDec.id)!.status === 'execution_blocked', 'Failing expired decision isolated as execution_blocked');
+    testAssert(getDecision(goodExpiredDec.id)!.status === 'executed', 'Subsequent expired decision executed successfully without HOL blocking');
+
+    // Test remove_lead_keeper execution with conflated params (subject as member)
+    const keeperMember = 'keeper_' + Date.now();
+    const entPubkey = 'enterprise_test_' + Date.now();
+    const keeperAuthor = 'keeper_author_' + Date.now();
+    seedTestMember(keeperMember, 'TestKeeper');
+    seedTestMember(keeperAuthor, 'KeeperAuthor', { earnedCredit: 50 });
+    db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by) VALUES (?, ?, 'lead', ?, 'admin')")
+        .run(entPubkey, keeperMember, Date.now());
+    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(keeperMember);
+
+    const removeKeeperDec = createDecision({
+        authorPubkey: keeperAuthor,
+        title: 'Remove rogue lead keeper',
+        description: 'Remove rogue lead keeper',
+        touches: 'member',
+        effect: 'remove_lead_keeper',
+        subject: keeperMember,
+        params: { enterprisePubkey: keeperMember, leadPubkey: keeperMember },
+    });
+    castDecisionVote(removeKeeperDec.id, voterA, true, 1);
+    castDecisionVote(removeKeeperDec.id, voterB, true, 1);
+    castDecisionVote(removeKeeperDec.id, admin, true, 1);
+    const execKeeperRes = executeDecision(removeKeeperDec.id);
+    testAssert(execKeeperRes.success, 'remove_lead_keeper executed successfully');
+    const remainingRoles = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'").get(keeperMember) as any;
+    testAssert(remainingRoles.c === 0, 'Lead keeper role deleted from treasury_operators');
+    const memberAfterRemoval = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(keeperMember) as any;
+    testAssert(memberAfterRemoval.can_operate === 0, 'can_operate reset to 0 when member has no remaining roles');
+
     // ── 10. Backward Compatibility: Legacy Voting Rounds ─────────────────────
     console.log('\n--- 10. Backward Compatibility ---');
 
@@ -634,8 +753,8 @@ async function runDecisionsSuite() {
         effect: 'suspend_member',
         subject: m2,
     });
-    const nanVoteRes = castDecisionVote(decVoteSan.id, voterA, true, NaN as any);
-    testAssert(nanVoteRes.success && nanVoteRes.creditsUsed === 1, 'NaN voteCount falls back safely to count 1');
+    const nanVoteRes2 = castDecisionVote(decVoteSan.id, voterA, true, NaN as any);
+    testAssert(!nanVoteRes2.success && nanVoteRes2.error?.includes('positive finite integer'), 'NaN voteCount rejected safely');
     closeForTick(decVoteSan.id);
     tickDecisions(); // Closes decVoteSan
 

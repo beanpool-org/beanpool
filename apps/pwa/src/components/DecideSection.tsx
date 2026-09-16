@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
     castDecisionVote,
+    getGovernanceCredits,
     type DecisionWithTally,
     type BalanceInfo,
 } from '../lib/api';
@@ -37,6 +38,17 @@ export function DecideSection({
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
     const [voteError, setVoteError] = useState<string | null>(null);
+    const [voiceCredits, setVoiceCredits] = useState<{ totalCredits: number; usedCredits: number; availableCredits: number } | null>(null);
+
+    useEffect(() => {
+        if (!identity?.publicKey) {
+            setVoiceCredits(null);
+            return;
+        }
+        getGovernanceCredits(identity.publicKey)
+            .then(setVoiceCredits)
+            .catch(() => {});
+    }, [identity?.publicKey]);
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -75,7 +87,13 @@ export function DecideSection({
         const count = selectedVoteCount[decision.id] || 1;
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
-            const available = balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0;
+            let available = voiceCredits?.availableCredits ?? 0;
+            try {
+                const fresh = await getGovernanceCredits(identity.publicKey);
+                setVoiceCredits(fresh);
+                available = fresh.availableCredits ?? 0;
+            } catch { }
+
             if (cost > available) {
                 setVoteError(`Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
                 return;
@@ -92,6 +110,9 @@ export function DecideSection({
             });
 
             if (res.success) {
+                if (identity?.publicKey) {
+                    getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
+                }
                 await onRefresh();
             } else {
                 setVoteError((res as any).error || 'Failed to record vote');
@@ -322,7 +343,7 @@ export function DecideSection({
                                             {item.franchise === 'quadratic_trade' && (
                                                 <div className="flex items-center justify-between bg-nature-800/60 border border-nature-700/60 rounded-xl px-3 py-2 text-xs">
                                                     <span className="text-nature-300 font-medium">
-                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0})
+                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {voiceCredits?.availableCredits ?? balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0})
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button

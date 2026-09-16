@@ -107,29 +107,43 @@ export function ProposeDecisionModal({
     }, [members, subject]);
 
     useEffect(() => {
-        if (!subject) {
+        if (effect !== 'remove_member' || !subject) {
             setFetchedBalance(null);
             return;
         }
-        const pubkey = selectedMember?.publicKey || (subject.length === 64 ? subject : null);
-        if (pubkey) {
-            getBalance(pubkey).then(b => {
-                if (b && typeof b.balance === 'number') {
-                    setFetchedBalance(b.balance);
-                }
-            }).catch(() => {});
+        const targetPubkey = selectedMember ? selectedMember.publicKey : (subject.trim().length >= 32 ? subject.trim() : null);
+        if (!targetPubkey) {
+            setFetchedBalance(null);
+            return;
         }
-    }, [subject, selectedMember]);
+        if (selectedMember && typeof selectedMember.balance === 'number') {
+            setFetchedBalance(null);
+            return;
+        }
+        let cancelled = false;
+        getBalance(targetPubkey)
+            .then(bal => {
+                if (!cancelled && bal && typeof bal.balance === 'number') {
+                    setFetchedBalance(bal.balance);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [effect, subject, selectedMember]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = fetchedBalance ?? selectedMember?.balance ?? 0;
+    const targetBalance = selectedMember?.balance ?? fetchedBalance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance ?? 0);
+    const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
     // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+    const debtWriteOffLine = debtAmount > 0
+        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -363,13 +377,14 @@ export function ProposeDecisionModal({
 
         setSubmitting(true);
         try {
+            const resolvedSubject = (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : (selectedMember ? selectedMember.publicKey : (subject.trim() || null)))) || null;
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
                 description: description.trim(),
                 touches,
                 effect,
-                subject: (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : subject.trim())) || null,
+                subject: resolvedSubject,
                 params,
             });
 

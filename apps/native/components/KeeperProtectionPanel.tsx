@@ -84,7 +84,7 @@ export function KeeperProtectionPanel({
                                 <View
                                     style={styles.providerInfo}
                                     accessible={true}
-                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery keeper`}
+                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery provider`}
                                 >
                                     <Text
                                         style={styles.tick}
@@ -174,10 +174,9 @@ export function KeeperProtectionPanel({
 
     return (
         <View style={[styles.panel, styles.wordsOnly]}>
-            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are the only way back</Text>
+            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are your primary recovery</Text>
             <Text style={styles.body}>
-                Right now these 12 words are the only way back into your account. No email, no
-                password reset — nobody, including your hub, can restore it for you.
+                Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.
             </Text>
 
             <View style={styles.buttonContainer}>

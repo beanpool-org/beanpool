@@ -285,7 +285,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     };
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || 'Community Treasury';
+    const name = detail?.name || 'Community Enterprise';
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
     const pendingBids: any[] = detail?.pendingBids || [];
     const activeDeals: any[] = detail?.activeDeals || [];
@@ -318,10 +318,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
 
             <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
-                    <div className="py-20 text-center text-nature-500 font-medium">Loading treasury details…</div>
+                    <div className="py-20 text-center text-nature-500 font-medium">Loading enterprise details…</div>
                 ) : error ? (
                     <div className="p-6 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-center">
-                        <p className="font-bold mb-2">Error loading treasury</p>
+                        <p className="font-bold mb-2">Error loading enterprise</p>
                         <p className="text-sm">{error}</p>
                         <button
                             onClick={load}
@@ -331,7 +331,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         </button>
                     </div>
                 ) : !detail ? (
-                    <div className="py-20 text-center text-nature-500">Treasury not found.</div>
+                    <div className="py-20 text-center text-nature-500">Enterprise not found.</div>
                 ) : (
                     <>
                         {/* Identity Banner */}

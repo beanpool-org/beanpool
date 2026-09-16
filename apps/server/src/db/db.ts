@@ -560,6 +560,7 @@ export function initSchema() {
     // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
@@ -941,10 +942,16 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     }
     const goalAmount = Number(e.goal_amount ?? legacyP?.goal_amount ?? 0);
 
-    let currentAmount = Number(legacyP?.current_amount || 0);
+    let currentAmount = 0;
+    if (legacyP && legacyP.current_amount != null) {
+        currentAmount = Number(legacyP.current_amount);
+    }
     try {
-        const escBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(`escrow_${e.public_key}`) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, Number(escBal));
+        const txSum = (db.prepare(`
+            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
+            WHERE project_id = ? AND to_pubkey = 'escrow_' || ?
+        `).get(e.public_key, e.public_key) as any)?.s || 0;
+        currentAmount = Math.max(currentAmount, txSum);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -1177,7 +1184,7 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit Enterprise Treasury Account
+                // Credit Enterprise Treasury Account (Slice 3: pledges land in enterprise account)
                 db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
 
                 // Record atomic Sweep Transaction to the enterprise

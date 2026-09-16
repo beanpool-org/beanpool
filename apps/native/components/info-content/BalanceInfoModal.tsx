@@ -174,13 +174,13 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        Every member has access to a <Text style={styles.boldWhiteText}>Floor Balance</Text> (credit line) based on their community tier. This allows you to trade even if you temporarily have zero credits.
+                        Every member has access to a <Text style={styles.boldWhiteText}>Floor Balance</Text> (credit line) earned through completed trades and community vouches. This allows you to trade even if you temporarily have zero credits.
                     </Text>
 
                     <View style={styles.limitContainer}>
                         <Text style={styles.limitTitle}>Negative Balances</Text>
                         <Text style={styles.limitText}>
-                            If you spend past zero, your balance becomes <Text style={styles.boldWhiteText}>negative</Text> up to your <Text style={styles.boldWhiteText}>tier limit</Text>. When you earn credits again, they will first pay off this negative balance.
+                            If you spend past zero, your balance becomes <Text style={styles.boldWhiteText}>negative</Text> down to your <Text style={styles.boldWhiteText}>earned credit floor</Text>. When you earn credits again, they will first pay off this negative balance.
                         </Text>
                     </View>
 

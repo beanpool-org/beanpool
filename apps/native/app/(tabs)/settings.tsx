@@ -2423,7 +2423,7 @@ export default function SettingsScreen() {
                             {hasMnemonic(identity) ? (
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 12, gap: 8 }}>
                                     <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, lineHeight: 18 }}>
-                                        Have you backed up your 12 words? They are the only way back into your account.
+                                        Have you backed up your 12 words? They are your primary way back into your account.
                                     </Text>
                                     <Pressable
                                         style={{ backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.feedback.warning.border, padding: 10, borderRadius: 8, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}

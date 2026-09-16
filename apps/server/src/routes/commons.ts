@@ -136,8 +136,8 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
-    const { title, description, touches, effect, subject, params } = (ctx as any).requestBody || {};
-    const actor = ctx.state.actor as string;
+    const { title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
+    const actor = (ctx.state as any)?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: 'Authentication required to propose a decision' };
@@ -157,7 +157,7 @@ router.post('/api/commons/decisions', async (ctx) => {
             effect,
             subject,
             params,
-            // closesAt omitted so engine defaults strictly to 7 days
+            closesAt,
         });
         ctx.body = { success: true, decision };
     } catch (err: any) {
@@ -168,7 +168,7 @@ router.post('/api/commons/decisions', async (ctx) => {
 
 router.post('/api/commons/decisions/:id/vote', async (ctx) => {
     const { support, voteCount, signature } = (ctx as any).requestBody || {};
-    const actor = ctx.state.actor as string;
+    const actor = (ctx.state as any)?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: 'Authentication required to vote' };

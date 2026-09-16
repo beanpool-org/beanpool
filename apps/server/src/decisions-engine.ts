@@ -386,10 +386,12 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     const now = new Date();
     const opensAt = now.toISOString();
     const closesAt = opts.closesAt || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    let finalParams = opts.params;
+
+    let finalParams = opts.params !== undefined && opts.params !== null ? { ...opts.params } : (opts.effect === 'remove_member' && opts.subject ? {} : opts.params);
     if (opts.effect === 'remove_member' && opts.subject) {
         const member = getMember(opts.subject);
-        const memberBalance = getBalance(opts.subject)?.balance ?? 0;
+        const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(opts.subject) as { balance: number } | undefined;
+        const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(opts.subject)?.balance ?? 0);
         const commonsPoolBal = getCommonsBalanceExact();
         const memberName = member?.callsign || opts.params?.memberName || opts.subject.slice(0, 8);
         const debt = memberBalance < 0 ? Math.abs(memberBalance) : 0;
@@ -398,9 +400,10 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
             memberName,
             debt, // Authoritatively computed from ledger
             commonsPool: Math.round(commonsPoolBal), // Authoritatively computed from ledger
+            balance: memberBalance,
         };
     }
-    const serializedParams = finalParams !== undefined ? JSON.stringify(finalParams) : null;
+    const serializedParams = finalParams !== undefined && finalParams !== null ? JSON.stringify(finalParams) : null;
 
     db.prepare(`
         INSERT INTO decisions (
@@ -460,15 +463,19 @@ export function castDecisionVote(
 ): { success: boolean; creditsUsed: number; error?: string } {
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
-    if (decision.status !== 'open' || new Date(decision.closesAt).getTime() <= Date.now()) {
+    if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
+    if (new Date(decision.closesAt).getTime() <= Date.now()) {
         return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
     }
 
     const elig = checkVoterEligibility(voterPubkey);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
 
-    const parsedCount = Number(voteCount);
-    const count = Number.isFinite(parsedCount) ? Math.max(1, Math.floor(parsedCount)) : 1;
+    const num = Number(voteCount);
+    if (!Number.isFinite(num) || num < 1) {
+        return { success: false, creditsUsed: 0, error: 'voteCount must be a positive finite integer' };
+    }
+    const count = Math.floor(num);
     let weight = 1;
     let creditCost = 1;
 
@@ -737,11 +744,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         }
     }
 
-    const cancelledDecisionIds: string[] = [];
-
     // Reversible state flips and money movements: single atomic commit
     try {
+        let alreadyExecuted = false;
+        const cancelledDecisionIds: string[] = [];
+
         conservingTransaction(() => {
+            // Re-verify status under write lock to guard against concurrent execution
+            const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
+            if (!current || current.status === 'executed' || current.status === 'execution_void') {
+                alreadyExecuted = true;
+                return;
+            }
+
             const authSigner = `system:decision:${decision.id}`;
 
             switch (decision.effect) {
@@ -813,10 +828,17 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'remove_lead_keeper': {
                     const entPubkey = decision.params?.enterprisePubkey;
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
-                    if (!entPubkey) throw new Error('enterprisePubkey required for remove_lead_keeper');
-                    db.prepare(
-                        "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
-                    ).run(entPubkey, leadPubkey);
+                    if (entPubkey && entPubkey !== leadPubkey) {
+                        db.prepare(
+                            "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
+                        ).run(entPubkey, leadPubkey);
+                    } else {
+                        db.prepare(
+                            "DELETE FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'"
+                        ).run(leadPubkey);
+                    }
+                    const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?").get(leadPubkey) as any;
+                    if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(leadPubkey);
                     break;
                 }
                 case 'grant_enterprise': {
@@ -913,6 +935,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             `).run(now, now, decisionId);
         });
 
+        if (alreadyExecuted) {
+            const current = getDecision(decisionId);
+            return { success: true, status: current?.status || 'executed' };
+        }
+
         for (const cid of cancelledDecisionIds) {
             broadcast({ type: 'decision_updated', decision: getDecision(cid)! });
         }
@@ -964,7 +991,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         `).run(now, adminPubkey, reason.trim(), now, decisionId);
 
         // If member was suspended in grace window, restore them
-        if (decision.effect === 'remove_member' && decision.subject) {
+        if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
         }
@@ -1037,51 +1064,64 @@ export function tickDecisions(asOfTime?: number): {
 
     for (const r of openExpired) {
         evaluated++;
-        const now = new Date().toISOString();
+        try {
+            const now = new Date().toISOString();
 
-        if (r.status === 'passed') {
+            if (r.status === 'passed') {
+                const res = executeDecision(r.id);
+                if (res.success && res.status === 'executed') {
+                    executed++;
+                }
+                continue;
+            }
+
+            const tally = tallyDecision(r.id, asOfTime);
+
+            if (!tally.quorumMet) {
+                db.prepare(`
+                    UPDATE decisions SET
+                        status = 'unresolved',
+                        execution_reason = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
+                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                continue;
+            }
+
+            if (!tally.passed) {
+                db.prepare(`
+                    UPDATE decisions SET
+                        status = 'failed',
+                        execution_reason = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                `).run(
+                    `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
+                    now,
+                    r.id
+                );
+                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                continue;
+            }
+
+            // Passed! Mark passed and execute
+            db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
             const res = executeDecision(r.id);
             if (res.success && res.status === 'executed') {
                 executed++;
             }
-            continue;
-        }
-
-        const tally = tallyDecision(r.id, asOfTime);
-
-        if (!tally.quorumMet) {
+        } catch (err: any) {
+            const now = new Date().toISOString();
+            console.error(`[Decisions] Failed to evaluate decision ${r.id}:`, err);
             db.prepare(`
                 UPDATE decisions SET
-                    status = 'unresolved',
-                    execution_reason = ?,
+                    status = 'execution_blocked',
+                    execution_error = ?,
                     updated_at = ?
                 WHERE id = ?
-            `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
+            `).run(err?.message || String(err), now, r.id);
             broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
-            continue;
-        }
-
-        if (!tally.passed) {
-            db.prepare(`
-                UPDATE decisions SET
-                    status = 'failed',
-                    execution_reason = ?,
-                    updated_at = ?
-                WHERE id = ?
-            `).run(
-                `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
-                now,
-                r.id
-            );
-            broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
-            continue;
-        }
-
-        // Passed! Mark passed and execute
-        db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
-        const res = executeDecision(r.id);
-        if (res.success && res.status === 'executed') {
-            executed++;
         }
     }
 

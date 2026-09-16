@@ -4096,6 +4096,7 @@ export function getAllProjects(): CommunityProject[] {
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
             FROM members m
             WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
+              AND m.public_key NOT IN (SELECT id FROM projects)
         `).all() as any[];
 
         for (const e of enterprises) {

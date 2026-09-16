@@ -102,29 +102,43 @@ export function ProposeDecisionModal({
     }, [members, subject]);
 
     useEffect(() => {
-        if (!subject) {
+        if (effect !== 'remove_member' || !subject) {
             setFetchedBalance(null);
             return;
         }
-        const pubkey = selectedMember?.publicKey || (subject.length === 64 ? subject : null);
-        if (pubkey) {
-            getBalance(pubkey).then(b => {
-                if (b && typeof b.balance === 'number') {
-                    setFetchedBalance(b.balance);
-                }
-            }).catch(() => {});
+        const targetPubkey = selectedMember ? selectedMember.publicKey : (subject.trim().length >= 32 ? subject.trim() : null);
+        if (!targetPubkey) {
+            setFetchedBalance(null);
+            return;
         }
-    }, [subject, selectedMember]);
+        if (selectedMember && typeof selectedMember.balance === 'number') {
+            setFetchedBalance(null);
+            return;
+        }
+        let cancelled = false;
+        getBalance(targetPubkey)
+            .then(bal => {
+                if (!cancelled && bal && typeof bal.balance === 'number') {
+                    setFetchedBalance(bal.balance);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [effect, subject, selectedMember]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = fetchedBalance ?? selectedMember?.balance ?? 0;
+    const targetBalance = selectedMember?.balance ?? fetchedBalance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance ?? 0);
+    const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
     // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+    const debtWriteOffLine = debtAmount > 0
+        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
 
     if (!isOpen) return null;
 
@@ -185,13 +199,14 @@ export function ProposeDecisionModal({
         setSubmitting(true);
         setError(null);
         try {
+            const resolvedSubject = (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : (selectedMember ? selectedMember.publicKey : (subject.trim() || null)))) || null;
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
                 description: description.trim(),
                 touches,
                 effect,
-                subject: (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : subject.trim())) || null,
+                subject: resolvedSubject,
                 params,
             });
 
@@ -305,19 +320,20 @@ export function ProposeDecisionModal({
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
                             Specific Action / Effect
                         </label>
-                        <div role="radiogroup" aria-label="Governance effect" className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" role="radiogroup" aria-label="Specific Action or Effect">
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
                                 <button
                                     type="button"
+                                    key={eff.id}
                                     role="radio"
                                     aria-checked={effect === eff.id}
-                                    key={eff.id}
-                                    onClick={() => setEffect(eff.id)}
-                                    className={`w-full text-left p-2.5 rounded-xl border transition-all ${
+                                    onClick={() => !submitting && setEffect(eff.id)}
+                                    disabled={submitting}
+                                    className={`w-full text-left p-2.5 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                                         effect === eff.id
                                             ? 'bg-emerald-500/15 border-emerald-500'
                                             : 'bg-nature-800/40 border-nature-700 hover:border-nature-600'
-                                    }`}
+                                    } ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <div className={`text-sm font-semibold ${effect === eff.id ? 'text-emerald-300' : 'text-white'}`}>
                                         {eff.label}

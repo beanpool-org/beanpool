@@ -1095,7 +1095,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = 400;
-        ctx.body = { error: result.error };
+        ctx.body = { error: result.error || 'Failed to halt decision' };
         return;
     }
     ctx.body = { success: true };

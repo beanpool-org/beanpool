@@ -2005,11 +2005,8 @@ export async function castDecisionVote(decisionId: string, payload: {
 }
 
 export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
-    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!rawUrl) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
+        const res = await signedGet(`/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
         if (!res.ok) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
         return await res.json();
     } catch {

@@ -155,20 +155,20 @@ async function main() {
         `control: ${OPENING} beans held ${STALE_DAYS} days genuinely owes ${fairCharge.toFixed(4)} — a real, `
         + 'recordable decay, so every comparison below can actually fail');
 
-    // ── Path 1: crowdfund escrow sweep to the enterprise treasury (Slice 3) ─────────────────────────
+    // ── Path 1: crowdfund escrow sweep to the enterprise account (Slice 3) ─────────────────────────
     const funded = id('proj');
-    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to enterprise', [], PAYOUT, null);
+    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to the enterprise account', [], PAYOUT, null);
     pledgeToProject(crypto.randomUUID(), funded, backer, PAYOUT, 'pledge');
 
     const creatorRow = row(creator)!;
     assert(creatorRow.epoch === nowEpoch(),
         'path 1: the escrow sweep left the creator\'s demurrage window CLOSED in the row');
-    // Row-level: creator balance was settled (decay fairCharge subtracted), payout credited to enterprise account
+    // Row-level, creator personal balance reflects only the fair charge (sweep lands in enterprise account per Slice 3)
     assert(Math.abs((OPENING - creatorRow.balance) - fairCharge) < SAME_CHARGE,
-        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, not a charge against the payout`);
+        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, with creator personal funds protected`);
     const fundedRow = row(funded)!;
     assert(Math.abs(fundedRow.balance - PAYOUT) < 1e-9,
-        'path 1: the enterprise treasury was credited with the full payout');
+        `path 1: the enterprise account received the full ${PAYOUT} payout (demurrage-exempt)`);
 
     reconcileLedgerFromDb();   // what the balance-mutation hook, or any restart, does
     const creatorCharge = OPENING - getBalance(creator).balance;
@@ -186,12 +186,13 @@ async function main() {
         + 'window is STILL closed in the row — persisting only when there is an event to persist would leave '
         + 'the commonest case broken');
     assert(Math.abs(quietRow.balance - GREEN_ZONE_HOLDING) < 1e-9,
-        `path 1b: and creator holding ${GREEN_ZONE_HOLDING} arrives intact`);
-    assert(Math.abs(row(quietProject)!.balance - PAYOUT) < 1e-9,
-        `path 1b: and enterprise received the payout ${PAYOUT}`);
+        `path 1b: creator inside Green Zone untouched — holds ${GREEN_ZONE_HOLDING}`);
+    const quietProjectRow = row(quietProject)!;
+    assert(Math.abs(quietProjectRow.balance - PAYOUT) < 1e-9,
+        `path 1b: enterprise received ${PAYOUT} payout (demurrage-exempt)`);
     reconcileLedgerFromDb();
     assert(Math.abs(getBalance(quiet).balance - GREEN_ZONE_HOLDING) < 1e-9,
-        'path 1b: and the next read charges nothing either — creator remains in the Green Zone');
+        'path 1b: and the next read charges nothing against creator');
 
     // ── Path 1c: the payer side — a pledge may not be afforded out of beans demurrage has taken ─────
     // The affordability check is a raw `SELECT balance`, so against an unsettled row it reads the PRE-decay

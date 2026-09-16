@@ -32,8 +32,8 @@ import {
     createCrowdfundProject, pledgeToProject, migrateProjectsAndCommonsToEnterprises,
 } from './db/db.js';
 import {
-    initStateEngine, reconcileLedgerFromDb, getBalance,
     getAllProjects, getProjects, createProject, deleteProject,
+    initStateEngine, reconcileLedgerFromDb, getBalance,
 } from './state-engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -227,9 +227,9 @@ async function runTests() {
     testAssert(singleProject?.id === testProject, 'getCrowdfundProject(id) returns project');
     testAssert(singleProject?.description === 'Shared workshop tools', 'Project description matches');
 
-    // Check getAllProjects includes it
+    // Check getAllProjects excludes crowdfund campaigns (domain separation per CR #816)
     const allProj = getAllProjects();
-    testAssert(allProj.some(p => p.id === testProject), 'getAllProjects includes bounded enterprise');
+    testAssert(!allProj.some(p => p.id === testProject), 'getAllProjects excludes crowdfund projects (domain separation)');
 
     // Pledge partial amount (100 < 200)
     const pledge1TxId = 'pledge_1_' + crypto.randomUUID();
@@ -246,12 +246,12 @@ async function runTests() {
     pledgeToProject(pledge2TxId, testProject, testBacker, 100, 'Goal-reaching pledge');
     reconcileLedgerFromDb();
 
-    // Verify auto-sweep behavior (Slice 3: crowdfund pledges land in enterprise account):
-    // Escrow is fully drained to 0, enterprise is credited with 200 beans, creator personal balance untouched
+    // Verify auto-sweep behavior:
+    // Escrow is fully drained to 0, enterprise account is credited with 200 beans (Slice 3: pledges land in enterprise account)
     testAssert(getBalance(testBacker).balance === 300, 'Backer debited to 300');
     testAssert(getBalance(`escrow_${testProject}`).balance === 0, 'Escrow balance fully drained to 0');
-    testAssert(getBalance(testCreator).balance === 100, 'Creator personal balance untouched (still 100)');
-    testAssert(getBalance(testProject).balance === 200, 'Enterprise credited with 200 beans (0 -> 200)');
+    testAssert(getBalance(testCreator).balance === 100, 'Creator personal balance untouched (remains 100)');
+    testAssert(getBalance(testProject).balance === 200, 'Enterprise account credited with 200 beans');
 
     // Verify sweep transaction was recorded to enterprise account
     const sweepTx = db.prepare(`SELECT * FROM transactions WHERE id = ?`).get(`sweep_${pledge2TxId}`) as any;

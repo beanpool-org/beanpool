@@ -155,14 +155,14 @@ export default function TreasuryDetailScreen() {
     useFocusEffect(load);
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || nameParam || 'Community Treasury';
+    const name = detail?.name || nameParam || 'Community Enterprise';
     const avatar = detail?.avatar || avatarParam;
 
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
         if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
-        if (amt > balance) { Alert.alert('Not enough surplus', `This treasury only holds ${balance} 🫘.`); return; }
+        if (amt > balance) { Alert.alert('Not enough surplus', `This enterprise only holds ${balance} 🫘.`); return; }
         setSweeping(true);
         try {
             await treasurySweep(treasuryKey, amt);
@@ -335,7 +335,7 @@ export default function TreasuryDetailScreen() {
                 <View style={styles.centerFill}><ActivityIndicator color={colors.brand.primary} /></View>
             ) : !detail ? (
                 <View style={styles.centerFill}>
-                    <Text style={styles.emptyNote}>Couldn't load this treasury. Check your connection.</Text>
+                    <Text style={styles.emptyNote}>Couldn't load this enterprise. Check your connection.</Text>
                 </View>
             ) : (
                 <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
@@ -343,7 +343,7 @@ export default function TreasuryDetailScreen() {
                         {/* Identity */}
                         <View style={styles.identityRow}>
                             {avatar ? (
-                                <Image source={{ uri: avatar }} style={styles.avatar} accessibilityLabel="Treasury avatar" />
+                                <Image source={{ uri: avatar }} style={styles.avatar} accessibilityLabel="Enterprise avatar" />
                             ) : (
                                 <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>{detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}</Text></View>
                             )}
@@ -632,7 +632,7 @@ export default function TreasuryDetailScreen() {
                                 )}
 
                                 <Text style={styles.opHint}>
-                                    Post the treasury's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
+                                    Post the enterprise's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
 
                                 {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (

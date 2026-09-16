@@ -897,7 +897,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         <div>
                                             <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                Positive balances above 200 Beans decay by 1.5% monthly (progressive circulation). This prevents hoarding and funds local community projects.
+                                                Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                             </p>
                                         </div>
                                     </div>
@@ -935,12 +935,11 @@ export function WelcomePage({ onComplete }: Props) {
                                 <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Right now your 12 words are the <strong>only</strong> way back into your account. No email,
-                                        no password reset — nobody, including your hub, can restore it for you.
+                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
-                                        7 days of inactivity, and clearing browsing data erases your identity permanently.
+                                        7 days of inactivity, so keeping your 12 words safe ensures seamless access.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
@@ -1018,8 +1017,8 @@ export function WelcomePage({ onComplete }: Props) {
                                 </p>
                                 <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
                                     Safari can clear site data after <strong>7 days of inactivity</strong>, and
-                                    clearing your browsing data erases your identity permanently.
-                                    Your 12 words on paper are the only backup that can't be wiped.
+                                    clearing your browsing data wipes your local session.
+                                    Your 12 words on paper are the only offline backup that can't be wiped.
                                 </p>
                             </div>
 

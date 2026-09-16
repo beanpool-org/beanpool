@@ -326,6 +326,15 @@ async function runSuite() {
     });
     assert(vote1.status === 200 && vote1.body.creditsUsed === 1, '1m1v vote uses exactly 1 credit');
 
+    // Vote without signature auth fails with 401
+    const unauthVote = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionMember.id}/vote`, {
+        body: {
+            voterPubkey: bob,
+            support: true,
+            voteCount: 1,
+        },
+    });
+    assert(unauthVote.status === 401, 'Vote without cryptographic signature fails with 401');
     // Charlie votes on quadratic pool decision: 3 votes = 9 credits
     const voteQ = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionPool.id}/vote`, {
         actor: charlie,

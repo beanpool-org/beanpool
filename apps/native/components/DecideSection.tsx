@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -13,6 +13,7 @@ import { palette } from '../constants/colors';
 import {
     type DecisionWithTally,
     castDecisionVote,
+    getGovernanceCredits,
 } from '../utils/db';
 
 interface Props {
@@ -44,6 +45,13 @@ export function DecideSection({
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
+    const [voiceCredits, setVoiceCredits] = useState<{ totalCredits: number; usedCredits: number; availableCredits: number } | null>(null);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
+        }
+    }, [identity?.publicKey]);
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -82,7 +90,13 @@ export function DecideSection({
         const count = selectedVoteCount[decision.id] || 1;
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
-            const available = balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
+            let available = voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
+            try {
+                const fresh = await getGovernanceCredits(identity.publicKey);
+                setVoiceCredits(fresh);
+                available = fresh.availableCredits ?? 0;
+            } catch { }
+
             if (cost > available) {
                 Alert.alert('Insufficient Credits', `Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
                 return;
@@ -99,6 +113,9 @@ export function DecideSection({
 
             if (res.success) {
                 Alert.alert('Vote Recorded', `Your ${support ? 'YES' : 'NO'} vote (${count} weight) has been cast.`);
+                if (identity?.publicKey) {
+                    getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
+                }
                 await onRefresh();
             } else {
                 Alert.alert('Voting Error', (res as any).error || 'Failed to record vote');
@@ -388,6 +405,10 @@ export function DecideSection({
         },
         stepperBtn: {
             padding: 4,
+            minWidth: 44,
+            minHeight: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         qvLabel: {
             fontSize: 12,
@@ -684,14 +705,16 @@ export function DecideSection({
                                         {item.franchise === 'quadratic_trade' && (
                                             <View style={styles.qvStepper}>
                                                 <Text style={styles.qvLabel}>
-                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
+                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel="Decrease vote count"
+                                                        accessibilityLabel="Decrease votes"
+                                                        accessibilityHint={`Decreases vote count from ${currentCount}`}
                                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }]}
+                                                        disabled={votingId === item.id || currentCount <= 1}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, (votingId === item.id || currentCount <= 1) && { opacity: 0.5 }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
@@ -703,9 +726,11 @@ export function DecideSection({
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        accessibilityLabel="Increase vote count"
+                                                        accessibilityLabel="Increase votes"
+                                                        accessibilityHint={`Increases vote count from ${currentCount}`}
                                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }]}
+                                                        disabled={votingId === item.id}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, votingId === item.id && { opacity: 0.5 }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,

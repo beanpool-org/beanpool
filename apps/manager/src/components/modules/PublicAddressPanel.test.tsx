@@ -496,5 +496,26 @@ describe('PublicAddressPanel Component', () => {
         expect(domainSpan).not.toBeNull();
         expect(domainSpan?.textContent).toBe('long-community-subdomain-overflow-test.beanpool.org');
     });
+
+    it('sets role="log", aria-live="polite", and aria-atomic="false" on propagation monitor terminal', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation(() => {
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ status: 'none', logs: [] }),
+            } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('propagation-monitor-terminal')).toBeInTheDocument();
+        });
+
+        const terminal = screen.getByTestId('propagation-monitor-terminal');
+        expect(terminal.getAttribute('role')).toBe('log');
+        expect(terminal.getAttribute('aria-live')).toBe('polite');
+        expect(terminal.getAttribute('aria-atomic')).toBe('false');
+    });
 });
 

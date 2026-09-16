@@ -591,6 +591,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
                 <div
                     ref={logTerminalRef}
+                    role="log"
+                    aria-live="polite"
+                    aria-atomic="false"
                     data-testid="propagation-monitor-terminal"
                     className="p-3.5 rounded-xl bg-[#090d16] border border-nature-800 font-mono text-xs max-h-52 overflow-y-auto space-y-1 text-nature-300"
                 >

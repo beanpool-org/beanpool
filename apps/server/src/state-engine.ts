@@ -2543,7 +2543,18 @@ export interface EscrowDisputeContext {
     status: string;
     createdAt: string;
     daysInEscrow: number;
+    daysStuck: number;
     isStalled: boolean;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    sellerCallsign?: string;
+    resolution?: EscrowDisputeAction | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+    disputeResolution?: EscrowDisputeAction | null;
+    disputeResolvedAt?: string | null;
+    disputeResolvedBy?: string | null;
     post: {
         id: string;
         title: string;
@@ -2554,7 +2565,7 @@ export interface EscrowDisputeContext {
         credits: number;
         authorPubkey: string;
         photos: string[];
-    };
+    } | null;
     parties: {
         buyer: {
             pubkey: string;
@@ -2571,6 +2582,15 @@ export interface EscrowDisputeContext {
         conversationId: string | null;
         messages: Message[];
     };
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
 }
 
 function mapDisputeRow(r: any): EscrowDisputeContext {
@@ -2599,6 +2619,16 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
         };
     }
 
+    const chatContext = (chat?.messages || []).map(m => ({
+        id: m.id,
+        senderPubkey: m.authorPubkey,
+        recipientPubkey: m.authorPubkey === r.buyer_pubkey ? r.seller_pubkey : r.buyer_pubkey,
+        senderCallsign: m.authorPubkey === r.buyer_pubkey ? (r.buyer_callsign || 'Buyer') : (m.authorPubkey === r.seller_pubkey ? (r.seller_callsign || 'Seller') : 'System'),
+        content: m.ciphertext,
+        createdAt: new Date(m.timestamp).getTime(),
+        type: m.type
+    }));
+
     return {
         id: r.id,
         postId: r.post_id,
@@ -2607,8 +2637,19 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
         status: r.status,
         createdAt: r.created_at,
         daysInEscrow,
+        daysStuck: Math.floor(daysInEscrow),
         isStalled,
-        post: {
+        buyerPubkey: r.buyer_pubkey,
+        sellerPubkey: r.seller_pubkey,
+        buyerCallsign: r.buyer_callsign || 'Anonymous',
+        sellerCallsign: r.seller_callsign || 'Anonymous',
+        resolution: r.dispute_resolution || null,
+        resolvedAt: r.dispute_resolved_at ? new Date(r.dispute_resolved_at).getTime() : null,
+        resolvedBy: r.dispute_resolved_by || null,
+        disputeResolution: r.dispute_resolution || null,
+        disputeResolvedAt: r.dispute_resolved_at || null,
+        disputeResolvedBy: r.dispute_resolved_by || null,
+        post: (r.post_title || r.post_id) ? {
             id: r.post_id,
             title: r.post_title || 'Untitled Post',
             description: r.post_description || '',
@@ -2618,7 +2659,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
             credits: r.post_credits ?? r.credits,
             authorPubkey: r.post_author_pubkey || r.seller_pubkey,
             photos
-        },
+        } : null,
         parties: {
             buyer: {
                 pubkey: r.buyer_pubkey,
@@ -2631,11 +2672,12 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
                 avatarUrl: r.seller_avatar_url || null
             }
         },
-        chat
+        chat,
+        chatContext
     };
 }
 
-export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0): EscrowDisputeContext[] {
+export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: 'all' | 'pending' | 'resolved' = 'all'): EscrowDisputeContext[] {
     let query = `
         SELECT mt.*,
                p.title AS post_title,
@@ -2650,12 +2692,14 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0): EscrowDi
                seller.callsign AS seller_callsign,
                seller.avatar_url AS seller_avatar_url
         FROM marketplace_transactions mt
-        JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
-        WHERE mt.status = 'pending'
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
     `;
-    const params: any[] = [];
+    const params: any[] = [status, status, status];
     if (minDays > 0) {
         query += ` AND (julianday('now') - julianday(mt.created_at)) >= ?`;
         params.push(minDays);
@@ -2682,7 +2726,7 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                seller.callsign AS seller_callsign,
                seller.avatar_url AS seller_avatar_url
         FROM marketplace_transactions mt
-        JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
         WHERE mt.id = ?

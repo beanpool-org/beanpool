@@ -580,7 +580,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
-        escrowDisputesCount: getEscrowDisputes(7).length,
+        escrowDisputesCount: (db.prepare(`
+            SELECT COUNT(*)
+            FROM marketplace_transactions
+            WHERE status = 'pending'
+              AND created_at <= datetime('now', '-7 days')
+        `).pluck().get() as number) || 0,
         memberStats: getMemberStats(),
     };
 });
@@ -1391,17 +1396,29 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
 
 router.get('/api/local/admin/disputes', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const minDaysParam = ctx.query.minDays;
-    const minDays = minDaysParam !== undefined ? Number(minDaysParam) : 7;
-    const limit = ctx.query.limit ? Number(ctx.query.limit) : 50;
-    const offset = ctx.query.offset ? Number(ctx.query.offset) : 0;
+    const minDays = !isNaN(Number(ctx.query.minDays)) ? Number(ctx.query.minDays) : 7;
+    const limit = !isNaN(Number(ctx.query.limit)) ? Math.max(1, Math.min(200, Number(ctx.query.limit))) : 50;
+    const offset = !isNaN(Number(ctx.query.offset)) ? Math.max(0, Number(ctx.query.offset)) : 0;
+    const status = (typeof ctx.query.status === 'string' && ['all', 'pending', 'resolved'].includes(ctx.query.status))
+        ? (ctx.query.status as 'all' | 'pending' | 'resolved')
+        : 'all';
 
-    const disputes = getEscrowDisputes(isNaN(minDays) ? 7 : minDays, limit, offset);
+    const total = (db.prepare(`
+        SELECT COUNT(*) FROM marketplace_transactions mt
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+          AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).pluck().get(status, status, status, minDays, minDays) as number) || 0;
+
+    const disputes = getEscrowDisputes(minDays, limit, offset, status);
     ctx.body = {
         disputes,
-        total: disputes.length,
+        total,
         count: disputes.length,
-        minDays: isNaN(minDays) ? 7 : minDays
+        minDays,
+        limit,
+        offset
     };
 });
 

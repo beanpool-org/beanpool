@@ -41,10 +41,18 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.state.adminRole = sessionRes.session.role;
             ctx.state.isKeySession = true;
 
-            // #133: CSRF validation for mutating requests if header provided
+            // #133: CSRF validation for mutating requests with cookie session (or if header provided)
+            const isMutatingMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(ctx.method?.toUpperCase());
+            const hasCookieSession = Boolean(ctx.cookies && typeof ctx.cookies.get === 'function' && ctx.cookies.get('admin_session'));
             const csrfHeader = (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
                 ctx.request?.headers?.['x-csrf-token'] || ctx.headers?.['x-csrf-token'];
-            if (csrfHeader && !validateCsrfToken(ctx)) {
+            if (hasCookieSession && isMutatingMethod) {
+                if (!csrfHeader || !validateCsrfToken(ctx)) {
+                    ctx.status = 403;
+                    ctx.body = { error: 'Invalid or missing CSRF token' };
+                    return false;
+                }
+            } else if (csrfHeader && !validateCsrfToken(ctx)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Invalid or expired CSRF token' };
                 return false;
@@ -52,10 +60,24 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 
             return true;
         } else {
-            // Presented an invalid, expired, or revoked key session token
-            ctx.status = 401;
-            ctx.body = { error: sessionRes.error || 'Invalid or expired admin session', sessionExpired: true };
-            return false;
+            const hasExplicitCreds =
+                (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
+                ctx.request?.headers?.['x-admin-password'] ||
+                ctx.headers?.['x-admin-password'] ||
+                ctx.request?.headers?.['x-break-glass-code'] ||
+                ctx.headers?.['x-break-glass-code'] ||
+                ctx.requestBody?.password ||
+                ctx.request?.body?.password ||
+                ctx.requestBody?.breakGlassCode ||
+                ctx.request?.body?.breakGlassCode;
+
+            if (hasExplicitCreds) {
+                if (ctx.cookies?.set) ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+            } else {
+                ctx.status = 401;
+                ctx.body = { error: sessionRes.error || 'Invalid or expired admin session', sessionExpired: true };
+                return false;
+            }
         }
     }
 
@@ -116,8 +138,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         return false;
     }
 
+    if (!ctx.state) ctx.state = {};
+    if (!ctx.state.adminRole) ctx.state.adminRole = 'owner';
     if (breakGlassOwner) {
-        if (!ctx.state) ctx.state = {};
         ctx.state.actor = breakGlassOwner;
         ctx.state.auth_signer = breakGlassOwner;
         ctx.state.isBreakGlassAuth = true;

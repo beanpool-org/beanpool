@@ -730,8 +730,11 @@ export function ApplianceSection({
 
                         {/* 80% Warning Banner */}
                         {effectiveDiskHealth && (effectiveDiskHealth.warning || effectiveDiskHealth.usedPercent >= 80) && (
-                            <div className="p-4 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex items-start gap-3">
-                                <span className="text-base leading-none">⚠️</span>
+                            <div
+                                role="alert"
+                                className="p-4 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex items-start gap-3"
+                            >
+                                <span className="text-base leading-none" aria-hidden="true">⚠️</span>
                                 <div>
                                     <span className="font-bold">High Disk Usage Warning:</span>
                                     <span className="ml-1 text-amber-300">
@@ -1450,7 +1453,9 @@ export function ApplianceSection({
                             <button
                                 type="button"
                                 onClick={() => setShowCleanModal(false)}
-                                className="text-nature-400 hover:text-white text-lg font-bold"
+                                disabled={cleaningStorage}
+                                aria-label="Close storage cleanup modal"
+                                className="w-11 h-11 flex items-center justify-center rounded-lg text-nature-400 hover:text-white text-lg font-bold disabled:opacity-40 disabled:pointer-events-none transition-colors"
                             >
                                 ✕
                             </button>

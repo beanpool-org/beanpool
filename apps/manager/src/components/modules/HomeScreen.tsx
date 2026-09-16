@@ -211,6 +211,8 @@ export function HomeScreen({
                 ) : (
                     <div
                         data-testid="unclean-shutdown-alert"
+                        role="alert"
+                        aria-live="assertive"
                         className="p-6 rounded-2xl bg-red-950/90 border-4 border-red-500 shadow-2xl space-y-3 animate-fade-in text-left"
                     >
                         <div className="flex items-start justify-between gap-4 flex-wrap">

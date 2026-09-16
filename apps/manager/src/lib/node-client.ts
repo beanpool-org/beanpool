@@ -1230,3 +1230,122 @@ export async function revokeRegistrarClaim(
     return res.json();
 }
 
+// ======================== REPLICATION TOKEN & ACCESS AUDIT ========================
+
+export interface ReplicationAccessEvent {
+    at: string;
+    ip: string;
+    auth: string;
+    reason?: string;
+}
+
+export interface ReplicationAccessData {
+    hasToken?: boolean;
+    tokenOnly?: boolean;
+    totalPulls?: number;
+    lastPullAt?: string | null;
+    lastPullIp?: string | null;
+    lastPullAuth?: string | null;
+    totalRejected?: number;
+    lastRejectedAt?: string | null;
+    lastRejectedIp?: string | null;
+    recent?: ReplicationAccessEvent[];
+    [key: string]: unknown;
+}
+
+export interface ReplicationTokenStatus {
+    hasToken: boolean;
+    tokenOnly: boolean;
+    createdAt?: string | null;
+}
+
+export async function getReplicationTokenStatus(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ReplicationTokenStatus> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/status');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function generateReplicationToken(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; token: string }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/generate');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function setReplicationTokenMode(
+    nodeUrl: string,
+    tokenOnly: boolean,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; tokenOnly: boolean }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/mode');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ tokenOnly, password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function clearReplicationToken(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/clear');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function getReplicationAccess(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ReplicationAccessData> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-access');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+

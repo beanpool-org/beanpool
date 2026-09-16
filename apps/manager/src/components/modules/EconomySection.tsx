@@ -1082,10 +1082,13 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                                 .map((m, idx) => {
                                                     const pk = normalizeKeeperPubkey(m);
                                                     const rawName = m.callsign || m.name || (m as { displayName?: string }).displayName;
-                                                    const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : (pk ? pk.slice(0, 10) : 'Member');
+                                                    const hasName = typeof rawName === 'string' && rawName.trim().length > 0;
+                                                    const label = hasName
+                                                        ? `@${rawName.trim().replace(/^@/, '')} (${pk ? `${pk.slice(0, 8)}...` : ''})`
+                                                        : (pk ? `Member (${pk.slice(0, 8)}...)` : 'Member');
                                                     return (
                                                         <option key={pk || `assign-member-${idx}`} value={pk}>
-                                                            @{name} ({pk ? `${pk.slice(0, 8)}...` : ''})
+                                                            {label}
                                                         </option>
                                                     );
                                                 });

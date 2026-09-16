@@ -934,5 +934,56 @@ describe('EconomySection Component', () => {
             expect(screen.getByText('Bakery Co-op')).toBeInTheDocument();
             expect(screen.getByText('@Baker Bob')).toBeInTheDocument();
         });
+
+        it('renders clean labels in member assign select dropdown without double-at or double-hash', async () => {
+            const testTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_select_test',
+                    name: 'Select Test Co-op',
+                    avatar: '🌾',
+                    balance: 10,
+                    creditLine: 50,
+                    liveOffers: 1,
+                    keepers: [],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(testTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue([]);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{
+                            members: [
+                                {
+                                    publicKey: '11112222333344445555',
+                                    callsign: '@alreadyAt',
+                                },
+                                {
+                                    publicKey: '66667777888899990000',
+                                },
+                            ],
+                        }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            // Open Manage Keepers modal
+            const manageBtn = screen.getByRole('button', { name: /manage/i });
+            await act(async () => {
+                fireEvent.click(manageBtn);
+            });
+
+            const select = screen.getByRole('combobox') as HTMLSelectElement;
+            const options = Array.from(select.options).map((o) => o.text);
+
+            expect(options).toContain('@alreadyAt (11112222...)');
+            expect(options).not.toContain('@@alreadyAt (11112222...)');
+            expect(options).toContain('Member (66667777...)');
+            expect(options).not.toContain('@6666777788 (66667777...)');
+        });
     });
 });

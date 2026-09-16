@@ -13,6 +13,13 @@ import {
     loginToNode,
     fetchNodeTreasuries,
     createNodeTreasury,
+    seedTreasuryOffer,
+    fetchTreasuryKeepers,
+    assignTreasuryKeeper,
+    revokeTreasuryKeeper,
+    fetchNodeRoles,
+    grantNodeRoleApi,
+    revokeNodeRoleApi,
     fetchNodeSnapshots,
     createNodeSnapshot,
     deleteNodeSnapshot,
@@ -432,6 +439,91 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             creditLine: 1000,
             password: 'adminpass',
         });
+    });
+
+    it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } }),
+        });
+
+        const res = await seedTreasuryOffer(
+            'https://node.example.com',
+            'treasury-pubkey-123',
+            { title: 'Farm Eggs', category: 'food', credits: 10, description: 'Fresh eggs', repeatable: true },
+            'adminpass',
+            'tfa123'
+        );
+
+        expect(res).toEqual({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/treasury/treasury-pubkey-123/offer');
+        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(JSON.parse((init as any).body)).toEqual({
+            title: 'Farm Eggs',
+            category: 'food',
+            credits: 10,
+            description: 'Fresh eggs',
+            repeatable: true,
+            password: 'adminpass',
+        });
+    });
+
+    it('fetchTreasuryKeepers, assignTreasuryKeeper, and revokeTreasuryKeeper send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1'] }),
+        });
+        await fetchTreasuryKeepers('https://node.example.com', 'treasury-1', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1', 'keeper-2'] }),
+        });
+        await assignTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1'] }),
+        });
+        await revokeTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+    });
+
+    it('fetchNodeRoles, grantNodeRoleApi, and revokeNodeRoleApi send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ roles: [] }),
+        });
+        await fetchNodeRoles('https://node.example.com', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await grantNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await revokeNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
     });
 
     it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {

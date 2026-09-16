@@ -139,6 +139,18 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         return { steps, failures, reentry, comparableReentry, protectionStates, countingSince, top };
     }, [rows, days]);
 
+    if (!active || profiles.length === 0) {
+        return (
+            <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in font-sans">
+                <span className="text-4xl opacity-50 grayscale" aria-hidden="true">🚪</span>
+                <h4 className="text-sm font-bold text-nature-300 m-0">No Node Profiles Available</h4>
+                <p className="text-xs text-nature-500 m-0 max-w-sm">
+                    Configure or select a sovereign node profile in Fleet Settings to inspect onboarding funnel metrics.
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6 animate-fade-in font-sans">
             <div className="flex flex-wrap items-center justify-between gap-4">

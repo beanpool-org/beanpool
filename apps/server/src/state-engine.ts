@@ -3932,7 +3932,15 @@ export { recordActivity };
 
 export function getNodeConfig(): NodeConfig {
     const row = db.prepare("SELECT value FROM node_config WHERE key='node_config'").get() as any;
-    const config: any = row ? JSON.parse(row.value) : {};
+    // Reliability fix: gracefully handle JSON parse errors on corrupted DB config values
+    let config: any = {};
+    if (row && row.value) {
+        try {
+            config = JSON.parse(row.value);
+        } catch {
+            config = {};
+        }
+    }
 
     let migrated = false;
     if ('publishToDirectory' in config || 'password' in config) {

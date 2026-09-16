@@ -37,11 +37,13 @@ import { ledger } from './engine/ledger.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
+    getBalance,
     getMember,
     setUserStatusRow,
     adminPruneUser,
     broadcast,
     isNodeAdmin,
+    isSoleOwner,
     persistDecayEvents,
     persistCommonsBalance,
 } from './state-engine.js';
@@ -183,6 +185,28 @@ export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
     return '1m1v';
 }
 
+export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
+    poll: 'nothing',
+    set_rule: 'rule',
+    set_levy: 'rule',
+    grant_enterprise: 'pool',
+    grant_hardship: 'pool',
+    write_off_deficit: 'pool',
+    suspend_member: 'member',
+    unsuspend_member: 'member',
+    freeze_credit: 'member',
+    unfreeze_credit: 'member',
+    remove_member: 'member',
+    reinstate_member: 'member',
+    grant_voucher: 'member',
+    revoke_voucher: 'member',
+    grant_tier: 'member',
+    revoke_tier: 'member',
+    grant_elder: 'member',
+    revoke_elder: 'member',
+    remove_lead_keeper: 'member',
+};
+
 /**
  * Returns required pass threshold per §3.4:
  * - remove_member: 66% (0.66)
@@ -190,16 +214,17 @@ export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
  * - pool / rule / member actions: 60% (0.60)
  * - poll (nothing): simple majority (> 0.50)
  */
-export function thresholdForEffect(effect: DecisionEffect, touches: DecisionTouch): number {
-    if (touches === 'nothing') return 0.50;
+export function thresholdForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.66;
     if (
         effect === 'unsuspend_member' ||
         effect === 'unfreeze_credit' ||
-        effect === 'reinstate_member'
+        effect === 'reinstate_member' ||
+        effect === 'poll'
     ) {
         return 0.50;
     }
+    if (touches === 'nothing') return 0.50;
     return 0.60;
 }
 
@@ -209,9 +234,9 @@ export function thresholdForEffect(effect: DecisionEffect, touches: DecisionTouc
  * - others: 30% (0.30)
  * - nothing (poll): 0 (no quorum)
  */
-export function quorumRatioForEffect(effect: DecisionEffect, touches: DecisionTouch): number {
-    if (touches === 'nothing') return 0;
+export function quorumRatioForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.25;
+    if (effect === 'poll' || touches === 'nothing') return 0;
     return 0.30;
 }
 
@@ -252,10 +277,10 @@ export function getActiveMembersCount30d(asOfTime?: number): number {
  * Computes required quorum for a decision:
  * quorum = max( K_min, ceil(ratio * activeMembers_30d) ), K_min = 3.
  */
-export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number): number {
+export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number, activeMembersCount?: number): number {
     if (decision.touches === 'nothing') return 0;
     const ratio = quorumRatioForEffect(decision.effect, decision.touches);
-    const active = getActiveMembersCount30d(asOfTime);
+    const active = activeMembersCount !== undefined ? activeMembersCount : getActiveMembersCount30d(asOfTime);
     return Math.max(3, Math.ceil(ratio * active));
 }
 
@@ -322,7 +347,7 @@ export function getDecisionVoiceCredits(decisionId: string, voterPubkey: string)
     return {
         totalCredits,
         usedCredits: currentCreditsUsed,
-        availableCredits: Math.max(0, totalCredits),
+        availableCredits: Math.max(0, totalCredits - currentCreditsUsed),
     };
 }
 
@@ -352,31 +377,33 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(check.error || 'Cannot propose decision');
     }
 
+    if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
+        throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
+    }
+
     const id = crypto.randomUUID();
     const franchise = franchiseForTouch(opts.touches);
     const now = new Date();
     const opensAt = now.toISOString();
     const closesAt = opts.closesAt || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    let params = opts.params !== undefined && opts.params !== null ? { ...opts.params } : {};
+    let finalParams = opts.params !== undefined && opts.params !== null ? { ...opts.params } : (opts.effect === 'remove_member' && opts.subject ? {} : opts.params);
     if (opts.effect === 'remove_member' && opts.subject) {
-        const acc = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(opts.subject) as { balance: number } | undefined;
-        const memberRow = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(opts.subject) as { callsign: string } | undefined;
-        const targetBal = acc?.balance ?? 0;
-        const debt = Math.abs(targetBal < 0 ? targetBal : 0);
-        const commonsBal = typeof getCommonsBalanceExact === 'function' ? Math.round(getCommonsBalanceExact()) : 0;
-        params = {
-            ...params,
-            memberName: params.memberName || memberRow?.callsign || opts.subject.slice(0, 8),
-            debt,
-            commonsPool: commonsBal,
-            balance: targetBal,
+        const member = getMember(opts.subject);
+        const accRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(opts.subject) as { balance: number } | undefined;
+        const memberBalance = accRow !== undefined ? accRow.balance : (getBalance(opts.subject)?.balance ?? 0);
+        const commonsPoolBal = getCommonsBalanceExact();
+        const memberName = member?.callsign || opts.params?.memberName || opts.subject.slice(0, 8);
+        const debt = memberBalance < 0 ? Math.abs(memberBalance) : 0;
+        finalParams = {
+            ...opts.params,
+            memberName,
+            debt, // Authoritatively computed from ledger
+            commonsPool: Math.round(commonsPoolBal), // Authoritatively computed from ledger
+            balance: memberBalance,
         };
     }
-
-    const serializedParams = (opts.params !== undefined && opts.params !== null) || Object.keys(params).length > 0
-        ? JSON.stringify(params)
-        : null;
+    const serializedParams = finalParams !== undefined && finalParams !== null ? JSON.stringify(finalParams) : null;
 
     db.prepare(`
         INSERT INTO decisions (
@@ -437,6 +464,9 @@ export function castDecisionVote(
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
     if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
+    if (new Date(decision.closesAt).getTime() <= Date.now()) {
+        return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
+    }
 
     const elig = checkVoterEligibility(voterPubkey);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
@@ -513,13 +543,13 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 /**
  * Tally votes for a decision.
  */
-export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
+export function tallyDecision(decisionId: string, asOfTime?: number, activeMembersCount?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
 
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
-    const quorumRequired = getQuorumRequired(decision, asOfTime);
+    const quorumRequired = getQuorumRequired(decision, asOfTime, activeMembersCount);
     const quorumMet = decision.touches === 'nothing' || totalVoters >= quorumRequired;
 
     let yesWeight = 0;
@@ -568,8 +598,18 @@ export function preflightAssert(decision: Decision): {
     if (decision.touches === 'member') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
         const member = getMember(decision.subject);
-        if (!member || member.status === 'pruned') {
+        if (decision.effect !== 'reinstate_member' && (!member || member.status === 'pruned')) {
             return { status: 'void', reason: 'Subject member does not exist or was already pruned' };
+        }
+        if (decision.effect === 'reinstate_member' && !member) {
+            return { status: 'void', reason: 'Subject member does not exist' };
+        }
+    }
+
+    if (decision.effect === 'remove_member' || decision.effect === 'suspend_member') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
+        if (isSoleOwner(decision.subject)) {
+            return { status: 'blocked', reason: 'Cannot remove or suspend sole node owner via community vote per §3.8' };
         }
     }
 
@@ -589,10 +629,10 @@ export function preflightAssert(decision: Decision): {
     }
 
     if (decision.effect === 'grant_hardship') {
-        if (!decision.subject) return { status: 'blocked', reason: 'Missing hardship recipient subject' };
-        const member = getMember(decision.subject);
-        if (!member || member.status === 'pruned') {
-            return { status: 'void', reason: 'Hardship recipient member does not exist or was pruned' };
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing hardship grant recipient' };
+        const recipient = getMember(decision.subject);
+        if (!recipient || recipient.status === 'pruned' || recipient.isTreasury) {
+            return { status: 'void', reason: 'Invalid or missing hardship recipient member' };
         }
         const amount = Number(decision.params?.amount);
         if (!amount || amount <= 0 || !Number.isFinite(amount)) {
@@ -600,6 +640,19 @@ export function preflightAssert(decision: Decision): {
         }
         if (getCommonsBalanceExact() < amount) {
             return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${amount}, available ${getCommonsBalanceExact().toFixed(2)}` };
+        }
+    }
+
+    if (decision.effect === 'write_off_deficit') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing enterprise subject' };
+        const enterprise = getMember(decision.subject);
+        if (!enterprise || !enterprise.isTreasury) {
+            return { status: 'void', reason: 'Subject enterprise does not exist or was archived' };
+        }
+        const entAccount = ledger.getAccount(decision.subject);
+        const deficit = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+        if (deficit > 0 && getCommonsBalanceExact() < deficit) {
+            return { status: 'insufficient_funds', reason: `Insufficient pool funds: requires ${deficit}, available ${getCommonsBalanceExact().toFixed(2)}` };
         }
     }
 
@@ -620,6 +673,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: true, status: decision.status };
     }
 
+    if (decision.status === 'admin_halted' || decision.status === 'failed' || decision.status === 'unresolved') {
+        return { success: false, status: decision.status, error: `Cannot execute decision in status ${decision.status}` };
+    }
+
     const preflight = preflightAssert(decision);
     const now = new Date().toISOString();
 
@@ -632,6 +689,18 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     }
 
     if (preflight.status === 'insufficient_funds') {
+        const existingQueued = (db.prepare(
+            "SELECT COUNT(*) as c FROM decisions WHERE status = 'passed_queued_for_funds' AND id != ?"
+        ).get(decisionId) as any)?.c || 0;
+
+        if (existingQueued >= 1) {
+            db.prepare(
+                "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
+            ).run(now, decisionId);
+            broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+            return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
+        }
+
         db.prepare(
             "UPDATE decisions SET status = 'passed_queued_for_funds', execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Queued for pool funds', now, decisionId);
@@ -678,6 +747,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     // Reversible state flips and money movements: single atomic commit
     try {
         let alreadyExecuted = false;
+        const cancelledDecisionIds: string[] = [];
+
         conservingTransaction(() => {
             // Re-verify status under write lock to guard against concurrent execution
             const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
@@ -698,6 +769,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     setUserStatusRow(decision.subject!, 'active');
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
                     // Cancel any pending removal grace periods for this subject
+                    const cancelledDecisions = db.prepare(
+                        "SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
+                    ).all(decision.subject!) as any[];
+
                     db.prepare(`
                         UPDATE decisions SET
                             status = 'failed',
@@ -705,6 +780,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                             updated_at = ?
                         WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
                     `).run(now, decision.subject!);
+
+                    for (const cd of cancelledDecisions) {
+                        cancelledDecisionIds.push(cd.id);
+                    }
                     break;
                 }
                 case 'freeze_credit': {
@@ -814,9 +893,31 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     persistCommonsBalance();
                     break;
                 }
+                case 'write_off_deficit': {
+                    const entPubkey = decision.subject!;
+                    const entAccount = ledger.getAccount(entPubkey);
+                    if (entAccount && entAccount.balance < 0) {
+                        const deficit = Math.abs(entAccount.balance);
+                        if (!ledger.deductFromCommons(deficit)) {
+                            throw new Error('Insufficient commons funds to write off deficit');
+                        }
+                        entAccount.balance = 0;
+                        db.prepare(`
+                            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                            VALUES (?, 0, ?, ?)
+                            ON CONFLICT(public_key) DO UPDATE SET balance = 0, last_updated_at = excluded.last_updated_at
+                        `).run(entPubkey, entAccount.lastDemurrageEpoch, now);
+                        db.prepare(`
+                            INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer)
+                            VALUES (?, 'COMMONS_POOL', ?, ?, ?, ?, ?)
+                        `).run(crypto.randomUUID(), entPubkey, deficit, `Deficit write-off: ${decision.title.slice(0, 80)}`, now, authSigner);
+                        persistDecayEvents();
+                        persistCommonsBalance();
+                    }
+                    break;
+                }
                 case 'poll':
                 case 'set_rule':
-                case 'write_off_deficit':
                 case 'set_levy':
                     // Rule updates or parameter updates
                     break;
@@ -837,6 +938,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         if (alreadyExecuted) {
             const current = getDecision(decisionId);
             return { success: true, status: current?.status || 'executed' };
+        }
+
+        for (const cid of cancelledDecisionIds) {
+            broadcast({ type: 'decision_updated', decision: getDecision(cid)! });
         }
 
         if (decision.subject) {
@@ -892,7 +997,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         }
     });
 
-    if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
+    if (decision.subject) {
         broadcast({ type: 'profile_updated', publicKey: decision.subject });
     }
     broadcast({ type: 'decision_halted', decisionId, adminPubkey, reason });
@@ -952,16 +1057,25 @@ export function tickDecisions(asOfTime?: number): {
     let graceExpired = 0;
     let queuedEvaluated = 0;
 
-    // 1. Close open decisions whose window expired
+    // 1. Close open decisions whose window expired, or retry stranded passed decisions
     const openExpired = db.prepare(
-        "SELECT * FROM decisions WHERE status = 'open' AND closes_at <= ? ORDER BY closes_at ASC"
+        "SELECT * FROM decisions WHERE status IN ('open', 'passed') AND closes_at <= ? ORDER BY closes_at ASC"
     ).all(nowIso) as any[];
 
     for (const r of openExpired) {
         evaluated++;
         try {
-            const tally = tallyDecision(r.id, asOfTime);
             const now = new Date().toISOString();
+
+            if (r.status === 'passed') {
+                const res = executeDecision(r.id);
+                if (res.success && res.status === 'executed') {
+                    executed++;
+                }
+                continue;
+            }
+
+            const tally = tallyDecision(r.id, asOfTime);
 
             if (!tally.quorumMet) {
                 db.prepare(`
@@ -1080,8 +1194,15 @@ export function tickDecisions(asOfTime?: number): {
             `).run(now.toISOString(), top.id);
             broadcast({ type: 'decision_updated', decision: getDecision(top.id)! });
         } else {
-            const amount = Number(JSON.parse(top.params || '{}')?.amount || 0);
-            if (amount > 0 && getCommonsBalanceExact() >= amount) {
+            let requiredAmount = 0;
+            if (top.effect === 'write_off_deficit' && top.subject) {
+                const entAccount = ledger.getAccount(top.subject);
+                requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+            } else {
+                requiredAmount = Number(JSON.parse(top.params || '{}')?.amount || 0);
+            }
+
+            if (requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
                 const res = executeDecision(top.id);
                 if (res.success && res.status === 'executed') {
                     executed++;

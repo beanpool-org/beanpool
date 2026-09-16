@@ -56,11 +56,11 @@ async function main() {
     const res = closeVotingRound(round.id);
 
     assert(res.success && res.winner?.id === winnerProj.id, 'A2-5: winner chosen by vote WEIGHT (5), not voter count (loser had 2 voters)');
-    assert(dbBalance(prop1) === 100, 'A2-5: proposer credited in the DB (durable), not just in memory');
-    assert(getBalance(prop1).balance === dbBalance(prop1), 'A2-5: in-memory ledger == DB for the proposer (no desync)');
+    assert(dbBalance(winnerProj.id) === 100, 'A2-5: enterprise credited in the DB (durable), not just in memory');
+    assert(getBalance(winnerProj.id).balance === dbBalance(winnerProj.id), 'A2-5: in-memory ledger == DB for the enterprise (no desync)');
 
-    const tx = db.prepare(`SELECT * FROM transactions WHERE from_pubkey='COMMONS_POOL' AND to_pubkey=? AND amount=100`).get(prop1) as any;
-    assert(!!tx, 'A2-5: a COMMONS_POOL→proposer transaction row was recorded (auditable)');
+    const tx = db.prepare(`SELECT * FROM transactions WHERE from_pubkey='COMMONS_POOL' AND to_pubkey=? AND amount=100`).get(winnerProj.id) as any;
+    assert(!!tx, 'A2-5: a COMMONS_POOL→enterprise transaction row was recorded (auditable)');
 
     assert(Math.abs(getBalance('COMMONS_POOL').commonsBalance - (commonsBefore - 100)) < 1e-9, 'A2-5: commons balance debited by the grant (conservation)');
     assert(dbBalance(loserProj.id) === 0 && dbBalance(prop2) === 0, 'A2-5: the losing project / proposer received nothing');

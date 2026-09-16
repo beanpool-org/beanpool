@@ -17,10 +17,13 @@ import {
     createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
     getBalance, moveToCommons, conservingTransaction,
     sweepEnterpriseCeiling,
+    getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
+    pledgeEnterpriseBacking, releaseEnterpriseBacking,
 } from '../state-engine.js';
-import { db } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
+import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import type { RouteDeps } from './types.js';
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
@@ -102,8 +105,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // ---- Public transparency reads ------------------------------------------------------
     const listTreasuriesHandler = async (ctx: any) => {
+        const includeBounded = ctx.query?.includeBounded === 'true';
+        const whereClause = includeBounded
+            ? "is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
+            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND status NOT IN ('pruned', 'deleted')";
         const rows = db.prepare(
-            "SELECT public_key, callsign, avatar_url, earned_credit, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE is_treasury=1 ORDER BY callsign COLLATE NOCASE"
+            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -112,6 +119,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = {
             treasuries: rows.map(r => {
                 const b = getBalance(r.public_key);
+                const floorInfo = getEnterpriseFloor(r.public_key);
                 // #143 step 3: a federation link is an enterprise, so it appears in this list like any
                 // other — but it carries a SECOND number that must never be added to its balance. The
                 // energy balance is the `bridge_<peer>` tab: what the two communities owe each other, and
@@ -119,18 +127,32 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 // enterprise, which serialises to an absent field — same thing to a client as the null the
                 // detail read returns.
                 const link = linksByTreasury.get(r.public_key);
+                let currentAmount: number | null = null;
+                if (r.goal_amount != null) {
+                    const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(r.public_key) as any;
+                    const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${r.public_key}`) as any)?.balance || 0;
+                    currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
+                }
                 return {
                     publicKey: r.public_key, name: r.callsign,
+                    callsign: r.callsign,
                     avatar: r.avatar_url
                         ? (r.avatar_url.startsWith('bundled://')
                             ? r.avatar_url
                             : `/api/avatar/${r.public_key}?size=thumb`)
                         : null,
-                    balance: b.balance, creditLine: r.earned_credit, liveOffers: b.liveOffers,
+                    avatarUrl: r.avatar_url,
+                    balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+                    allowance: floorInfo.allowance,
+                    derivedAllowance: floorInfo.derivedAllowance,
+                    legacyFloor: floorInfo.legacyFloor,
+                    legacyCreditFloor: floorInfo.legacyFloor,
+                    liveOffers: b.liveOffers,
                     earnedSurplus: r.earned_surplus ?? 0,
                     workingCapitalCeiling: r.working_capital_ceiling ?? null,
                     purpose: r.purpose ?? null,
                     goalAmount: r.goal_amount != null ? Number(r.goal_amount) : null,
+                    currentAmount,
                     deadlineAt: r.deadline_at ?? null,
                     lifecycle: r.lifecycle ?? 'ongoing',
                     status: r.status ?? 'active',
@@ -138,6 +160,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
+                    pledges: getEnterprisePledges(r.public_key),
                     link: link && linkShape(link),
                 };
             }),
@@ -148,9 +171,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
+        const floorInfo = getEnterpriseFloor(treasury);
         const posts = db.prepare(
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') ORDER BY created_at DESC"
         ).all(treasury) as any[];
@@ -194,19 +218,33 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ORDER BY t.created_at DESC
             LIMIT 50
         `).all(treasury, treasury, treasury, treasury) as any[]) : [];
+        let currentAmount: number | null = null;
+        if (m.goal_amount != null) {
+            const pRow = db.prepare("SELECT current_amount FROM projects WHERE id = ?").get(treasury) as any;
+            const escBal = (db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(`escrow_${treasury}`) as any)?.balance || 0;
+            currentAmount = Math.max(Number(pRow?.current_amount || 0), Number(escBal));
+        }
+
         ctx.body = {
             publicKey: treasury, name: m.callsign,
+            callsign: m.callsign,
             avatar: m.avatar_url
                 ? (m.avatar_url.startsWith('bundled://')
                     ? m.avatar_url
                     : `/api/avatar/${treasury}?size=thumb`)
                 : null,
+            avatarUrl: m.avatar_url,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
+            allowance: floorInfo.allowance,
+            derivedAllowance: floorInfo.derivedAllowance,
+            legacyFloor: floorInfo.legacyFloor,
+            legacyCreditFloor: floorInfo.legacyFloor,
             liveOffers: b.liveOffers, posts, flow, pendingBids, activeDeals,
             earnedSurplus: m.earned_surplus ?? 0,
             workingCapitalCeiling: m.working_capital_ceiling ?? null,
             purpose: m.purpose ?? null,
             goalAmount: m.goal_amount != null ? Number(m.goal_amount) : null,
+            currentAmount,
             deadlineAt: m.deadline_at ?? null,
             lifecycle: m.lifecycle ?? 'ongoing',
             status: m.status ?? 'active',
@@ -215,6 +253,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
+            pledges: getEnterprisePledges(treasury),
+            availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
             link: linkDetail(treasury),
         };
@@ -222,15 +262,62 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/treasury/:treasury', getTreasuryHandler);
     router.get('/api/enterprise/:treasury', getTreasuryHandler);
 
-    // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
-    const createEnterpriseHandler = async (ctx: any) => {
-        const body = (ctx as any).requestBody || {};
+    const crowdfundPledgeHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
             ctx.body = { error: 'Authentication required' };
             return;
         }
+        if (statusOf(treasury) !== 'active') {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            return;
+        }
+        if (statusOf(actor) !== 'active') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only active community members can pledge.' };
+            return;
+        }
+        if (blockCrossNodeSettlement(ctx, actor)) return;
+
+        const body = (ctx as any).requestBody || {};
+        const { amount, memo } = body;
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            ctx.status = 400;
+            ctx.body = { error: 'A positive amount is required' };
+            return;
+        }
+        try {
+            const txId = crypto.randomUUID();
+            pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
+            deps.broadcast?.({ type: 'project_updated', project: getCrowdfundProject(treasury) });
+            ctx.body = { success: true, txId };
+        } catch (err: any) {
+            ctx.status = 400;
+            ctx.body = { error: err.message };
+        }
+    };
+
+    // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
+    const createEnterpriseHandler = async (ctx: any) => {
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+
+        const memberStatus = statusOf(actor);
+        if (memberStatus !== 'active') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only active community members can create an enterprise' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
         const enterpriseName = String(name || title || '').trim();
         if (!enterpriseName || enterpriseName.length < 2) {
@@ -246,12 +333,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
 
         try {
-            // Enforce zero creditLine for self-serve creation;
-            // credit lines may only be allocated via admin routes or community decisions
             const res = createTreasury(
                 enterpriseName,
                 photoUrl || '',
-                0,
+                0, // Member-created enterprises must start with 0 credit line (Rule 1)
                 {
                     systemCreated: !photoUrl,
                     workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,
@@ -301,7 +386,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Admin (password-gated) ---------------------------------------------------------
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        const { name, avatar, creditLine, workingCapitalCeiling } = (ctx as any).requestBody || {};
+        const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
         try {
             ctx.body = {
@@ -310,7 +395,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     String(name),
                     String(avatar),
                     Number(creditLine) || 0,
-                    { workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null }
+                    {
+                        workingCapitalCeiling: workingCapitalCeiling !== undefined && workingCapitalCeiling !== null ? Number(workingCapitalCeiling) : null,
+                        purpose: purpose ? String(purpose) : undefined,
+                    }
                 ),
             };
         } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }
@@ -537,6 +625,141 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
     });
+
+    // ---- Backing pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4) ----------------
+    // Get active backing pledges for an enterprise
+    const getPledgesHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const actor = ctx.state?.actor;
+        const floorInfo = getEnterpriseFloor(treasury);
+        ctx.body = {
+            pledges: getEnterprisePledges(treasury),
+            floor: floorInfo.floor,
+            allowance: floorInfo.allowance,
+            derivedAllowance: floorInfo.derivedAllowance,
+            legacyFloor: floorInfo.legacyFloor,
+            availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
+        };
+    };
+    router.get('/api/treasury/:treasury/pledges', getPledgesHandler);
+    router.get('/api/treasury/:treasury/backing', getPledgesHandler);
+
+    // Pledge backing from a keeper's earned credit
+    const backingPledgeHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireOperator(ctx, treasury);
+        if (!actor) return;
+        const { amount } = (ctx as any).requestBody || {};
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            ctx.status = 400;
+            ctx.body = { error: 'amount must be a positive number' };
+            return;
+        }
+        try {
+            const pledge = pledgeEnterpriseBacking(treasury, actor, parsedAmount);
+            const floorInfo = getEnterpriseFloor(treasury);
+            ctx.body = {
+                success: true,
+                pledge,
+                floor: floorInfo.floor,
+                allowance: floorInfo.allowance,
+                derivedAllowance: floorInfo.derivedAllowance,
+                legacyFloor: floorInfo.legacyFloor,
+                availableToBack: getAvailableBacking(actor, treasury),
+            };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to pledge backing' };
+        }
+    };
+
+    // Unified pledge handler: dispatches to crowdfund pledge or keeper backing pledge
+    const pledgeDispatchHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const body = (ctx as any).requestBody || {};
+        if (body.type === 'backing') {
+            return backingPledgeHandler(ctx);
+        }
+        if (body.memo !== undefined) {
+            return crowdfundPledgeHandler(ctx);
+        }
+        const ent = db.prepare('SELECT goal_amount, lifecycle FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
+        if (ent && ent.goal_amount != null) {
+            return crowdfundPledgeHandler(ctx);
+        }
+        return backingPledgeHandler(ctx);
+    };
+
+    router.post('/api/treasury/:treasury/pledge', pledgeDispatchHandler);
+    router.post('/api/enterprise/:treasury/pledge', pledgeDispatchHandler);
+    router.post('/api/treasury/:treasury/backing', backingPledgeHandler);
+    router.post('/api/enterprise/:treasury/backing', backingPledgeHandler);
+
+    // Release backing pledge (gated by keepership or active pledge, and deficit covenant)
+    const releaseHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Not a treasury' };
+            return;
+        }
+        const actor = ctx.state?.actor;
+        if (!actor) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            return;
+        }
+
+        const isOp = canOperateTreasury(actor, treasury);
+        const hasActivePledge = !!db.prepare(
+            "SELECT 1 FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL"
+        ).get(treasury, actor);
+
+        if (!isOp && !hasActivePledge) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not an authorized keeper or pledge holder of this enterprise' };
+            return;
+        }
+
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
+
+        const { amount } = (ctx as any).requestBody || {};
+        const parsedAmount = (amount !== undefined && amount !== null) ? Number(amount) : undefined;
+        if (parsedAmount !== undefined && (!Number.isFinite(parsedAmount) || parsedAmount <= 0)) {
+            ctx.status = 400;
+            ctx.body = { error: 'amount must be a positive number' };
+            return;
+        }
+        try {
+            const res = releaseEnterpriseBacking(treasury, actor, parsedAmount);
+            const floorInfo = getEnterpriseFloor(treasury);
+            ctx.body = {
+                success: true,
+                releasedAmount: res.releasedAmount,
+                remainingPledge: res.remainingPledge,
+                floor: floorInfo.floor,
+                allowance: floorInfo.allowance,
+                derivedAllowance: floorInfo.derivedAllowance,
+                legacyFloor: floorInfo.legacyFloor,
+                availableToBack: getAvailableBacking(actor, treasury),
+            };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to release backing' };
+        }
+    };
+    router.post('/api/treasury/:treasury/release', releaseHandler);
+    router.delete('/api/treasury/:treasury/pledge', releaseHandler);
+    router.post('/api/treasury/:treasury/pledge/release', releaseHandler);
+    router.delete('/api/treasury/:treasury/backing', releaseHandler);
+    router.post('/api/treasury/:treasury/backing/release', releaseHandler);
 
     return router;
 }

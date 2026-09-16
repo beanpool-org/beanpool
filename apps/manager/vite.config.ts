@@ -2,13 +2,29 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
 
+const isFleetMode = process.env.VITE_FLEET_MODE === 'true';
+
 export default defineConfig({
-    base: './',
+    base: isFleetMode ? './' : '/settings/',
     build: {
-        outDir: '../server/public/manager',
+        outDir: isFleetMode ? '../server/public/manager' : '../server/public/settings',
         emptyOutDir: true,
     },
-    plugins: [react()],
+    define: {
+        __FLEET_MODE__: JSON.stringify(isFleetMode),
+    },
+    plugins: [
+        react(),
+        {
+            name: 'html-branding-transform',
+            transformIndexHtml(html) {
+                if (isFleetMode) {
+                    return html.replace(/<title>(.*?)<\/title>/, '<title>BeanPool Fleet Manager — Control Plane</title>');
+                }
+                return html.replace(/<title>(.*?)<\/title>/, '<title>BeanPool — Node Settings</title>');
+            },
+        },
+    ],
     resolve: {
         alias: {
             '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),

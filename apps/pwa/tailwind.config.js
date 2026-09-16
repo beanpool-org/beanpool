@@ -69,7 +69,11 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-      }
+      },
+      spacing: {
+        'nav-height': 'var(--bottom-nav-height)',
+        'nav-offset': 'var(--bottom-nav-offset)',
+      },
     },
   },
   plugins: [],

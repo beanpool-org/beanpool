@@ -32,8 +32,8 @@ import {
     createCrowdfundProject, pledgeToProject, migrateProjectsAndCommonsToEnterprises,
 } from './db/db.js';
 import {
+    getAllProjects, getProjects, createProject, deleteProject,
     initStateEngine, reconcileLedgerFromDb, getBalance,
-    getAllProjects, getProjects, createProject,
 } from './state-engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -206,20 +206,21 @@ async function runTests() {
     const testProject = 'proj_' + crypto.randomUUID().slice(0, 12);
 
     const nowEpoch = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'creator_test', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'backer_test', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testCreator, 'cr_' + testCreator.slice(8, 16));
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(testBacker, 'bk_' + testBacker.slice(8, 16));
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`).run(testCreator, nowEpoch);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 500, ?)`).run(testBacker, nowEpoch);
     reconcileLedgerFromDb();
 
     // Create crowdfund project (goal = 200)
-    createCrowdfundProject(testProject, testCreator, 'Community Tool Shed', 'Shared workshop tools', ['https://example.com/shed.png'], 200, null);
+    const projectTitle = 'Community Tool Shed ' + testProject.slice(5, 11);
+    createCrowdfundProject(testProject, testCreator, projectTitle, 'Shared workshop tools', ['https://example.com/shed.png'], 200, null);
 
     // Verify getters return unified enterprise
     const cfProjects = getCrowdfundProjects();
     const foundProject = cfProjects.find(p => p.id === testProject);
     testAssert(!!foundProject, 'getCrowdfundProjects returns newly created project');
-    testAssert(foundProject?.title === 'Community Tool Shed', 'Project title matches');
+    testAssert(foundProject?.title === projectTitle, 'Project title matches');
     testAssert(foundProject?.goal_amount === 200, 'Project goal amount matches');
 
     const singleProject = getCrowdfundProject(testProject);
@@ -258,10 +259,31 @@ async function runTests() {
     testAssert(sweepTx.to_pubkey === testProject, 'Sweep transaction to_pubkey is the enterprise account');
     testAssert(sweepTx.amount === 200, 'Sweep transaction amount is 200');
 
+    // Verify current_amount does not double-count sweeps (Comment 1)
+    const singleProjectAfter = getCrowdfundProject(testProject);
+    testAssert(singleProjectAfter?.current_amount === 200, 'current_amount does not double-count sweeps (exactly 200, not 400)');
+
+    // Verify Commons proposal can receive direct pledges via fallback (Comment 5)
+    const commonsProp = createProject(testCreator, 'Solar Battery Initiative', 'Power backup', 150);
+    testAssert(!!commonsProp, 'Commons proposal created successfully');
+    if (!commonsProp) throw new Error('createProject returned null');
+    const propPledgeTxId = 'pledge_prop_' + crypto.randomUUID();
+    pledgeToProject(propPledgeTxId, commonsProp.id, testBacker, 50, 'Pledge to commons proposal');
+    reconcileLedgerFromDb();
+    testAssert(getBalance(`escrow_${commonsProp.id}`).balance === 50, 'Escrow holds 50 beans for commons proposal');
+    const commonsPropProject = getCrowdfundProject(commonsProp.id);
+    testAssert(commonsPropProject?.current_amount === 50, 'Bounded commons proposal resolves in getCrowdfundProject with current_amount 50');
+
     // Verify ledger conservation
     const sumAfter = (db.prepare('SELECT COALESCE(SUM(balance), 0) as s FROM accounts').get() as any).s;
     testAssert(Math.abs(sumAfter - (sumBefore + 600)) < 1e-9, 'Ledger conservation strictly preserved (delta = seeded 600)');
 
+    // Test deleteProject does not resurrect in getAllProjects
+    const delProj = createProject(testCreator, 'Delete Me Project', 'Will be pruned', 100);
+    testAssert(!!delProj && getAllProjects().some(p => p.id === delProj.id), 'Created project visible in getAllProjects');
+    const delSuccess = deleteProject(testCreator, delProj!.id);
+    testAssert(delSuccess, 'deleteProject succeeded');
+    testAssert(!getAllProjects().some(p => p.id === delProj!.id), 'Pruned project does not resurrect in getAllProjects');
     console.log(`\n🎉 ${testsPassed}/${testsRun} checks passed.`);
     console.log('⭐️ Project == Enterprise migration and unification tests ALL PASSED.');
 }

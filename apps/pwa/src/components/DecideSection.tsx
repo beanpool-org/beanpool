@@ -134,8 +134,12 @@ export function DecideSection({
             )}
 
             {/* View Switcher: Open Decisions vs History */}
-            <div className="flex gap-2">
+            <div role="tablist" aria-label="Decisions view" className="flex gap-2">
                 <button
+                    role="tab"
+                    id="tab-open-decisions"
+                    aria-selected={activeView === 'open'}
+                    aria-controls="panel-open-decisions"
                     onClick={() => onChangeView('open')}
                     className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all ${
                         activeView === 'open'
@@ -152,6 +156,10 @@ export function DecideSection({
                 </button>
 
                 <button
+                    role="tab"
+                    id="tab-history-decisions"
+                    aria-selected={activeView === 'history'}
+                    aria-controls="panel-history-decisions"
                     onClick={() => onChangeView('history')}
                     className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all ${
                         activeView === 'history'
@@ -165,7 +173,7 @@ export function DecideSection({
 
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
-                <>
+                <div role="tabpanel" id="panel-open-decisions" aria-labelledby="tab-open-decisions" className="space-y-4">
                     {/* Propose Action Banner */}
                     <div className="bg-nature-900 border border-nature-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                         <div>
@@ -289,7 +297,14 @@ export function DecideSection({
                                                         {tally.quorumMet ? 'Quorum Met ✅' : 'Pending Quorum'}
                                                     </span>
                                                 </div>
-                                                <div className="h-2 bg-nature-800 rounded-full overflow-hidden">
+                                                <div
+                                                    role="progressbar"
+                                                    aria-valuenow={Math.min(100, quorumPct)}
+                                                    aria-valuemin={0}
+                                                    aria-valuemax={100}
+                                                    aria-label="Quorum progress"
+                                                    className="h-2 bg-nature-800 rounded-full overflow-hidden"
+                                                >
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-300 ${tally.quorumMet ? 'bg-emerald-500' : 'bg-sky-500'}`}
                                                         style={{ width: `${quorumPct}%` }}
@@ -307,7 +322,14 @@ export function DecideSection({
                                                         Threshold required: {thresholdPct}%
                                                     </span>
                                                 </div>
-                                                <div className="h-2 bg-nature-800 rounded-full overflow-hidden">
+                                                <div
+                                                    role="progressbar"
+                                                    aria-valuenow={Math.min(100, supportPct)}
+                                                    aria-valuemin={0}
+                                                    aria-valuemax={100}
+                                                    aria-label="Support progress"
+                                                    className="h-2 bg-nature-800 rounded-full overflow-hidden"
+                                                >
                                                     <div
                                                         className={`h-full rounded-full transition-all duration-300 ${tally.passed ? 'bg-emerald-500' : 'bg-amber-500'}`}
                                                         style={{ width: `${supportPct}%` }}
@@ -321,7 +343,7 @@ export function DecideSection({
                                             {item.franchise === 'quadratic_trade' && (
                                                 <div className="flex items-center justify-between bg-nature-800/60 border border-nature-700/60 rounded-xl px-3 py-2 text-xs">
                                                     <span className="text-nature-300 font-medium">
-                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {voiceCredits?.availableCredits ?? 0})
+                                                        Vote Count: <strong className="text-white">{currentCount}</strong> (Cost: <strong className="text-emerald-400">{currentCount * currentCount} cr</strong> · Available: {voiceCredits?.availableCredits ?? balanceInfo?.qualifiedValue ?? balanceInfo?.earnedCredit ?? 0})
                                                     </span>
                                                     <div className="flex items-center gap-2">
                                                         <button
@@ -330,7 +352,7 @@ export function DecideSection({
                                                                 ...prev,
                                                                 [item.id]: Math.max(1, (prev[item.id] || 1) - 1),
                                                             }))}
-                                                            className="w-7 h-7 rounded-lg bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
+                                                            className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Decrease votes"
                                                         >
                                                             -
@@ -341,7 +363,7 @@ export function DecideSection({
                                                                 ...prev,
                                                                 [item.id]: (prev[item.id] || 1) + 1,
                                                             }))}
-                                                            className="w-7 h-7 rounded-lg bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
+                                                            className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Increase votes"
                                                         >
                                                             +
@@ -375,12 +397,12 @@ export function DecideSection({
                             })}
                         </div>
                     )}
-                </>
+                </div>
             )}
 
             {/* DECISIONS HISTORY VIEW */}
             {activeView === 'history' && (
-                <div className="space-y-4">
+                <div role="tabpanel" id="panel-history-decisions" aria-labelledby="tab-history-decisions" className="space-y-4">
                     {/* Filters */}
                     <div className="flex flex-wrap gap-2">
                         {(['all', 'executed', 'failed', 'void'] as const).map(f => (

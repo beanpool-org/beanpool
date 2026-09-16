@@ -33,6 +33,63 @@ export interface GatewayConfig {
     };
 }
 
+export interface NodeHealthFlag {
+    id?: string;
+    type?: string;
+    description?: string;
+    severity?: 'critical' | 'alert' | 'warning' | 'info' | string;
+    [key: string]: unknown;
+}
+
+export interface NodeReport {
+    id?: string;
+    targetPubkey?: string;
+    target_pubkey?: string;
+    reporterPubkey?: string;
+    reporter_pubkey?: string;
+    reason?: string;
+    severity?: string;
+    status?: string;
+    [key: string]: unknown;
+}
+
+export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
+
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    callsign?: string;
+    tier?: string;
+    standing?: string;
+    canVouch?: boolean;
+    canOperate?: boolean;
+    creditFrozen?: boolean;
+    isFrozen?: boolean;
+    nodeRole?: MemberNodeRole | null;
+    isTreasury?: boolean;
+    [key: string]: unknown;
+}
+
+export interface NodeDataPayload {
+    health?: {
+        healthScore?: number;
+        flags?: NodeHealthFlag[];
+        [key: string]: unknown;
+    };
+    reports?: NodeReport[];
+    members?: MemberItem[];
+    profiles?: Record<string, unknown>[];
+    posts?: unknown[];
+    reportCount?: number;
+    memberStats?: Record<string, unknown>;
+    tradeVolume?: number;
+    circulation?: number;
+    commonsBalance?: number;
+    enterprises?: unknown[];
+    [key: string]: unknown;
+}
+
 export function normalizeNodeUrl(rawUrl: string): string {
     let trimmed = (rawUrl || '').trim();
     if (!trimmed) return 'https://localhost:8443';
@@ -364,7 +421,107 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
+export function normalizeKeeperPubkey(keeper: unknown): string {
+    if (typeof keeper === 'string') return keeper;
+    if (typeof keeper === 'object' && keeper !== null) {
+        const obj = keeper as { publicKey?: unknown; pubkey?: unknown };
+        if (typeof obj.publicKey === 'string') return obj.publicKey;
+        if (typeof obj.pubkey === 'string') return obj.pubkey;
+    }
+    return '';
+}
+
+export function normalizeKeepers(rawKeepers: unknown): string[] {
+    if (!Array.isArray(rawKeepers)) return [];
+    return rawKeepers.map(normalizeKeeperPubkey).filter(Boolean);
+}
+
+export function normalizeNodeData(raw: unknown): NodeDataPayload {
+    if (!raw || typeof raw !== 'object') {
+        return {};
+    }
+    const data = raw as Record<string, unknown>;
+    const result: NodeDataPayload = { ...data };
+
+    if (data.members !== undefined) {
+        result.members = Array.isArray(data.members)
+            ? data.members.map((m: any) => {
+                if (!m || typeof m !== 'object') return { publicKey: '', standing: 'Newcomer' };
+                const pubkey = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
+                return {
+                    ...m,
+                    publicKey: pubkey,
+                    pubkey: pubkey,
+                    name: typeof m.name === 'string' ? m.name : (typeof m.displayName === 'string' ? m.displayName : (typeof m.callsign === 'string' ? m.callsign : undefined)),
+                    callsign: typeof m.callsign === 'string' ? m.callsign : undefined,
+                    tier: typeof m.tier === 'string' ? m.tier : (typeof m.standing === 'string' ? m.standing : 'Newcomer'),
+                    standing: typeof m.standing === 'string' ? m.standing : (typeof m.tier === 'string' ? m.tier : 'Newcomer'),
+                    canVouch: Boolean(m.canVouch ?? m.isVoucher),
+                    canOperate: Boolean(m.canOperate ?? m.isOperator ?? m.can_operate),
+                    nodeRole: (m.nodeRole === 'owner' || m.nodeRole === 'admin' || m.nodeRole === 'moderator') ? m.nodeRole : null,
+                };
+            })
+            : [];
+    }
+
+    if (data.reports !== undefined) {
+        const rawReports = Array.isArray(data.reports) ? data.reports : [];
+        result.reports = rawReports.map((r: any) => {
+            if (!r || typeof r !== 'object') return { id: '', targetPubkey: '', target_pubkey: '' };
+            const targetPubkey = normalizeKeeperPubkey(r.targetPubkey) || normalizeKeeperPubkey(r.target_pubkey);
+            const reporterPubkey = normalizeKeeperPubkey(r.reporterPubkey) || normalizeKeeperPubkey(r.reporter_pubkey);
+            return {
+                ...r,
+                id: r.id !== undefined && r.id !== null ? String(r.id) : undefined,
+                targetPubkey,
+                target_pubkey: targetPubkey,
+                reporterPubkey,
+                reporter_pubkey: reporterPubkey,
+                reason: typeof r.reason === 'string' ? r.reason : (typeof r.description === 'string' ? r.description : ''),
+                severity: typeof r.severity === 'string' ? r.severity : 'Report',
+                status: typeof r.status === 'string' ? r.status : 'pending',
+            };
+        });
+        if (typeof data.reportCount !== 'number') {
+            result.reportCount = result.reports.length;
+        }
+    }
+
+    if (data.profiles !== undefined) {
+        result.profiles = Array.isArray(data.profiles)
+            ? data.profiles.map((p: any) => {
+                if (!p || typeof p !== 'object') return { publicKey: '' };
+                const pub = typeof p.publicKey === 'string' ? p.publicKey : (typeof p.pubkey === 'string' ? p.pubkey : '');
+                return {
+                    ...p,
+                    publicKey: pub,
+                    pubkey: pub,
+                };
+            })
+            : [];
+    }
+
+    if (data.posts !== undefined) {
+        result.posts = Array.isArray(data.posts) ? data.posts : [];
+    }
+
+    if (data.health !== undefined) {
+        const rawHealth = (data.health && typeof data.health === 'object') ? (data.health as Record<string, unknown>) : {};
+        const flags: NodeHealthFlag[] = Array.isArray(rawHealth.flags)
+            ? rawHealth.flags.map((f: any) => (f && typeof f === 'object' ? f : { description: String(f || '') }))
+            : [];
+        const healthScore = typeof rawHealth.healthScore === 'number' ? rawHealth.healthScore : 100;
+        result.health = {
+            ...rawHealth,
+            flags,
+            healthScore,
+        };
+    }
+
+    return result;
+}
+
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
     const res = await fetch(endpoint, {
         method: 'POST',
@@ -374,7 +531,8 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfa
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    const json = await res.json();
+    return normalizeNodeData(json);
 }
 
 export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
@@ -503,26 +661,157 @@ export async function updateNodeUserOperator(
     return res.json();
 }
 
+export interface NodeRoleRecord {
+    member_pubkey: string;
+    role: 'owner' | 'admin' | 'moderator';
+    granted_at: string;
+    granted_by: string | null;
+    callsign?: string;
+}
+
+export async function fetchNodeRoles(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<NodeRoleRecord[]> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch node roles');
+    }
+    const data = await res.json();
+    return data.roles || [];
+}
+
+export async function grantNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey, role }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to grant node role');
+    }
+    return data;
+}
+
+export async function revokeNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/node-roles/${encodeURIComponent(pubkey)}/${encodeURIComponent(role)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke node role');
+    }
+    return data;
+}
+
+export async function fetchTreasuryKeepers(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch keepers');
+    }
+    const data = await res.json().catch(() => ({}));
+    return normalizeKeepers(data.keepers);
+}
+
+export async function assignTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey: memberPubkey }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to assign keeper');
+    }
+    return normalizeKeepers(data.keepers);
+}
+
+export async function revokeTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<string[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(memberPubkey)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke keeper');
+    }
+    return normalizeKeepers(data.keepers);
+}
+
 export interface NodeTreasury {
     publicKey: string;
     name: string;
     avatar?: string;
+    avatarUrl?: string;
     balance: number;
     creditLine: number;
     liveOffers: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    keepers?: string[];
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/treasuries');
     const res = await fetch(endpoint);
     if (!res.ok) return [];
-    const data = await res.json();
-    return data.treasuries || [];
+    const data = await res.json().catch(() => ({}));
+    const rawList = Array.isArray(data.treasuries) ? data.treasuries : (Array.isArray(data) ? data : []);
+    return rawList.map((t: any) => {
+        if (!t || typeof t !== 'object') return t;
+        const normalized: any = { ...t };
+        if ('keepers' in t && t.keepers !== undefined) {
+            normalized.keepers = normalizeKeepers(t.keepers);
+        }
+        return normalized;
+    });
 }
 
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number },
+    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {
@@ -684,6 +973,70 @@ export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPas
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
+}
+
+export interface SnapshotScheduleConfig {
+    enabled: boolean;
+    intervalHours: number;
+    keep: number;
+}
+
+export interface BackupVerificationResult {
+    success: boolean;
+    ok: boolean;
+    verifiedAt: string;
+    result?: unknown[];
+}
+
+export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        return { enabled: true, intervalHours: 24, keep: 7 };
+    }
+    const data = await res.json();
+    return data.config || { enabled: true, intervalHours: 24, keep: 7 };
+}
+
+export async function updateNodeSnapshotSchedule(
+    nodeUrl: string,
+    config: Partial<SnapshotScheduleConfig>,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...config, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.config;
+}
+
+export async function verifyNodeBackup(
+    nodeUrl: string,
+    snapshotName?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<BackupVerificationResult> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup/verify');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ name: snapshotName, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
 }
 
 export async function updateNodeReplicationCadence(

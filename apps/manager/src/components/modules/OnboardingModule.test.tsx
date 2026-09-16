@@ -79,6 +79,21 @@ describe('OnboardingModule', () => {
         expect(screen.getByText('Network error reaching node')).toBeInTheDocument();
     });
 
+    it('renders empty state when profiles array is empty', () => {
+        render(
+            <OnboardingModule
+                profiles={[]}
+                activeProfileId=""
+                onSelectNode={mockSelectNode}
+            />
+        );
+
+        expect(screen.getByText('No Node Profiles Available')).toBeInTheDocument();
+        expect(
+            screen.getByText(/Configure or select a sovereign node profile in Fleet Settings/i)
+        ).toBeInTheDocument();
+    });
+
     it('renders empty funnel notice when no tallied data exists', async () => {
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
             days: 30,

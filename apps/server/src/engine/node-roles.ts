@@ -1,7 +1,7 @@
 import { db } from '../db/db.js';
 import { getMember } from '@beanpool/engine';
 
-export type MemberNodeRole = 'owner' | 'admin';
+export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
 
 export interface NodeRoleRecord {
@@ -101,8 +101,8 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * - Demoting the last owner to admin is blocked
  */
 export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
-    if (role !== 'owner' && role !== 'admin') {
-        throw new Error("Role must be 'owner' or 'admin'");
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
     if (targetPubkey === 'SYSTEM' || targetPubkey.toUpperCase() === 'SYSTEM') {
@@ -143,9 +143,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             if (ownerCount > 0 && !isOwner) {
                 throw new Error('Only an owner may grant the owner role');
             }
-        } else if (role === 'admin') {
+        } else if (role === 'admin' || role === 'moderator') {
             if (!isOwner) {
-                throw new Error('Only an owner may grant the admin role');
+                throw new Error(`Only an owner may grant the ${role} role`);
             }
             if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
@@ -161,16 +161,16 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
 }
 
 /**
- * Revokes a node role ('owner' or 'admin') from a member.
+ * Revokes a node role ('owner', 'admin', or 'moderator') from a member.
  *
  * Enforces:
  * - Only an owner may revoke 'owner'
  * - Never allow the last owner to be removed
- * - Only an owner may revoke 'admin'
+ * - Only an owner may revoke 'admin' or 'moderator'
  */
 export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
-    if (role !== 'owner' && role !== 'admin') {
-        throw new Error("Role must be 'owner' or 'admin'");
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
     db.transaction(() => {
@@ -192,9 +192,9 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             if (ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
-        } else if (role === 'admin') {
+        } else if (role === 'admin' || role === 'moderator') {
             if (!isOwner) {
-                throw new Error('Only an owner may revoke the admin role');
+                throw new Error(`Only an owner may revoke the ${role} role`);
             }
         }
 

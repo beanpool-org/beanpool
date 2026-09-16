@@ -217,8 +217,12 @@ router.post('/api/local/update-identity', async (ctx) => {
     }
 
     if (callsign !== undefined) config.callsign = (callsign || '').slice(0, 20);
-    if (lat !== undefined && lng !== undefined) {
-        config.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+    if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lng);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            config.location = { lat: parsedLat, lng: parsedLng };
+        }
     }
     if (communityName !== undefined) config.communityName = (communityName || '').slice(0, 60) || null;
     if (contactEmail !== undefined) config.contactEmail = (contactEmail || '').slice(0, 100) || null;
@@ -1221,9 +1225,9 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 router.post('/api/reports', async (ctx) => {
     const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
     const activeReporter = ctx.state.actor || reporterPubkey;
-    if (!activeReporter || !targetPubkey || !reason) {
+    if (!activeReporter || !targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
-        ctx.body = { error: 'reporterPubkey, targetPubkey, and reason are required' };
+        ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
         return;
     }
     const report = submitReport(activeReporter, targetPubkey, reason, targetPostId);

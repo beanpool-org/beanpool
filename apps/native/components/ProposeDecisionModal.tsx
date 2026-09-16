@@ -83,6 +83,7 @@ export function ProposeDecisionModal({
     const [touches, setTouches] = useState<DecisionTouch>('member');
     const [effect, setEffect] = useState<DecisionEffect>('suspend_member');
     const [subject, setSubject] = useState('');
+    const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
     const [tier, setTier] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [ruleKey, setRuleKey] = useState('');
@@ -332,6 +333,13 @@ export function ProposeDecisionModal({
             return;
         }
 
+        const targetPubkey = selectedMember?.publicKey || (subject.trim().length === 64 ? subject.trim() : null);
+
+        if (touches === 'member' && !targetPubkey) {
+            Alert.alert('Member Not Found', 'Please enter or select a valid member callsign or 64-character public key.');
+            return;
+        }
+
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
             const amount = Number(grantAmount);
@@ -343,7 +351,20 @@ export function ProposeDecisionModal({
         } else if (effect === 'grant_tier') {
             params = { tier };
         } else if (effect === 'remove_lead_keeper') {
-            params = { enterprisePubkey: subject, leadPubkey: subject };
+            if (!enterprisePubkey.trim()) {
+                Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
+                return;
+            }
+            if (!targetPubkey) {
+                Alert.alert('Missing Lead Keeper', 'Please enter the lead keeper callsign or public key to remove.');
+                return;
+            }
+            params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
+        } else if (effect === 'write_off_deficit') {
+            if (!enterprisePubkey.trim()) {
+                Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
+                return;
+            }
         } else if (effect === 'set_rule') {
             params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
@@ -356,7 +377,7 @@ export function ProposeDecisionModal({
 
         setSubmitting(true);
         try {
-            const resolvedSubject = selectedMember ? selectedMember.publicKey : (subject.trim() || null);
+            const resolvedSubject = (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : (selectedMember ? selectedMember.publicKey : (subject.trim() || null)))) || null;
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
@@ -372,6 +393,7 @@ export function ProposeDecisionModal({
                 setTitle('');
                 setDescription('');
                 setSubject('');
+                setEnterprisePubkey('');
                 setGrantAmount('');
                 onCreated();
                 onClose();
@@ -445,27 +467,66 @@ export function ProposeDecisionModal({
 
                         {/* Effect Selector */}
                         <Text style={styles.sectionLabel}>Select Specific Effect</Text>
-                        {EFFECTS_BY_TOUCH[touches].map(eff => (
-                            <Pressable
-                                key={eff.id}
-                                accessibilityRole="button"
-                                style={[styles.effectCard, effect === eff.id && styles.effectCardActive]}
-                                onPress={() => setEffect(eff.id)}
-                            >
-                                <Text style={[styles.effectLabel, effect === eff.id && styles.effectLabelActive]}>
-                                    {eff.label}
-                                </Text>
-                                <Text style={styles.effectDesc}>{eff.desc}</Text>
-                            </Pressable>
-                        ))}
+                        <View accessibilityRole="radiogroup" accessibilityLabel="Governance effect">
+                            {EFFECTS_BY_TOUCH[touches].map(eff => (
+                                <Pressable
+                                    key={eff.id}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ checked: effect === eff.id }}
+                                    style={[styles.effectCard, effect === eff.id && styles.effectCardActive]}
+                                    onPress={() => setEffect(eff.id)}
+                                >
+                                    <Text style={[styles.effectLabel, effect === eff.id && styles.effectLabelActive]}>
+                                        {eff.label}
+                                    </Text>
+                                    <Text style={styles.effectDesc}>{eff.desc}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+
+                        {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
+                        {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
+                            <>
+                                <Text style={styles.sectionLabel}>Target Enterprise Public Key</Text>
+                                {treasuries && treasuries.length > 0 && (
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                        {treasuries.map(t => (
+                                            <Pressable
+                                                key={t.publicKey}
+                                                accessibilityRole="button"
+                                                style={[
+                                                    styles.segmentBtn,
+                                                    enterprisePubkey === t.publicKey && styles.segmentBtnActive,
+                                                    { paddingHorizontal: 10, paddingVertical: 6 }
+                                                ]}
+                                                onPress={() => setEnterprisePubkey(t.publicKey)}
+                                            >
+                                                <Text style={[styles.segmentText, enterprisePubkey === t.publicKey && styles.segmentTextActive, { fontSize: 12 }]}>
+                                                    {t.name}
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Enter enterprise pubkey..."
+                                    placeholderTextColor={colors.text.muted}
+                                    value={enterprisePubkey}
+                                    onChangeText={setEnterprisePubkey}
+                                />
+                            </>
+                        )}
 
                         {/* Subject Input */}
                         {touches === 'member' && (
                             <>
-                                <Text style={styles.sectionLabel}>Target Member Public Key or Callsign</Text>
+                                <Text style={styles.sectionLabel}>
+                                    {effect === 'remove_lead_keeper' ? 'Lead Keeper Callsign or Public Key to Remove' : 'Target Member Public Key or Callsign'}
+                                </Text>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Enter member callsign or pubkey..."
+                                    placeholder={effect === 'remove_lead_keeper' ? 'Enter lead keeper callsign or pubkey...' : 'Enter member callsign or pubkey...'}
                                     placeholderTextColor={colors.text.muted}
                                     value={subject}
                                     onChangeText={setSubject}

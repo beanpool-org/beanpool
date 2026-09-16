@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
+import { Avatar } from '../common/Avatar';
 import {
     fetchNodeTreasuries,
     createNodeTreasury,
@@ -564,13 +565,16 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                     >
                                         <div>
                                             <div className="flex items-start justify-between gap-2 mb-2">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-9 h-9 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center text-lg">
-                                                        {t.avatar || '🌾'}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="text-sm font-bold text-white m-0">{t.name}</h4>
-                                                        <span className="text-[10px] font-mono text-nature-400">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <Avatar
+                                                        src={t.avatar}
+                                                        alt={t.name || 'Enterprise'}
+                                                        className="w-9 h-9 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center text-lg overflow-hidden shrink-0"
+                                                        fallbackGlyph="🌾"
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <h4 className="text-sm font-bold text-white m-0 truncate">{t.name}</h4>
+                                                        <span className="text-[10px] font-mono text-nature-400 block truncate">
                                                             {pubkeyStr ? `${pubkeyStr.slice(0, 12)}...` : 'Unknown'}
                                                         </span>
                                                     </div>
@@ -820,7 +824,12 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                         className="p-2.5 rounded-xl bg-nature-950 hover:bg-nature-800/80 border border-nature-800 text-left transition-all group"
                                     >
                                         <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-terra-300">
-                                            <span>{p.avatar}</span>
+                                            <Avatar
+                                                src={p.avatar}
+                                                alt=""
+                                                className="w-5 h-5 rounded flex items-center justify-center text-xs overflow-hidden shrink-0"
+                                                fallbackGlyph="🌾"
+                                            />
                                             <span className="truncate">{p.name}</span>
                                         </div>
                                         <p className="text-[10px] text-nature-400 line-clamp-1 mt-0.5">{p.purpose}</p>
@@ -833,13 +842,21 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                             <div className="grid grid-cols-4 gap-2">
                                 <div className="col-span-1">
                                     <label className="block text-xs font-bold text-nature-300 mb-1">Avatar</label>
-                                    <input
-                                        type="text"
-                                        value={newEnterpriseAvatar}
-                                        onChange={(e) => setNewEnterpriseAvatar(e.target.value)}
-                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-center text-lg text-white focus:outline-none focus:border-terra-500"
-                                        maxLength={4}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <Avatar
+                                            src={newEnterpriseAvatar}
+                                            alt={newEnterpriseName || 'Enterprise'}
+                                            className="w-10 h-10 rounded-xl bg-nature-950 border border-nature-700 flex items-center justify-center text-lg overflow-hidden shrink-0"
+                                            fallbackGlyph="🌾"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={newEnterpriseAvatar}
+                                            onChange={(e) => setNewEnterpriseAvatar(e.target.value)}
+                                            placeholder="🌾"
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
                                 </div>
                                 <div className="col-span-3">
                                     <label className="block text-xs font-bold text-nature-300 mb-1">Enterprise Name</label>

@@ -3,6 +3,7 @@ import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
+import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
 
 export interface MemberItem {
@@ -98,12 +99,16 @@ interface MembersModuleProps {
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
 }
 
-export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
+export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
     const profile = profiles instanceof Map
         ? profiles.get(pub)
         : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    const raw = profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+    return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+}
+
+export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
+    const raw = getMemberRawAvatar(m, profiles);
     return resolveAvatarUrl(raw);
 }
 
@@ -551,13 +556,12 @@ export function MembersModule({
                         {treasuries.map((t) => (
                             <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    {t.avatar ? (
-                                        <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shrink-0" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-lg shrink-0">
-                                            🏛️
-                                        </div>
-                                    )}
+                                    <Avatar
+                                        src={t.avatar}
+                                        alt={t.name}
+                                        className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden"
+                                        fallbackGlyph="🏛️"
+                                    />
                                     <div className="min-w-0">
                                         <div className="font-bold text-white text-xs truncate">{t.name}</div>
                                         <div className="text-[11px] text-nature-400 font-mono">
@@ -751,27 +755,16 @@ export function MembersModule({
                                                 }`}
                                             >
                                                 <div className="col-span-4 flex items-center gap-2.5">
-                                                    {(() => {
-                                                        const avatar = getMemberAvatar(m, profilesMap);
-                                                        if (avatar) {
-                                                            return (
-                                                                <img
-                                                                    src={avatar}
-                                                                    alt={displayName}
-                                                                    className="w-7 h-7 rounded-full object-cover shrink-0 border border-terra-500/40 shadow-sm"
-                                                                />
-                                                            );
-                                                        }
-                                                        return (
-                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                                                                isMemberFrozen
-                                                                    ? 'bg-red-950 text-red-400 border-red-800'
-                                                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
-                                                            }`}>
-                                                                {initial}
-                                                            </div>
-                                                        );
-                                                    })()}
+                                                    <Avatar
+                                                        src={getMemberRawAvatar(m, profilesMap)}
+                                                        alt={displayName}
+                                                        className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border overflow-hidden ${
+                                                            isMemberFrozen
+                                                                ? 'bg-red-950 text-red-400 border-red-800'
+                                                                : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
+                                                        }`}
+                                                        fallbackGlyph={initial}
+                                                    />
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>

@@ -15,6 +15,12 @@ set -e
 #   Pushes to main are tagged with their short-sha (e.g. DEPLOY_TAG=3fb6e72).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if [ -n "${DEPLOY_TAG:-}" ] && ! [[ "$DEPLOY_TAG" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+  echo "🛑 FATAL: Invalid DEPLOY_TAG: '$DEPLOY_TAG'"
+  exit 1
+fi
+
 IMAGE="ghcr.io/beanpool-org/beanpool-node:${DEPLOY_TAG:-latest}"
 
 # Load .env file for Cloudflare credentials (if it exists)
@@ -323,7 +329,9 @@ for NODE in "${TARGETS[@]}"; do
       echo "📦 DEPLOY_PULL=1 — taking the published image (${DEPLOY_TAG:-latest}) for: $NAME (NOT your working tree)"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
-        echo "   Aborting deploy to prevent starting a stale or rolled-back local image."
+        echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
+        echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
+        echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
@@ -333,7 +341,9 @@ for NODE in "${TARGETS[@]}"; do
     else
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
-        echo "   Aborting deploy to prevent starting a stale or rolled-back local image."
+        echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
+        echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
+        echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d

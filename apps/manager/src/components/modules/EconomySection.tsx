@@ -117,24 +117,15 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             pubkey = input.trim();
         } else if (typeof input === 'object' && input !== null) {
             const obj = input as {
-                publicKey?: unknown;
-                pubkey?: unknown;
-                public_key?: unknown;
-                member_pubkey?: unknown;
-                memberPubkey?: unknown;
-                name?: unknown;
                 callsign?: unknown;
+                name?: unknown;
                 displayName?: unknown;
             };
             if (typeof obj.callsign === 'string' && obj.callsign.trim()) directName = obj.callsign.trim();
             else if (typeof obj.name === 'string' && obj.name.trim()) directName = obj.name.trim();
             else if (typeof obj.displayName === 'string' && obj.displayName.trim()) directName = obj.displayName.trim();
 
-            if (typeof obj.publicKey === 'string') pubkey = obj.publicKey.trim();
-            else if (typeof obj.pubkey === 'string') pubkey = obj.pubkey.trim();
-            else if (typeof obj.public_key === 'string') pubkey = obj.public_key.trim();
-            else if (typeof obj.member_pubkey === 'string') pubkey = obj.member_pubkey.trim();
-            else if (typeof obj.memberPubkey === 'string') pubkey = obj.memberPubkey.trim();
+            pubkey = normalizeKeeperPubkey(input);
         }
 
         // Prefer the keeper entry's own callsign when present rather than depending on a second lookup

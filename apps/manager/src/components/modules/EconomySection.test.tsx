@@ -892,5 +892,47 @@ describe('EconomySection Component', () => {
             expect(screen.getAllByText('@MOnsta MAGic')).toHaveLength(2);
             expect(screen.getAllByText('@Marty Party2')).toHaveLength(2);
         });
+
+        it('resolves member name when keeper object has empty string publicKey and populated alias', async () => {
+            const aliasKeeperTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_alias_keeper',
+                    name: 'Bakery Co-op',
+                    avatar: '🍞',
+                    balance: 10,
+                    creditLine: 50,
+                    liveOffers: 1,
+                    keepers: [
+                        {
+                            publicKey: '',
+                            pubkey: 'pk_baker_bob',
+                        } as any,
+                    ],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(aliasKeeperTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(aliasKeeperTreasury[0].keepers as any);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{
+                            members: [
+                                {
+                                    publicKey: 'pk_baker_bob',
+                                    callsign: 'Baker Bob',
+                                },
+                            ],
+                        }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('Bakery Co-op')).toBeInTheDocument();
+            expect(screen.getByText('@Baker Bob')).toBeInTheDocument();
+        });
     });
 });

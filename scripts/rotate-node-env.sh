@@ -113,6 +113,9 @@ while [[ $# -gt 0 ]]; do
     *)
       if [[ "$1" =~ ^[A-Za-z0-9_]+= ]]; then
         KEY_VALUE_PAIRS+=("$1")
+      elif [[ "$1" =~ ^- ]]; then
+        echo "❌ Error: Unrecognized option '$1'. Run with -h/--help for usage." >&2
+        exit 1
       else
         TARGET_NODES+=("$1")
       fi
@@ -209,6 +212,7 @@ echo ""
 
 # Execution loop
 FAILED_NODES=()
+SKIPPED_NODES=()
 
 for NODE_DEF in "${RESOLVED_TARGETS[@]}"; do
   N_ID=$(echo "$NODE_DEF" | cut -d: -f1)
@@ -234,7 +238,7 @@ for NODE_DEF in "${RESOLVED_TARGETS[@]}"; do
     if [ $FORCE_LIVE_NODE -ne 1 ]; then
       echo "🛑 PROTECTING LIVE NODE: '$N_NAME' is a live community!"
       echo "   Skipping. To force rotation on this node, pass --force-live-node."
-      FAILED_NODES+=("$N_NAME (skipped: live node)")
+      SKIPPED_NODES+=("$N_NAME (protected live community node)")
       echo ""
       continue
     else
@@ -281,6 +285,12 @@ if os.path.exists(env_path):
 else:
     print(f"ℹ️ Note: .env file does not exist at {env_path}, will create")
 
+def format_env_line(key, value):
+    if not ((value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'"))):
+        escaped = value.replace('\\', '\\\\').replace('"', '\\"')
+        return f'{key}="{escaped}"\n'
+    return f"{key}={value}\n"
+
 new_lines = []
 seen = set()
 
@@ -290,40 +300,67 @@ for line in existing_lines:
         k, _ = stripped.split("=", 1)
         k = k.strip()
         if k in updates:
-            new_lines.append(f"{k}={updates[k]}\n")
+            new_lines.append(format_env_line(k, updates[k]))
             seen.add(k)
             action = "would update" if dry_run else "updated"
             print(f"  [{action}] {k} (len={len(updates[k])})")
             continue
     new_lines.append(line)
 
+# Ensure newline delimiter before appending new keys
+if new_lines and not new_lines[-1].endswith("\n"):
+    new_lines[-1] += "\n"
+
 for k in order:
     if k not in seen:
-        new_lines.append(f"{k}={updates[k]}\n")
+        new_lines.append(format_env_line(k, updates[k]))
         seen.add(k)
         action = "would add" if dry_run else "added"
         print(f"  [{action}] {k} (len={len(updates[k])})")
 
 if dry_run:
+    if "ADMIN_PASSWORD" in updates:
+        print("  [dry-run] Would reset isLocked in data/local-config.json for password rotation")
     print(f"  [dry-run] Would write updated .env to {env_path} (mode 0600)")
     print(f"  [dry-run] Would run: cd {project_dir} && docker compose -p {proj_name} up -d --no-deps --force-recreate beanpool-node")
     sys.exit(0)
 
-# Real update: create backup, write atomically, chmod 0600
-if os.path.exists(env_path):
-    import time
-    bak_path = f"{env_path}.bak.{int(time.time())}"
-    with open(bak_path, "w") as f:
-        f.writelines(existing_lines)
-    os.chmod(bak_path, 0o600)
-    print(f"  [backup] Created backup at {bak_path}")
+# Real update: create backup, write atomically, mode 0600 via umask
+old_umask = os.umask(0o077)
+try:
+    if os.path.exists(env_path):
+        import time
+        bak_path = f"{env_path}.bak.{int(time.time())}"
+        with open(bak_path, "w") as f:
+            f.writelines(existing_lines)
+        print(f"  [backup] Created backup at {bak_path}")
 
-tmp_path = f"{env_path}.tmp.{os.getpid()}"
-with open(tmp_path, "w") as f:
-    f.writelines(new_lines)
-os.chmod(tmp_path, 0o600)
-os.replace(tmp_path, env_path)
-print(f"  [success] Saved updated .env (permissions 0600)")
+    tmp_path = f"{env_path}.tmp.{os.getpid()}"
+    with open(tmp_path, "w") as f:
+        f.writelines(new_lines)
+    os.replace(tmp_path, env_path)
+    print(f"  [success] Saved updated .env (permissions 0600)")
+
+    # Reset admin password lock in local-config.json if ADMIN_PASSWORD updated
+    if "ADMIN_PASSWORD" in updates:
+        cfg_path = os.path.join(project_dir, "data", "local-config.json")
+        if os.path.exists(cfg_path):
+            import json
+            try:
+                with open(cfg_path, "r") as f:
+                    cfg = json.load(f)
+                cfg["isLocked"] = False
+                cfg.pop("adminHash", None)
+                cfg.pop("salt", None)
+                cfg_tmp = f"{cfg_path}.tmp.{os.getpid()}"
+                with open(cfg_tmp, "w") as f:
+                    json.dump(cfg, f, indent=2)
+                os.replace(cfg_tmp, cfg_path)
+                print("  [admin-lock] Cleared isLocked in local-config.json for password rotation")
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to reset admin lock in {cfg_path}: {e}", file=sys.stderr)
+finally:
+    os.umask(old_umask)
 
 # Restart only beanpool-node container
 print(f"  [restart] Recreating beanpool-node container (cloudflared untouched)...")
@@ -353,6 +390,9 @@ REMOTE_PYTHON
 done
 
 echo "=========================================================="
+if [ ${#SKIPPED_NODES[@]} -gt 0 ]; then
+  echo "ℹ️ Skipped nodes: ${SKIPPED_NODES[*]}"
+fi
 if [ ${#FAILED_NODES[@]} -eq 0 ]; then
   echo "🎉 All targeted nodes processed successfully!"
   exit 0

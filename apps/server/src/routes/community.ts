@@ -32,6 +32,7 @@ import {
     getMembersVersion,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
+import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
     validatePasswordStrength,
@@ -924,22 +925,34 @@ router.post('/api/member/purge', async (ctx) => {
 });
 
 router.post('/api/member/re-enroll', async (ctx) => {
+    if (!rateLimit(ctx)) return;
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
-    const { code, newPublicKey } = body;
+    const { code, newPublicKey, signature } = body;
 
     if (!code || typeof code !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Re-enrolment code is required' };
         return;
     }
-    if (!newPublicKey || typeof newPublicKey !== 'string') {
+    if (!newPublicKey || typeof newPublicKey !== 'string' || !/^[0-9a-f]{64}$/i.test(newPublicKey.trim())) {
         ctx.status = 400;
-        ctx.body = { error: 'New public key is required' };
+        ctx.body = { error: 'Valid 64-character hex new public key is required' };
         return;
     }
 
+    const cleanCode = code.trim().toUpperCase();
+    const cleanNew = newPublicKey.trim().toLowerCase();
+
+    // Verify Proof of Possession if signature provided
+    if (signature) {
+        if (!verifyEd25519Signature(cleanCode, signature, cleanNew)) {
+            ctx.status = 401;
+            ctx.body = { error: 'Invalid signature: proof of possession failed for new public key' };
+            return;
+        }
+    }
+
     try {
-        const cleanCode = code.trim().toUpperCase();
         const req = db.prepare("SELECT * FROM rekey_requests WHERE code = ?").get(cleanCode) as any;
         if (!req) {
             ctx.status = 404;
@@ -947,7 +960,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
             return;
         }
 
-        const result = completeRekey(req.old_pubkey, newPublicKey, cleanCode, req.operator_pubkey);
+        const result = completeRekey(req.old_pubkey, cleanNew, cleanCode, req.operator_pubkey);
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;

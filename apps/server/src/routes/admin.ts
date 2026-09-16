@@ -1564,6 +1564,14 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
     }
 
     const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    if (resolution === 'gift_to_member' && (!signedActor || signedActor === 'owner:password')) {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Two-person rule requires signed key-based admin authentication to gift offboarding funds to a member.',
+            code: 'KEY_AUTH_REQUIRED',
+        };
+        return;
+    }
     const effectiveActor = signedActor || 'owner:password';
 
     try {

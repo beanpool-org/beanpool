@@ -90,12 +90,11 @@ if [ "$NEEDS_REGISTRY_IMAGE" = "1" ]; then
   if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
     IMAGE_FOUND=1
   else
-    REGISTRY_TOKEN=$(curl -fsSL "https://ghcr.io/token?scope=repository:beanpool-org/beanpool-node:pull" 2>/dev/null | sed -E 's/.*"token":"([^"]+)".*/\1/')
+    REGISTRY_TOKEN=$(curl -fsSL "https://ghcr.io/token?scope=repository:beanpool-org/beanpool-node:pull" 2>/dev/null | sed -n -E 's/.*"token":"([^"]+)".*/\1/p')
     if [ -n "$REGISTRY_TOKEN" ]; then
       HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer $REGISTRY_TOKEN" \
-        -H "Accept: application/vnd.oci.image.index.v1+json" \
-        -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+        -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json" \
         "https://ghcr.io/v2/beanpool-org/beanpool-node/manifests/${DEPLOY_TAG:-latest}")
       if [ "$HTTP_STATUS" = "200" ]; then
         IMAGE_FOUND=1

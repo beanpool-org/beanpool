@@ -928,7 +928,8 @@ export async function startHttpsServer(port: number): Promise<void> {
                 const k = key.toLowerCase();
                 const isIdentityField = k.endsWith('pubkey') || k.endsWith('publickey') || k === 'from' || k === 'createdby';
                 const isOtherEntity = k.startsWith('target') || k.startsWith('old') || k.startsWith('to')
-                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller');
+                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller')
+                    || k.startsWith('member');
                 
                 if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== pubKeyHex) {
                     // A2-13: don't name the field in the client-facing error — leaking

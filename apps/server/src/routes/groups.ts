@@ -24,7 +24,8 @@ import {
     approveGroupMember,
     inviteGroupMember,
     deleteGroupPost,
-    getGroupsVersion
+    getGroupsVersion,
+    isGroupConvenor
 } from '../state-engine.js';
 import type { RouteDeps } from './types.js';
 
@@ -140,7 +141,17 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     router.get('/api/groups/:id/members', async (ctx) => {
         const status = ctx.query.status as any;
         const role = ctx.query.role as any;
-        const members = getGroupMembers(ctx.params.id, { status, role });
+        const viewerPubkey = ctx.state?.actor as string | undefined;
+
+        if (status && status !== 'active') {
+            if (!viewerPubkey || !isGroupConvenor(ctx.params.id, viewerPubkey)) {
+                ctx.status = 403;
+                ctx.body = { error: 'Only convenors can view pending or invited members' };
+                return;
+            }
+        }
+
+        const members = getGroupMembers(ctx.params.id, { status: status || 'active', role });
         ctx.status = 200;
         ctx.body = members;
     });
@@ -151,13 +162,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
 
         const body = (ctx as any).requestBody || {};
-        const { memberPubkey, role, action } = body;
+        const memberPubkey = body.targetPubkey || body.memberPubkey;
 
         if (!memberPubkey) {
             ctx.status = 400;
-            ctx.body = { error: 'memberPubkey is required' };
+            ctx.body = { error: 'targetPubkey or memberPubkey is required' };
             return;
         }
+
+        const { role, action } = body;
 
         try {
             if (action === 'approve') {

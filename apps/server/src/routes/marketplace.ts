@@ -211,8 +211,8 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             if (actor === authorPublicKey) {
                 entitled = true;
             } else {
-                const postRow = db.prepare("SELECT target_group_id FROM posts WHERE id = ?").get(id) as any;
-                if (postRow?.target_group_id) {
+                const postRow = db.prepare("SELECT target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
+                if (postRow?.audience_scope === 'group' && postRow?.target_group_id) {
                     const isConv = db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'").get(postRow.target_group_id, actor);
                     if (isConv) {
                         entitled = true;

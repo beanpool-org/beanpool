@@ -132,23 +132,44 @@ export function fmtLastActive(iso?: string | null): string {
 }
 
 export function getMemberDisplayName(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string {
-    const rawPub = m?.publicKey || m?.pubkey;
-    const pub = typeof rawPub === 'string' ? rawPub : '';
+    const rawPub = m?.publicKey || m?.pubkey || (m as any)?.public_key || (m as any)?.member_pubkey || (m as any)?.memberPubkey;
+    const pub = typeof rawPub === 'string' ? rawPub.trim() : '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
     // Look up in profiles Map or array
-    const profile = profiles instanceof Map
-        ? profiles.get(pub)
-        : (Array.isArray(profiles) ? profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub)) : undefined);
+    let profile: ProfileItem | undefined;
+    if (profiles instanceof Map) {
+        profile = profiles.get(pub);
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            for (const [k, v] of profiles.entries()) {
+                if (k.toLowerCase() === lower) {
+                    profile = v;
+                    break;
+                }
+            }
+        }
+    } else if (Array.isArray(profiles) && pub) {
+        profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            profile = profiles.find((p) => {
+                if (!p) return false;
+                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey;
+                return typeof pk === 'string' && pk.trim().toLowerCase() === lower;
+            });
+        }
+    }
+
     if (typeof profile?.name === 'string' && profile.name.trim()) return profile.name.trim();
     if (typeof profile?.displayName === 'string' && profile.displayName.trim()) return profile.displayName.trim();
     if (typeof profile?.callsign === 'string' && profile.callsign.trim()) return profile.callsign.trim();
     if (typeof profile?.handle === 'string' && profile.handle.trim()) return `@${profile.handle.trim()}`;
 
     // Direct properties on member object
+    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
     if (typeof m?.name === 'string' && m.name.trim()) return m.name.trim();
     if (typeof m?.displayName === 'string' && m.displayName.trim()) return m.displayName.trim();
-    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
     if (typeof m?.handle === 'string' && m.handle.trim()) return `@${m.handle.trim()}`;
 
     if (pub && pub.includes('-')) {

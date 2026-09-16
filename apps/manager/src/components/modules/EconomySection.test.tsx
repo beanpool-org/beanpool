@@ -699,4 +699,198 @@ describe('EconomySection Component', () => {
             expect(screen.queryByText(brokenUrl)).not.toBeInTheDocument();
         });
     });
+
+    describe('Keeper resolution and identity resilience (Defect 2)', () => {
+        it('resolves a keeper given as a bare pubkey string to the member callsign', async () => {
+            const barePubkeyTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_eggs_1',
+                    name: 'Community Eggs',
+                    avatar: '🥚',
+                    balance: 35.82,
+                    creditLine: 200,
+                    liveOffers: 1,
+                    keepers: ['89aa85a84d1234567890abcdef'],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(barePubkeyTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(['89aa85a84d1234567890abcdef']);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{
+                            members: [
+                                {
+                                    publicKey: '89aa85a84d1234567890abcdef',
+                                    callsign: 'MOnsta MAGic',
+                                    tier: 'Resident',
+                                },
+                            ],
+                        }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('Community Eggs')).toBeInTheDocument();
+            expect(screen.getByText('@MOnsta MAGic')).toBeInTheDocument();
+        });
+
+        it('resolves a keeper given as a bare pubkey string case-insensitively', async () => {
+            const barePubkeyTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_eggs_case',
+                    name: 'Community Eggs',
+                    avatar: '🥚',
+                    balance: 35.82,
+                    creditLine: 200,
+                    liveOffers: 1,
+                    keepers: ['89AA85A84D1234567890ABCDEF'],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(barePubkeyTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(['89AA85A84D1234567890ABCDEF']);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{
+                            members: [
+                                {
+                                    publicKey: '89aa85a84d1234567890abcdef',
+                                    callsign: 'MOnsta MAGic',
+                                    tier: 'Resident',
+                                },
+                            ],
+                        }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('@MOnsta MAGic')).toBeInTheDocument();
+        });
+
+        it('shows a keeper given as an object with callsign without needing the members list', async () => {
+            const objectKeeperTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_eggs_2',
+                    name: 'Community Eggs',
+                    avatar: '🥚',
+                    balance: 35.82,
+                    creditLine: 200,
+                    liveOffers: 1,
+                    keepers: [
+                        {
+                            publicKey: 'bd3e4acb8b1234567890abcdef',
+                            callsign: 'Marty Party2',
+                            avatarUrl: null,
+                            grantedAt: '2026-09-02T00:00:00Z',
+                        },
+                    ],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(objectKeeperTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(objectKeeperTreasury[0].keepers as any);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{ members: [] }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('Community Eggs')).toBeInTheDocument();
+            expect(screen.getByText('@Marty Party2')).toBeInTheDocument();
+        });
+
+        it('degrades an unknown pubkey to a short hash without crashing', async () => {
+            const unknownKeeperTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_unknown_keeper',
+                    name: 'Unknown Co-op',
+                    avatar: '🌾',
+                    balance: 0,
+                    creditLine: 0,
+                    liveOffers: 0,
+                    keepers: ['1234567890abcdef1234567890'],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(unknownKeeperTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(['1234567890abcdef1234567890']);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{ members: [] }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('Unknown Co-op')).toBeInTheDocument();
+            expect(screen.getByText('@1234567890...')).toBeInTheDocument();
+        });
+
+        it('shows keeper names in manage keepers drawer for both string and object shapes', async () => {
+            const mixedTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_mixed_keepers',
+                    name: 'Community Eggs',
+                    avatar: '🥚',
+                    balance: 35.82,
+                    creditLine: 200,
+                    liveOffers: 1,
+                    keepers: [
+                        '89aa85a84d1234567890abcdef',
+                        {
+                            publicKey: 'bd3e4acb8b1234567890abcdef',
+                            callsign: 'Marty Party2',
+                        },
+                    ],
+                },
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(mixedTreasury);
+            vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(mixedTreasury[0].keepers as any);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{
+                            members: [
+                                {
+                                    publicKey: '89aa85a84d1234567890abcdef',
+                                    callsign: 'MOnsta MAGic',
+                                },
+                            ],
+                        }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            // Open Manage Keepers modal
+            const manageBtn = screen.getByRole('button', { name: /manage/i });
+            await act(async () => {
+                fireEvent.click(manageBtn);
+            });
+
+            expect(screen.getByText(/Manage Keepers — Community Eggs/i)).toBeInTheDocument();
+            expect(screen.getAllByText('@MOnsta MAGic')).toHaveLength(2);
+            expect(screen.getAllByText('@Marty Party2')).toHaveLength(2);
+        });
+    });
 });

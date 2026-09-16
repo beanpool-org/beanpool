@@ -1704,6 +1704,72 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
     return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
 }
 
+// Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+export interface KeeperRequestItem {
+    id: string;
+    enterprisePubkey: string;
+    memberPubkey: string;
+    pledgedBacking: number;
+    status: 'pending' | 'approved' | 'declined';
+    createdAt: string;
+    decidedAt?: string | null;
+    decidedBy?: string | null;
+    callsign?: string;
+    avatarUrl?: string | null;
+}
+
+export interface SuccessionProposalItem {
+    id: string;
+    enterprisePubkey: string;
+    leadPubkey: string;
+    candidatePubkey: string;
+    proposedBy?: string;
+    proposerPubkey?: string;
+    proposedAt?: string;
+    createdAt?: string;
+    status: 'active' | 'passed' | 'cancelled';
+    resolvedAt?: string | null;
+    executedAt?: string | null;
+    votesCount: number;
+    votesRequired?: number;
+    requiredVotes?: number;
+    totalEligible?: number;
+    votes?: Array<{ voterPubkey: string; callsign?: string; votedAt?: string }>;
+    candidateCallsign?: string;
+    candidateAvatarUrl?: string | null;
+    leadCallsign?: string;
+    hasVoted?: boolean;
+}
+
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+}
+
+export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending'): Promise<{ success: boolean; requests: KeeperRequestItem[] }> {
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
+}
+
+export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`);
+}
+
+export async function declineKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/decline`);
+}
+
+export async function getEnterpriseSuccession(treasury: string): Promise<{ success: boolean; leadInactivity: any; proposals: SuccessionProposalItem[]; activeProposal: SuccessionProposalItem | null }> {
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/succession`);
+}
+
+export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string): Promise<{ success: boolean; proposal: SuccessionProposalItem; status: string; votesCount: number; votesRequired: number; leadMoved: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string): Promise<{ success: boolean; votesCount: number; votesRequired: number; status: string; leadMoved: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`);
+}
+
+
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {
     return request('GET', '/api/commons/rounds');
 }

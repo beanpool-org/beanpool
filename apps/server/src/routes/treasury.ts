@@ -366,6 +366,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // able to see who keeps what without asking an admin.
             keepers: treasuryKeepers(treasury),
             pledges: getEnterprisePledges(treasury),
+            isLeadOrSoleKeeperOrAdmin: actor ? isLeadOrSoleKeeperOrAdmin(treasury, actor) : false,
             availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending')
@@ -374,6 +375,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
                 : null,
             leadInactivity: getLeadInactivity(treasury),
+            succession: getSuccessionProposals(treasury),
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
             link: linkDetail(treasury),
         };

@@ -2,6 +2,7 @@ import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface SectionErrorBoundaryProps {
     sectionName: string;
+    resetKey?: unknown;
     children: ReactNode;
     onReset?: () => void;
 }
@@ -22,8 +23,11 @@ export class SectionErrorBoundary extends Component<SectionErrorBoundaryProps, S
         };
     }
 
-    static getDerivedStateFromError(error: Error): Partial<SectionErrorBoundaryState> {
-        return { hasError: true, error };
+    static getDerivedStateFromError(error: unknown): Partial<SectionErrorBoundaryState> {
+        const normalized = error instanceof Error
+            ? error
+            : new Error(typeof error === 'string' ? error : 'An unexpected error occurred.');
+        return { hasError: true, error: normalized };
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
@@ -31,7 +35,10 @@ export class SectionErrorBoundary extends Component<SectionErrorBoundaryProps, S
     }
 
     componentDidUpdate(prevProps: SectionErrorBoundaryProps): void {
-        if (prevProps.sectionName !== this.props.sectionName && this.state.hasError) {
+        if (
+            this.state.hasError &&
+            (prevProps.sectionName !== this.props.sectionName || prevProps.resetKey !== this.props.resetKey)
+        ) {
             this.handleRetry();
         }
     }

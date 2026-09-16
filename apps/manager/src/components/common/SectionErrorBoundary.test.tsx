@@ -64,4 +64,54 @@ describe('SectionErrorBoundary', () => {
 
         spy.mockRestore();
     });
+
+    it('normalizes non-Error throws into Error instances', () => {
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const ThrowingString = () => {
+            throw 'Custom string error message';
+        };
+
+        render(
+            <SectionErrorBoundary sectionName="People & Safety">
+                <ThrowingString />
+            </SectionErrorBoundary>
+        );
+
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByText(/Custom string error message/)).toBeInTheDocument();
+
+        spy.mockRestore();
+    });
+
+    it('automatically resets error state when resetKey changes', () => {
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        let shouldFail = true;
+        const FlakyComponent = () => {
+            if (shouldFail) throw new Error('Crash on Node A');
+            return <div>Content on Node B</div>;
+        };
+
+        const { rerender } = render(
+            <SectionErrorBoundary sectionName="Economy" resetKey="node-a">
+                <FlakyComponent />
+            </SectionErrorBoundary>
+        );
+
+        expect(screen.getByText(/Crash on Node A/)).toBeInTheDocument();
+
+        // Switch nodes via resetKey
+        shouldFail = false;
+        rerender(
+            <SectionErrorBoundary sectionName="Economy" resetKey="node-b">
+                <FlakyComponent />
+            </SectionErrorBoundary>
+        );
+
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByText('Content on Node B')).toBeInTheDocument();
+
+        spy.mockRestore();
+    });
 });
+

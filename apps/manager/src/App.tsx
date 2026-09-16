@@ -911,7 +911,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
 
                                 if (shouldShowColdStart) {
                                     return (
-                                        <SectionErrorBoundary sectionName="Cold-Start Wizard">
+                                        <SectionErrorBoundary sectionName="Cold-Start Wizard" resetKey={activeNode?.id}>
                                             <ColdStartWizard
                                                 activeNode={activeNode}
                                                 diag={diag}
@@ -929,7 +929,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                 }
 
                                 return (
-                                    <SectionErrorBoundary sectionName="Home">
+                                    <SectionErrorBoundary sectionName="Home" resetKey={activeNode?.id}>
                                         <HomeScreen
                                             communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
                                             publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
@@ -958,7 +958,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             })()}
 
                             {activeTab === 'people' && (
-                                <SectionErrorBoundary sectionName="People & Safety">
+                                <SectionErrorBoundary sectionName="People & Safety" resetKey={activeNode?.id}>
                                     <PeopleSafetySection
                                         activeNode={activeNode}
                                         nodeData={nodeData}
@@ -1007,7 +1007,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'economy' && (
-                                <SectionErrorBoundary sectionName="Shared Projects & Economy">
+                                <SectionErrorBoundary sectionName="Shared Projects & Economy" resetKey={activeNode?.id}>
                                     <EconomySection
                                         activeNode={activeNode}
                                         nodeData={nodeData}
@@ -1020,7 +1020,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'bulletin' && (
-                                <SectionErrorBoundary sectionName="Bulletin & News">
+                                <SectionErrorBoundary sectionName="Bulletin & News" resetKey={activeNode?.id}>
                                     <BulletinSection
                                         activeNode={activeNode}
                                         onRefresh={() => loadNodeData()}
@@ -1029,7 +1029,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'appliance' && (
-                                <SectionErrorBoundary sectionName="Appliance & Data">
+                                <SectionErrorBoundary sectionName="Appliance & Data" resetKey={activeNode?.id}>
                                     <ApplianceSection
                                         activeNode={activeNode}
                                         diag={diag}
@@ -1053,7 +1053,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                     ) : (
                         <>
                             {activeTab === 'overview' && (
-                                <SectionErrorBoundary sectionName="Fleet Overview">
+                                <SectionErrorBoundary sectionName="Fleet Overview" resetKey={activeProfileId || activeNode?.id}>
                                     <TelemetryModule
                                         profiles={profiles}
                                         activeProfileId={activeProfileId}
@@ -1072,7 +1072,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'analytics' && (
-                                <SectionErrorBoundary sectionName="Fleet Analytics">
+                                <SectionErrorBoundary sectionName="Fleet Analytics" resetKey={activeProfileId || activeNode?.id}>
                                     <AnalyticsModule
                                         profiles={profiles}
                                         activeProfileId={activeProfileId}
@@ -1086,7 +1086,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'gateway' && (
-                                <SectionErrorBoundary sectionName="Gateway Module">
+                                <SectionErrorBoundary sectionName="Gateway Module" resetKey={activeProfileId || activeNode?.id}>
                                     <GatewayModule
                                         gateway={gateway}
                                         gatewayLoading={gatewayLoading}
@@ -1105,7 +1105,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'members' && (
-                                <SectionErrorBoundary sectionName="Members & Access">
+                                <SectionErrorBoundary sectionName="Members & Access" resetKey={activeProfileId || activeNode?.id}>
                                     <MembersModule
                                         nodeData={nodeData}
                                         nodeDataLoading={nodeDataLoading}
@@ -1154,7 +1154,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'topology' && (
-                                <SectionErrorBoundary sectionName="Topology Module">
+                                <SectionErrorBoundary sectionName="Topology Module" resetKey={activeProfileId || activeNode?.id}>
                                     <TopologyModule
                                         activeNode={activeNode}
                                         diag={diag}
@@ -1165,13 +1165,13 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'invites' && (
-                                <SectionErrorBoundary sectionName="Invites Module">
+                                <SectionErrorBoundary sectionName="Invites Module" resetKey={activeProfileId || activeNode?.id}>
                                     <InvitesModule activeNode={activeNode} />
                                 </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'onboarding' && (
-                                <SectionErrorBoundary sectionName="Onboarding Funnel">
+                                <SectionErrorBoundary sectionName="Onboarding Funnel" resetKey={activeProfileId || activeNode?.id}>
                                     <OnboardingModule
                                         profiles={profiles}
                                         activeProfileId={activeProfileId}
@@ -1181,13 +1181,13 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                             )}
 
                             {activeTab === 'logs' && (
-                                <SectionErrorBoundary sectionName="Logs Module">
+                                <SectionErrorBoundary sectionName="Logs Module" resetKey={activeProfileId || activeNode?.id}>
                                     <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
                                 </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'ai' && (
-                                <SectionErrorBoundary sectionName="AI Services">
+                                <SectionErrorBoundary sectionName="AI Services" resetKey={activeProfileId || activeNode?.id}>
                                     <AiServicesModule
                                         activeNode={activeNode}
                                         contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}

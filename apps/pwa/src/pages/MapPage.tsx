@@ -761,6 +761,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         });
 
         // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)
+        const escapeHtml = (str: string) =>
+            str.replace(/[&<>"']/g, (m) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            }[m] || m));
+
         enterprises
             .filter(ent => ent.lat != null && ent.lng != null && ent.status !== 'completed')
             .forEach(ent => {
@@ -769,13 +778,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 const bgColor = isPaused ? '#451a03' : '#7c2d12';
                 const shadowColor = isPaused ? 'rgba(245,158,11,0.5)' : 'rgba(224,109,83,0.5)';
 
+                // Sanitize name and avatar for Leaflet HTML
+                const safeName = escapeHtml(ent.name || '');
+
                 // Avatar or fallback icon
                 let avatarContent = `<span style="font-size: 20px; line-height: 1;">🌾</span>`;
                 if (ent.avatar) {
-                    if (ent.avatar.startsWith('bundled://') || ent.avatar.startsWith('data:') || ent.avatar.startsWith('/')) {
-                        avatarContent = `<img src="${ent.avatar}" alt="${ent.name}" style="width: 28px; height: 28px; border-radius: 8px; object-fit: cover;" />`;
+                    if (ent.avatar.startsWith('bundled://') || (ent.avatar.startsWith('data:image/') && !ent.avatar.includes('"')) || ent.avatar.startsWith('/')) {
+                        avatarContent = `<img src="${escapeHtml(ent.avatar)}" alt="${safeName}" style="width: 28px; height: 28px; border-radius: 8px; object-fit: cover;" />`;
                     } else if (ent.avatar.length <= 4) {
-                        avatarContent = `<span style="font-size: 20px; line-height: 1;">${ent.avatar}</span>`;
+                        avatarContent = `<span style="font-size: 20px; line-height: 1;">${escapeHtml(ent.avatar)}</span>`;
                     }
                 }
 
@@ -790,7 +802,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     : '';
 
                 const html = `
-                <div style="position: relative; width: 44px; height: 54px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25)); cursor: pointer;" title="${ent.name}${isPaused ? ' (Paused)' : ''}">
+                <div style="position: relative; width: 44px; height: 54px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25)); cursor: pointer;" title="${safeName}${isPaused ? ' (Paused)' : ''}">
                     ${pausedBadge}
                     <div style="
                         width: 42px; height: 42px; border-radius: 12px;
@@ -817,7 +829,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     iconAnchor: [22, 54],
                 });
 
-                const marker = L.marker([ent.lat, ent.lng], { icon });
+                const markerLabel = `${ent.name}${isPaused ? ' (Paused Enterprise)' : ' (Enterprise)'}`;
+                const marker = L.marker([ent.lat, ent.lng], {
+                    icon,
+                    title: markerLabel,
+                    alt: markerLabel,
+                });
                 marker.on('click', () => {
                     if (onOpenTreasury) {
                         onOpenTreasury(ent.publicKey);

@@ -209,4 +209,68 @@ describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)'
 
         expect(onOpenTreasury).toHaveBeenCalledWith('ent-shed-pk');
     });
+
+    it('sets accessible title and alt attributes on enterprise markers', async () => {
+        await act(async () => {
+            render(
+                <MapPage
+                    identity={mockIdentity}
+                />
+            );
+        });
+
+        await waitFor(() => {
+            const shedMarker = mockCreatedMarkers.find(m =>
+                m.opts?.className?.includes('custom-enterprise-pin') &&
+                m.opts?.html?.includes('Mullum Tool Shed')
+            );
+            expect(shedMarker).toBeDefined();
+            expect(shedMarker?.opts?.title).toBe('Mullum Tool Shed (Enterprise)');
+            expect(shedMarker?.opts?.alt).toBe('Mullum Tool Shed (Enterprise)');
+
+            const flockMarker = mockCreatedMarkers.find(m =>
+                m.opts?.className?.includes('custom-enterprise-pin') &&
+                m.opts?.html?.includes('Community Eggs')
+            );
+            expect(flockMarker).toBeDefined();
+            expect(flockMarker?.opts?.title).toBe('Community Eggs (Paused Enterprise)');
+            expect(flockMarker?.opts?.alt).toBe('Community Eggs (Paused Enterprise)');
+        });
+    });
+
+    it('escapes enterprise name and avatar to prevent stored XSS and attribute breakout', async () => {
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValueOnce({
+            enterprises: [
+                {
+                    publicKey: 'ent-malicious-pk',
+                    name: '<script>alert("xss")</script>" onmouseover="steal()',
+                    callsign: 'BadEnt',
+                    avatar: '<img src=x onerror=alert(1)>',
+                    lat: -28.5495,
+                    lng: 153.5005,
+                    paused: false,
+                    status: 'active',
+                },
+            ],
+        });
+
+        await act(async () => {
+            render(
+                <MapPage
+                    identity={mockIdentity}
+                />
+            );
+        });
+
+        await waitFor(() => {
+            const marker = mockCreatedMarkers.find(m =>
+                m.opts?.className?.includes('custom-enterprise-pin')
+            );
+            expect(marker).toBeDefined();
+            const html = marker?.opts?.html;
+            expect(html).not.toContain('<script>');
+            expect(html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+            expect(html).not.toContain('<img src=x');
+        });
+    });
 });

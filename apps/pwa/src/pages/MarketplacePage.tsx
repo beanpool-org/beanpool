@@ -32,7 +32,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
-    getMembers, getTreasuries, getTreasury,
+    getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
@@ -362,18 +362,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
                 if (beansOnly) filter.beansOnly = true;
 
-                // Always fetch home node listings, the viewer's OWN posts, and enterprise statuses
-                // (to filter out paused or wound-up enterprises from the feed and search).
-                const [homeData, myOwnPosts, treasuriesData] = await Promise.all([
+                // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
+                // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
+                const statusesPromise = getEnterpriseStatuses().catch(() => null);
+                const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
                     getMarketplacePosts(filter),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
-                    getTreasuries().catch(() => ({ treasuries: [] }))
+                    statusesPromise,
+                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
+                    statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
                 ]);
 
                 const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
-                for (const t of (treasuriesData?.treasuries || [])) {
-                    if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
-                        inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                if (statusesData?.enterprises) {
+                    for (const t of statusesData.enterprises) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
+                    }
+                } else if (fallbackTreasuries?.treasuries) {
+                    for (const t of fallbackTreasuries.treasuries) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
                     }
                 }
                 setInactiveEnterprises(inactiveMap);

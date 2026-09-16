@@ -204,6 +204,23 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/treasuries', listTreasuriesHandler);
     router.get('/api/enterprises', listTreasuriesHandler);
 
+    // Lightweight statuses endpoint for marketplace / search / map filtering without balance computation & keeper lookups
+    const listEnterpriseStatusesHandler = async (ctx: any) => {
+        const rows = db.prepare(
+            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1"
+        ).all() as any[];
+        ctx.body = {
+            enterprises: rows.map(r => ({
+                publicKey: r.public_key,
+                name: r.callsign || 'Unnamed',
+                paused: r.paused === 1,
+                status: r.status || 'active',
+            })),
+        };
+    };
+    router.get('/api/enterprises/statuses', listEnterpriseStatusesHandler);
+    router.get('/api/treasuries/statuses', listEnterpriseStatusesHandler);
+
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         const m = db.prepare('SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;

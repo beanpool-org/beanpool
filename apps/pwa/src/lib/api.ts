@@ -1449,6 +1449,17 @@ export interface EnterpriseLedgerResponse {
     entries: EnterpriseLedgerEntry[];
 }
 
+export interface EnterpriseStatus {
+    publicKey: string;
+    name: string;
+    paused: boolean;
+    status: string;
+}
+
+export async function getEnterpriseStatuses(): Promise<{ enterprises: EnterpriseStatus[] }> {
+    return request('GET', '/api/enterprises/statuses');
+}
+
 export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {
     return request('GET', '/api/treasuries');
 }

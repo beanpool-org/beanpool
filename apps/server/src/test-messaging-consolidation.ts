@@ -22,7 +22,7 @@ import { initStateEngine, createConversation, sendMessage, toggleMessageReaction
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8547;
+const PORT = 8573;
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;

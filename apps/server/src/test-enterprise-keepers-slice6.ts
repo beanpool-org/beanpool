@@ -519,6 +519,10 @@ async function main() {
     assert(listReqRes.body?.requests?.length === 1, 'HTTP returns 1 pending request');
     assert(listReqRes.body?.requests?.[0]?.callsign === 'HTTPApplicant', 'Applicant callsign included in response');
 
+    // Stranger cannot list keeper requests
+    const strangerListRes = await signedFetch('GET', `/api/enterprise/${httpEnt}/keepers/requests`, httpStranger);
+    assert(strangerListRes.status === 403, 'Stranger HTTP GET keepers/requests returns 403');
+
     // 3. Non-lead keeper/stranger cannot approve via HTTP
     const strangerApproveRes = await signedFetch('POST', `/api/enterprise/${httpEnt}/keepers/requests/${httpReqId}/approve`, httpStranger);
     assert(strangerApproveRes.status === 403, 'Stranger HTTP approve returns 403');
@@ -549,6 +553,9 @@ async function main() {
     assert(proposeSuccRes.body?.success === true, 'HTTP succession propose succeeded');
     // Since httpApplicant was the only other keeper (N = 1), 1 >= 1 -> executed immediately!
     assert(proposeSuccRes.body?.executed === true, 'Sole other keeper immediately passes succession');
+    assert(proposeSuccRes.body?.leadMoved === true, 'HTTP propose returns leadMoved alias');
+    assert(proposeSuccRes.body?.votesCount === 1, 'HTTP propose returns votesCount alias');
+    assert(proposeSuccRes.body?.votesRequired === 1, 'HTTP propose returns votesRequired alias');
 
     // Check succession state via HTTP GET
     const succGetRes = await signedFetch('GET', `/api/enterprise/${httpEnt}/succession`, httpApplicant);

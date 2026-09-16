@@ -1049,7 +1049,24 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const listKeeperRequestsHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
+        const actor = ctx.state?.actor;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed.' };
+            return;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
+        if (!isLeadOrSoleKeeperOrAdmin(treasury, actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only the lead keeper, sole keeper, or admin may view keeper requests' };
+            return;
+        }
         const { status } = ctx.query;
         try {
             const requests = getKeeperRequests(treasury, status ? String(status) : undefined);
@@ -1150,7 +1167,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!candidatePubkey) { ctx.status = 400; ctx.body = { error: 'candidatePubkey is required' }; return; }
         try {
             const res = proposeLeadSuccession(treasury, actor, candidatePubkey);
-            ctx.body = { success: true, ...res };
+            ctx.body = {
+                success: true,
+                ...res,
+                leadMoved: res.executed,
+                votesCount: res.proposal.votesCount,
+                votesRequired: res.proposal.requiredVotes,
+                status: res.proposal.status,
+            };
         } catch (e: any) {
             const isAuth = /Only an active keeper|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
@@ -1177,7 +1201,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         try {
             const res = voteLeadSuccession(proposalId, actor);
-            ctx.body = { success: true, ...res };
+            ctx.body = {
+                success: true,
+                ...res,
+                leadMoved: res.executed,
+                votesCount: res.proposal.votesCount,
+                votesRequired: res.proposal.requiredVotes,
+                status: res.proposal.status,
+            };
         } catch (e: any) {
             const isAuth = /Only active keepers|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;

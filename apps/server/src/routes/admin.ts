@@ -115,7 +115,9 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
         let status = 400;
         if (res.totpRequired) {
             status = 401;
-        } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('not found')) {
+        } else if (res.error?.includes('Challenge not found')) {
+            status = 404;
+        } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
             status = 403;
         }
         ctx.status = status;
@@ -225,7 +227,15 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
             if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {
                 targetPubkey = pubKeyHex;
+            } else {
+                ctx.status = 401;
+                ctx.body = { error: 'Invalid cryptographic signature' };
+                return;
             }
+        } else {
+            ctx.status = 401;
+            ctx.body = { error: 'Unauthorized: valid admin session or signature required' };
+            return;
         }
     }
 
@@ -237,6 +247,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
 
     const newEpoch = revokeAllMemberSessions(targetPubkey);
     ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.status = 200;
     ctx.body = {
         success: true,
         memberPubkey: targetPubkey,
@@ -273,16 +284,27 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
     }
 
     // Check if authenticated via password
-    const ok = await checkAdminAuth(ctx as any);
-    if (ok) {
-        ctx.body = {
-            authenticated: true,
-            isKeySession: !!(ctx.state as any)?.isKeySession,
-            memberPubkey: (ctx.state as any)?.actor || null,
-            role: (ctx.state as any)?.adminRole || 'owner',
-        };
-        return;
+    const hasPasswordCreds =
+        (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+
+    if (hasPasswordCreds) {
+        const ok = await checkAdminAuth(ctx as any);
+        if (ok) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: !!(ctx.state as any)?.isKeySession,
+                memberPubkey: (ctx.state as any)?.actor || null,
+                role: (ctx.state as any)?.adminRole || 'owner',
+            };
+            return;
+        }
     }
+
+    ctx.status = 200;
     ctx.body = { authenticated: false };
 });
 
@@ -320,14 +342,22 @@ const handleEnrol = async (ctx: any) => {
         return;
     }
 
-    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || !(ctx.state as any)?.isKeySession;
+    const callerRole = (ctx.state as any)?.adminRole;
+    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
+    const requestedRole = body.role || 'owner';
+
+    if (requestedRole === 'owner' && !isBreakGlass && callerRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
+        return;
+    }
 
     try {
         const res = enrolAdminOwnerKey({
             targetPubkey,
             actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
             isBreakGlass,
-            role: body.role || 'owner',
+            role: requestedRole,
         });
         ctx.body = {
             success: true,
@@ -352,6 +382,11 @@ router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
  */
 router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    if ((ctx.state as any)?.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only node owners can toggle break-glass mode' };
+        return;
+    }
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;

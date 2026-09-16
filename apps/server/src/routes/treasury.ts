@@ -101,6 +101,30 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         return actor;
     };
 
+    // Gate an administrative or lifecycle action: authorized for enterprise keepers or node admin.
+    // Also checks that both enterprise and actor are not explicitly suspended or pruned.
+    const requireKeeperOrAdmin = (ctx: any, treasury: string): string | null => {
+        const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!actor || !canAdministerTreasury(actor, treasury)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may perform this action' };
+            return null;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so it can no longer be modified.' };
+            return null;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return null;
+        }
+        return actor;
+    };
+
     // ---- Public transparency reads ------------------------------------------------------
     const listTreasuriesHandler = async (ctx: any) => {
         const rows = db.prepare(
@@ -608,14 +632,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Pause enterprise for a season (keeper / admin)
     const pauseHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
-        if (!canAdministerTreasury(actor, treasury)) {
-            ctx.status = 403;
-            ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may pause it' };
-            return;
-        }
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
         try {
             const res = pauseEnterprise(treasury, actor);
             ctx.body = {
@@ -636,14 +654,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Resume enterprise from pause (keeper / admin)
     const resumeHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
-        if (!canAdministerTreasury(actor, treasury)) {
-            ctx.status = 403;
-            ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may resume it' };
-            return;
-        }
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
         try {
             const res = resumeEnterprise(treasury, actor);
             ctx.body = {
@@ -662,9 +674,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Initiate wind-up (lead keeper only)
     const initiateWindUpHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
         try {
             const res = initiateWindUp(treasury, actor);
             ctx.body = {
@@ -687,9 +698,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Cancel wind-up during 7-day grace period (any keeper)
     const cancelWindUpHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
         try {
             const res = cancelWindUp(treasury, actor);
             ctx.body = {
@@ -708,9 +718,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Finalise wind-up after 7-day grace period and 0 open escrows (keeper / admin)
     const finaliseWindUpHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const actor = ctx.state?.actor;
-        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
-        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
         try {
             const res = finaliseWindUp(treasury, actor);
             ctx.body = {

@@ -2334,7 +2334,10 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
     if (member.status === 'completed') throw new Error('Enterprise has already wound up');
 
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
-    if (op?.role !== 'lead' && !isAdminPubkey(actorPubkey)) {
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = !!op && opCount === 1;
+    const isLead = !!op && op.role === 'lead';
+    if (!isLead && !isSoleKeeper && !isAdminPubkey(actorPubkey)) {
         throw new Error('Only the lead keeper may initiate wind-up');
     }
 

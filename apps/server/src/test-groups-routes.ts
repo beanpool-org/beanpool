@@ -191,12 +191,43 @@ async function runRouteTests() {
 
     // 7. GET /api/groups/:id/members - List members
     {
-        const ctx: any = {
-            query: {}
-        };
-        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctx);
-        check(ctx.status === 200, '7a. GET /api/groups/:id/members returns 200');
-        check(ctx.body.length === 2, '7b. Two active members returned');
+        const dave = makeMember('dave');
+        // Dave requests to join
+        const ctxJoin: any = { state: { actor: dave } };
+        await dispatch(router, 'POST', `/api/groups/${groupId}/join`, ctxJoin);
+        check(ctxJoin.status === 200 && ctxJoin.body?.member?.status === 'pending_approval', '7-setup. Dave is pending approval');
+
+        // Anonymous query -> 2 active members (Dave is omitted)
+        const ctxAnon: any = { query: {} };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxAnon);
+        check(ctxAnon.status === 200, '7a. GET /api/groups/:id/members returns 200');
+        check(ctxAnon.body.length === 2, '7b. Two active members returned for anon');
+
+        // Non-convenor Carol queries with no status -> 2 active members
+        const ctxCarol: any = { query: {}, state: { actor: carol } };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxCarol);
+        check(ctxCarol.status === 200 && ctxCarol.body.length === 2, '7c. Non-convenor gets active members only');
+
+        // Non-convenor Carol queries with status=pending_approval -> 403
+        const ctxCarolPending: any = { query: { status: 'pending_approval' }, state: { actor: carol } };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxCarolPending);
+        check(ctxCarolPending.status === 403, '7d. Non-convenor blocked from status=pending_approval (403)');
+
+        // Non-convenor Carol queries with status=all -> 403
+        const ctxCarolAll: any = { query: { status: 'all' }, state: { actor: carol } };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxCarolAll);
+        check(ctxCarolAll.status === 403, '7e. Non-convenor blocked from status=all (403)');
+
+        // Convenor Alice queries with no status -> gets 3 members (active + pending)
+        const ctxAliceNoStatus: any = { query: {}, state: { actor: alice } };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxAliceNoStatus);
+        check(ctxAliceNoStatus.status === 200 && ctxAliceNoStatus.body.length === 3, '7f. Convenor gets all members including pending when no status param passed');
+        check(ctxAliceNoStatus.body.some((m: any) => m.memberPubkey === dave && m.status === 'pending_approval'), '7g. Pending member is present in convenor roster');
+
+        // Convenor Alice queries with status=all -> gets 3 members
+        const ctxAliceAll: any = { query: { status: 'all' }, state: { actor: alice } };
+        await dispatch(router, 'GET', `/api/groups/${groupId}/members`, ctxAliceAll);
+        check(ctxAliceAll.status === 200 && ctxAliceAll.body.length === 3, '7h. Convenor status=all returns full roster');
     }
 
     // 8. PATCH /api/groups/:id/members/:pubkey - Change member role

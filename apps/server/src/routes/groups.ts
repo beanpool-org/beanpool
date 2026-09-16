@@ -142,16 +142,17 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const status = ctx.query.status as any;
         const role = ctx.query.role as any;
         const viewerPubkey = ctx.state?.actor as string | undefined;
-
+        const isConvenor = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
         if (status && status !== 'active') {
-            if (!viewerPubkey || !isGroupConvenor(ctx.params.id, viewerPubkey)) {
+            if (!isConvenor) {
                 ctx.status = 403;
                 ctx.body = { error: 'Only convenors can view pending or invited members' };
                 return;
             }
         }
 
-        const members = getGroupMembers(ctx.params.id, { status: status || 'active', role });
+        const effectiveStatus = status ? (status === 'all' ? undefined : status) : (isConvenor ? undefined : 'active');
+        const members = getGroupMembers(ctx.params.id, { status: effectiveStatus, role });
         ctx.status = 200;
         ctx.body = members;
     });

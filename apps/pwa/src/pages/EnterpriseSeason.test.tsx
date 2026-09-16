@@ -75,8 +75,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 avatar: null,
                 balance: 150,
                 creditLine: 200,
-                usableFloor: 200,
-                pausedFloorSnapshot: 200,
+                usableFloor: -200,
+                pausedFloorSnapshot: -200,
                 paused: true,
                 pausedAt: '2026-09-15T00:00:00.000Z',
                 pauseExpiresAt: '2026-12-14T00:00:00.000Z',
@@ -382,7 +382,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 {
                     publicKey: 'enterprise-bakery-pubkey',
                     name: 'Commons Bakery',
-                    paused: false,
+                    paused: true,
                     status: 'completed',
                     balance: 0,
                     creditLine: 0,
@@ -406,9 +406,10 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 expect(screen.getByText('Community Farm')).toBeInTheDocument();
             });
 
-            expect(screen.getByText('⏸️ Paused')).toBeInTheDocument();
+            expect(screen.getAllByText('⏸️ Paused').length).toBe(1);
             expect(screen.getByText('⏳ Winding up')).toBeInTheDocument();
             expect(screen.getByText('Closed')).toBeInTheDocument();
+            expect(screen.getByText(/Completed · Closed/i)).toBeInTheDocument();
         });
     });
 });

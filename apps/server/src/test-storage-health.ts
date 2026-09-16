@@ -149,6 +149,49 @@ async function runTests() {
     assert(parsedLogs.length === 50, 'Archived gzip contains all 50 pruned logs');
     assert(parsedLogs[0].message === 'Log event number 1', 'First archived log verified');
 
+    // 5. Test SHA-256 hashed thumbnails & soft-deletion (deleted_at)
+    console.log('\n--- 5. SHA-256 Hashed Pulse Thumbnails & Soft Deletes ---');
+    try {
+        db.exec("ALTER TABLE pulse_items ADD COLUMN deleted_at TEXT");
+    } catch {}
+
+    const crypto = await import('node:crypto');
+    const hash = (id: string) => crypto.createHash('sha256').update(id).digest('hex');
+
+    const validItemId = 'item_curated_valid_123';
+    const softDeletedItemId = 'item_curated_soft_del_456';
+    const missingItemId = 'item_curated_missing_789';
+
+    db.prepare("INSERT INTO pulse_items (id, title, deleted_at) VALUES (?, ?, NULL)").run(validItemId, 'Active Pulse');
+    db.prepare("INSERT INTO pulse_items (id, title, deleted_at) VALUES (?, ?, '2026-09-10T12:00:00Z')").run(softDeletedItemId, 'Deleted Pulse');
+
+    const validHash = hash(validItemId);
+    const softDelHash = hash(softDeletedItemId);
+    const missingHash = hash(missingItemId);
+
+    fs.writeFileSync(path.join(thumbDir, `${validHash}.bin`), Buffer.from('valid_thumb'));
+    fs.writeFileSync(path.join(thumbDir, `${validHash}.json`), JSON.stringify({ itemId: validItemId, mime: 'image/jpeg' }));
+
+    fs.writeFileSync(path.join(thumbDir, `${softDelHash}.bin`), Buffer.from('soft_del_thumb'));
+    fs.writeFileSync(path.join(thumbDir, `${softDelHash}.json`), JSON.stringify({ itemId: softDeletedItemId, mime: 'image/jpeg' }));
+
+    fs.writeFileSync(path.join(thumbDir, `${missingHash}.bin`), Buffer.from('missing_thumb'));
+    fs.writeFileSync(path.join(thumbDir, `${missingHash}.json`), JSON.stringify({ itemId: missingItemId, mime: 'image/jpeg' }));
+
+    const previewHashed = getStorageCleanPreview({ db, dataDir: testDir });
+    // Out of the 3 hashed thumbnails: 1 is valid, 2 are orphans (soft-deleted + missing)
+    assert(previewHashed.orphanedThumbnails.count === 2, `Preview identifies 2 orphaned hashed thumbnails (got: ${previewHashed.orphanedThumbnails.count})`);
+
+    const cleanHashed = cleanStorageAndCompressLogs({ db, dataDir: testDir });
+    assert(cleanHashed.removedThumbnailsCount === 2, `Cleaned 2 orphaned hashed thumbnails (got: ${cleanHashed.removedThumbnailsCount})`);
+
+    assert(fs.existsSync(path.join(thumbDir, `${validHash}.bin`)), 'Valid hashed thumbnail .bin preserved');
+    assert(fs.existsSync(path.join(thumbDir, `${validHash}.json`)), 'Valid hashed thumbnail .json preserved');
+    assert(!fs.existsSync(path.join(thumbDir, `${softDelHash}.bin`)), 'Soft-deleted hashed thumbnail .bin removed');
+    assert(!fs.existsSync(path.join(thumbDir, `${softDelHash}.json`)), 'Soft-deleted hashed thumbnail .json removed');
+    assert(!fs.existsSync(path.join(thumbDir, `${missingHash}.bin`)), 'Missing item hashed thumbnail .bin removed');
+    assert(!fs.existsSync(path.join(thumbDir, `${missingHash}.json`)), 'Missing item hashed thumbnail .json removed');
+
     // Clean up
     db.close();
     try {

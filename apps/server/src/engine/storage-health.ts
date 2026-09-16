@@ -259,13 +259,26 @@ export function getStorageCleanPreview(options?: { db?: any; dataDir?: string })
         try {
             for (const f of fs.readdirSync(thumbDir)) {
                 if (f.endsWith('.bin')) {
-                    const itemId = f.slice(0, -4);
+                    const fileBase = f.slice(0, -4);
+                    const metaFile = path.join(thumbDir, `${fileBase}.json`);
+                    let actualItemId: string | null = null;
+                    if (fs.existsSync(metaFile)) {
+                        try {
+                            const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+                            if (meta?.itemId) actualItemId = meta.itemId;
+                        } catch {}
+                    }
+                    const lookupId = actualItemId || fileBase;
                     try {
-                        const exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ?').get(itemId);
+                        let exists = null;
+                        try {
+                            exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ? AND deleted_at IS NULL').get(lookupId);
+                        } catch {
+                            exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ?').get(lookupId);
+                        }
                         if (!exists) {
                             orphanedThumbnailsCount++;
                             orphanedThumbnailsBytes += fs.statSync(path.join(thumbDir, f)).size;
-                            const metaFile = path.join(thumbDir, `${itemId}.json`);
                             if (fs.existsSync(metaFile)) {
                                 orphanedThumbnailsBytes += fs.statSync(metaFile).size;
                             }
@@ -348,12 +361,25 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
         try {
             for (const f of fs.readdirSync(thumbDir)) {
                 if (f.endsWith('.bin')) {
-                    const itemId = f.slice(0, -4);
+                    const fileBase = f.slice(0, -4);
+                    const metaFile = path.join(thumbDir, `${fileBase}.json`);
+                    let actualItemId: string | null = null;
+                    if (fs.existsSync(metaFile)) {
+                        try {
+                            const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+                            if (meta?.itemId) actualItemId = meta.itemId;
+                        } catch {}
+                    }
+                    const lookupId = actualItemId || fileBase;
                     try {
-                        const exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ?').get(itemId);
+                        let exists = null;
+                        try {
+                            exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ? AND deleted_at IS NULL').get(lookupId);
+                        } catch {
+                            exists = db.prepare('SELECT 1 FROM pulse_items WHERE id = ?').get(lookupId);
+                        }
                         if (!exists) {
                             try { fs.unlinkSync(path.join(thumbDir, f)); } catch {}
-                            const metaFile = path.join(thumbDir, `${itemId}.json`);
                             try { if (fs.existsSync(metaFile)) fs.unlinkSync(metaFile); } catch {}
                             removedThumbnailsCount++;
                         }
@@ -380,6 +406,7 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
             if (rowsToArchive.length > 0) {
                 const logsArchiveDir = path.join(dataDir, 'logs', 'archived');
+                let archiveWritten = false;
                 try {
                     if (!fs.existsSync(logsArchiveDir)) {
                         fs.mkdirSync(logsArchiveDir, { recursive: true });
@@ -388,19 +415,28 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
                     const jsonStr = JSON.stringify(rowsToArchive);
                     const compressed = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'));
                     fs.writeFileSync(archiveFile, compressed);
-                } catch {}
+                    archiveWritten = true;
+                } catch (err) {
+                    console.error('[StorageHealth] Failed to write compressed log archive:', err);
+                }
 
-                const delLogs = db.prepare(`
-                    DELETE FROM system_logs
-                    WHERE id < (SELECT id FROM system_logs ORDER BY id DESC LIMIT 1 OFFSET 499)
-                `).run();
-                compressedLogsCount = delLogs.changes || rowsToArchive.length;
+                if (archiveWritten) {
+                    const maxArchivedId = rowsToArchive[rowsToArchive.length - 1].id;
+                    const delLogs = db.prepare(`
+                        DELETE FROM system_logs
+                        WHERE id <= ?
+                    `).run(maxArchivedId);
+                    compressedLogsCount = delLogs.changes || rowsToArchive.length;
+                }
             }
         }
 
-        // Reclaim SQLite pages
+        // Reclaim SQLite pages if incremental vacuum is configured
         try {
-            db.pragma('incremental_vacuum');
+            const autoVacuumMode = db.pragma('auto_vacuum', { simple: true });
+            if (autoVacuumMode === 2) {
+                db.pragma('incremental_vacuum');
+            }
         } catch {}
     } catch {}
 

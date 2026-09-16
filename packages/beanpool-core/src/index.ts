@@ -23,3 +23,4 @@ export * from './archetypes.js';
 export * from './synonyms.js';
 export * from './channels.js';
 export * from './groups.js';
+export * from './geo.js';

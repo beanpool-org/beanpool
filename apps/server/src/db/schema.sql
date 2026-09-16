@@ -63,7 +63,14 @@ CREATE TABLE IF NOT EXISTS members (
     wind_up_initiated_at DATETIME,
     wind_up_initiated_by TEXT,
     wind_up_finalised_at DATETIME,
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    -- Enterprise location (docs/the-commons.md §2.2, Slice 6)
+    lat REAL,
+    lng REAL,
+    location_auth_signer TEXT,
+    auth_signer TEXT,
+    location_updated_at DATETIME,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);

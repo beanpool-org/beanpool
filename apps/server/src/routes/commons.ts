@@ -9,9 +9,6 @@ import {
     getProjects, getAllProjects, getVotingRounds, getActiveRound,
     getCommonsBalance, getGovernanceCredits,
     adminRejectProject,
-    createDecision, getDecision, getAllDecisions, getOpenDecisions,
-    castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
-    getActiveMembersCount30d, getDecisionVoiceCredits,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -108,89 +105,6 @@ router.get('/api/commons/my-credits/:pubkey', async (ctx) => {
 
 router.get('/api/commons/rounds', async (ctx) => {
     ctx.body = { rounds: getVotingRounds(), activeRound: getActiveRound() };
-});
-
-// ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
-
-router.get('/api/commons/decisions', async (ctx) => {
-    const status = ctx.query.status as any;
-    const decisions = getAllDecisions(status);
-    const activeMembers30d = getActiveMembersCount30d();
-    ctx.body = {
-        decisions: decisions.map(d => ({
-            ...d,
-            tally: tallyDecision(d.id, undefined, activeMembers30d),
-        })),
-        activeMembers30d,
-    };
-});
-
-router.get('/api/commons/decisions/:id', async (ctx) => {
-    const decision = getDecision(ctx.params.id);
-    if (!decision) return ctx.throw(404, 'Decision not found');
-    const tally = tallyDecision(decision.id);
-    const votes = getDecisionVotes(decision.id);
-    const actor = (ctx.state as any)?.actor || (ctx.query?.voterPubkey as string);
-    const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
-    ctx.body = { decision, tally, votes, voiceCredits };
-});
-
-router.post('/api/commons/decisions', async (ctx) => {
-    const { title, description, touches, effect, subject, params } = (ctx as any).requestBody || {};
-    const actor = ctx.state.actor as string;
-    if (!actor) {
-        ctx.status = 401;
-        ctx.body = { error: 'Authentication required to propose a decision' };
-        return;
-    }
-    if (!title || !touches || !effect) {
-        ctx.status = 400;
-        ctx.body = { error: 'title, touches, and effect are required' };
-        return;
-    }
-    try {
-        const decision = createDecision({
-            authorPubkey: actor,
-            title,
-            description: description || '',
-            touches,
-            effect,
-            subject,
-            params,
-            // closesAt omitted so engine defaults strictly to 7 days
-        });
-        ctx.body = { success: true, decision };
-    } catch (err: any) {
-        ctx.status = 400;
-        ctx.body = { error: err.message };
-    }
-});
-
-router.post('/api/commons/decisions/:id/vote', async (ctx) => {
-    const { support, voteCount, signature } = (ctx as any).requestBody || {};
-    const actor = ctx.state.actor as string;
-    if (!actor) {
-        ctx.status = 401;
-        ctx.body = { error: 'Authentication required to vote' };
-        return;
-    }
-    if (support === undefined) {
-        ctx.status = 400;
-        ctx.body = { error: 'support (boolean) is required' };
-        return;
-    }
-    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);
-    if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { error: result.error };
-        return;
-    }
-    ctx.body = { success: true, creditsUsed: result.creditsUsed };
-});
-
-router.post('/api/commons/decisions/tick', async (ctx) => {
-    const result = tickDecisions();
-    ctx.body = { success: true, ...result };
 });
 
 // ==========================================

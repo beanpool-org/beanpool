@@ -2,9 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
-
-export { ErrorBoundary };
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi } from '../utils/db';
@@ -16,11 +14,8 @@ import { useTheme, useStyles } from './ThemeContext';
 // A member holding the keepership of THIS enterprise additionally gets the keeper controls: post its
 // Offer/Need and sweep its surplus into the shared Commons pool.
 export default function TreasuryDetailScreen() {
-    const params = useLocalSearchParams<{ publicKey?: string | string[]; id?: string | string[]; name?: string | string[]; avatar?: string | string[] }>();
-    const rawKey = params.publicKey || params.id;
-    const treasuryKey = typeof rawKey === 'string' ? rawKey : Array.isArray(rawKey) ? rawKey[0] : undefined;
-    const nameParam = typeof params.name === 'string' ? params.name : Array.isArray(params.name) ? params.name[0] : undefined;
-    const avatarParam = typeof params.avatar === 'string' ? params.avatar : Array.isArray(params.avatar) ? params.avatar[0] : undefined;
+    const params = useLocalSearchParams<{ publicKey?: string; id?: string; name?: string; avatar?: string }>();
+    const treasuryKey = params.publicKey || params.id;
     const { theme, colors } = useTheme();
 
     const [detail, setDetail] = useState<any>(null);
@@ -155,8 +150,8 @@ export default function TreasuryDetailScreen() {
     useFocusEffect(load);
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || nameParam || 'Community Treasury';
-    const avatar = detail?.avatar || avatarParam;
+    const name = detail?.name || params.name || 'Community Treasury';
+    const avatar = detail?.avatar || params.avatar;
 
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;

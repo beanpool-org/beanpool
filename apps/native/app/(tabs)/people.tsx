@@ -266,12 +266,8 @@ export default function PeopleScreen() {
                     const data = await res.json();
                     if (data && data.invites) {
                         const serverInvites = data.invites;
-                        // ⚡ Bolt: Pre-compute server invites Map and updated codes Set for O(1) lookups
-                        const serverInvitesMap = new Map<string, any>(
-                            serverInvites.map((si: any) => [si.code.toLowerCase(), si])
-                        );
                         const updatedInvites = localInvites.map((localInv: any) => {
-                            const match = serverInvitesMap.get(localInv.code.toLowerCase());
+                            const match = serverInvites.find((si: any) => si.code.toLowerCase() === localInv.code.toLowerCase());
                             if (match) {
                                 return {
                                     ...localInv,
@@ -282,12 +278,9 @@ export default function PeopleScreen() {
                             return localInv;
                         });
 
-                        const updatedCodes = new Set<string>(
-                            updatedInvites.map((li: any) => li.code.toLowerCase())
-                        );
-
                         serverInvites.forEach((si: any) => {
-                            if (!updatedCodes.has(si.code.toLowerCase())) {
+                            const exists = updatedInvites.some((li: any) => li.code.toLowerCase() === si.code.toLowerCase());
+                            if (!exists) {
                                 updatedInvites.push({
                                     code: si.code,
                                     createdBy: si.createdBy,

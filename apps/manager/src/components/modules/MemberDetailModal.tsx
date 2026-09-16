@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
+import { getMemberDisplayName, getMemberAvatar, getMemberRawAvatar, fmtDate, fmtLastActive } from './MembersModule';
 import { PruneBranchModal } from './PruneBranchModal';
+import { Avatar } from '../common/Avatar';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
@@ -157,27 +158,16 @@ export function MemberDetailModal({
                 {/* Modal Header */}
                 <div className="flex items-start justify-between border-b border-nature-800 pb-4">
                     <div className="flex items-center gap-3.5">
-                        {(() => {
-                            const avatar = getMemberAvatar(member, profiles);
-                            if (avatar) {
-                                return (
-                                    <img
-                                        src={avatar}
-                                        alt={displayName}
-                                        className="w-12 h-12 rounded-2xl object-cover shrink-0 border border-terra-500/40 shadow-md"
-                                    />
-                                );
-                            }
-                            return (
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border ${
-                                    isFrozen
-                                        ? 'bg-red-950/80 text-red-400 border-red-800/80'
-                                        : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
-                                }`}>
-                                    {initial}
-                                </div>
-                            );
-                        })()}
+                        <Avatar
+                            src={getMemberRawAvatar(member, profiles as any)}
+                            alt={displayName}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border shrink-0 overflow-hidden shadow-md ${
+                                isFrozen
+                                    ? 'bg-red-950/80 text-red-400 border-red-800/80'
+                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
+                            }`}
+                            fallbackGlyph={initial}
+                        />
                         <div>
                             <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>{displayName}</span>

@@ -545,4 +545,158 @@ describe('EconomySection Component', () => {
             'tfa-prop-xyz'
         );
     });
+
+    describe('Enterprise Card Avatar Rendering', () => {
+        it('renders an img with resolved src and name as alt for bundled:// avatar', async () => {
+            const bundledTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_pk_beanpool',
+                    name: 'BeanPool Central',
+                    avatar: 'bundled://sprout',
+                    balance: 100,
+                    creditLine: 0,
+                    liveOffers: 0,
+                },
+            ];
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(bundledTreasury);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={mockNodeData}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            const img = screen.getByRole('img', { name: 'BeanPool Central' });
+            expect(img).toBeInTheDocument();
+            expect(img).toHaveAttribute('src', '/avatars/avatar_sprout.jpg');
+            expect(img).toHaveAttribute('alt', 'BeanPool Central');
+            expect(screen.queryByText('bundled://sprout')).not.toBeInTheDocument();
+        });
+
+        it('renders an img for an /api/avatar URL with name as alt', async () => {
+            const apiAvatarUrl = '/api/avatar/7d566ff87a5fd0dc35a81214388bfcca78a91406284f5dfc165dd20d9383ff46?size=thumb';
+            const apiTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_pk_eggs',
+                    name: 'Community Eggs',
+                    avatar: apiAvatarUrl,
+                    balance: 50,
+                    creditLine: 0,
+                    liveOffers: 0,
+                },
+            ];
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(apiTreasury);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={mockNodeData}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            const img = screen.getByRole('img', { name: 'Community Eggs' });
+            expect(img).toBeInTheDocument();
+            expect(img).toHaveAttribute('src', apiAvatarUrl);
+            expect(img).toHaveAttribute('alt', 'Community Eggs');
+            expect(screen.queryByText(apiAvatarUrl)).not.toBeInTheDocument();
+        });
+
+        it('renders emoji as text for emoji avatar', async () => {
+            const emojiTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_pk_tools',
+                    name: 'Tool Shed',
+                    avatar: '🛠️',
+                    balance: 200,
+                    creditLine: 0,
+                    liveOffers: 0,
+                },
+            ];
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(emojiTreasury);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={mockNodeData}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('🛠️')).toBeInTheDocument();
+            expect(screen.queryByRole('img', { name: 'Tool Shed' })).not.toBeInTheDocument();
+        });
+
+        it('renders fallback glyph for an empty avatar', async () => {
+            const emptyTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_pk_empty',
+                    name: 'No Avatar Co-op',
+                    avatar: '',
+                    balance: 10,
+                    creditLine: 0,
+                    liveOffers: 0,
+                },
+            ];
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(emptyTreasury);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={mockNodeData}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(screen.getByText('🌾')).toBeInTheDocument();
+            expect(screen.queryByRole('img', { name: 'No Avatar Co-op' })).not.toBeInTheDocument();
+        });
+
+        it('does not render raw URL string when image fails to load and falls back to glyph', async () => {
+            const brokenUrl = 'https://example.com/broken-image.jpg';
+            const brokenTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_pk_broken',
+                    name: 'Broken Image Co-op',
+                    avatar: brokenUrl,
+                    balance: 10,
+                    creditLine: 0,
+                    liveOffers: 0,
+                },
+            ];
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(brokenTreasury);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={mockNodeData}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            const img = screen.getByRole('img', { name: 'Broken Image Co-op' });
+            expect(img).toBeInTheDocument();
+
+            // Simulate image load error
+            await act(async () => {
+                fireEvent.error(img);
+            });
+
+            expect(screen.getByText('🌾')).toBeInTheDocument();
+            expect(screen.queryByRole('img', { name: 'Broken Image Co-op' })).not.toBeInTheDocument();
+            expect(screen.queryByText(brokenUrl)).not.toBeInTheDocument();
+        });
+    });
 });

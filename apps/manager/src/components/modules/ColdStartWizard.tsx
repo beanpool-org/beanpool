@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import type { NodeProfile } from '../../lib/profiles';
+import { Avatar } from '../common/Avatar';
 import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
 import {
     createNodeTreasury,
@@ -650,7 +651,12 @@ TOTP Secret:    ${totpSecret}
                                             : 'bg-nature-950 border-nature-800 hover:border-nature-700'
                                     }`}
                                 >
-                                    <span className="text-2xl block mb-2">{p.avatar}</span>
+                                    <Avatar
+                                        src={p.avatar}
+                                        alt={p.title}
+                                        className="w-8 h-8 rounded flex items-center justify-center text-2xl mb-2 overflow-hidden shrink-0"
+                                        fallbackGlyph="🌾"
+                                    />
                                     <div className="text-xs font-bold text-white mb-1">{p.title}</div>
                                     <p className="text-[10px] text-nature-400 m-0 line-clamp-2">{p.purpose}</p>
                                 </button>
@@ -662,13 +668,21 @@ TOTP Secret:    ${totpSecret}
                         <div className="grid grid-cols-4 gap-2">
                             <div className="col-span-1">
                                 <label className="block text-xs font-bold text-nature-300 mb-1">Avatar</label>
-                                <input
-                                    type="text"
-                                    value={enterpriseAvatar}
-                                    onChange={(e) => setEnterpriseAvatar(e.target.value)}
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-center text-lg text-white"
-                                    maxLength={4}
-                                />
+                                <div className="flex items-center gap-2">
+                                    <Avatar
+                                        src={enterpriseAvatar}
+                                        alt={enterpriseName || 'Enterprise'}
+                                        className="w-10 h-10 rounded-xl bg-nature-950 border border-nature-700 flex items-center justify-center text-lg overflow-hidden shrink-0"
+                                        fallbackGlyph="🌾"
+                                    />
+                                    <input
+                                        type="text"
+                                        value={enterpriseAvatar}
+                                        onChange={(e) => setEnterpriseAvatar(e.target.value)}
+                                        placeholder="🌾"
+                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white"
+                                    />
+                                </div>
                             </div>
                             <div className="col-span-3">
                                 <label className="block text-xs font-bold text-nature-300 mb-1">Enterprise Name</label>

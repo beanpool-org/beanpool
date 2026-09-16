@@ -38,6 +38,9 @@ export function resolveAvatarUrl(url: string | null | undefined): string | null 
         const id = url.replace('bundled://', '').split('?')[0];
         return BUNDLED_MAP[id] || null;
     }
+    if (BUNDLED_MAP[url]) {
+        return BUNDLED_MAP[url];
+    }
     const isAllowedSource =
         url.startsWith('/') ||
         url.startsWith('https://') ||
@@ -46,4 +49,17 @@ export function resolveAvatarUrl(url: string | null | undefined): string | null 
     if (!isAllowedSource) return null;
     if (/["'()\\\s<>]/.test(url)) return null;
     return url;
+}
+
+export function isShortEmoji(str: string | null | undefined): boolean {
+    if (!str || typeof str !== 'string') return false;
+    const trimmed = str.trim();
+    if (!trimmed || trimmed.length > 8) return false;
+    if (/[a-zA-Z0-9:/\\._?&=#%<>]/.test(trimmed)) return false;
+    const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
+    if (segmenter) {
+        const segments = Array.from(segmenter.segment(trimmed));
+        if (segments.length > 2) return false;
+    }
+    return /^[\p{Extended_Pictographic}\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier}\p{Emoji_Component}\uFE0E\uFE0F\u200D\s]+$/u.test(trimmed);
 }

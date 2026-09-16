@@ -341,8 +341,13 @@ export function initSchema() {
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
-    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_hash TEXT`).run(); } catch { }
+    const nrColumns = (db.prepare("PRAGMA table_info(node_roles)").all() as any[]).map(c => c.name);
+    if (!nrColumns.includes('session_epoch')) {
+        db.prepare(`ALTER TABLE node_roles ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`).run();
+    }
+    if (!nrColumns.includes('break_glass_hash')) {
+        db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_hash TEXT`).run();
+    }
 
     // node_roles: ensure check constraint allows 'moderator'
     try {

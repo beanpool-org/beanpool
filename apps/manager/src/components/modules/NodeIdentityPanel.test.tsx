@@ -217,19 +217,23 @@ describe('NodeIdentityPanel Component', () => {
         });
 
         const searchInput = screen.getByPlaceholderText(/Search for a location.../i);
+        expect(searchInput).toHaveAttribute('role', 'combobox');
+        expect(searchInput).toHaveAttribute('aria-autocomplete', 'list');
+        expect(searchInput).toHaveAttribute('aria-expanded', 'false');
 
         await act(async () => {
             fireEvent.change(searchInput, { target: { value: 'Byron Bay' } });
         });
 
-        // Advance debounce timer
+        // Advance debounce timer (1000ms debounce)
         await act(async () => {
-            await new Promise((r) => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 1100));
         });
 
         await waitFor(() => {
             expect(screen.getByText('Byron Bay, NSW, Australia')).toBeInTheDocument();
         });
+        expect(searchInput).toHaveAttribute('aria-expanded', 'true');
 
         const resultItem = screen.getByText('Byron Bay, NSW, Australia');
         await act(async () => {
@@ -238,6 +242,52 @@ describe('NodeIdentityPanel Component', () => {
 
         expect((document.getElementById('cfg-lat') as HTMLInputElement).value).toBe('-28.6474');
         expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
+    });
+
+    it('prevents accidental form submission on Enter in location search and supports arrow key navigation', async () => {
+        const onRefreshDiag = vi.fn();
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    onRefreshDiag={onRefreshDiag}
+                />
+            );
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search for a location.../i);
+
+        // Pressing Enter before searching does not submit form
+        await act(async () => {
+            fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' });
+        });
+        expect(onRefreshDiag).not.toHaveBeenCalled();
+
+        await act(async () => {
+            fireEvent.change(searchInput, { target: { value: 'Byron Bay' } });
+        });
+
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 1100));
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Byron Bay, NSW, Australia')).toBeInTheDocument();
+        });
+
+        // Navigate suggestions with ArrowDown and select with Enter
+        await act(async () => {
+            fireEvent.keyDown(searchInput, { key: 'ArrowDown', code: 'ArrowDown' });
+        });
+        await act(async () => {
+            fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' });
+        });
+
+        expect((document.getElementById('cfg-lat') as HTMLInputElement).value).toBe('-28.6474');
+        expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
+        // Form was not submitted
+        expect(onRefreshDiag).not.toHaveBeenCalled();
     });
 
     it('triggers manual directory push when Publish Now button is clicked', async () => {

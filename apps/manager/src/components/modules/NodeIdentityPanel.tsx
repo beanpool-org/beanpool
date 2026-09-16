@@ -32,7 +32,9 @@ export function NodeIdentityPanel({
     const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string; type: string }>>([]);
     const [searching, setSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
 
     // Directory publishing flags
@@ -211,11 +213,20 @@ export function NodeIdentityPanel({
         }
     }, [lat, lng, radiusKm, nodeIcon]);
 
+    // Cleanup timers and abort controllers on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+            if (abortControllerRef.current) abortControllerRef.current.abort();
+        };
+    }, []);
+
     // Handle outside clicks to close search suggestions dropdown
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
                 setShowResults(false);
+                setSelectedIndex(-1);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -230,7 +241,10 @@ export function NodeIdentityPanel({
 
     const handleSearchInput = (value: string) => {
         setSearchQuery(value);
+        setSelectedIndex(-1);
         if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+
         const q = value.trim();
         if (q.length < 3) {
             setSearchResults([]);
@@ -240,18 +254,25 @@ export function NodeIdentityPanel({
         setSearching(true);
         searchTimeoutRef.current = setTimeout(async () => {
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`);
+                const controller = new AbortController();
+                abortControllerRef.current = controller;
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`,
+                    { signal: controller.signal }
+                );
                 if (res.ok) {
                     const data = await res.json();
                     setSearchResults(Array.isArray(data) ? data : []);
                     setShowResults(true);
                 }
-            } catch (err) {
-                console.error('Geocoding failed:', err);
+            } catch (err: unknown) {
+                if ((err as Error)?.name !== 'AbortError') {
+                    console.error('Geocoding failed:', err);
+                }
             } finally {
                 setSearching(false);
             }
-        }, 350);
+        }, 1000);
     };
 
     const handleSelectLocation = (item: { display_name: string; lat: string; lon: string }) => {
@@ -261,6 +282,7 @@ export function NodeIdentityPanel({
         setLng(itemLng);
         setSearchQuery(item.display_name);
         setShowResults(false);
+        setSelectedIndex(-1);
         panMapTo(itemLat, itemLng, 12);
     };
 
@@ -409,8 +431,34 @@ export function NodeIdentityPanel({
                             <input
                                 id="location-search"
                                 type="search"
+                                role="combobox"
+                                aria-autocomplete="list"
+                                aria-expanded={showResults && searchResults.length > 0}
+                                aria-controls="location-results"
+                                aria-activedescendant={selectedIndex >= 0 ? `location-result-${selectedIndex}` : undefined}
                                 value={searchQuery}
                                 onChange={(e) => handleSearchInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (selectedIndex >= 0 && selectedIndex < searchResults.length) {
+                                            handleSelectLocation(searchResults[selectedIndex]);
+                                        }
+                                    } else if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        if (showResults && searchResults.length > 0) {
+                                            setSelectedIndex((prev) => (prev + 1) % searchResults.length);
+                                        }
+                                    } else if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        if (showResults && searchResults.length > 0) {
+                                            setSelectedIndex((prev) => (prev <= 0 ? searchResults.length - 1 : prev - 1));
+                                        }
+                                    } else if (e.key === 'Escape') {
+                                        setShowResults(false);
+                                        setSelectedIndex(-1);
+                                    }
+                                }}
                                 placeholder="Search for a location..."
                                 autoComplete="off"
                                 className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 pr-10"
@@ -425,13 +473,27 @@ export function NodeIdentityPanel({
                         {showResults && searchResults.length > 0 && (
                             <div
                                 id="location-results"
+                                role="listbox"
+                                aria-label="Location suggestions"
                                 className="absolute left-0 right-0 top-full mt-1 bg-nature-900 border border-nature-700 rounded-xl shadow-2xl z-30 max-h-56 overflow-y-auto custom-scrollbar divide-y divide-nature-800"
                             >
                                 {searchResults.map((item, idx) => (
                                     <div
                                         key={idx}
+                                        id={`location-result-${idx}`}
+                                        role="option"
+                                        aria-selected={selectedIndex === idx}
+                                        tabIndex={0}
                                         onClick={() => handleSelectLocation(item)}
-                                        className="p-3 text-xs hover:bg-nature-800/80 cursor-pointer transition-colors"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleSelectLocation(item);
+                                            }
+                                        }}
+                                        className={`p-3 text-xs cursor-pointer transition-colors ${
+                                            selectedIndex === idx ? 'bg-nature-800' : 'hover:bg-nature-800/80'
+                                        }`}
                                     >
                                         <div className="text-white font-medium">{item.display_name}</div>
                                         <div className="text-[10px] text-terra-400 font-mono mt-0.5 capitalize">{item.type}</div>

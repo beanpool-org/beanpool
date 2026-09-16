@@ -44,6 +44,7 @@ import {
     adminAssignTreasuryOperator, initiateWindUp, cancelWindUp,
     finaliseWindUp, getEnterpriseLedger, pauseEnterprise, resumeEnterprise,
     reconcileLedgerFromDb, getCommonsBalance, getCommonsBalanceExact,
+    getEnterpriseUnderlyingFloor,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -242,6 +243,15 @@ async function main() {
     const txDeal = requestPost(existingOffer.id, ordinaryMember);
     assert(txDeal !== null, 'Charlie requested kale offer');
 
+    // Test: cancelWindUp is allowed even after 7-day grace period if not finalised
+    const cancelAfterGrace = cancelWindUp(farm, regKeeper);
+    assert(cancelAfterGrace.ok === true && cancelAfterGrace.status === 'active', 'Keeper can cancel wind-up after 7 days if not finalised');
+    initiateWindUp(farm, leadKeeper);
+    db.prepare("UPDATE members SET wind_up_initiated_at = ? WHERE public_key = ?").run(eightDaysAgo, farm);
+
+    // Create an active backing pledge to verify release upon finalise
+    db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
+
     // Finalise blocked while open transaction exists
     let openEscrowFinaliseThrew = false;
     try {
@@ -265,6 +275,9 @@ async function main() {
     const finalRes = finaliseWindUp(farm, leadKeeper);
     assert(finalRes.ok === true && finalRes.status === 'completed', 'Wind-up finalised successfully');
     assert(finalRes.sweptAmount === farmPreBal, `Swept full remaining balance (${farmPreBal}) to Commons`);
+
+    const activePledgesPost = db.prepare("SELECT COUNT(*) as c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL").get(farm) as any;
+    assert(activePledgesPost.c === 0, 'Active pledges released upon wind-up finalisation');
 
     // Verify sweep landed in Commons pool
     const commonsPost = getCommonsBalance();
@@ -383,6 +396,13 @@ async function main() {
     assert(ledger.summary.totalSpend === 25, `Total gross spend is 25 (got ${ledger.summary.totalSpend})`);
     assert(ledger.summary.startingBalance === 0, 'Starting balance is 0');
     assert(ledger.summary.endingBalance === getBalance(bakery).balance, `Ending balance matches current balance (${getBalance(bakery).balance})`);
+    assert(Math.round((ledger.summary.startingBalance + ledger.summary.netChange) * 100) / 100 === ledger.summary.endingBalance, `Summary accounting invariant holds: starting (${ledger.summary.startingBalance}) + netChange (${ledger.summary.netChange}) === ending (${ledger.summary.endingBalance})`);
+
+    // Verify getEnterpriseUnderlyingFloor with legacy floor and pledges
+    const { publicKey: eggsTestEnt } = createTreasury('EggsTestLifecycle', AVATAR, 0);
+    db.prepare("UPDATE members SET legacy_credit_floor = 200, earned_credit = 0 WHERE public_key = ?").run(eggsTestEnt);
+    const uFloorWithLegacy = getEnterpriseUnderlyingFloor(eggsTestEnt);
+    assert(uFloorWithLegacy.floor === -200, `getEnterpriseUnderlyingFloor accounts for legacy_credit_floor (-200, got ${uFloorWithLegacy.floor})`);
 
     // Test period filtering with `since`
     // Set tx1 timestamp to 1 hour ago so since filtering is unambiguous across millisecond execution

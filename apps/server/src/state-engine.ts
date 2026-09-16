@@ -1830,21 +1830,33 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     const backingRow = db.prepare(
         "SELECT SUM(backing) as totalBacking, COUNT(CASE WHEN backing > 0 THEN 1 END) as hasBacking, COUNT(*) as totalKeepers FROM treasury_operators WHERE treasury_pubkey = ?"
     ).get(enterprisePubkey) as any;
-    const totalBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
-    const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0;
-    const totalKeepers = (backingRow?.totalKeepers ?? 0);
-    const memberRow = db.prepare("SELECT earned_credit FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
-    const { floor, earnedCredit, grantedCredit } = getMemberTrustProfile(enterprisePubkey);
-    const effectiveEarnedCredit = Math.max(earnedCredit || 0, memberEarnedCredit);
-    if (hasExplicitBacking) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, totalBacking + effectiveEarnedCredit + (grantedCredit || 0));
-        return { floor: -allowance, totalBacking, hasBacking: true };
+    const pledgeRow = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) as total
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
+    const pledgeBacking = Number(pledgeRow?.total || 0);
+    const operatorBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
+    const totalBacking = Math.max(operatorBacking, pledgeBacking);
+    const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0 || pledgeBacking > 0;
+
+    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (memberRow?.credit_frozen === 1) {
+        return { floor: 0, totalBacking, hasBacking: hasExplicitBacking };
     }
 
-    if (grantedCredit > 0 || effectiveEarnedCredit > 0) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveEarnedCredit + grantedCredit);
-        return { floor: -allowance, totalBacking: 0, hasBacking: false };
+    const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
+    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+    if (legacyFloor > 0 && totalBacking >= legacyFloor) {
+        legacyFloor = 0;
+    }
+
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
+        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
     }
 
     return { floor: 0, totalBacking: 0, hasBacking: false };
@@ -2706,12 +2718,6 @@ export function cancelWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error('Only a keeper of this enterprise may cancel wind-up');
     }
 
-    const initiatedAt = member.wind_up_initiated_at ? new Date(member.wind_up_initiated_at).getTime() : 0;
-    const gracePeriodMs = 7 * 24 * 60 * 60 * 1000;
-    if (Date.now() - initiatedAt > gracePeriodMs) {
-        throw new Error('Wind-up grace period (7 days) has expired');
-    }
-
     db.prepare(`
         UPDATE members
         SET status = 'active', wind_up_initiated_at = NULL, wind_up_initiated_by = NULL
@@ -2798,6 +2804,9 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
                 db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(op.member_pubkey);
             }
         }
+
+        db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE enterprise = ? AND released_at IS NULL").run(now, enterprisePubkey);
+        clearEnterpriseFloorCache(enterprisePubkey);
 
         db.prepare(`
             UPDATE members
@@ -2977,7 +2986,7 @@ export function getEnterpriseLedger(
         summary: {
             totalIncome: Math.round(periodIncome * 100) / 100,
             totalSpend: Math.round(periodSpend * 100) / 100,
-            netChange: Math.round((periodIncome - periodSpend) * 100) / 100,
+            netChange: Math.round((periodEndingBalance - startingBalance) * 100) / 100,
             startingBalance: Math.round(startingBalance * 100) / 100,
             endingBalance: Math.round(periodEndingBalance * 100) / 100,
             transactionCount: filteredEntries.length,

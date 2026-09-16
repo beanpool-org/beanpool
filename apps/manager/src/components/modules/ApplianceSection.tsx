@@ -112,7 +112,7 @@ export function ApplianceSection({
                 activeNode.adminPassword,
                 getTfaSessionToken(activeNode.id)
             );
-            setSnapshots(list || []);
+            setSnapshots(Array.isArray(list) ? list : []);
         } catch {
             setSnapshots([]);
         } finally {
@@ -923,11 +923,11 @@ export function ApplianceSection({
 
                         {loadingSnapshots ? (
                             <div className="py-6 text-center text-xs text-nature-400">Loading snapshots...</div>
-                        ) : snapshots.length === 0 ? (
+                        ) : (Array.isArray(snapshots) ? snapshots : []).length === 0 ? (
                             <div className="py-6 text-center text-xs text-nature-400">No snapshots created yet.</div>
                         ) : (
                             <div className="space-y-2">
-                                {snapshots.map((s) => (
+                                {(Array.isArray(snapshots) ? snapshots : []).map((s) => (
                                     <div
                                         key={s.name}
                                         className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3 text-xs"
@@ -1007,10 +1007,10 @@ export function ApplianceSection({
 
                         {/* Peer List */}
                         <div className="space-y-2">
-                            {connectors.length === 0 ? (
+                            {(Array.isArray(connectors) ? connectors : []).length === 0 ? (
                                 <div className="text-xs text-nature-400 italic">No external peers currently linked.</div>
                             ) : (
-                                connectors.map((c, i) => (
+                                (Array.isArray(connectors) ? connectors : []).map((c, i) => (
                                     <div
                                         key={c.id || i}
                                         className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between text-xs font-mono"

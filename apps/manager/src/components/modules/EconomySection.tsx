@@ -7,6 +7,8 @@ import {
     fetchTreasuryKeepers,
     assignTreasuryKeeper,
     revokeTreasuryKeeper,
+    normalizeKeeperPubkey,
+    normalizeKeepers,
     type NodeTreasury,
     type NodeDataPayload,
     type MemberItem,
@@ -103,14 +105,46 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
     const [roundDays, setRoundDays] = useState(7);
     const [roundActionLoading, setRoundActionLoading] = useState(false);
 
-    const members: MemberItem[] = nodeData?.members || [];
+    const members: MemberItem[] = Array.isArray(nodeData?.members) ? nodeData.members : [];
 
-    const getMemberDisplayName = (pubkey: string): string => {
-        const found = members.find((m) => (m.publicKey || m.pubkey) === pubkey);
-        if (found) {
-            return (found.name || (found as { callsign?: string }).callsign || pubkey.slice(0, 10)) as string;
+    const getMemberDisplayName = (input: unknown): string => {
+        if (!input) return 'Unknown';
+        let pubkey = '';
+        let directName = '';
+
+        if (typeof input === 'string') {
+            pubkey = input;
+        } else if (typeof input === 'object' && input !== null) {
+            const obj = input as {
+                publicKey?: unknown;
+                pubkey?: unknown;
+                name?: unknown;
+                callsign?: unknown;
+                displayName?: unknown;
+            };
+            if (typeof obj.name === 'string' && obj.name.trim()) directName = obj.name.trim();
+            else if (typeof obj.displayName === 'string' && obj.displayName.trim()) directName = obj.displayName.trim();
+            else if (typeof obj.callsign === 'string' && obj.callsign.trim()) directName = obj.callsign.trim();
+
+            if (typeof obj.publicKey === 'string') pubkey = obj.publicKey;
+            else if (typeof obj.pubkey === 'string') pubkey = obj.pubkey;
         }
-        return `${pubkey.slice(0, 10)}...`;
+
+        if (pubkey && Array.isArray(members)) {
+            const found = members.find((m) => m && (m.publicKey === pubkey || (m as { pubkey?: string }).pubkey === pubkey));
+            if (found) {
+                const foundName = found.name || (found as { callsign?: string }).callsign;
+                if (typeof foundName === 'string' && foundName.trim()) {
+                    return foundName.trim();
+                }
+            }
+        }
+
+        if (directName) return directName;
+        if (typeof pubkey === 'string' && pubkey.length > 0) {
+            return pubkey.length > 10 ? `${pubkey.slice(0, 10)}...` : pubkey;
+        }
+        return typeof input === 'string' ? input : 'Member';
     };
 
     const loadTreasuries = async () => {
@@ -123,7 +157,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             const initialMap: Record<string, string[]> = {};
             for (const t of list || []) {
                 if (t.publicKey) {
-                    initialMap[t.publicKey] = t.keepers || [];
+                    initialMap[t.publicKey] = normalizeKeepers(t.keepers);
                 }
             }
             setKeepersMap(initialMap);
@@ -140,7 +174,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                 activeNode.adminPassword,
                                 effectiveTfaToken
                             );
-                            return { pubkey: t.publicKey, keepers };
+                            return { pubkey: t.publicKey, keepers: normalizeKeepers(keepers) };
                         } catch {
                             return { pubkey: t.publicKey, keepers: [] };
                         }
@@ -258,7 +292,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                 activeNode.adminPassword,
                 effectiveTfaToken
             );
-            setKeepersMap((prev) => ({ ...prev, [t.publicKey]: keepers }));
+            setKeepersMap((prev) => ({ ...prev, [t.publicKey]: normalizeKeepers(keepers) }));
         } catch {
             // Keep existing from map if fetch fails
         }
@@ -285,7 +319,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             );
             setKeepersMap((prev) => ({
                 ...prev,
-                [manageKeepersTreasury.publicKey]: updatedKeepers,
+                [manageKeepersTreasury.publicKey]: normalizeKeepers(updatedKeepers),
             }));
             setAssignMemberPubkey('');
             setCustomKeeperPubkey('');
@@ -297,9 +331,15 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
         }
     };
 
-    const handleRevokeKeeper = async (keeperPubkey: string) => {
+    const handleRevokeKeeper = async (keeperInput: unknown) => {
         if (!manageKeepersTreasury) return;
-        const displayName = getMemberDisplayName(keeperPubkey);
+        const keeperPubkey = normalizeKeeperPubkey(keeperInput);
+        if (!keeperPubkey) {
+            console.error('Unable to determine keeper public key for revocation', keeperInput);
+            return;
+        }
+
+        const displayName = getMemberDisplayName(keeperInput);
         if (!confirm(`Revoke keeper permissions from @${displayName} for ${manageKeepersTreasury.name}?`)) {
             return;
         }
@@ -316,7 +356,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             );
             setKeepersMap((prev) => ({
                 ...prev,
-                [manageKeepersTreasury.publicKey]: updatedKeepers,
+                [manageKeepersTreasury.publicKey]: normalizeKeepers(updatedKeepers),
             }));
             onRefresh();
         } catch (err: unknown) {
@@ -513,11 +553,13 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {treasuries.map((t) => {
-                                const currentKeepers = keepersMap[t.publicKey] || t.keepers || [];
+                            {treasuries.map((t, idx) => {
+                                const rawKeepers = keepersMap[t.publicKey] || t.keepers || [];
+                                const currentKeepers = Array.isArray(rawKeepers) ? rawKeepers : [];
+                                const pubkeyStr = typeof t.publicKey === 'string' ? t.publicKey : '';
                                 return (
                                     <div
-                                        key={t.publicKey}
+                                        key={pubkeyStr || `treasury-${idx}`}
                                         className="p-5 rounded-2xl bg-nature-900/80 border border-nature-800 hover:border-nature-700 transition-all flex flex-col justify-between shadow-lg space-y-4"
                                     >
                                         <div>
@@ -529,7 +571,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                                     <div>
                                                         <h4 className="text-sm font-bold text-white m-0">{t.name}</h4>
                                                         <span className="text-[10px] font-mono text-nature-400">
-                                                            {(t.publicKey || '').slice(0, 12)}...
+                                                            {pubkeyStr ? `${pubkeyStr.slice(0, 12)}...` : 'Unknown'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -570,14 +612,19 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                                     </div>
                                                 ) : (
                                                     <div className="flex flex-wrap gap-1">
-                                                        {currentKeepers.slice(0, 3).map((pk) => (
-                                                            <span
-                                                                key={pk}
-                                                                className="px-2 py-0.5 rounded-md bg-nature-800/80 border border-nature-700 text-[10px] font-medium text-nature-200"
-                                                            >
-                                                                @{getMemberDisplayName(pk)}
-                                                            </span>
-                                                        ))}
+                                                        {currentKeepers.slice(0, 3).map((pk, idx) => {
+                                                            const kPubkey = typeof pk === 'string'
+                                                                ? pk
+                                                                : (pk && typeof (pk as any).publicKey === 'string' ? (pk as any).publicKey : String(idx));
+                                                            return (
+                                                                <span
+                                                                    key={kPubkey || idx}
+                                                                    className="px-2 py-0.5 rounded-md bg-nature-800/80 border border-nature-700 text-[10px] font-medium text-nature-200"
+                                                                >
+                                                                    @{getMemberDisplayName(pk)}
+                                                                </span>
+                                                            );
+                                                        })}
                                                         {currentKeepers.length > 3 && (
                                                             <span className="px-1.5 py-0.5 rounded text-[10px] text-nature-400 font-medium">
                                                                 +{currentKeepers.length - 3} more
@@ -845,12 +892,13 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
                                 >
                                     <option value="">None (assign keeper later)</option>
-                                    {members.map((m) => {
-                                        const pk = m.publicKey || m.pubkey || '';
-                                        const name = m.name || (m as { callsign?: string }).callsign || pk.slice(0, 10);
+                                    {members.map((m, idx) => {
+                                        const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
+                                        const rawName = m.name || (m as { callsign?: string }).callsign;
+                                        const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : (pk ? pk.slice(0, 10) : 'Member');
                                         return (
-                                            <option key={pk} value={pk}>
-                                                @{name} ({pk.slice(0, 8)}...)
+                                            <option key={pk || `member-${idx}`} value={pk}>
+                                                @{name} ({pk ? `${pk.slice(0, 8)}...` : ''})
                                             </option>
                                         );
                                     })}
@@ -912,53 +960,65 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
 
                         {/* Current Keepers List */}
                         <div>
-                            <h4 className="text-xs font-bold text-nature-300 uppercase tracking-wider mb-2">
-                                Current Keepers ({(keepersMap[manageKeepersTreasury.publicKey] || []).length})
-                            </h4>
+                            {(() => {
+                                const currentTreasuryKeepers = Array.isArray(keepersMap[manageKeepersTreasury.publicKey])
+                                    ? keepersMap[manageKeepersTreasury.publicKey]
+                                    : (Array.isArray(manageKeepersTreasury.keepers) ? manageKeepersTreasury.keepers : []);
+                                return (
+                                    <>
+                                        <h4 className="text-xs font-bold text-nature-300 uppercase tracking-wider mb-2">
+                                            Current Keepers ({currentTreasuryKeepers.length})
+                                        </h4>
 
-                            {(keepersMap[manageKeepersTreasury.publicKey] || []).length === 0 ? (
-                                <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800 text-center text-xs text-nature-400">
-                                    <p className="font-semibold text-amber-400 mb-1">No keepers currently assigned.</p>
-                                    <p className="text-[11px] text-nature-400">
-                                        Without an appointed keeper, community members cannot operate this enterprise or
-                                        satisfy the offer covenant.
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {(keepersMap[manageKeepersTreasury.publicKey] || []).map((pk) => {
-                                        const name = getMemberDisplayName(pk);
-                                        return (
-                                            <div
-                                                key={pk}
-                                                className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
-                                            >
-                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                    <div className="w-7 h-7 rounded-lg bg-nature-800 border border-nature-700 flex items-center justify-center text-xs font-bold text-terra-400">
-                                                        {name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <div className="text-xs font-bold text-white truncate">
-                                                            @{name}
-                                                        </div>
-                                                        <div className="text-[10px] font-mono text-nature-500 truncate">
-                                                            {pk.slice(0, 16)}...
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <button
-                                                    onClick={() => handleRevokeKeeper(pk)}
-                                                    disabled={keeperActionLoading}
-                                                    className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-xs font-bold text-red-300 border border-red-800/80 transition-all disabled:opacity-40 shrink-0"
-                                                >
-                                                    Revoke
-                                                </button>
+                                        {currentTreasuryKeepers.length === 0 ? (
+                                            <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800 text-center text-xs text-nature-400">
+                                                <p className="font-semibold text-amber-400 mb-1">No keepers currently assigned.</p>
+                                                <p className="text-[11px] text-nature-400">
+                                                    Without an appointed keeper, community members cannot operate this enterprise or
+                                                    satisfy the offer covenant.
+                                                </p>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {currentTreasuryKeepers.map((pk, idx) => {
+                                                    const name = getMemberDisplayName(pk);
+                                                    const pubkeyStr = typeof pk === 'string'
+                                                        ? pk
+                                                        : (pk && typeof (pk as any).publicKey === 'string' ? (pk as any).publicKey : '');
+                                                    return (
+                                                        <div
+                                                            key={pubkeyStr || idx}
+                                                            className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
+                                                        >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                                <div className="w-7 h-7 rounded-lg bg-nature-800 border border-nature-700 flex items-center justify-center text-xs font-bold text-terra-400">
+                                                                    {(name || '?').charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="text-xs font-bold text-white truncate">
+                                                                        @{name}
+                                                                    </div>
+                                                                    <div className="text-[10px] font-mono text-nature-500 truncate">
+                                                                        {pubkeyStr ? `${pubkeyStr.slice(0, 16)}...` : 'Unknown'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <button
+                                                                onClick={() => handleRevokeKeeper(pk)}
+                                                                disabled={keeperActionLoading}
+                                                                className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-xs font-bold text-red-300 border border-red-800/80 transition-all disabled:opacity-40 shrink-0"
+                                                            >
+                                                                Revoke
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
 
                         {/* Assign New Keeper Form */}
@@ -986,23 +1046,27 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                         className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
                                     >
                                         <option value="">-- Choose from community directory --</option>
-                                        {members
-                                            .filter(
-                                                (m) =>
-                                                    !(keepersMap[manageKeepersTreasury.publicKey] || []).includes(
-                                                        m.publicKey || m.pubkey || ''
-                                                    )
-                                            )
-                                            .map((m) => {
-                                                const pk = m.publicKey || m.pubkey || '';
-                                                const name =
-                                                    m.name || (m as { callsign?: string }).callsign || pk.slice(0, 10);
-                                                return (
-                                                    <option key={pk} value={pk}>
-                                                        @{name} ({pk.slice(0, 8)}...)
-                                                    </option>
-                                                );
-                                            })}
+                                        {(() => {
+                                            const activeKeepers = Array.isArray(keepersMap[manageKeepersTreasury.publicKey])
+                                                ? keepersMap[manageKeepersTreasury.publicKey]
+                                                : (Array.isArray(manageKeepersTreasury.keepers) ? manageKeepersTreasury.keepers : []);
+                                            const assignedPubkeys = activeKeepers.map(normalizeKeeperPubkey).filter(Boolean);
+                                            return members
+                                                .filter((m) => {
+                                                    const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
+                                                    return pk && !assignedPubkeys.includes(pk);
+                                                })
+                                                .map((m, idx) => {
+                                                    const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
+                                                    const rawName = m.name || (m as { callsign?: string }).callsign;
+                                                    const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : (pk ? pk.slice(0, 10) : 'Member');
+                                                    return (
+                                                        <option key={pk || `assign-member-${idx}`} value={pk}>
+                                                            @{name} ({pk ? `${pk.slice(0, 8)}...` : ''})
+                                                        </option>
+                                                    );
+                                                });
+                                        })()}
                                     </select>
                                 </div>
                             )}

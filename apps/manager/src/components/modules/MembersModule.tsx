@@ -125,30 +125,33 @@ export function fmtLastActive(iso?: string | null): string {
 }
 
 export function getMemberDisplayName(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string {
-    const pub = m?.publicKey || m?.pubkey || '';
+    const rawPub = m?.publicKey || m?.pubkey;
+    const pub = typeof rawPub === 'string' ? rawPub : '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
     // Look up in profiles Map or array
     const profile = profiles instanceof Map
         ? profiles.get(pub)
-        : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    if (profile?.name?.trim()) return profile.name.trim();
-    if (profile?.displayName?.trim()) return profile.displayName.trim();
-    if (profile?.callsign?.trim()) return profile.callsign.trim();
-    if (profile?.handle?.trim()) return `@${profile.handle.trim()}`;
+        : (Array.isArray(profiles) ? profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub)) : undefined);
+    if (typeof profile?.name === 'string' && profile.name.trim()) return profile.name.trim();
+    if (typeof profile?.displayName === 'string' && profile.displayName.trim()) return profile.displayName.trim();
+    if (typeof profile?.callsign === 'string' && profile.callsign.trim()) return profile.callsign.trim();
+    if (typeof profile?.handle === 'string' && profile.handle.trim()) return `@${profile.handle.trim()}`;
 
     // Direct properties on member object
-    if (m?.name?.trim()) return m.name.trim();
-    if (m?.displayName?.trim()) return m.displayName.trim();
-    if (m?.callsign?.trim()) return m.callsign.trim();
-    if (m?.handle?.trim()) return `@${m.handle.trim()}`;
+    if (typeof m?.name === 'string' && m.name.trim()) return m.name.trim();
+    if (typeof m?.displayName === 'string' && m.displayName.trim()) return m.displayName.trim();
+    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
+    if (typeof m?.handle === 'string' && m.handle.trim()) return `@${m.handle.trim()}`;
 
-    if (pub.includes('-')) {
+    if (pub && pub.includes('-')) {
         const prefix = pub.split('-')[0];
-        return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Member`;
+        if (prefix) {
+            return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Member`;
+        }
     }
 
-    if (pub.length > 8) {
+    if (pub && pub.length > 8) {
         return `Member (${pub.slice(0, 8)})`;
     }
 
@@ -619,7 +622,16 @@ export function MembersModule({
                                         <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold uppercase font-mono">
                                             USER REPORT
                                         </span>
-                                        <span className="font-mono text-amber-300">Target: {report.targetPubkey?.slice(0, 12)}...</span>
+                                        <span className="font-mono text-amber-300">
+                                            {(() => {
+                                                const target = typeof report.targetPubkey === 'string'
+                                                    ? report.targetPubkey
+                                                    : (typeof report.target_pubkey === 'string'
+                                                        ? report.target_pubkey
+                                                        : '');
+                                                return `Target: ${target ? `${target.slice(0, 12)}...` : 'Unknown'}`;
+                                            })()}
+                                        </span>
                                     </div>
                                     <p className="text-nature-200 m-0">Reason: {report.reason || 'Abuse or spam reported by member'}</p>
                                 </div>
@@ -793,7 +805,7 @@ export function MembersModule({
                                                             )}
                                                         </div>
                                                         <code className="text-[10px] text-nature-500 font-mono truncate block">
-                                                            {pubkey ? `${pubkey.slice(0, 20)}...` : ''}
+                                                            {typeof pubkey === 'string' && pubkey ? `${pubkey.slice(0, 20)}...` : ''}
                                                         </code>
                                                     </div>
                                                 </div>

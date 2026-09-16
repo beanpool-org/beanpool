@@ -47,8 +47,9 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
-                const data = await res.json();
-                setChannels(data.channels || []);
+                const data = await res.json().catch(() => ({}));
+                const raw = data.channels || data;
+                setChannels(Array.isArray(raw) ? raw : []);
             }
         } catch {
             setChannels([]);
@@ -298,7 +299,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
 
                     {loadingChannels ? (
                         <div className="p-8 text-center text-xs text-nature-400">Loading channels...</div>
-                    ) : channels.length === 0 ? (
+                    ) : (Array.isArray(channels) ? channels : []).length === 0 ? (
                         <div className="p-8 text-center bg-nature-900/40 border border-nature-800 rounded-2xl">
                             <p className="text-sm font-semibold text-white mb-1">No channels added yet</p>
                             <p className="text-xs text-nature-400 mb-4">
@@ -313,7 +314,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {channels.map((c) => (
+                            {(Array.isArray(channels) ? channels : []).map((c) => (
                                 <div
                                     key={c.id}
                                     className="p-4 rounded-xl bg-nature-900/80 border border-nature-800 flex items-center justify-between gap-3 shadow-md"

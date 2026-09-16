@@ -263,6 +263,7 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
     /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
     /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
+    /^\/api\/commons\/my-credits\/[^/]+$/,                  // governance: voice credits public read
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>

@@ -390,7 +390,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors truncate">
                                                     {t.name}
                                                 </h3>
-                                                {t.paused && (
+                                                {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
                                                         ⏸️ Paused
                                                     </span>
@@ -421,12 +421,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             </div>
                                             <p className="text-xs text-nature-400 mt-0.5">
                                                 {t.callsign ? `@${t.callsign} · ` : ''}
-                                                {t.paused
-                                                    ? 'Paused for season'
+                                                {t.status === 'completed'
+                                                    ? 'Completed · Closed'
                                                     : t.status === 'winding_up'
                                                         ? 'Winding up'
-                                                        : t.status === 'completed'
-                                                            ? 'Completed · Closed'
+                                                        : t.paused
+                                                            ? 'Paused for season'
                                                             : `${t.liveOffers ?? 0} live offer${(t.liveOffers ?? 0) === 1 ? '' : 's'}`}
                                                 {t.keepers && t.keepers.length > 0 ? ` · ${t.keepers.length} keeper${t.keepers.length === 1 ? '' : 's'}` : ''}
                                             </p>

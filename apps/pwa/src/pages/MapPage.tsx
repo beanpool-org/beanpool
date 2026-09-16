@@ -718,7 +718,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             });
             marker.addTo(markersRef.current!);
         });
-    }, [posts, useModernMarkers, blockedSet]);
+    }, [posts, useModernMarkers, blockedSet, inactiveEnterpriseKeys]);
 
     return (
         <>

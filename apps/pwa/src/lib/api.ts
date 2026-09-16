@@ -930,7 +930,8 @@ export async function getGroups(filter?: { category?: string; q?: string; member
     if (filter?.member) params.set('member', filter.member);
     if (filter?.limit) params.set('limit', String(filter.limit));
     if (filter?.offset) params.set('offset', String(filter.offset));
-    return request('GET', `/api/groups?${params}`);
+    const qs = params.toString();
+    return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
 }
 
 export async function getGroup(id: string): Promise<Group> {
@@ -956,7 +957,8 @@ export async function getGroupMembers(groupId: string, filter?: { status?: strin
     const params = new URLSearchParams();
     if (filter?.status) params.set('status', filter.status);
     if (filter?.role) params.set('role', filter.role);
-    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/members?${params}`);
+    const qs = params.toString();
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/members${qs ? `?${qs}` : ''}`);
 }
 
 export async function approveGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean; member: GroupMember }> {

@@ -410,7 +410,7 @@ async function main() {
     assert(true, 'assertMemberActive succeeds with uppercase hex of active member (normalised before query)');
 
     // Verify hot-path query in assertMemberActive uses B-tree index (not SCAN TABLE)
-    const hotPathPlan = db.prepare('EXPLAIN QUERY PLAN SELECT status FROM members WHERE public_key = ?').all(newAliceKey) as any[];
+    const hotPathPlan = db.prepare('EXPLAIN QUERY PLAN SELECT status FROM members WHERE public_key = ? COLLATE NOCASE').all(newAliceKey) as any[];
     const usesIndex = hotPathPlan.some((step) => step.detail.includes('USING INDEX') || step.detail.includes('USING PRIMARY KEY'));
     assert(usesIndex === true, 'assertMemberActive members query utilizes index without full-table SCAN');
 

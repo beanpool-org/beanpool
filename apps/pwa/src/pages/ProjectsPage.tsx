@@ -434,14 +434,39 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                                     <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center" aria-hidden="true">{t.link ? '🔗' : '🏛️'}</div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-white font-semibold text-sm truncate">{t.name}</div>
+                                    <div className="flex items-center gap-1.5 truncate">
+                                        <span className="text-white font-semibold text-sm truncate">{t.name}</span>
+                                        {t.paused && (
+                                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40">
+                                                ⏸️ Paused
+                                            </span>
+                                        )}
+                                        {t.status === 'winding_up' && (
+                                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                                                ⏳ Winding up
+                                            </span>
+                                        )}
+                                        {t.status === 'completed' && (
+                                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-700 text-stone-300 border border-stone-600">
+                                                Closed
+                                            </span>
+                                        )}
+                                    </div>
                                     {/* A LINK'S HEADLINE IS THE ENERGY BALANCE, not its offer count — #143 §7: "we have
                                         delivered 480 beans of work to Byron and had none back" is the fact that makes
                                         anyone call a favour in, and it is the reason the card exists. */}
                                     {t.link ? (
                                         <div className="text-nature-400 text-xs">{energySentence(t.link.energyBalance)}</div>
                                     ) : (
-                                        <div className="text-nature-400 text-xs">{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</div>
+                                        <div className="text-nature-400 text-xs">
+                                            {t.paused
+                                                ? 'Paused for season'
+                                                : t.status === 'winding_up'
+                                                    ? 'Winding up'
+                                                    : t.status === 'completed'
+                                                        ? 'Completed · Closed'
+                                                        : `${t.liveOffers} live offer${t.liveOffers === 1 ? '' : 's'}`}
+                                        </div>
                                     )}
                                 </div>
                                 <div className="text-right">

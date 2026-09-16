@@ -308,8 +308,10 @@ async function main() {
     }
     assert(approveWindingUpThrew, 'approvePostRequest blocked when author is winding up');
 
-    // Create an active backing pledge to verify release upon finalise
+    // Create an active backing pledge, set pause/legacy floor, and insert a pending wage claim to verify release/cleanup upon finalise
     db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
+    db.prepare("UPDATE members SET legacy_credit_floor = 200, paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = -200 WHERE public_key = ?").run(eightDaysAgo, leadKeeper, farm);
+    db.prepare("INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run('dwc-farm-1', farm, leadKeeper, existingOffer.id, txDeal.id, 15, eightDaysAgo);
 
     // Finalise blocked while open transaction exists
     let openEscrowFinaliseThrew = false;
@@ -338,6 +340,19 @@ async function main() {
     const activePledgesPost = db.prepare("SELECT COUNT(*) as c FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL").get(farm) as any;
     assert(activePledgesPost.c === 0, 'Active pledges released upon wind-up finalisation');
 
+    const mPost = db.prepare("SELECT legacy_credit_floor, paused, paused_at, paused_by, paused_floor_snapshot FROM members WHERE public_key = ?").get(farm) as any;
+    assert(mPost.legacy_credit_floor === null, 'legacy_credit_floor cleared upon wind-up finalisation');
+    assert(mPost.paused === 0, 'paused reset to 0 upon wind-up finalisation');
+    assert(mPost.paused_at === null, 'paused_at cleared upon wind-up finalisation');
+    assert(mPost.paused_by === null, 'paused_by cleared upon wind-up finalisation');
+    assert(mPost.paused_floor_snapshot === null, 'paused_floor_snapshot cleared upon wind-up finalisation');
+
+    const pendingClaimsPost = db.prepare("SELECT COUNT(*) as c FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND status = 'pending'").get(farm) as any;
+    assert(pendingClaimsPost.c === 0, 'Pending deferred wage claims cancelled upon wind-up finalisation');
+
+    const woundUpFloor = getEnterpriseUnderlyingFloor(farm);
+    assert(woundUpFloor.floor === 0 && woundUpFloor.totalBacking === 0 && woundUpFloor.hasBacking === false, 'getEnterpriseUnderlyingFloor returns 0 for completed enterprise');
+
     // Verify sweep landed in Commons pool
     const commonsPost = getCommonsBalance();
     assert(Math.round((commonsPost - commonsPre) * 100) / 100 === farmPreBal, `Commons pool received exactly swept amount (${farmPreBal})`);
@@ -350,6 +365,19 @@ async function main() {
     // Verify keepers released
     const remainingOps = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(farm) as any;
     assert(remainingOps.c === 0, 'All operators deleted from treasury_operators');
+
+    // Test operator backing excludes inactive / credit-frozen keepers (Comment 4)
+    createTreasury('BackingTestCoop', AVATAR, 0);
+    const coopPubkey = (db.prepare("SELECT public_key FROM members WHERE callsign = 'BackingTestCoop'").get() as any).public_key;
+    adminAssignTreasuryOperator(coopPubkey, regKeeper, 'keeper', 100);
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === -100, 'Operator backing is active for active keeper');
+    // Freeze credit of regKeeper
+    db.prepare("UPDATE members SET credit_frozen = 1 WHERE public_key = ?").run(regKeeper);
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === 0, 'Operator backing excluded when keeper is credit_frozen');
+    db.prepare("UPDATE members SET credit_frozen = 0, status = 'suspended' WHERE public_key = ?").run(regKeeper);
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === 0, 'Operator backing excluded when keeper is suspended');
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(regKeeper);
+    assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === -100, 'Operator backing restored when keeper returns to active');
 
     // Verify name stays reserved
     let duplicateNameThrew = false;

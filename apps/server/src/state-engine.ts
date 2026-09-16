@@ -1827,9 +1827,15 @@ export function liveOfferCount(publicKey: string): number {
  * (docs/the-commons.md §2.6) and its own trust profile (earned/granted credit).
  */
 export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor: number; totalBacking: number; hasBacking: boolean } {
-    const backingRow = db.prepare(
-        "SELECT SUM(backing) as totalBacking, COUNT(CASE WHEN backing > 0 THEN 1 END) as hasBacking, COUNT(*) as totalKeepers FROM treasury_operators WHERE treasury_pubkey = ?"
-    ).get(enterprisePubkey) as any;
+    const backingRow = db.prepare(`
+        SELECT COALESCE(SUM(o.backing), 0) as totalBacking,
+               COUNT(CASE WHEN o.backing > 0 THEN 1 END) as hasBacking,
+               COUNT(*) as totalKeepers
+        FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ?
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
     const pledgeRow = db.prepare(`
         SELECT COALESCE(SUM(p.amount), 0) as total
         FROM enterprise_pledges p
@@ -1842,9 +1848,9 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     const totalBacking = Math.max(operatorBacking, pledgeBacking);
     const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0 || pledgeBacking > 0;
 
-    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (memberRow?.credit_frozen === 1) {
-        return { floor: 0, totalBacking, hasBacking: hasExplicitBacking };
+    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (memberRow?.status === 'completed' || memberRow?.credit_frozen === 1) {
+        return { floor: 0, totalBacking: 0, hasBacking: false };
     }
 
     const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
@@ -2810,9 +2816,17 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
 
         db.prepare(`
             UPDATE members
-            SET status = 'completed', wind_up_finalised_at = ?
+            SET status = 'completed', wind_up_finalised_at = ?,
+                legacy_credit_floor = NULL,
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
             WHERE public_key = ?
         `).run(now, enterprisePubkey);
+
+        db.prepare(`
+            UPDATE deferred_wage_claims
+            SET status = 'cancelled'
+            WHERE enterprise_pubkey = ? AND status = 'pending'
+        `).run(enterprisePubkey);
 
         db.prepare(`
             UPDATE posts

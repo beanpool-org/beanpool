@@ -670,13 +670,15 @@ async function runDecisionsSuite() {
     // Test remove_lead_keeper execution with conflated params (subject as member)
     const keeperMember = 'keeper_' + Date.now();
     const entPubkey = 'enterprise_test_' + Date.now();
+    const keeperAuthor = 'keeper_author_' + Date.now();
     seedTestMember(keeperMember, 'TestKeeper');
+    seedTestMember(keeperAuthor, 'KeeperAuthor', { earnedCredit: 50 });
     db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by) VALUES (?, ?, 'lead', ?, 'admin')")
         .run(entPubkey, keeperMember, Date.now());
     db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(keeperMember);
 
     const removeKeeperDec = createDecision({
-        authorPubkey: admin,
+        authorPubkey: keeperAuthor,
         title: 'Remove rogue lead keeper',
         description: 'Remove rogue lead keeper',
         touches: 'member',

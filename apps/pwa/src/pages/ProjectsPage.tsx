@@ -199,7 +199,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const filteredGroups = useMemo(() => {
         if (groupCategoryFilter === 'all') return groups;
         if (groupCategoryFilter === 'my_groups') {
-            return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole);
+            return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
         }
         return groups.filter(g => g.category === groupCategoryFilter);
     }, [groups, groupCategoryFilter]);

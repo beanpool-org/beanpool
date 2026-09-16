@@ -443,7 +443,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
     const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
-    const heldCredit = detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0;
+    const heldCredit = Math.abs(detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0);
     const pauseExpiresAt = detail?.pauseExpiresAt || (detail?.pausedAt ? new Date(new Date(detail.pausedAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString() : null);
     const pauseDateFormatted = formatPauseDate(pauseExpiresAt);
 
@@ -971,8 +971,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        disabled={lifecycleActionLoading}
                                                         onClick={() => setConfirmingPause(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Cancel
                                                     </button>
@@ -1000,8 +1001,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        disabled={lifecycleActionLoading}
                                                         onClick={() => setConfirmingResume(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Cancel
                                                     </button>
@@ -1034,8 +1036,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        disabled={lifecycleActionLoading}
                                                         onClick={() => setConfirmingWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Cancel
                                                     </button>
@@ -1063,8 +1066,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        disabled={lifecycleActionLoading}
                                                         onClick={() => setConfirmingCancelWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Keep Winding Up
                                                     </button>
@@ -1092,8 +1096,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        disabled={lifecycleActionLoading}
                                                         onClick={() => setConfirmingFinaliseWindUp(false)}
-                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     >
                                                         Cancel
                                                     </button>

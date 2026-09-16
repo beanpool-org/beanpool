@@ -545,4 +545,146 @@ describe('NodeIdentityPanel Component', () => {
             expect(onRefreshDiag).not.toHaveBeenCalled();
         });
     });
+
+    describe('Bucket 2 Item 5: Service Radius Slider and Number Input', () => {
+        it('renders with real payload and synchronizes dual slider and number input on change', async () => {
+            const fetchMock = vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ communityName: 'Byron Hub' }),
+                    });
+                }
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            serviceRadius: { lat: -28.64, lng: 153.61, radiusKm: 35 },
+                        }),
+                    });
+                }
+                if (url.includes('/api/local/update-identity') || url.includes('/api/local/admin/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({ success: true }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            // Verify initial values from payload
+            const slider = screen.getByLabelText(/Service radius slider in kilometers/i) as HTMLInputElement;
+            const numberInput = screen.getByLabelText(/Service radius in kilometers/i) as HTMLInputElement;
+
+            await waitFor(() => {
+                expect(slider.value).toBe('35');
+                expect(numberInput.value).toBe('35');
+            });
+
+            // Adjust slider -> number input updates
+            await act(async () => {
+                fireEvent.change(slider, { target: { value: '75' } });
+            });
+            expect(slider.value).toBe('75');
+            expect(numberInput.value).toBe('75');
+
+            // Adjust number input -> slider updates
+            await act(async () => {
+                fireEvent.change(numberInput, { target: { value: '120' } });
+            });
+            expect(slider.value).toBe('120');
+            expect(numberInput.value).toBe('120');
+
+            // Save and verify payload sent
+            const saveBtn = screen.getByRole('button', { name: /save identity/i });
+            await act(async () => {
+                fireEvent.click(saveBtn);
+            });
+
+            await waitFor(() => {
+                expect(fetchMock).toHaveBeenCalledWith(
+                    expect.stringContaining('/api/local/admin/node/config'),
+                    expect.objectContaining({
+                        method: 'POST',
+                        body: expect.stringContaining('"radiusKm":120'),
+                    })
+                );
+            });
+        });
+
+        it('renders safely with an empty payload for service radius defaulting to 0', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/local/community-info') || url.includes('/api/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({}),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            }));
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            const slider = screen.getByLabelText(/Service radius slider in kilometers/i) as HTMLInputElement;
+            const numberInput = screen.getByLabelText(/Service radius in kilometers/i) as HTMLInputElement;
+
+            expect(slider.value).toBe('0');
+            expect(numberInput.value).toBe('0');
+        });
+
+        it('renders safely with wrong-typed and malformed service radius payload', async () => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve({
+                            serviceRadius: {
+                                radiusKm: 'not-a-number',
+                                lat: 'invalid-lat',
+                                lng: null,
+                            },
+                        }),
+                    });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+            }));
+
+            await act(async () => {
+                render(
+                    <NodeIdentityPanel
+                        activeNode={mockProfile}
+                        diag={null}
+                        onRefreshDiag={vi.fn()}
+                    />
+                );
+            });
+
+            const slider = screen.getByLabelText(/Service radius slider in kilometers/i) as HTMLInputElement;
+            const numberInput = screen.getByLabelText(/Service radius in kilometers/i) as HTMLInputElement;
+
+            // Safe fallback to 0
+            expect(slider.value).toBe('0');
+            expect(numberInput.value).toBe('0');
+        });
+    });
 });
+

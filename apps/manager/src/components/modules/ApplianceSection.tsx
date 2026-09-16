@@ -958,12 +958,14 @@ export function ApplianceSection({
 
             {/* Subtab: Node Identity */}
             {subTab === 'identity' && (
-                <NodeIdentityPanel
-                    key={activeNode.id}
-                    activeNode={activeNode}
-                    diag={diag}
-                    onRefreshDiag={onRefreshDiag}
-                />
+                <SectionErrorBoundary sectionName="Node Identity" resetKey={activeNode.id}>
+                    <NodeIdentityPanel
+                        key={activeNode.id}
+                        activeNode={activeNode}
+                        diag={diag}
+                        onRefreshDiag={onRefreshDiag}
+                    />
+                </SectionErrorBoundary>
             )}
 
             {/* Subtab: Access & Security */}

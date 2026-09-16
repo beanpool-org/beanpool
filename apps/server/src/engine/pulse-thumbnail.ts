@@ -50,6 +50,57 @@ export const ALLOWED_IMAGE_CONTENT_TYPES = [
     'image/avif',
 ];
 
+/**
+ * Resolves canonical Instagram embed URL from an item permalink or external ID.
+ * Instagram's public embed page serves fresh thumbnail images for public posts/reels
+ * without requiring third-party OAuth tokens or leaking visitor IP addresses.
+ */
+export function extractInstagramEmbedUrl(postUrl?: string | null, externalId?: string | null): string | null {
+    if (postUrl) {
+        try {
+            const u = new URL(postUrl.trim());
+            const host = u.hostname.toLowerCase();
+            if (host === 'instagram.com' || host === 'www.instagram.com' || host === 'instagr.am') {
+                const match = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/i);
+                if (match && match[1]) {
+                    return `https://www.instagram.com/p/${match[1]}/embed/`;
+                }
+            }
+        } catch {}
+    }
+    if (externalId && /^[A-Za-z0-9_-]+$/.test(externalId)) {
+        return `https://www.instagram.com/p/${externalId}/embed/`;
+    }
+    return null;
+}
+
+/**
+ * Extracts a fresh CDN thumbnail image URL from an Instagram embed HTML document.
+ */
+export function extractThumbnailFromEmbedHtml(html: string): string | null {
+    if (!html) return null;
+    const imgMatch = html.match(/<img[^>]+class="[^"]*EmbeddedMediaImage[^"]*"[^>]+src="([^">]+)"/i) ||
+                     html.match(/<img[^>]+src="([^">]+)"[^>]+class="[^"]*EmbeddedMediaImage[^"]*"/i);
+    if (imgMatch && imgMatch[1]) {
+        return imgMatch[1].replace(/&amp;/g, '&').trim();
+    }
+    const jsonMatch = html.match(/\\"display_url\\":\\"([^"\\]+(?:\\.[^"\\]+)*)\\"/) ||
+                      html.match(/"display_url":"([^"]+)"/);
+    if (jsonMatch && jsonMatch[1]) {
+        return jsonMatch[1].replace(/\\\//g, '/').replace(/\\u0026/g, '&').trim();
+    }
+    const ogMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i) ||
+                    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+    if (ogMatch && ogMatch[1]) {
+        return ogMatch[1].replace(/&amp;/g, '&').trim();
+    }
+    const fallbackImg = html.match(/<img[^>]+src="([^">]*(?:cdninstagram\.com|fbcdn\.net)[^">]*)"/i);
+    if (fallbackImg && fallbackImg[1]) {
+        return fallbackImg[1].replace(/&amp;/g, '&').trim();
+    }
+    return null;
+}
+
 export interface ThumbnailCacheEntry {
     buffer: Buffer;
     contentType: string;
@@ -421,6 +472,68 @@ export class PulseThumbnailService {
         this.fetchFn = options.fetchFn ?? ssrfSafeFetch;
     }
 
+    private async attemptThumbnailRecovery(
+        itemId: string,
+        row: { platform?: string; url?: string | null; external_id?: string | null },
+        options: { ifNoneMatch?: string } = {}
+    ): Promise<ThumbnailResult | null> {
+        // 1. Instagram post recovery via public embed page
+        const isInstagram = row.platform === 'instagram' ||
+            Boolean(row.url && /(?:instagram\.com|instagr\.am)/i.test(row.url));
+        if (isInstagram) {
+            const embedUrl = extractInstagramEmbedUrl(row.url, row.external_id);
+            if (embedUrl) {
+                try {
+                    const embedRes = await this.fetchFn(embedUrl, {
+                        method: 'GET',
+                        timeoutMs: this.timeoutMs,
+                        maxBytes: 512 * 1024,
+                        allowedContentTypes: ['text/html', 'text/plain'],
+                    });
+                    if (embedRes.status === 200) {
+                        const html = await embedRes.text();
+                        const freshUrl = extractThumbnailFromEmbedHtml(html);
+                        if (freshUrl && /^https?:\/\//i.test(freshUrl)) {
+                            const imgRes = await this.fetchFn(freshUrl, {
+                                method: 'GET',
+                                timeoutMs: this.timeoutMs,
+                                maxBytes: this.maxEntryBytes,
+                                allowedContentTypes: ALLOWED_IMAGE_CONTENT_TYPES,
+                            });
+                            if (imgRes.status === 200) {
+                                const rawType = imgRes.headers['content-type'] || 'image/jpeg';
+                                const mimeType = rawType.split(';')[0].trim().toLowerCase();
+                                if (ALLOWED_IMAGE_CONTENT_TYPES.includes(mimeType)) {
+                                    const buffer = await imgRes.buffer();
+                                    if (buffer.length <= this.maxEntryBytes) {
+                                        const entry = this.cache.set(itemId, buffer, mimeType);
+                                        const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
+                                        if (this.diskStore) {
+                                            await this.diskStore.set(itemId, buffer, mimeType, etag);
+                                        }
+                                        try {
+                                            db.prepare(
+                                                `UPDATE pulse_items SET thumbnail_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
+                                            ).run(freshUrl, itemId);
+                                        } catch {}
+                                        if (options.ifNoneMatch && options.ifNoneMatch === etag) {
+                                            return { status: 304 };
+                                        }
+                                        return { status: 200, buffer, contentType: mimeType, etag };
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (err: any) {
+                    if (err instanceof SsrfSecurityError) throw err;
+                    logger.warn('SYS', `[PulseThumbnail] Instagram embed recovery failed for item ${itemId}: ${err?.message || err}`);
+                }
+            }
+        }
+        return null;
+    }
+
     async getThumbnail(
         itemId: string,
         options: { ifNoneMatch?: string } = {}
@@ -441,8 +554,15 @@ export class PulseThumbnailService {
         // primary-key lookup costs microseconds; a deletion that does not delete costs the
         // promise the app makes about erasing an account.
         const row = db.prepare(
-            `SELECT id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
-        ).get(itemId) as { id: string; thumbnail_url: string | null; deleted_at: string | null } | undefined;
+            `SELECT id, platform, url, external_id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
+        ).get(itemId) as {
+            id: string;
+            platform?: string;
+            url?: string | null;
+            external_id?: string | null;
+            thumbnail_url: string | null;
+            deleted_at: string | null;
+        } | undefined;
 
         if (!row || row.deleted_at !== null) {
             // Scrubbed out from under the cache — take the bytes with it.
@@ -488,6 +608,15 @@ export class PulseThumbnailService {
         }
 
         if (!row.thumbnail_url || !row.thumbnail_url.trim()) {
+            try {
+                const recovered = await this.attemptThumbnailRecovery(itemId, row, options);
+                if (recovered) return recovered;
+            } catch (recoveryErr: any) {
+                if (recoveryErr instanceof SsrfSecurityError) {
+                    this.cache.setNegative(itemId, 400, recoveryErr.message);
+                    return { status: 400, error: recoveryErr.message };
+                }
+            }
             return { status: 404, error: 'Item has no thumbnail' };
         }
 
@@ -552,6 +681,20 @@ export class PulseThumbnailService {
                 });
 
                 if (res.status < 200 || res.status >= 300) {
+                    if (res.status === 403 || res.status === 404 || res.status === 410) {
+                        try {
+                            const recovered = await this.attemptThumbnailRecovery(itemId, row, options);
+                            if (recovered) return recovered;
+                        } catch (recoveryErr: any) {
+                            if (recoveryErr instanceof SsrfSecurityError) {
+                                const status = 400;
+                                const error = recoveryErr.message;
+                                logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
+                                this.cache.setNegative(itemId, status, error);
+                                return { status, error };
+                            }
+                        }
+                    }
                     const status = (res.status >= 400 && res.status < 500) ? res.status : 502;
                     const error = `Upstream refused: HTTP ${res.status}`;
                     logger.warn('SYS', `[PulseThumbnail] Upstream refused for item ${itemId}: HTTP ${res.status}`);
@@ -599,20 +742,35 @@ export class PulseThumbnailService {
                     status = 400;
                     error = err.message;
                     logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${err.message}`);
-                } else if (err instanceof ProhibitedContentTypeError) {
-                    status = 502;
-                    error = `Upstream returned a non-image: ${err.message}`;
-                    logger.warn('SYS', `[PulseThumbnail] Upstream returned a non-image for item ${itemId}: ${err.message}`);
-                } else if (err instanceof PayloadTooLargeError) {
-                    status = 413;
-                    error = err.message;
-                    logger.warn('SYS', `[PulseThumbnail] Upstream payload too large for item ${itemId}: ${err.message}`);
-                } else if (err?.name === 'AbortError' || err?.message?.includes('timed out')) {
-                    status = 504;
-                    error = 'Upstream thumbnail request timed out';
-                    logger.warn('SYS', `[PulseThumbnail] Upstream thumbnail request timed out for item ${itemId}`);
                 } else {
-                    logger.warn('SYS', `[PulseThumbnail] Upstream thumbnail fetch failed for item ${itemId}: ${error}`);
+                    try {
+                        const recovered = await this.attemptThumbnailRecovery(itemId, row, options);
+                        if (recovered) return recovered;
+                    } catch (recoveryErr: any) {
+                        if (recoveryErr instanceof SsrfSecurityError) {
+                            status = 400;
+                            error = recoveryErr.message;
+                            logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
+                            this.cache.setNegative(itemId, status, error);
+                            return { status, error };
+                        }
+                    }
+
+                    if (err instanceof ProhibitedContentTypeError) {
+                        status = 502;
+                        error = `Upstream returned a non-image: ${err.message}`;
+                        logger.warn('SYS', `[PulseThumbnail] Upstream returned a non-image for item ${itemId}: ${err.message}`);
+                    } else if (err instanceof PayloadTooLargeError) {
+                        status = 413;
+                        error = err.message;
+                        logger.warn('SYS', `[PulseThumbnail] Upstream payload too large for item ${itemId}: ${err.message}`);
+                    } else if (err?.name === 'AbortError' || err?.message?.includes('timed out')) {
+                        status = 504;
+                        error = 'Upstream thumbnail request timed out';
+                        logger.warn('SYS', `[PulseThumbnail] Upstream thumbnail request timed out for item ${itemId}`);
+                    } else {
+                        logger.warn('SYS', `[PulseThumbnail] Upstream thumbnail fetch failed for item ${itemId}: ${error}`);
+                    }
                 }
 
                 this.cache.setNegative(itemId, status, error);
@@ -705,6 +863,17 @@ export class PulseThumbnailService {
             });
 
             if (res.status < 200 || res.status >= 300) {
+                if (res.status === 403 || res.status === 404 || res.status === 410) {
+                    try {
+                        const row = db.prepare(
+                            `SELECT id, platform, url, external_id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
+                        ).get(itemId) as any;
+                        if (row && row.deleted_at === null) {
+                            const recovered = await this.attemptThumbnailRecovery(itemId, row);
+                            if (recovered && recovered.status === 200) return recovered;
+                        }
+                    } catch {}
+                }
                 const status = (res.status >= 400 && res.status < 500) ? res.status : 502;
                 const error = `Upstream refused: HTTP ${res.status}`;
                 logger.warn('SYS', `[PulseThumbnail] Upstream refused at ingest for item ${itemId}: HTTP ${res.status}`);

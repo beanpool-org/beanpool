@@ -31,6 +31,8 @@ import {
     PulseThumbnailCache,
     PulseThumbnailDiskStore,
     MAX_THUMBNAIL_BYTES,
+    extractInstagramEmbedUrl,
+    extractThumbnailFromEmbedHtml,
     type ThumbnailResult,
 } from './engine/pulse-thumbnail.js';
 import {
@@ -131,14 +133,26 @@ function makeChannel(ownerPubkey: string, platform = 'youtube'): string {
 
 function makePulseItem(channelId: string, ownerPubkey: string, opts: {
     id?: string;
+    platform?: string;
+    url?: string | null;
+    externalId?: string | null;
     thumbnailUrl?: string | null;
     deletedAt?: string | null;
 } = {}): string {
     const id = opts.id || ('item_' + crypto.randomBytes(8).toString('hex'));
     db.prepare(
-        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, title, thumbnail_url, category, source, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, 'youtube', 'https://youtube.com/watch?v=1', 'Test Item', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`
-    ).run(id, channelId, ownerPubkey, opts.thumbnailUrl ?? null, opts.deletedAt ?? null);
+        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, external_id, title, thumbnail_url, category, source, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'Test Item', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`
+    ).run(
+        id,
+        channelId,
+        ownerPubkey,
+        opts.platform ?? 'youtube',
+        opts.url ?? 'https://youtube.com/watch?v=1',
+        opts.externalId ?? null,
+        opts.thumbnailUrl ?? null,
+        opts.deletedAt ?? null
+    );
     return id;
 }
 
@@ -184,6 +198,39 @@ async function main(): Promise<void> {
                 url,
                 buffer: async () => Buffer.from('URL signature expired'),
                 text: async () => 'URL signature expired',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        // Simulate Instagram embed page recovery
+        if (url.includes('instagram.com/p/RECOVER123/embed/')) {
+            const embedHtml = `
+                <!DOCTYPE html>
+                <html><body>
+                <div class="EmbeddedMedia">
+                    <img class="EmbeddedMediaImage" src="https://cdn.instagram.com/fresh-recovered.jpg" />
+                </div>
+                </body></html>
+            `;
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from(embedHtml),
+                text: async () => embedHtml,
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('instagram.com/p/UNRECOVERABLE/embed/')) {
+            return {
+                status: 404,
+                statusText: 'Not Found',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from('Not found'),
+                text: async () => 'Not found',
                 json: async <T = any>(): Promise<T> => ({} as T),
             };
         }
@@ -314,6 +361,77 @@ async function main(): Promise<void> {
     const resExpiredRetry = await callRouter(router, 'GET', `/api/pulse/items/${expiredItemId}/thumbnail`);
     assert(resExpiredRetry.status >= 400, 'Retry of failed thumbnail returns failure');
     assert(upstreamFetchCount === fetchCountBefore, 'Negative cache prevented re-fetching dead upstream in tight loop');
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Automatic recovery of expired Instagram CDN thumbnails via embed page
+    // ──────────────────────────────────────────────────────────────────────────
+    const igRecoverItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/RECOVER123/',
+        externalId: 'RECOVER123',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+
+    const fetchesBeforeRecovery = upstreamFetchCount;
+    const resRecovered = await callRouter(router, 'GET', `/api/pulse/items/${igRecoverItemId}/thumbnail`);
+    assert(resRecovered.status === 200, 'Expired Instagram thumbnail automatically recovers with 200 OK');
+    assert(Buffer.isBuffer(resRecovered.body), 'Recovered response body is a binary Buffer');
+    assert(resRecovered.body.equals(sampleJpeg), 'Recovered buffer matches expected image bytes');
+    assert(resRecovered.type === 'image/jpeg', 'Recovered Content-Type header is image/jpeg');
+    assert(typeof resRecovered.headers['etag'] === 'string', 'Recovered ETag is populated');
+
+    // 1 fetch for dead CDN link + 1 fetch for embed HTML + 1 fetch for fresh image bytes = 3 fetches
+    assert(upstreamFetchCount - fetchesBeforeRecovery === 3, 'Recovery performed 1 initial fetch + 1 embed fetch + 1 fresh image fetch');
+
+    // Verify pulse_items table was updated with the fresh CDN URL
+    const updatedRow = db.prepare(
+        'SELECT thumbnail_url FROM pulse_items WHERE id = ?'
+    ).get(igRecoverItemId) as { thumbnail_url: string };
+    assert(updatedRow.thumbnail_url === 'https://cdn.instagram.com/fresh-recovered.jpg', 'pulse_items.thumbnail_url was updated with recovered URL');
+
+    // Verify subsequent request is served from cache without any additional upstream fetches
+    const fetchesAfterRecovery = upstreamFetchCount;
+    const resRecoveredCached = await callRouter(router, 'GET', `/api/pulse/items/${igRecoverItemId}/thumbnail`);
+    assert(resRecoveredCached.status === 200, 'Subsequent request for recovered item returns 200 OK');
+    assert(resRecoveredCached.body.equals(sampleJpeg), 'Subsequent request matches cached image bytes');
+    assert(upstreamFetchCount === fetchesAfterRecovery, 'Subsequent request served from cache with ZERO upstream fetches');
+
+    // Recovery failure falls back cleanly to upstream status
+    const igUnrecoverableItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/UNRECOVERABLE/',
+        externalId: 'UNRECOVERABLE',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+    const resUnrecoverable = await callRouter(router, 'GET', `/api/pulse/items/${igUnrecoverableItemId}/thumbnail`);
+    assert(resUnrecoverable.status === 403, 'Unrecoverable Instagram item falls back to 403');
+    assert(resUnrecoverable.body?.error === 'Upstream refused: HTTP 403', 'Unrecoverable item reports upstream refusal');
+
+    // Unit tests for embed URL and HTML extraction functions
+    assert(
+        extractInstagramEmbedUrl('https://www.instagram.com/p/DB12345/') === 'https://www.instagram.com/p/DB12345/embed/',
+        'extractInstagramEmbedUrl extracts post embed URL'
+    );
+    assert(
+        extractInstagramEmbedUrl('https://instagram.com/reel/C_abc456/?utm_source=ig') === 'https://www.instagram.com/p/C_abc456/embed/',
+        'extractInstagramEmbedUrl extracts reel embed URL'
+    );
+    assert(
+        extractInstagramEmbedUrl(null, 'SHORT123') === 'https://www.instagram.com/p/SHORT123/embed/',
+        'extractInstagramEmbedUrl constructs embed URL from externalId'
+    );
+    assert(
+        extractInstagramEmbedUrl('https://youtube.com/watch?v=123') === null,
+        'extractInstagramEmbedUrl returns null for non-Instagram URL'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="https://cdn.instagram.com/pic.jpg?oe=1&amp;oh=2" />') === 'https://cdn.instagram.com/pic.jpg?oe=1&oh=2',
+        'extractThumbnailFromEmbedHtml extracts image src and decodes &amp;'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('{\"display_url\":\"https:\\/\\/cdn.instagram.com\\/pic2.jpg?oe=1\\u0026oh=2\"}') === 'https://cdn.instagram.com/pic2.jpg?oe=1&oh=2',
+        'extractThumbnailFromEmbedHtml extracts JSON display_url and unescapes slashes and unicode'
+    );
 
     // ──────────────────────────────────────────────────────────────────────────
     // Requirement 7.4: A private-IP upstream is refused

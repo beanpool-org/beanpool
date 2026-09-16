@@ -190,8 +190,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // Synchronize Daily Pulse marketplace gate (< 2 threshold)
         syncPulseMarketplaceGate();
 
-        ctx.status = 201;
-        ctx.body = post;
+        ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to create post' };

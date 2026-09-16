@@ -44,6 +44,17 @@ describe('EconomySection Component', () => {
             success: true,
             publicKey: 'treasury_pk_new',
         });
+        vi.spyOn(nodeClient, 'updateEnterpriseLocation').mockResolvedValue({
+            success: true,
+            lat: -28.55,
+            lng: 153.501,
+            locationAuthSigner: 'admin',
+        });
+        vi.spyOn(nodeClient, 'clearEnterpriseLocation').mockResolvedValue({
+            success: true,
+            lat: null,
+            lng: null,
+        });
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ proposed: [], activeRound: null, pastRounds: [] }),
@@ -136,6 +147,126 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_bob',
+            mockProfile.adminPassword,
+            undefined
+        );
+    });
+
+    it('renders enterprise map location status and opens location picker with plain-words warning and approximate button', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Check map location display on enterprise card
+        expect(screen.getByText('Map Location')).toBeInTheDocument();
+        expect(screen.getByText('No map location set')).toBeInTheDocument();
+
+        // Click Set Location
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        // Plain words visibility requirement
+        expect(screen.getByText('Everyone on this node will see this spot on the map.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /approximate \(~100m\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /save location/i })).toBeInTheDocument();
+
+        // Reuses Leaflet map container
+        expect(document.getElementById('enterprise-map-treasury_pk_1234567890')).toBeInTheDocument();
+    });
+
+    it('enters coordinates, approximates to ~100m, and saves location', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Open picker
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        // Enter raw lat/lng
+        const latInput = document.getElementById('lat-input-treasury_pk_1234567890') as HTMLInputElement;
+        const lngInput = document.getElementById('lng-input-treasury_pk_1234567890') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-28.549521' } });
+            fireEvent.change(lngInput, { target: { value: '153.500543' } });
+        });
+
+        // Click Approximate
+        const approxBtn = screen.getByRole('button', { name: /approximate \(~100m\)/i });
+        await act(async () => {
+            fireEvent.click(approxBtn);
+        });
+
+        expect(screen.getByText('~100m')).toBeInTheDocument();
+
+        // Save
+        const saveBtn = screen.getByRole('button', { name: /save location/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        expect(nodeClient.updateEnterpriseLocation).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            { lat: -28.55, lng: 153.501 },
+            mockProfile.adminPassword,
+            undefined
+        );
+    });
+
+    it('clears enterprise location', async () => {
+        const treasuriesWithLoc = [
+            {
+                ...mockTreasuries[0],
+                lat: -28.55,
+                lng: 153.501,
+            },
+        ];
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(treasuriesWithLoc);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText(/-28.550, 153.501/i)).toBeInTheDocument();
+
+        // Click Edit
+        const editBtn = screen.getByRole('button', { name: /edit/i });
+        await act(async () => {
+            fireEvent.click(editBtn);
+        });
+
+        // Click Clear Location
+        const clearBtn = screen.getByRole('button', { name: /clear location/i });
+        await act(async () => {
+            fireEvent.click(clearBtn);
+        });
+
+        expect(nodeClient.clearEnterpriseLocation).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
             mockProfile.adminPassword,
             undefined
         );

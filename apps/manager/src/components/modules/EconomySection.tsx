@@ -18,6 +18,7 @@ import {
     getTfaSessionToken,
 } from '../../lib/node-client';
 import { EscrowDisputesPanel } from './EscrowDisputesPanel';
+import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -94,6 +95,7 @@ export function EconomySection({
     const [newEnterpriseCeiling, setNewEnterpriseCeiling] = useState('');
     const [newEnterpriseKeeper, setNewEnterpriseKeeper] = useState('');
     const [creatingEnterprise, setCreatingEnterprise] = useState(false);
+    const [editingLocationPubkey, setEditingLocationPubkey] = useState<string | null>(null);
 
     // Keepers state
     const [keepersMap, setKeepersMap] = useState<Record<string, any[]>>({});
@@ -669,6 +671,50 @@ export function EconomySection({
                                                     </div>
                                                 )}
                                             </div>
+
+                                            {/* Map Location display & trigger */}
+                                            <div className="bg-nature-950/70 border border-nature-800/80 rounded-xl p-2.5 space-y-1.5 mt-2.5">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-nature-400 flex items-center gap-1">
+                                                        <span>📍</span>
+                                                        <span>Map Location</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
+                                                        className="text-[10px] font-bold text-terra-400 hover:text-terra-300 transition-colors"
+                                                    >
+                                                        {editingLocationPubkey === pubkeyStr ? 'Close' : (t.lat != null && t.lng != null ? 'Edit' : 'Set Location')}
+                                                    </button>
+                                                </div>
+                                                {t.lat != null && t.lng != null ? (
+                                                    <div className="flex items-center justify-between text-[11px] font-mono text-emerald-400">
+                                                        <span>{t.lat.toFixed(3)}, {t.lng.toFixed(3)}</span>
+                                                        <span className="text-[10px] font-sans text-nature-400">Public map pin</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-[11px] text-nature-400 italic">
+                                                        No map location set
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Reusable Leaflet Location Picker */}
+                                            {editingLocationPubkey === pubkeyStr && (
+                                                <EnterpriseLocationPicker
+                                                    treasury={t}
+                                                    activeNode={activeNode}
+                                                    effectiveTfaToken={effectiveTfaToken}
+                                                    onLocationSaved={(newLat, newLng) => {
+                                                        setTreasuries((prev) =>
+                                                            prev.map((item) =>
+                                                                item.publicKey === t.publicKey ? { ...item, lat: newLat, lng: newLng } : item
+                                                            )
+                                                        );
+                                                    }}
+                                                    onClose={() => setEditingLocationPubkey(null)}
+                                                />
+                                            )}
                                         </div>
 
                                         <div className="border-t border-nature-800/80 pt-3 flex items-center justify-between">
@@ -679,6 +725,12 @@ export function EconomySection({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
+                                                    className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+                                                >
+                                                    Location
+                                                </button>
                                                 <button
                                                     onClick={() => handleOpenManageKeepers(t)}
                                                     className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"

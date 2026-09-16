@@ -157,8 +157,7 @@ export function FleetSidebar({
                 <div className="flex items-center gap-3">
                     <div
                         className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
-                        role="img"
-                        aria-label={isFleetMode ? "BeanPool Fleet Manager" : `${communityName || 'BeanPool'} — Node Settings`}
+                        aria-hidden="true"
                     >
                         🌱
                     </div>

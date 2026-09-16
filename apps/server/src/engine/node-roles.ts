@@ -163,9 +163,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             }
         }
 
-        const existing = db.prepare("SELECT session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { session_epoch: number; break_glass_hash: string | null } | undefined;
-        const epoch = existing?.session_epoch || 0;
-        const breakGlass = existing?.break_glass_hash || null;
+        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
+        const epoch = existing ? (existing.role !== role ? existing.session_epoch + 1 : existing.session_epoch) : 0;
+        const breakGlass = role === 'owner' ? (existing?.break_glass_hash || null) : null;
 
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(targetPubkey);
         db.prepare(

@@ -189,4 +189,98 @@ describe('EconomySection Component', () => {
         expect(screen.queryByRole('slider')).not.toBeInTheDocument();
         expect(screen.queryByText(/demurrage rate/i)).not.toBeInTheDocument();
     });
+
+    it('handles keepers returned as objects without crashing on pubkey.slice', async () => {
+        const objectKeepers = [
+            {
+                publicKey: '021234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+                callsign: 'doone',
+                avatarUrl: null,
+                grantedAt: '2026-09-02T00:00:00Z',
+            },
+        ];
+
+        const treasuriesWithObjectKeepers: any[] = [
+            {
+                publicKey: 'treasury_pk_object_keepers',
+                name: 'Community Bakery',
+                avatar: '🥖',
+                balance: 100,
+                creditLine: 50,
+                liveOffers: 1,
+                keepers: objectKeepers,
+            },
+        ];
+
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(treasuriesWithObjectKeepers as any);
+        vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(objectKeepers as any);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{
+                        members: [
+                            {
+                                publicKey: '021234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+                                name: 'doone',
+                                tier: 'Steward',
+                            },
+                        ],
+                    }}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText('Community Bakery')).toBeInTheDocument();
+        expect(screen.getByText('@doone')).toBeInTheDocument();
+    });
+
+    it('renders safely with empty nodeData and empty treasuries', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([]);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{}}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText('Shared Projects & Economy')).toBeInTheDocument();
+        expect(screen.getByText(/No enterprises created yet/i)).toBeInTheDocument();
+    });
+
+    it('handles malformed wrong-typed keepers (numbers, nulls, empty objects)', async () => {
+        const malformedTreasuries: any[] = [
+            {
+                publicKey: 'treasury_pk_malformed',
+                name: 'Malformed Enterprise',
+                avatar: '🌱',
+                balance: 0,
+                creditLine: 0,
+                liveOffers: 0,
+                keepers: [12345, null, undefined, {}],
+            },
+        ];
+
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(malformedTreasuries as any);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{ members: [] }}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText('Malformed Enterprise')).toBeInTheDocument();
+        // Should not throw or crash
+    });
 });
+

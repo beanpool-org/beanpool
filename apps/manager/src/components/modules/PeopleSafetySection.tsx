@@ -41,7 +41,8 @@ export function PeopleSafetySection({
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
 
-    const reports = nodeData?.reports || [];
+    const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
+    const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
 
     const handleBulkDeletePosts = async () => {
         if (!confirm(`Permanently delete all posts older than ${bulkDeleteDays} days?`)) return;
@@ -104,7 +105,7 @@ export function PeopleSafetySection({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Members ({nodeData?.members?.length ?? 0})
+                        Members ({members.length})
                     </button>
                     <button
                         onClick={() => setSubTab('invites')}
@@ -195,7 +196,16 @@ export function PeopleSafetySection({
                                                     {report.severity || 'Report'}
                                                 </span>
                                                 <span className="text-xs font-mono text-nature-300">
-                                                    Target: {report.targetPubkey?.slice(0, 16) || 'Unknown'}...
+                                                    {(() => {
+                                                        const target = typeof report.targetPubkey === 'string'
+                                                            ? report.targetPubkey
+                                                            : (typeof report.target_pubkey === 'string'
+                                                                ? report.target_pubkey
+                                                                : (report.targetPubkey && typeof report.targetPubkey.publicKey === 'string'
+                                                                    ? report.targetPubkey.publicKey
+                                                                    : ''));
+                                                        return `Target: ${target ? `${target.slice(0, 16)}...` : 'Unknown'}`;
+                                                    })()}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-white m-0">

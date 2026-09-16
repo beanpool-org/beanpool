@@ -31,11 +31,15 @@ export function HomeScreen({
     onStartColdStartWizard,
 }: HomeScreenProps) {
     // Action required counts
-    const pendingReportsCount = (nodeData?.reports || []).length;
+    const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
+    const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
+    const pendingReportsCount = reports.length;
     
     // Calculate unclaimed invites from nodeData or invites count
-    const membersCount = (nodeData?.members || []).filter((m: any) => !m.isTreasury).length;
-    const enterprisesCount = ((nodeData as any)?.enterprises?.length ?? (nodeData?.members || []).filter((m: any) => m.isTreasury).length);
+    const membersCount = members.filter((m: any) => m && !m.isTreasury).length;
+    const enterprisesCount = Array.isArray((nodeData as any)?.enterprises)
+        ? (nodeData as any).enterprises.length
+        : members.filter((m: any) => m && m.isTreasury).length;
 
     const circulationVolume = (() => {
         if (typeof (nodeData as any)?.tradeVolume === 'number') {
@@ -44,9 +48,10 @@ export function HomeScreen({
         if (typeof (nodeData as any)?.circulation === 'number') {
             return (nodeData as any).circulation.toFixed(1);
         }
-        if (nodeData?.memberStats) {
-            const totalVol = Object.values(nodeData.memberStats as Record<string, { volume?: number }>).reduce(
-                (sum, s) => sum + (s.volume || 0),
+        if (nodeData?.memberStats && typeof nodeData.memberStats === 'object') {
+            const stats = Object.values(nodeData.memberStats as Record<string, { volume?: number }>);
+            const totalVol = stats.reduce(
+                (sum, s) => sum + (s && typeof s.volume === 'number' ? s.volume : 0),
                 0
             );
             return (totalVol / 2).toFixed(1);

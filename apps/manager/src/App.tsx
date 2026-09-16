@@ -61,6 +61,7 @@ import { EconomySection } from './components/modules/EconomySection';
 import { BulletinSection } from './components/modules/BulletinSection';
 import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
+import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -910,256 +911,288 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
 
                                 if (shouldShowColdStart) {
                                     return (
-                                        <ColdStartWizard
-                                            activeNode={activeNode}
-                                            diag={diag}
-                                            nodeData={nodeData}
-                                            onComplete={() => {
-                                                setShowColdStart(false);
-                                                loadNodeData();
-                                                loadDiagnostics();
-                                                setActiveTab('home');
-                                            }}
-                                            onCancel={() => setShowColdStart(false)}
-                                        />
+                                        <SectionErrorBoundary sectionName="Cold-Start Wizard">
+                                            <ColdStartWizard
+                                                activeNode={activeNode}
+                                                diag={diag}
+                                                nodeData={nodeData}
+                                                onComplete={() => {
+                                                    setShowColdStart(false);
+                                                    loadNodeData();
+                                                    loadDiagnostics();
+                                                    setActiveTab('home');
+                                                }}
+                                                onCancel={() => setShowColdStart(false)}
+                                            />
+                                        </SectionErrorBoundary>
                                     );
                                 }
 
                                 return (
-                                    <HomeScreen
-                                        communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
-                                        publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
-                                        version="1.4.2"
-                                        diag={diag}
-                                        nodeData={nodeData}
-                                        onNavigate={(tab, sub) => {
-                                            setNavSubTab(sub);
-                                            setActiveTab(tab);
-                                        }}
-                                        onInviteMember={() => {
-                                            setNavSubTab('invites');
-                                            setActiveTab('people');
-                                        }}
-                                        onCreateEnterprise={() => {
-                                            setNavSubTab('enterprises');
-                                            setActiveTab('economy');
-                                        }}
-                                        onDownloadBackup={handleDownloadBackup}
-                                        onRunLedgerAudit={handleRunLedgerAudit}
-                                        auditState={auditState}
-                                        onStartColdStartWizard={() => setShowColdStart(true)}
-                                    />
+                                    <SectionErrorBoundary sectionName="Home">
+                                        <HomeScreen
+                                            communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
+                                            publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
+                                            version="1.4.2"
+                                            diag={diag}
+                                            nodeData={nodeData}
+                                            onNavigate={(tab, sub) => {
+                                                setNavSubTab(sub);
+                                                setActiveTab(tab);
+                                            }}
+                                            onInviteMember={() => {
+                                                setNavSubTab('invites');
+                                                setActiveTab('people');
+                                            }}
+                                            onCreateEnterprise={() => {
+                                                setNavSubTab('enterprises');
+                                                setActiveTab('economy');
+                                            }}
+                                            onDownloadBackup={handleDownloadBackup}
+                                            onRunLedgerAudit={handleRunLedgerAudit}
+                                            auditState={auditState}
+                                            onStartColdStartWizard={() => setShowColdStart(true)}
+                                        />
+                                    </SectionErrorBoundary>
                                 );
                             })()}
 
                             {activeTab === 'people' && (
-                                <PeopleSafetySection
-                                    activeNode={activeNode}
-                                    nodeData={nodeData}
-                                    nodeDataLoading={nodeDataLoading}
-                                    onRefresh={() => loadNodeData()}
-                                    onFreezeUser={async (pubkey, freeze) => {
-                                        if (activeNode) {
-                                            await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onPruneUser={async (pubkey) => {
-                                        if (activeNode) {
-                                            await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onUpdateTier={async (pubkey, tier) => {
-                                        if (activeNode) {
-                                            await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onToggleVoucher={async (pubkey, canVouch) => {
-                                        if (activeNode) {
-                                            await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onToggleOperator={async (pubkey, granted) => {
-                                        if (activeNode) {
-                                            await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onGrantNodeRole={async (pubkey, role) => {
-                                        if (activeNode) {
-                                            await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                            await loadNodeData();
-                                        }
-                                    }}
-                                    onRevokeNodeRole={async (pubkey, role) => {
-                                        if (activeNode) {
-                                            await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                            await loadNodeData();
-                                        }
-                                    }}
-                                    initialSubTab={(navSubTab as any) || 'directory'}
-                                />
+                                <SectionErrorBoundary sectionName="People & Safety">
+                                    <PeopleSafetySection
+                                        activeNode={activeNode}
+                                        nodeData={nodeData}
+                                        nodeDataLoading={nodeDataLoading}
+                                        onRefresh={() => loadNodeData()}
+                                        onFreezeUser={async (pubkey, freeze) => {
+                                            if (activeNode) {
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneUser={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onUpdateTier={async (pubkey, tier) => {
+                                            if (activeNode) {
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleVoucher={async (pubkey, canVouch) => {
+                                            if (activeNode) {
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleOperator={async (pubkey, granted) => {
+                                            if (activeNode) {
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onGrantNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onRevokeNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        initialSubTab={(navSubTab as any) || 'directory'}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'economy' && (
-                                <EconomySection
-                                    activeNode={activeNode}
-                                    nodeData={nodeData}
-                                    onRefresh={() => {
-                                        loadNodeData();
-                                        loadDiagnostics();
-                                    }}
-                                />
+                                <SectionErrorBoundary sectionName="Shared Projects & Economy">
+                                    <EconomySection
+                                        activeNode={activeNode}
+                                        nodeData={nodeData}
+                                        onRefresh={() => {
+                                            loadNodeData();
+                                            loadDiagnostics();
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'bulletin' && (
-                                <BulletinSection
-                                    activeNode={activeNode}
-                                    onRefresh={() => loadNodeData()}
-                                />
+                                <SectionErrorBoundary sectionName="Bulletin & News">
+                                    <BulletinSection
+                                        activeNode={activeNode}
+                                        onRefresh={() => loadNodeData()}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'appliance' && (
-                                <ApplianceSection
-                                    activeNode={activeNode}
-                                    diag={diag}
-                                    gateway={gateway}
-                                    gatewayLoading={gatewayLoading}
-                                    gatewaySuccess={gatewaySuccess}
-                                    gatewaySaving={gatewaySaving}
-                                    nodeLogs={nodeLogs}
-                                    onChangeGateway={(updated) => setGateway(updated)}
-                                    onSaveGateway={handleSaveGateway}
-                                    onRefreshDiag={() => loadDiagnostics()}
-                                    onRefreshLogs={() => loadLogs()}
-                                    onDownloadBackup={handleDownloadBackup}
-                                    onRunLedgerAudit={handleRunLedgerAudit}
-                                    auditState={auditState}
-                                    initialSubTab={(navSubTab as any) || 'diagnostics'}
-                                />
+                                <SectionErrorBoundary sectionName="Appliance & Data">
+                                    <ApplianceSection
+                                        activeNode={activeNode}
+                                        diag={diag}
+                                        gateway={gateway}
+                                        gatewayLoading={gatewayLoading}
+                                        gatewaySuccess={gatewaySuccess}
+                                        gatewaySaving={gatewaySaving}
+                                        nodeLogs={nodeLogs}
+                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onSaveGateway={handleSaveGateway}
+                                        onRefreshDiag={() => loadDiagnostics()}
+                                        onRefreshLogs={() => loadLogs()}
+                                        onDownloadBackup={handleDownloadBackup}
+                                        onRunLedgerAudit={handleRunLedgerAudit}
+                                        auditState={auditState}
+                                        initialSubTab={(navSubTab as any) || 'diagnostics'}
+                                    />
+                                </SectionErrorBoundary>
                             )}
                         </>
                     ) : (
                         <>
                             {activeTab === 'overview' && (
-                                <TelemetryModule
-                                    profiles={profiles}
-                                    activeProfileId={activeProfileId}
-                                    fleetDiags={fleetDiags}
-                                    fleetNodeData={fleetNodeData}
-                                    onSelectNode={(id: string) => setActiveProfileId(id)}
-                                    onInspectNodeThreats={(id: string) => {
-                                        setActiveProfileId(id);
-                                        setActiveTab('members');
-                                    }}
-                                    onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                                    onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
-                                    onSelectTab={(tab) => setActiveTab(tab)}
-                                />
+                                <SectionErrorBoundary sectionName="Fleet Overview">
+                                    <TelemetryModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        fleetDiags={fleetDiags}
+                                        fleetNodeData={fleetNodeData}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                        onInspectNodeThreats={(id: string) => {
+                                            setActiveProfileId(id);
+                                            setActiveTab('members');
+                                        }}
+                                        onEditNode={(node: NodeProfile) => setEditingNode(node)}
+                                        onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
+                                        onSelectTab={(tab) => setActiveTab(tab)}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'analytics' && (
-                                <AnalyticsModule
-                                    profiles={profiles}
-                                    activeProfileId={activeProfileId}
-                                    fleetDiags={fleetDiags}
-                                    historyMap={historyMap}
-                                    onSelectNode={(id: string) => setActiveProfileId(id)}
-                                    onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                                    onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
-                                />
+                                <SectionErrorBoundary sectionName="Fleet Analytics">
+                                    <AnalyticsModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        fleetDiags={fleetDiags}
+                                        historyMap={historyMap}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                        onEditNode={(node: NodeProfile) => setEditingNode(node)}
+                                        onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'gateway' && (
-                                <GatewayModule
-                                    gateway={gateway}
-                                    gatewayLoading={gatewayLoading}
-                                    gatewaySuccess={gatewaySuccess}
-                                    gatewaySaving={gatewaySaving}
-                                    activeWsConnections={diag?.activeWsConnections || 3}
-                                    onChangeGateway={(updated) => setGateway(updated)}
-                                    onSaveGateway={handleSaveGateway}
-                                    onAuthenticate={(pwd) => {
-                                        if (activeNode) {
-                                            handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
-                                        }
-                                    }}
-                                />
+                                <SectionErrorBoundary sectionName="Gateway Module">
+                                    <GatewayModule
+                                        gateway={gateway}
+                                        gatewayLoading={gatewayLoading}
+                                        gatewaySuccess={gatewaySuccess}
+                                        gatewaySaving={gatewaySaving}
+                                        activeWsConnections={diag?.activeWsConnections || 3}
+                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onSaveGateway={handleSaveGateway}
+                                        onAuthenticate={(pwd) => {
+                                            if (activeNode) {
+                                                handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
+                                            }
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'members' && (
-                                <MembersModule
-                                    nodeData={nodeData}
-                                    nodeDataLoading={nodeDataLoading}
-                                    activeNodeUrl={activeNode?.url}
-                                    adminPassword={activeNode?.adminPassword}
-                                    onRefresh={() => loadNodeData()}
-                                    onFreezeUser={async (pubkey, freeze) => {
-                                        if (activeNode) {
-                                            await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onPruneUser={async (pubkey) => {
-                                        if (activeNode) {
-                                            await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onUpdateTier={async (pubkey, tier) => {
-                                        if (activeNode) {
-                                            await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onToggleVoucher={async (pubkey, canVouch) => {
-                                        if (activeNode) {
-                                            await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onToggleOperator={async (pubkey, granted) => {
-                                        if (activeNode) {
-                                            await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                        }
-                                    }}
-                                    onGrantNodeRole={async (pubkey, role) => {
-                                        if (activeNode) {
-                                            await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                            await loadNodeData();
-                                        }
-                                    }}
-                                    onRevokeNodeRole={async (pubkey, role) => {
-                                        if (activeNode) {
-                                            await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                            await loadNodeData();
-                                        }
-                                    }}
-                                />
+                                <SectionErrorBoundary sectionName="Members & Access">
+                                    <MembersModule
+                                        nodeData={nodeData}
+                                        nodeDataLoading={nodeDataLoading}
+                                        activeNodeUrl={activeNode?.url}
+                                        adminPassword={activeNode?.adminPassword}
+                                        onRefresh={() => loadNodeData()}
+                                        onFreezeUser={async (pubkey, freeze) => {
+                                            if (activeNode) {
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneUser={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onUpdateTier={async (pubkey, tier) => {
+                                            if (activeNode) {
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleVoucher={async (pubkey, canVouch) => {
+                                            if (activeNode) {
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleOperator={async (pubkey, granted) => {
+                                            if (activeNode) {
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onGrantNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onRevokeNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'topology' && (
-                                <TopologyModule
-                                    activeNode={activeNode}
-                                    diag={diag}
-                                    profiles={profiles}
-                                    onRefresh={() => loadDiagnostics()}
-                                />
+                                <SectionErrorBoundary sectionName="Topology Module">
+                                    <TopologyModule
+                                        activeNode={activeNode}
+                                        diag={diag}
+                                        profiles={profiles}
+                                        onRefresh={() => loadDiagnostics()}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
-                            {activeTab === 'invites' && <InvitesModule activeNode={activeNode} />}
+                            {activeTab === 'invites' && (
+                                <SectionErrorBoundary sectionName="Invites Module">
+                                    <InvitesModule activeNode={activeNode} />
+                                </SectionErrorBoundary>
+                            )}
 
                             {activeTab === 'onboarding' && (
-                                <OnboardingModule
-                                    profiles={profiles}
-                                    activeProfileId={activeProfileId}
-                                    onSelectNode={(id: string) => setActiveProfileId(id)}
-                                />
+                                <SectionErrorBoundary sectionName="Onboarding Funnel">
+                                    <OnboardingModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                    />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'logs' && (
-                                <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
+                                <SectionErrorBoundary sectionName="Logs Module">
+                                    <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
+                                </SectionErrorBoundary>
                             )}
 
                             {activeTab === 'ai' && (
-                                <AiServicesModule
-                                    activeNode={activeNode}
-                                    contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
-                                />
+                                <SectionErrorBoundary sectionName="AI Services">
+                                    <AiServicesModule
+                                        activeNode={activeNode}
+                                        contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
+                                    />
+                                </SectionErrorBoundary>
                             )}
                         </>
                     )}

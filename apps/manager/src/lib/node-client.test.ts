@@ -18,6 +18,9 @@ import {
     deleteNodeSnapshot,
     updateNodeReplicationCadence,
     forceNodeResync,
+    normalizeNodeData,
+    normalizeKeepers,
+    normalizeKeeperPubkey,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -475,3 +478,95 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ password: 'pwd' });
     });
 });
+
+describe('normalizeKeeperPubkey and normalizeKeepers', () => {
+    it('normalizes string pubkeys directly', () => {
+        expect(normalizeKeeperPubkey('pubkey123')).toBe('pubkey123');
+        expect(normalizeKeepers(['pk1', 'pk2'])).toEqual(['pk1', 'pk2']);
+    });
+
+    it('extracts publicKey from keeper objects', () => {
+        const obj1 = { publicKey: 'pubkey_alpha', callsign: 'alpha', avatarUrl: null, grantedAt: null };
+        const obj2 = { pubkey: 'pubkey_beta', callsign: 'beta' };
+        expect(normalizeKeeperPubkey(obj1)).toBe('pubkey_alpha');
+        expect(normalizeKeeperPubkey(obj2)).toBe('pubkey_beta');
+        expect(normalizeKeepers([obj1, obj2])).toEqual(['pubkey_alpha', 'pubkey_beta']);
+    });
+
+    it('filters out empty or malformed keeper entries', () => {
+        expect(normalizeKeeperPubkey(null)).toBe('');
+        expect(normalizeKeeperPubkey(undefined)).toBe('');
+        expect(normalizeKeeperPubkey(12345)).toBe('');
+        expect(normalizeKeeperPubkey({})).toBe('');
+        expect(normalizeKeepers([null, undefined, 42, {}, 'valid_pk'])).toEqual(['valid_pk']);
+        expect(normalizeKeepers(null)).toEqual([]);
+        expect(normalizeKeepers(undefined)).toEqual([]);
+        expect(normalizeKeepers('not-an-array' as any)).toEqual([]);
+    });
+});
+
+describe('normalizeNodeData boundary normalization', () => {
+    it('handles null, undefined, and non-object inputs gracefully', () => {
+        expect(normalizeNodeData(null)).toEqual({});
+        expect(normalizeNodeData(undefined)).toEqual({});
+        expect(normalizeNodeData('string' as any)).toEqual({});
+    });
+
+    it('normalizes snake_case report fields and keeper shapes', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 42,
+                    reporter_pubkey: 'reporter_pk_1',
+                    target_pubkey: 'target_pk_2',
+                    reason: 'Spam activity',
+                    status: 'pending',
+                },
+            ],
+            members: [
+                {
+                    pubkey: 'member_pk_1',
+                    displayName: 'Alice',
+                    standing: 'Steward',
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('target_pk_2');
+        expect(normalized.reports?.[0].target_pubkey).toBe('target_pk_2');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('reporter_pk_1');
+        expect(normalized.reports?.[0].reporter_pubkey).toBe('reporter_pk_1');
+        expect(normalized.reports?.[0].id).toBe('42');
+        expect(normalized.reportCount).toBe(1);
+
+        expect(normalized.members?.[0].publicKey).toBe('member_pk_1');
+        expect(normalized.members?.[0].pubkey).toBe('member_pk_1');
+        expect(normalized.members?.[0].name).toBe('Alice');
+        expect(normalized.members?.[0].tier).toBe('Steward');
+    });
+
+    it('guards against malformed report targetPubkeys (objects, numbers, nulls)', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 'rep-obj',
+                    targetPubkey: { publicKey: 'nested_target_pk' },
+                    reporterPubkey: { publicKey: 'nested_reporter_pk' },
+                },
+                {
+                    id: 'rep-num',
+                    targetPubkey: 12345,
+                    reporterPubkey: null,
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('nested_target_pk');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('nested_reporter_pk');
+        expect(normalized.reports?.[1].targetPubkey).toBe('');
+        expect(normalized.reports?.[1].reporterPubkey).toBe('');
+    });
+});
+

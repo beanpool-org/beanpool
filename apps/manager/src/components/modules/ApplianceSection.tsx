@@ -1543,7 +1543,8 @@ export function ApplianceSection({
                             <button
                                 type="button"
                                 onClick={() => setShowCleanModal(false)}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-nature-300"
+                                disabled={cleaningStorage}
+                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-nature-300 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                             >
                                 {cleanResult ? 'Close' : 'Cancel'}
                             </button>

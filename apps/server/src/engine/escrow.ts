@@ -427,9 +427,17 @@ export function acceptPost(
     const post = getPosts(db, { id: postId, status: 'active' })[0];
     if (!post) throw new Error('Post not found or not active');
     assertMemberActive(post.authorPublicKey);
-    const authorMember = db.prepare('SELECT is_treasury, paused FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
-    if (authorMember?.is_treasury && authorMember.paused === 1) {
-        throw new Error('Enterprise is paused — cannot transact while paused');
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    const buyerMember = db.prepare('SELECT is_treasury, paused, status, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
+    if (buyerMember?.is_treasury) {
+        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
+        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
     }
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
@@ -462,7 +470,6 @@ export function acceptPost(
     // payee is always the post's author — a visitor, on a pulled listing.
     assertTradableHere(post, post.authorPublicKey);
 
-    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):

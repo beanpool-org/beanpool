@@ -191,6 +191,28 @@ async function main() {
     }
     assert(newOfferThrew, 'New listings blocked while winding up');
 
+    // While winding up: acceptPost is blocked (cannot accept new orders)
+    const kalePost = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND status = 'active'").get(farm) as any;
+    let acceptWindingUpThrew = false;
+    try {
+        acceptPost(kalePost.id, ordinaryMember);
+    } catch (e: any) {
+        acceptWindingUpThrew = true;
+        assert(e.message.includes('Enterprise is winding up — cannot accept new orders'), `acceptPost on winding-up author rejected: "${e.message}"`);
+    }
+    assert(acceptWindingUpThrew, 'acceptPost blocked when author is winding up');
+
+    // Ensure ordinaryMember has an active offer listed so they pass contribution requirement if buying
+    const memberOffer = createPost('offer', 'tools', 'Shovel', 'Sturdy shovel', 10, 'fixed', ordinaryMember);
+    let acceptBuyerWindingUpThrew = false;
+    try {
+        acceptPost(memberOffer!.id, farm);
+    } catch (e: any) {
+        acceptBuyerWindingUpThrew = true;
+        assert(e.message.includes('Enterprise is winding up — cannot accept new orders'), `acceptPost with winding-up buyer rejected: "${e.message}"`);
+    }
+    assert(acceptBuyerWindingUpThrew, 'acceptPost blocked when buyer is winding up');
+
     // ─────────────────────────────────────────────────────────────────────────
     // 2. CANCEL WIND-UP DURING GRACE PERIOD
     // ─────────────────────────────────────────────────────────────────────────

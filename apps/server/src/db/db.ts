@@ -615,11 +615,14 @@ export function initSchema() {
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
     try {
         db.exec(`
+            DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;
             CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
             AFTER DELETE ON groups
             FOR EACH ROW
             BEGIN
-                UPDATE posts SET target_group_id = NULL, audience_scope = 'public'
+                UPDATE posts SET target_group_id = NULL,
+                       active = 0, status = 'cancelled',
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                 WHERE target_group_id = OLD.id;
             END;
         `);

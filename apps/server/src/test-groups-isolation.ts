@@ -610,9 +610,15 @@ async function runTests() {
         })!;
         // Delete the group from DB
         db.prepare("DELETE FROM groups WHERE id = ?").run(tempGroup.id);
-        const cleanedPostRow = db.prepare("SELECT target_group_id, audience_scope FROM posts WHERE id = ?").get(tempPost.id) as any;
-        assert(cleanedPostRow.target_group_id === null && cleanedPostRow.audience_scope === 'public',
-            '10aa. posts_cleanup_on_group_delete resets target_group_id to NULL and audience_scope to public');
+        const cleanedPostRow = db.prepare("SELECT target_group_id, audience_scope, active, status FROM posts WHERE id = ?").get(tempPost.id) as any;
+        assert(cleanedPostRow.target_group_id === null && cleanedPostRow.audience_scope === 'group' && cleanedPostRow.active === 0 && cleanedPostRow.status === 'cancelled',
+            '10aa. posts_cleanup_on_group_delete deactivates post, cancels it, and preserves group scope without promoting to public');
+
+        // Regression test for Defect 1: assert non-member CANNOT read deleted group post
+        const nonMemberPosts = getPosts({ id: tempPost.id, viewerPubkey: carol.pubKeyHex, includeInactive: true });
+        assert(nonMemberPosts.length === 0, '10aa-1. Non-member Carol CANNOT read deleted group post even with includeInactive');
+        const anonPosts = getPosts({ id: tempPost.id, includeInactive: true });
+        assert(anonPosts.length === 0, '10aa-2. Anonymous viewer CANNOT read deleted group post even with includeInactive');
 
         // 13. Poll audience scope and franchise tests:
         // Set Dave as observer in gardenGroup

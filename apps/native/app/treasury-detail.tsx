@@ -192,32 +192,32 @@ export default function TreasuryDetailScreen() {
     const load = useCallback(() => {
         let active = true;
         setLoading(true);
-        if (treasuryKey) {
-            getTreasuryDetail(treasuryKey)
-                .then((d) => {
-                    if (active) {
-                        setDetail(d);
-                        setLoading(false);
-                    }
-                })
-                .catch(() => { if (active) setLoading(false); });
-        } else {
-            setLoading(false);
-        }
-        loadIdentity().then((id: any) => {
-            if (!active) return;
-            setIdentity(id);
-            if (id?.publicKey) {
-                getBalance(id.publicKey).then((b: any) => {
+        (async () => {
+            try {
+                const [d, id] = await Promise.all([
+                    treasuryKey ? getTreasuryDetail(treasuryKey) : Promise.resolve(null),
+                    loadIdentity()
+                ]);
+                if (!active) return;
+                if (d) setDetail(d);
+                setIdentity(id);
+                if (id?.publicKey && treasuryKey) {
+                    const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
-                    const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                    const inKeepers = Array.isArray(detail?.keepers) && detail.keepers.some((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
-                    setIsKeeperOfThis(!!treasuryKey && (mine.includes(treasuryKey) || inKeepers));
-                }).catch(() => {});
+                    const mine: string[] = Array.isArray(b?.keeperOf) ? b.keeperOf : [];
+                    const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
+                    setIsKeeperOfThis(mine.includes(treasuryKey) || inKeepers);
+                } else {
+                    setIsKeeperOfThis(false);
+                }
+            } catch {
+                // handle error
+            } finally {
+                if (active) setLoading(false);
             }
-        });
+        })();
         return () => { active = false; };
-    }, [treasuryKey, detail?.keepers]);
+    }, [treasuryKey]);
 
     useFocusEffect(load);
 
@@ -309,11 +309,14 @@ export default function TreasuryDetailScreen() {
         if (!treasuryKey || submittingSuccession) return;
         setSubmittingSuccession(true);
         try {
-            const res = await proposeEnterpriseSuccession(treasuryKey, candidatePubkey);
-            if (res?.leadMoved) {
+            const res: any = await proposeEnterpriseSuccession(treasuryKey, candidatePubkey);
+            const leadMoved = res?.executed ?? res?.leadMoved ?? false;
+            const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
+            const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
+            if (leadMoved) {
                 Alert.alert('Succession Passed 🌱', 'Lead keeper role has been transferred.');
             } else {
-                Alert.alert('Succession Proposed 🌱', `Proposal submitted (${res?.votesCount || 1} of ${res?.votesRequired || 2} votes recorded).`);
+                Alert.alert('Succession Proposed 🌱', `Proposal submitted (${votesCount} of ${votesRequired} votes recorded).`);
             }
             setShowCandidatePicker(false);
             load();
@@ -328,11 +331,14 @@ export default function TreasuryDetailScreen() {
         if (!treasuryKey || submittingSuccession) return;
         setSubmittingSuccession(true);
         try {
-            const res = await voteEnterpriseSuccession(treasuryKey, proposalId);
-            if (res?.leadMoved) {
+            const res: any = await voteEnterpriseSuccession(treasuryKey, proposalId);
+            const leadMoved = res?.executed ?? res?.leadMoved ?? false;
+            const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
+            const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
+            if (leadMoved) {
                 Alert.alert('Succession Passed 🌱', 'Your vote was recorded and the lead keeper role has been transferred!');
             } else {
-                Alert.alert('Vote Registered 🌱', `Vote recorded (${res?.votesCount} of ${res?.votesRequired} votes).`);
+                Alert.alert('Vote Registered 🌱', `Vote recorded (${votesCount} of ${votesRequired} votes).`);
             }
             load();
         } catch (e: any) {
@@ -605,7 +611,7 @@ export default function TreasuryDetailScreen() {
                                 {keeperRequests.map((req: any) => (
                                     <View key={req.id} style={styles.requestRow}>
                                         <View style={styles.requestInfo}>
-                                            <Text style={styles.requestCallsign}>{req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
+                                            <Text style={styles.requestCallsign}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
                                             <Text style={styles.requestBacking}>
                                                 Backing pledge: {req.pledgedBacking} 🫘
                                             </Text>
@@ -640,12 +646,12 @@ export default function TreasuryDetailScreen() {
                         )}
 
                         {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
-                        {leadInactivity?.isEligibleForSuccession && (
+                        {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
                             <View style={styles.successionCard}>
                                 <View style={styles.successionHeader}>
                                     <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.solid} />
                                     <Text style={styles.successionTitle}>
-                                        LEAD KEEPER INACTIVE ({leadInactivity.daysInactive} DAYS)
+                                        LEAD KEEPER INACTIVE ({Math.floor(leadInactivity.daysInactive)} DAYS)
                                     </Text>
                                 </View>
                                 <Text style={styles.successionText}>

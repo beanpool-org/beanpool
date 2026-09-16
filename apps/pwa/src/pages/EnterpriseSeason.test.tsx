@@ -56,8 +56,9 @@ vi.mock('../components/ProposeDecisionModal', () => ({
 
 const mockIdentity: BeanPoolIdentity = {
     publicKey: 'keeper-alice-pubkey',
-    secretKey: 'mock-secret',
+    privateKey: 'mock-private-key-hex',
     callsign: 'Alice',
+    createdAt: '2026-01-01T00:00:00.000Z',
 };
 
 describe('Enterprise Season & Lifecycle (PWA)', () => {
@@ -67,7 +68,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
 
     describe('TreasuryDetailPage', () => {
         it('renders paused state banner with plain words, held credit amount, and date', async () => {
-            const mockTreasury: api.Treasury = {
+            const mockTreasury = {
                 publicKey: 'enterprise-garden-pubkey',
                 name: 'Garden Crew',
                 purpose: 'Community food production',
@@ -160,7 +161,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
         });
 
         it('shows winding up banner with remaining days and initiator name', async () => {
-            const mockTreasury: api.Treasury = {
+            const mockTreasury = {
                 publicKey: 'enterprise-garden-pubkey',
                 name: 'Garden Crew',
                 purpose: 'Community food production',
@@ -202,7 +203,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
         });
 
         it('displays plain words explanation before tapping destructive wind-up button', async () => {
-            const mockTreasury: api.Treasury = {
+            const mockTreasury = {
                 publicKey: 'enterprise-garden-pubkey',
                 name: 'Garden Crew',
                 purpose: 'Community food production',
@@ -286,6 +287,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     paused: true,
                     status: 'active',
                     balance: 100,
+                    creditLine: 200,
+                    liveOffers: 2,
                 },
             ];
 
@@ -315,6 +318,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 credits: 6,
                 priceType: 'fixed',
                 status: 'active',
+                active: true,
+                repeatable: false,
                 authorPublicKey: 'enterprise-farm-pubkey',
                 authorCallsign: 'Community Farm',
                 createdAt: '2026-09-15T00:00:00Z',
@@ -326,6 +331,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 paused: true,
                 status: 'active',
                 balance: 100,
+                creditLine: 200,
+                liveOffers: 2,
             };
 
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([mockPost]);
@@ -360,6 +367,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     paused: true,
                     status: 'active',
                     balance: 100,
+                    creditLine: 200,
                     liveOffers: 2,
                 },
                 {
@@ -368,6 +376,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     paused: false,
                     status: 'winding_up',
                     balance: 50,
+                    creditLine: 100,
                     liveOffers: 0,
                 },
                 {
@@ -376,6 +385,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     paused: false,
                     status: 'completed',
                     balance: 0,
+                    creditLine: 0,
                     liveOffers: 0,
                 },
             ];

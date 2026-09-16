@@ -1283,7 +1283,7 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_at        DATETIME,
-    decided_by        TEXT REFERENCES members(public_key)
+    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_enterprise ON enterprise_keeper_requests(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_member ON enterprise_keeper_requests(member_pubkey, status);
@@ -1295,14 +1295,17 @@ WHERE status = 'pending';
 CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
     id                TEXT PRIMARY KEY,
     enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-    lead_pubkey       TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-    candidate_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-    proposer_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    lead_pubkey       TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
+    candidate_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
+    proposer_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
     status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'passed', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     executed_at       DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_succession_proposals_active_unique
+ON enterprise_succession_proposals(enterprise_pubkey)
+WHERE status = 'active';
 
 CREATE TABLE IF NOT EXISTS enterprise_succession_votes (
     proposal_id       TEXT NOT NULL REFERENCES enterprise_succession_proposals(id) ON DELETE CASCADE,

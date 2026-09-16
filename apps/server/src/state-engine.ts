@@ -1864,7 +1864,7 @@ export function usableFloor(publicKey: string): number {
             // - Earned growth still counts (if earned credit raises the floor, use the higher value).
             // - Keeper exits still release backing (if backing is removed, floor drops accordingly).
             // Formula: max(snapshot, derived) where snapshot expires at 90 days. Keeper backing release overrides snapshot floor.
-            let effectiveAllowance = underlyingAllowance < snapshotAllowance
+            const effectiveAllowance = underlyingAllowance < snapshotAllowance
                 ? underlyingAllowance  // backing withdrawn — override snapshot
                 : Math.max(snapshotAllowance, underlyingAllowance);  // earned growth raises it
             return -Math.max(effectiveAllowance, normalDerivedAllowance);

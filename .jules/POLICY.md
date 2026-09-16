@@ -320,3 +320,48 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** Missing test coverage for `POST /api/local/admin/commons/reject` and `adminRejectProject`.
 - **Why not to re-file:** Landed in merge commit `60e55543`. The tests target `/api/local/admin/commons/reject` and `adminRejectProject`, which SURVIVE the project==enterprise unification (#792) — old routes now serve from the unified model — so this coverage stays valid; the only conflict was the suite-list line in `scripts/test-all.sh`.
 
+### 2026-09-16 — Atlas: manager TopologyModule unit tests (#798) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing unit test coverage for `TopologyModule` in `apps/manager/src/components/modules/TopologyModule.tsx`.
+- **Why not to re-file:** Landed in merge commit `e7b52dc7`. Added unit tests in `apps/manager/src/components/modules/TopologyModule.test.tsx` covering tab switching across module views (On-Node Snapshots, Replication & Standby, Domain Name Claims, Disaster Recovery Runbook), domain name claim approval flow, and on-node snapshot fetching and creation. The module survives #808 behind `IS_FLEET_MODE`.
+
+### 2026-09-16 — Forge: admin post delete returns 404 for missing post (#799) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing HTTP 404 status code in `POST /api/local/admin/posts/:id/delete` when the post to delete is not found.
+- **Why not to re-file:** Landed in merge commit `22692a4d`. In `apps/server/src/routes/admin.ts`, returns HTTP status 404 `{ success: false, error: 'Post not found' }` if `adminDeletePost(ctx.params.id)` returns `false`, with regression coverage in `apps/server/src/test-moderation-admin.ts`.
+
+### 2026-09-16 — Sentinel: authenticated caller message send IDOR (#800) — LANDED, BUT CLAIM WAS FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** An authenticated caller can send a message as another member (IDOR on send).
+- **Why not to re-file:** Landed in merge commit `d2a6b3ed`. `requireSignature` in `apps/server/src/https-server.ts` already rejects any request whose identity field (`authorPubkey` ends in `'pubkey'`) differs from the signing key with 403 `'Identity mismatch'`; verified against main before the PR. The PR landed only a redundant route-level guard plus a regression assertion in the already-registered `test-messaging-idor.ts`, so this is defence in depth, not a vulnerability fix.
+
+### 2026-09-16 — Expo: native treasury-detail exports ErrorBoundary and refines params (#801) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing `ErrorBoundary` export in `apps/native/app/treasury-detail.tsx` and fragile parameter handling for array/scalar routes.
+- **Why not to re-file:** Landed in merge commit `b5792ac1`. Exports `ErrorBoundary` from `expo-router` in `apps/native/app/treasury-detail.tsx` to enable screen-level error handling, and refines parameter typing/extraction to safely handle both scalar string and array parameter edge cases.
+
+### 2026-09-16 — Palette: PulseFeedCard focus rings and touch targets, WCAG 2.5.3 name preserved (#802) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Interactive controls in `apps/pwa/src/components/PulseFeedCard.tsx` lacked minimum 44px touch target sizing and focus-visible rings.
+- **Why not to re-file:** Landed in merge commit `b4cd8c5e`. Added minimum 44px touch target height and focus-visible rings to interactive controls in `PulseFeedCard.tsx` while preserving accessible names under WCAG 2.5.3, verified by unit tests in `PulseFeedCard.test.tsx`.
+
+### 2026-09-16 — Bolt: O(1) invite-code lookups in native offline invite sync (#803) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Nested $O(N \times M)$ array scans (`find()` and `some()`) during offline invite sync in `apps/native/app/(tabs)/people.tsx`.
+- **Why not to re-file:** Landed in merge commit `7d2395ee`. Replaced nested array searches in `loadOfflineInvites()` with pre-computed `serverInvitesMap` (`Map`) and `updatedCodes` (`Set`), reducing invite code lookups from $O(N \times M)$ to $O(N + M)$ during offline invite synchronization on native devices.
+
+### 2026-09-16 — Flow: manager OnboardingModule empty state when no fleet profiles exist (#804) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing empty state UI in `apps/manager/src/components/modules/OnboardingModule.tsx` when the node profiles list is empty or no active profile is selected.
+- **Why not to re-file:** Landed in merge commit `7e4ee012`. Added accessible empty state UI in `OnboardingModule.tsx` guiding the operator to configure a node profile in Fleet Settings when no profiles exist.
+
+### 2026-09-16 — Pixel: accessibilityRole/label on native clear-deadline button in propose-project (#805) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing `accessibilityRole` and `accessibilityLabel` on the clear deadline `Pressable` in `apps/native/app/propose-project.tsx`.
+- **Why not to re-file:** Landed in merge commit `9dbe8dbc`. Added `accessibilityRole="button"` and `accessibilityLabel="Clear deadline"` to the clear deadline `Pressable` in `apps/native/app/propose-project.tsx`, which survives the #792 project-enterprise unification.
+
+### 2026-09-16 — Scout: test coverage commons projects update and delete (#807) — LANDED
+- **Category:** FIX LANDED
+- **Claim:** Missing test coverage for `POST /api/commons/projects/update` and `POST /api/commons/projects/delete` routes in `apps/server/src/routes/commons.ts`.
+- **Why not to re-file:** Landed in merge commit `365a909c`. Added integration test suite `apps/server/src/test-commons-projects-update-delete.ts` covering owner updates/deletions, non-owner rejections (400), field validation, and duplicate deletion guards, registered in `scripts/test-all.sh`. Commons project update/delete routes survive the #792 unification; only a suite-list conflict occurred.
+

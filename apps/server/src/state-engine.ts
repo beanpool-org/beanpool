@@ -43,6 +43,58 @@ export {
     type NodeRoleRecord,
 };
 import {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+} from './decisions-engine.js';
+export {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+};
+import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
@@ -330,6 +382,7 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    clearEnterpriseFloorCache();
     migrateLegacyState();
     seedPulseCurated();
     
@@ -474,6 +527,15 @@ export function initStateEngine(): void {
         setInterval(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
         }, 60 * 60 * 1000);
+
+        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+        // evaluate passed grants queue, and fire expired grace-period prunes.
+        setTimeout(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 30 * 1000);
+        setInterval(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 60 * 1000);
     }
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
@@ -1859,6 +1921,14 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: stri
  * never silently inert. `grantedBy` records the granting admin's pubkey today, and is deliberately
  * untyped so an `appoint` Decision id can be recorded here later without a migration.
  */
+export function clearEnterpriseFloorCache(enterprisePubkey?: string): void {
+    engine.clearEnterpriseFloorCache(db, enterprisePubkey);
+}
+
+export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseFloorInfo {
+    return engine.getEnterpriseFloor(db, enterprisePubkey);
+}
+
 export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
     const member = getMember(memberPubkey);
     if (!member) throw new Error('Member not found');
@@ -1871,6 +1941,7 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
                     VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
@@ -1881,6 +1952,8 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
  *
  * Clears can_operate once a member keeps nothing, so `canOperate()` keeps meaning "is a keeper"
  * and the fleet manager's display stays truthful.
+ *
+ * Handles keeper exit backing release/covenant lock (docs/the-commons.md §2.6).
  */
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
     db.transaction(() => {
@@ -1889,10 +1962,298 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
         const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
             .get(memberPubkey) as any;
         if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
+
+        // Keeper exit (docs/the-commons.md §2.6):
+        // Solvent: leave immediately, backing released, floor recalculates.
+        // In deficit: backing is locked to the extent the deficit needs it (Rule 3).
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(memberPubkey, treasuryPubkey) as any;
+        const keeperPledge = Number(activeRow?.total || 0);
+
+        if (keeperPledge > 0) {
+            const balance = getBalance(treasuryPubkey).balance;
+            const deficit = Math.max(0, -balance);
+            const totalRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.keeper != ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(treasuryPubkey, memberPubkey) as any;
+            const otherPledges = Number(totalRow?.total || 0);
+            const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
+            const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+            const otherAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+
+            if (otherAllowance >= deficit) {
+                // Solvent or remaining keepers cover deficit: full release
+                db.prepare(
+                    "UPDATE enterprise_pledges SET released_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                ).run(memberPubkey, treasuryPubkey);
+            } else {
+                // In deficit: lock what deficit needs (deficit - otherAllowance), release excess
+                const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
+                const toRelease = keeperPledge - lockedNeeded;
+                if (toRelease > 0) {
+                    const nowIso = new Date().toISOString();
+                    db.prepare(
+                        "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                    ).run(nowIso, memberPubkey, treasuryPubkey);
+                    db.prepare(`
+                        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                        VALUES (?, ?, ?, ?, ?, NULL)
+                    `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                }
+            }
+        }
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
+
+/**
+ * Available earned credit that a keeper can pledge to back enterprises (docs/the-commons.md §2.4 Rule 3).
+ * A keeper's earned credit is never deducted from their personal floor, but is counted once across all
+ * enterprises they keep.
+ * Pledges are incremental: headroom is earned credit minus ALL active pledges across all enterprises.
+ * Returns 0 if account is inactive (disabled/pruned) or credit-frozen.
+ */
+export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: string): number {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+    if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
+        return 0;
+    }
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+    ).get(keeperPubkey) as any;
+    const totalPledged = Number(row?.total || 0);
+    return Math.max(0, earnedCredit - totalPledged);
+}
+
+/**
+ * List active pledges backing an enterprise.
+ */
+export function getEnterprisePledges(enterprisePubkey: string): Array<{
+    id: string;
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(enterprisePubkey) as any[]).map(r => ({
+        id: r.id,
+        keeper: r.keeper,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.keeper}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * List active pledges made by a keeper.
+ */
+export function getKeeperPledges(keeperPubkey: string): Array<{
+    id: string;
+    enterprise: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.enterprise
+        WHERE p.keeper = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(keeperPubkey) as any[]).map(r => ({
+        id: r.id,
+        enterprise: r.enterprise,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.enterprise}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * Explicit, once-only backing pledge of a keeper's earned credit to back an enterprise (docs/the-commons.md §2.4 Rules 1-4).
+ * Gated by keepership (must have a treasury_operators row and can_operate = 1).
+ */
+export function pledgeEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amount: number
+): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (t.status === 'disabled' || t.status === 'pruned') {
+            throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
+        }
+
+        const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+        if (!km || km.status === 'disabled' || km.status === 'pruned') {
+            throw new Error('Your account is not active, so you cannot back this enterprise.');
+        }
+        if (km.credit_frozen === 1) {
+            throw new Error('Your credit is frozen, so you cannot back this enterprise.');
+        }
+
+        if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
+            throw new Error('You are not an authorized keeper of this enterprise');
+        }
+
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            throw new Error('Pledge amount must be a positive number');
+        }
+
+        const totalPledgedRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+        ).get(keeperPubkey) as any;
+        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
+        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
+
+        if (parsedAmount > availableToAdd) {
+            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
+        }
+
+        const pledgeToAdd = parsedAmount;
+        const pledgeId = crypto.randomUUID();
+        const pledgedAt = new Date().toISOString();
+
+        db.prepare(`
+            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+
+        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+        if (legacyFloor > 0) {
+            const pledgeSumRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(enterprisePubkey) as any;
+            const totalActiveDerived = Number(pledgeSumRow?.total || 0);
+            if (totalActiveDerived >= legacyFloor) {
+                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
+                broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+            }
+        }
+
+        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
+/**
+ * Release backing pledge from an enterprise (docs/the-commons.md §2.4 Rule 3).
+ * Covenant: a keeper can release only what leaves the enterprise above its current deficit.
+ */
+export function releaseEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amountToRelease?: number
+): { releasedAmount: number; remainingPledge: number } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(keeperPubkey, enterprisePubkey) as any;
+        const currentKeeperPledge = Number(activeRow?.total || 0);
+
+        const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
+        const hasActivePledge = currentKeeperPledge > 0;
+        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+            throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
+        }
+
+        if (currentKeeperPledge <= 0) {
+            throw new Error('No active backing pledge found for this enterprise');
+        }
+
+        let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
+        if (!Number.isFinite(toRelease) || toRelease <= 0) {
+            throw new Error('Release amount must be a positive number');
+        }
+        toRelease = Math.min(toRelease, currentKeeperPledge);
+
+        // Covenant check: enterprise balance deficit
+        const balance = getBalance(enterprisePubkey).balance;
+        const deficit = Math.max(0, -balance);
+
+        const totalPledgesRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
+        const newTotalPledges = currentTotalPledges - toRelease;
+        const legacyFloor = Number(t.legacy_credit_floor || 0);
+
+        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
+        }
+
+        const remainingPledge = currentKeeperPledge - toRelease;
+        const nowIso = new Date().toISOString();
+
+        db.prepare(
+            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).run(nowIso, keeperPubkey, enterprisePubkey);
+
+        if (remainingPledge > 0) {
+            const newPledgeId = crypto.randomUUID();
+            db.prepare(`
+                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                VALUES (?, ?, ?, ?, ?, NULL)
+            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        }
+
+        return { releasedAmount: toRelease, remainingPledge };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
 
 /**
  * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
@@ -2142,7 +2503,9 @@ export function acceptPost(postId: string, buyerPublicKey: string, hours?: numbe
 }
 
 export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
+    const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
+    if (res) clearEnterpriseFloorCache();
+    return res;
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
@@ -2877,6 +3240,7 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'active') {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     }
+    clearEnterpriseFloorCache();
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
@@ -2886,6 +3250,8 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
 
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
     db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
+    clearEnterpriseFloorCache(publicKey);
+    clearEnterpriseFloorCache();
     broadcast({ type: 'profile_updated', publicKey });
 }
 
@@ -3006,27 +3372,23 @@ export function createTreasury(
     const paused = opts.paused ? 1 : 0;
 
     let pubKeyHex = opts.publicKeyHex;
-    let privKeyHex = '';
     if (!pubKeyHex) {
-        const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
+        const { publicKey } = crypto.generateKeyPairSync('ed25519', {
             publicKeyEncoding: { type: 'spki', format: 'pem' },
             privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
         });
         pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-        privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
     }
 
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
         // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, paused)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, purpose, goalAmount, deadlineAt, lifecycle, paused);
+        // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
-        if (privKeyHex) {
-            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
-        }
         if (opts.leadKeeperPubkey) {
             db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
@@ -3034,6 +3396,7 @@ export function createTreasury(
         }
     })();
 
+    clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
     ledger.setDecayExempt(pubKeyHex);
     broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
@@ -3046,16 +3409,19 @@ export function adminDeletePost(postId: string) {
     return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
 }
 
+export function isSoleOwner(publicKey: string): boolean {
+    if (!isNodeOwner(publicKey)) return false;
+    const ownerCount = (db.prepare(
+        `SELECT COUNT(*) as c FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+    ).get(publicKey) as any)?.c || 0;
+    return ownerCount === 0;
+}
+
 export function adminPruneUser(publicKey: string) {
-    if (isNodeOwner(publicKey)) {
-        const ownerCount = (db.prepare(
-            `SELECT COUNT(*) as c FROM node_roles nr
-             JOIN members m ON nr.member_pubkey = m.public_key
-             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
-        ).get(publicKey) as any)?.c || 0;
-        if (ownerCount === 0) {
-            throw new Error('Cannot prune the sole node owner; appoint another owner first');
-        }
+    if (isSoleOwner(publicKey)) {
+        throw new Error('Cannot prune the sole node owner; appoint another owner first');
     }
 
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
@@ -3493,13 +3859,17 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     if (acc && Math.abs(acc.balance) > 1e-9) {
         throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
     }
+    const acct = ledger.getAccount(projectId);
+    if (acct && Math.abs(acct.balance) > 0.0001) {
+        throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
+    }
 
     projects.splice(index, 1);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
     })();
@@ -3717,7 +4087,7 @@ export function getAllProjects(): CommunityProject[] {
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
             FROM members m
-            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         `).all() as any[];
 
         for (const e of enterprises) {
@@ -3747,7 +4117,10 @@ export function getAllProjects(): CommunityProject[] {
         }
     } catch { }
 
-    return blobProjects;
+    const prunedIds = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE status IN ('pruned', 'deleted')").all() as any[]).map(r => r.public_key)
+    );
+    return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
 export function getVotingRounds(): VotingRound[] {

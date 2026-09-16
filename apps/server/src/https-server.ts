@@ -86,11 +86,12 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from './services/snapshot-scheduler.js';
 
-const PUBLIC_DIR = path.resolve('public');
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const SERVER_ROOT = path.resolve(__dirname, '..');
+const PUBLIC_DIR = fs.existsSync(path.resolve('public')) ? path.resolve('public') : path.join(SERVER_ROOT, 'public');
 
 // Route modules
 import { createSettingsRoutes } from './routes/settings.js';
@@ -545,7 +546,9 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        const clientIp = replicationClientIp(ctx);
+        // Derive real remote socket IP for security access control (strip IPv6-mapped IPv4 prefix)
+        const rawSocketIp = ctx.socket?.remoteAddress || ctx.ip || 'unknown';
+        const clientIp = rawSocketIp.replace(/^::ffff:/, '');
 
         // 1. Dynamic CORS Allowed Origins Handling (#131)
         const requestOrigin = ctx.get('Origin');
@@ -578,12 +581,38 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
 
-        // 2. Admin IP Allowlist Enforcement (/settings and /api/local/admin/*)
+        // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            if (ctx.path === '/settings' || ctx.path.startsWith('/api/local/admin/')) {
-                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp =>
-                    clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))
-                );
+            const normalizedPath = path.posix.normalize(ctx.path).replace(/\/+$/, '') || '/';
+            if (
+                normalizedPath === '/settings' ||
+                normalizedPath.startsWith('/settings/') ||
+                normalizedPath === '/settings-legacy' ||
+                normalizedPath === '/settings.js' ||
+                normalizedPath === '/api/local/admin' ||
+                normalizedPath.startsWith('/api/local/admin/') ||
+                normalizedPath === '/api/admin' ||
+                normalizedPath.startsWith('/api/admin/') ||
+                normalizedPath === '/api/local/verify-password' ||
+                normalizedPath === '/api/local/dashboard' ||
+                normalizedPath === '/api/local/update-identity' ||
+                normalizedPath === '/api/local/change-password' ||
+                normalizedPath === '/api/local/reset' ||
+                normalizedPath === '/api/local/connectors' ||
+                normalizedPath.startsWith('/api/local/connectors/') ||
+                normalizedPath.startsWith('/api/local/federation/') ||
+                normalizedPath === '/api/manager' ||
+                normalizedPath.startsWith('/api/manager/') ||
+                normalizedPath === '/api/pricing-guide/admin' ||
+                normalizedPath.startsWith('/api/pricing-guide/admin/')
+            ) {
+                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
+                    const norm = allowedIp.trim();
+                    if (clientIp === norm || norm === '*') return true;
+                    if ((norm === '127.0.0.1' || norm === 'localhost') && (clientIp === '127.0.0.1' || clientIp === '::1')) return true;
+                    if (norm.endsWith('*') && clientIp.startsWith(norm.slice(0, -1))) return true;
+                    return false;
+                });
                 if (!isAllowed) {
                     ctx.status = 403;
                     ctx.body = { error: 'Access denied by Gateway Admin IP allowlist' };
@@ -619,7 +648,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             // — so exempt it. It renders native-app-only there (no web escape
             // hatch), since servePwa is off.
             const isInviteTrampoline = ctx.path === '/' && !!ctx.query.invite;
-            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
+            if (ctx.path !== '/settings' && !ctx.path.startsWith('/settings/') && ctx.path !== '/settings-legacy' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
                 ctx.status = 530;
                 ctx.body = { error: 'Headless Mode: PWA hosting is disabled on this node gateway' };
                 return;
@@ -1010,9 +1039,20 @@ export async function startHttpsServer(port: number): Promise<void> {
         gzip: true,
     }));
 
-    // SPA fallback — return index.html for /manager/* and /app/* routes
+    // SPA fallback — return index.html for /settings/*, /manager/* and /app/* routes
     app.use(async (ctx) => {
         if (ctx.method === 'GET') {
+            if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
+                const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
+                if (fs.existsSync(settingsIndexPath)) {
+                    ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    ctx.set('Pragma', 'no-cache');
+                    ctx.set('Expires', '0');
+                    ctx.type = 'html';
+                    ctx.body = fs.createReadStream(settingsIndexPath);
+                    return;
+                }
+            }
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {

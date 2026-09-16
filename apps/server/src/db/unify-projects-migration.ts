@@ -80,7 +80,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         targetDb.prepare(`
                             UPDATE members SET
                                 is_treasury = 1,
-                                lifecycle = 'bounded',
+                                lifecycle = COALESCE(lifecycle, 'bounded'),
                                 purpose = COALESCE(purpose, ?),
                                 goal_amount = COALESCE(goal_amount, ?),
                                 deadline_at = COALESCE(deadline_at, ?),
@@ -143,7 +143,6 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                 }
 
                 if (Array.isArray(proposals) && proposals.length > 0) {
-                    let modified = false;
                     for (const prop of proposals) {
                         if (prop.migrated) continue;
 
@@ -175,7 +174,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                 targetDb.prepare(`
                                     UPDATE members SET
                                         is_treasury = 1,
-                                        lifecycle = 'bounded',
+                                        lifecycle = COALESCE(lifecycle, 'bounded'),
                                         purpose = COALESCE(purpose, ?),
                                         goal_amount = COALESCE(goal_amount, ?),
                                         status = COALESCE(status, ?),
@@ -202,19 +201,17 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                     ).run(prop.proposerPubkey);
                                 }
                             }
+
+                            prop.migrated = true;
+                            prop.migratedAt = new Date().toISOString();
+                            prop.enterprisePubkey = enterprisePubkey;
+
+                            targetDb.prepare(
+                                "UPDATE node_config SET value = ? WHERE key = 'commons_projects'"
+                            ).run(JSON.stringify(proposals));
                         })();
 
-                        prop.migrated = true;
-                        prop.migratedAt = new Date().toISOString();
-                        prop.enterprisePubkey = enterprisePubkey;
-                        modified = true;
                         migratedCommonsProposals++;
-                    }
-
-                    if (modified) {
-                        targetDb.prepare(
-                            "UPDATE node_config SET value = ? WHERE key = 'commons_projects'"
-                        ).run(JSON.stringify(proposals));
                     }
                 }
             }

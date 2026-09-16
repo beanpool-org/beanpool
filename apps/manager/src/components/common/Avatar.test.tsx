@@ -23,23 +23,40 @@ describe('Avatar component', () => {
         expect(screen.queryByText(url)).not.toBeInTheDocument();
     });
 
-    it('renders text for an emoji avatar', () => {
-        render(<Avatar src="🚜" alt="Machinery Co-op" />);
+    it('renders text for an emoji avatar with accessible role and label', () => {
+        render(<Avatar src="  🚜  " alt="Machinery Co-op" />);
+        expect(screen.getByText('🚜')).toBeInTheDocument();
+        const emoji = screen.getByRole('img', { name: 'Machinery Co-op' });
+        expect(emoji).toBeInTheDocument();
+        expect(emoji).toHaveAttribute('role', 'img');
+        expect(emoji).toHaveAttribute('aria-label', 'Machinery Co-op');
+    });
+
+    it('hides decorative emoji avatars from screen readers when alt is empty', () => {
+        const { container } = render(<Avatar src="🚜" alt="" />);
         expect(screen.getByText('🚜')).toBeInTheDocument();
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(screen.queryByText('Machinery Co-op')).not.toBeInTheDocument();
+        expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument();
     });
 
     it('renders fallback glyph for null, undefined, or empty avatar', () => {
-        const { rerender } = render(<Avatar src="" alt="Empty Org" />);
+        const { rerender } = render(<Avatar src="" alt="" />);
         expect(screen.getByText('🌾')).toBeInTheDocument();
         expect(screen.queryByRole('img')).not.toBeInTheDocument();
 
-        rerender(<Avatar src={null} alt="Empty Org" />);
+        rerender(<Avatar src={null} alt="" />);
         expect(screen.getByText('🌾')).toBeInTheDocument();
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
 
-        rerender(<Avatar src={undefined} alt="Empty Org" />);
+        rerender(<Avatar src={undefined} alt="" />);
         expect(screen.getByText('🌾')).toBeInTheDocument();
+        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    });
+
+    it('renders fallback glyph with accessible label when alt is provided', () => {
+        render(<Avatar src="" alt="Empty Org" />);
+        expect(screen.getByText('🌾')).toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Empty Org' })).toBeInTheDocument();
     });
 
     it('renders fallback glyph if image fails to load (onError) and never prints URL string', () => {
@@ -51,7 +68,7 @@ describe('Avatar component', () => {
         fireEvent.error(img);
 
         expect(screen.getByText('🌾')).toBeInTheDocument();
-        expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        expect(screen.getByRole('img', { name: 'Broken Org' })).toBeInTheDocument();
         expect(screen.queryByText(url)).not.toBeInTheDocument();
     });
 
@@ -61,7 +78,7 @@ describe('Avatar component', () => {
     });
 
     it('does not render raw string for unknown bundled key or invalid URL', () => {
-        render(<Avatar src="bundled://nonexistent" alt="Invalid Bundled" />);
+        render(<Avatar src="bundled://nonexistent" alt="" />);
         expect(screen.getByText('🌾')).toBeInTheDocument();
         expect(screen.queryByText('bundled://nonexistent')).not.toBeInTheDocument();
         expect(screen.queryByRole('img')).not.toBeInTheDocument();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { resolveAvatarUrl, isShortEmoji } from '../../lib/avatar';
 
 export interface AvatarProps {
@@ -18,14 +18,11 @@ export function Avatar({
     fallbackGlyph = '🌾',
     textClassName = '',
 }: AvatarProps) {
-    const [imgError, setImgError] = useState(false);
+    const [failedSrc, setFailedSrc] = useState<string | null>(null);
+    const isError = Boolean(src && failedSrc === src);
 
-    useEffect(() => {
-        setImgError(false);
-    }, [src]);
-
-    const resolvedUrl = !imgError ? resolveAvatarUrl(src) : null;
-    const isEmoji = !resolvedUrl && !imgError && isShortEmoji(src);
+    const resolvedUrl = !isError ? resolveAvatarUrl(src) : null;
+    const isEmoji = !resolvedUrl && isShortEmoji(src);
 
     return (
         <div className={className}>
@@ -34,12 +31,17 @@ export function Avatar({
                     src={resolvedUrl}
                     alt={alt}
                     className={imageClassName}
-                    onError={() => setImgError(true)}
+                    onError={() => setFailedSrc(src ?? null)}
                 />
-            ) : isEmoji ? (
-                <span className={`select-none leading-none ${textClassName}`}>{src}</span>
             ) : (
-                <span className={`select-none leading-none ${textClassName}`}>{fallbackGlyph}</span>
+                <span
+                    role={!alt ? undefined : 'img'}
+                    aria-label={!alt ? undefined : alt}
+                    aria-hidden={!alt ? 'true' : undefined}
+                    className={`select-none leading-none ${textClassName}`}
+                >
+                    {isEmoji ? src?.trim() : fallbackGlyph}
+                </span>
             )}
         </div>
     );

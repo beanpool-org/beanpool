@@ -283,4 +283,4 @@ Because third-party administrative accounts and multi-factor authentication (2FA
 6. **Deploy Worker & Fleet:**
    - Run `npx wrangler secret put` in `apps/registrar/`.
    - Run `bash scripts/rotate-node-env.sh` with the gathered new credentials.
-   - Clear `local-config.json` admin lock on each target node to activate the new `ADMIN_PASSWORD`.
+   - Clear `local-config.json` admin lock on each target node to activate the new `ADMIN_PASSWORD` (only required if updating `.env` manually without `rotate-node-env.sh`).

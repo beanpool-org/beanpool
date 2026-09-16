@@ -216,6 +216,31 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.ok(isGroupMember(db, group.id, 'bob_pub'));
     });
 
+    it('does not advertise invite_only groups to people outside them', () => {
+        const secret = createGroup(db, { name: 'Secret Circle', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
+        const open = createGroup(db, { name: 'Garden Crew', joinPolicy: 'open', createdBy: 'alice_pub' });
+        const knock = createGroup(db, { name: 'Water Works', joinPolicy: 'request_to_join', createdBy: 'alice_pub' });
+
+        const names = (viewer?: string) => listGroups(db, undefined, viewer).map(g => g.name).sort();
+
+        // A stranger sees the open and request_to_join groups — the latter must stay discoverable or nobody
+        // could ever ask to join it — but learns nothing about the invite_only one.
+        assert.deepStrictEqual(names('carol_pub'), ['Garden Crew', 'Water Works']);
+        // An anonymous caller is treated the same way.
+        assert.deepStrictEqual(names(undefined), ['Garden Crew', 'Water Works']);
+
+        // Someone merely holding an invitation can see it, before accepting.
+        inviteGroupMember(db, secret.id, 'alice_pub', 'bob_pub', 'member');
+        assert.ok(names('bob_pub').includes('Secret Circle'));
+
+        // And its convenor sees it.
+        assert.ok(names('alice_pub').includes('Secret Circle'));
+
+        // Removing Bob's membership row removes his sight of it again.
+        removeGroupMember(db, secret.id, 'alice_pub', 'bob_pub');
+        assert.ok(!names('bob_pub').includes('Secret Circle'));
+    });
+
     it('convenor moderation: role management and demotion safety', () => {
         const group = createGroup(db, {
             name: 'Team A',

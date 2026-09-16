@@ -200,6 +200,18 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
     `;
     const params: any[] = [];
 
+    // An invite_only group is not advertised. The broadcast path already treats non-open groups as private
+    // (state-engine.ts scopes group_created/group_updated to active members); without this the fetch path
+    // contradicted it, handing every private group's name, description, member count and convenor to anyone
+    // who asked. open and request_to_join stay listed for everyone — a request_to_join group nobody can see
+    // is a group nobody can ask to join.
+    if (viewerPubkey) {
+        query += " AND (g.join_policy != 'invite_only' OR EXISTS (SELECT 1 FROM group_members gmv WHERE gmv.group_id = g.id AND gmv.member_pubkey = ?))";
+        params.push(viewerPubkey);
+    } else {
+        query += " AND g.join_policy != 'invite_only'";
+    }
+
     if (filter?.memberPubkey) {
         query += " AND g.id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')";
         params.push(filter.memberPubkey);

@@ -321,9 +321,9 @@ export function PeerConnectorsPanel({
                     address,
                 }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.error || 'Remove failed');
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.success === false) {
+                throw new Error(data.error || 'Remove failed');
             }
             setStatusMsg({ text: `Removed connector ${address}`, isError: false });
             await loadConnectors();

@@ -670,4 +670,59 @@ describe('PeerConnectorsPanel Component', () => {
         fireEvent.click(dialog);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
+
+    it('handles connector removal failure when server returns success: false with 200 OK', async () => {
+        const testConnectors = [
+            {
+                address: 'wss://fail-remove.beanpool.org:8443',
+                callsign: 'Fail Remove Peer',
+                connected: true,
+                enabled: true,
+            },
+        ];
+
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors/remove') && opts?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: false, error: 'Failed to remove from config' }),
+                } as Response);
+            }
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(testConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+        });
+
+        // Open remove confirmation modal
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        // Confirm removal
+        const confirmBtn = screen.getByRole('button', { name: 'Remove Connector' });
+        fireEvent.click(confirmBtn);
+
+        // Expect error message and not success message
+        await waitFor(() => {
+            expect(screen.getByText('Failed to remove from config')).toBeInTheDocument();
+        });
+        expect(screen.queryByText(/Removed connector/i)).not.toBeInTheDocument();
+    });
 });
+

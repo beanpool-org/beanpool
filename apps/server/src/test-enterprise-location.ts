@@ -270,6 +270,15 @@ async function main() {
         mapData = await mapRes.json();
         assert(!mapData.enterprises.some((p: any) => p.publicKey === noLocCoop), 'Enterprise without location is excluded from map endpoint');
 
+        // Legacy/unspecified enterprise with NULL status and location set IS INCLUDED in map endpoint
+        db.prepare("UPDATE members SET status = NULL WHERE public_key = ?").run(shed);
+        mapRes = await fetch(`${BASE}/api/enterprises/map`);
+        mapData = await mapRes.json();
+        const nullStatusPin = mapData.enterprises.find((p: any) => p.publicKey === shed);
+        assert(nullStatusPin !== undefined, 'Enterprise with NULL status and location appears in map endpoint');
+        assert(nullStatusPin.status === 'active', 'Enterprise with NULL status defaults to active in map pin response');
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(shed);
+
         // ── 7. Public read transparency endpoints include location ──
         const treasuriesRes = await fetch(`${BASE}/api/treasuries`);
         assert(treasuriesRes.ok, 'GET /api/treasuries succeeds');

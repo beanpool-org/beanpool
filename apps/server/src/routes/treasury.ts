@@ -260,9 +260,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
              WHERE is_treasury = 1
                AND lat IS NOT NULL
                AND lng IS NOT NULL
-               AND status != 'completed'
                AND wind_up_finalised_at IS NULL
-               AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))
+               AND (status IS NULL OR status NOT IN ('completed', 'pruned', 'deleted'))
              ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         ctx.body = {

@@ -348,6 +348,7 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
     // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
     const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();

@@ -498,6 +498,7 @@ export function initSchema() {
     // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
@@ -884,10 +885,9 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     try {
         const txSum = (db.prepare(`
             SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
-        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
-        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
-        currentAmount = Math.max(currentAmount, txSum, accBal);
+            WHERE project_id = ? AND to_pubkey = 'escrow_' || ?
+        `).get(e.public_key, e.public_key) as any)?.s || 0;
+        currentAmount = Math.max(currentAmount, txSum);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -1106,14 +1106,14 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
+                // Credit Enterprise Account (Slice 3: pledges land in enterprise account, demurrage-exempt)
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, projectId);
 
-                // Record atomic Sweep Transaction
+                // Record atomic Sweep Transaction to Enterprise
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`sweep_${txId}`, escrowPubkey, project.creator_pubkey, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
+                `).run(`sweep_${txId}`, escrowPubkey, projectId, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
         }
     });
@@ -1129,6 +1129,15 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
+
+    // Assert balance is zero before deleting account to preserve ledger conservation
+    const entAcc = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(projectId) as { balance: number } | undefined;
+    if (entAcc && Math.abs(entAcc.balance) > 0.0001) {
+        throw new Error(`Cannot delete enterprise account with non-zero balance (${entAcc.balance}). Funds must be swept or refunded first.`);
+    }
+    if (project.status !== 'ACTIVE') {
+        throw new Error(`Cannot delete project with status ${project.status}`);
+    }
 
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window

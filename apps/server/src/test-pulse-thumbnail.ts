@@ -432,6 +432,18 @@ async function main(): Promise<void> {
         extractThumbnailFromEmbedHtml('{\"display_url\":\"https:\\/\\/cdn.instagram.com\\/pic2.jpg?oe=1\\u0026oh=2\"}') === 'https://cdn.instagram.com/pic2.jpg?oe=1&oh=2',
         'extractThumbnailFromEmbedHtml extracts JSON display_url and unescapes slashes and unicode'
     );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="javascript:alert(1)" />') === null,
+        'extractThumbnailFromEmbedHtml rejects javascript: scheme'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="/relative/path/image.jpg" />') === null,
+        'extractThumbnailFromEmbedHtml rejects relative URLs'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="data:image/jpeg;base64,123" />') === null,
+        'extractThumbnailFromEmbedHtml rejects data: scheme'
+    );
 
     // ──────────────────────────────────────────────────────────────────────────
     // Requirement 7.4: A private-IP upstream is refused

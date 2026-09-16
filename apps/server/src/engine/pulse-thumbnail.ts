@@ -76,27 +76,40 @@ export function extractInstagramEmbedUrl(postUrl?: string | null, externalId?: s
 
 /**
  * Extracts a fresh CDN thumbnail image URL from an Instagram embed HTML document.
+ * Enforces that the extracted URL strictly uses the http: or https: scheme.
  */
 export function extractThumbnailFromEmbedHtml(html: string): string | null {
     if (!html) return null;
+    let candidate: string | null = null;
+
     const imgMatch = html.match(/<img[^>]+class="[^"]*EmbeddedMediaImage[^"]*"[^>]+src="([^">]+)"/i) ||
                      html.match(/<img[^>]+src="([^">]+)"[^>]+class="[^"]*EmbeddedMediaImage[^"]*"/i);
     if (imgMatch && imgMatch[1]) {
-        return imgMatch[1].replace(/&amp;/g, '&').trim();
+        candidate = imgMatch[1];
+    } else {
+        const jsonMatch = html.match(/\\"display_url\\":\\"([^"\\]+(?:\\.[^"\\]+)*)\\"/i) ||
+                          html.match(/"display_url":"([^"]+)"/i);
+        if (jsonMatch && jsonMatch[1]) {
+            candidate = jsonMatch[1];
+        } else {
+            const ogMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i) ||
+                            html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
+            if (ogMatch && ogMatch[1]) {
+                candidate = ogMatch[1];
+            } else {
+                const fallbackImg = html.match(/<img[^>]+src="([^">]*(?:cdninstagram\.com|fbcdn\.net)[^">]*)"/i);
+                if (fallbackImg && fallbackImg[1]) {
+                    candidate = fallbackImg[1];
+                }
+            }
+        }
     }
-    const jsonMatch = html.match(/\\"display_url\\":\\"([^"\\]+(?:\\.[^"\\]+)*)\\"/) ||
-                      html.match(/"display_url":"([^"]+)"/);
-    if (jsonMatch && jsonMatch[1]) {
-        return jsonMatch[1].replace(/\\\//g, '/').replace(/\\u0026/g, '&').trim();
-    }
-    const ogMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:og:image|twitter:image)["'][^>]+content=["']([^"']+)["']/i) ||
-                    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["'](?:og:image|twitter:image)["']/i);
-    if (ogMatch && ogMatch[1]) {
-        return ogMatch[1].replace(/&amp;/g, '&').trim();
-    }
-    const fallbackImg = html.match(/<img[^>]+src="([^">]*(?:cdninstagram\.com|fbcdn\.net)[^">]*)"/i);
-    if (fallbackImg && fallbackImg[1]) {
-        return fallbackImg[1].replace(/&amp;/g, '&').trim();
+
+    if (candidate) {
+        const cleaned = candidate.replace(/&amp;/g, '&').replace(/\\\//g, '/').replace(/\\u0026/g, '&').trim();
+        if (/^https?:\/\//i.test(cleaned)) {
+            return cleaned;
+        }
     }
     return null;
 }

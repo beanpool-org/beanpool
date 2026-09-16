@@ -20,6 +20,7 @@ delete process.env.CF_RECORD_NAME;
 import { db, initSchema } from './db/db.js';
 import {
     createPost,
+    updatePost,
     getPosts,
     getPostCount,
     getActivePostCount,
@@ -477,6 +478,16 @@ async function runTests() {
         const taintedRow = db.prepare("SELECT target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(taintedPublic!.id) as any;
         assert(taintedRow.target_group_id === null && taintedRow.target_pubkey === null && taintedRow.assigned_to === null,
             '10u. Public post clears foreign target_group_id, target_pubkey, and assigned_to in database');
+
+        // 8. Non-public posts cannot update reach to non-local:
+        const groupPostToUpdate = createPost('offer', 'tools', 'Wheelbarrow', 'Good wheelbarrow', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: gardenGroup.id
+        });
+        updatePost(groupPostToUpdate!.id, alice.pubKeyHex, { reach: 'everywhere' as any, reachPeers: ['node-xyz'] } as any);
+        const updatedRow = db.prepare("SELECT reach, reach_peers FROM posts WHERE id = ?").get(groupPostToUpdate!.id) as any;
+        assert(updatedRow.reach === 'local' && updatedRow.reach_peers === null,
+            '10v. updatePost strips non-local reach updates on group-scoped posts');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

@@ -332,6 +332,11 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
+    if (existingPost.audienceScope !== 'public') {
+        delete updates.reach;
+        delete (updates as any).reachPeers;
+    }
+
     if (existingPost.type === 'poll') {
         if (existingPost.status !== 'active') {
             throw new Error('Cannot edit a closed poll');

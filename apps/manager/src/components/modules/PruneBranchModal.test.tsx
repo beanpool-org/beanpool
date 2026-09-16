@@ -67,8 +67,9 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
 
         // 4 members in branch: root + 2 children + 1 grandchild
         expect(screen.getByText('4')).toBeInTheDocument();
-        // Total balance: 150.5 + 50.25 + 200 + 75.25 = 476 beans
-        expect(screen.getByText(/476 beans/i)).toBeInTheDocument();
+        // Net Commons Pool Impact: 150.5 + 50.25 + 200 + 75.25 = +476 🫘
+        expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('+476 🫘');
 
         // Root name shown in impact box
         expect(screen.getByText('BadRootLeader')).toBeInTheDocument();
@@ -110,7 +111,8 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
 
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
-        expect(screen.getByText(/0 beans/i)).toBeInTheDocument();
+        expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('0 🫘');
 
         const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
         expect(pruneBtn).toBeDisabled();
@@ -140,7 +142,8 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
         expect(screen.getByText('Unknown Root')).toBeInTheDocument();
         expect(screen.getByText('1')).toBeInTheDocument();
-        expect(screen.getByText(/0 beans/i)).toBeInTheDocument();
+        expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('0 🫘');
     });
 
     it('dismisses via Escape key and Cancel button', async () => {
@@ -219,5 +222,63 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         // Surplus credit confiscated: 400 beans
         const creditEl = document.getElementById('prune-credit-confiscated');
         expect(creditEl?.textContent).toBe('400 🫘 credit');
+
+        // Net Commons Pool Impact: +150 🫘
+        const netEl = document.getElementById('prune-net-impact');
+        expect(netEl?.textContent).toContain('+150 🫘');
+    });
+
+    it('guards against dismissal via Escape, backdrop click, or close buttons while pruning is in-flight', async () => {
+        const handleClose = vi.fn();
+        let resolveConfirm: () => void = () => {};
+        const pendingConfirm = new Promise<void>((resolve) => {
+            resolveConfirm = resolve;
+        });
+        const handleConfirm = vi.fn().mockReturnValue(pendingConfirm);
+
+        render(
+            <PruneBranchModal
+                rootMember={mockRootMember}
+                members={mockDownstreamMembers}
+                onConfirm={handleConfirm}
+                onClose={handleClose}
+            />
+        );
+
+        // Type to confirm and click prune
+        const input = screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i);
+        await userEvent.type(input, 'BadRootLeader');
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        await userEvent.click(pruneBtn);
+
+        expect(handleConfirm).toHaveBeenCalled();
+
+        // While pruning is in-flight:
+        // 1. Escape key should NOT call onClose
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(handleClose).not.toHaveBeenCalled();
+
+        // 2. Header close button should be disabled
+        const closeBtn = screen.getByLabelText(/Close prune branch dialog/i);
+        expect(closeBtn).toBeDisabled();
+        await userEvent.click(closeBtn);
+        expect(handleClose).not.toHaveBeenCalled();
+
+        // 3. Cancel button should be disabled
+        const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+        expect(cancelBtn).toBeDisabled();
+        await userEvent.click(cancelBtn);
+        expect(handleClose).not.toHaveBeenCalled();
+
+        // 4. Backdrop click should NOT call onClose
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(dialog);
+        expect(handleClose).not.toHaveBeenCalled();
+
+        // Complete the operation
+        resolveConfirm();
+        await waitFor(() => {
+            expect(handleClose).toHaveBeenCalledTimes(1);
+        });
     });
 });

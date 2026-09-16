@@ -133,14 +133,14 @@ export function PruneBranchModal({
     // Keyboard accessibility: Escape closes modal
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
+            if (e.key === 'Escape' && !isPruning) {
                 e.preventDefault();
                 onClose();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose]);
+    }, [onClose, isPruning]);
 
     const handlePrune = async () => {
         if (!isMatch || isPruning || !rootPubkey) return;
@@ -162,7 +162,7 @@ export function PruneBranchModal({
             aria-labelledby="prune-branch-title"
             className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto"
             onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
+                if (e.target === e.currentTarget && !isPruning) onClose();
             }}
         >
             <div className="bg-nature-900 border border-red-700/80 rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 text-nature-100 font-sans my-auto">
@@ -178,9 +178,10 @@ export function PruneBranchModal({
                     </div>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => { if (!isPruning) onClose(); }}
+                        disabled={isPruning}
                         aria-label="Close prune branch dialog"
-                        className="text-nature-400 hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-nature-800 transition-colors"
+                        className="text-nature-400 hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-nature-800 transition-colors disabled:opacity-50"
                     >
                         ✕
                     </button>
@@ -240,10 +241,11 @@ export function PruneBranchModal({
                         </div>
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-nature-800/40">
                             <span className="text-nature-400 font-medium">
-                                Total Balance Written Off:
+                                Net Commons Pool Impact:
                             </span>
-                            <span className="text-sm font-black text-red-400 font-mono" id="prune-total-balance">
-                                {totalBalance} beans
+                            <span className={`text-sm font-black font-mono ${totalCreditConfiscated >= totalDebtWriteOff ? 'text-emerald-400' : 'text-red-400'}`} id="prune-net-impact">
+                                {Math.round((totalCreditConfiscated - totalDebtWriteOff) * 100) / 100 > 0 ? '+' : ''}
+                                {Math.round((totalCreditConfiscated - totalDebtWriteOff) * 100) / 100} 🫘
                             </span>
                         </div>
                     </div>
@@ -277,7 +279,7 @@ export function PruneBranchModal({
                 <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={() => { if (!isPruning) onClose(); }}
                         disabled={isPruning}
                         className="min-h-[44px] px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all disabled:opacity-50"
                     >

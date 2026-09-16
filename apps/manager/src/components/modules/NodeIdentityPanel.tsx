@@ -404,13 +404,15 @@ export function NodeIdentityPanel({
             {saveStatus && (
                 <div
                     id="identity-status"
+                    role={saveStatus.isError ? 'alert' : 'status'}
+                    aria-live={saveStatus.isError ? 'assertive' : 'polite'}
                     className={`p-3 rounded-xl border text-xs font-semibold ${
                         saveStatus.isError
                             ? 'bg-red-950 border-red-800 text-red-200'
                             : 'bg-emerald-950 border-emerald-800 text-emerald-300'
                     }`}
                 >
-                    {saveStatus.isError ? '❌ ' : '✓ '}
+                    <span aria-hidden="true">{saveStatus.isError ? '❌ ' : '✓ '}</span>
                     {saveStatus.text}
                 </div>
             )}

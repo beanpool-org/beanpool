@@ -415,6 +415,9 @@ describe('NodeIdentityPanel Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/Saved!/i)).toBeInTheDocument();
+            const statusEl = document.getElementById('identity-status');
+            expect(statusEl).toHaveAttribute('role', 'status');
+            expect(statusEl).toHaveAttribute('aria-live', 'polite');
             expect(onRefreshDiag).toHaveBeenCalled();
         });
     });
@@ -535,6 +538,9 @@ describe('NodeIdentityPanel Component', () => {
 
         await waitFor(() => {
             expect(screen.getByText(/2FA session expired. Please re-authenticate./i)).toBeInTheDocument();
+            const statusEl = document.getElementById('identity-status');
+            expect(statusEl).toHaveAttribute('role', 'alert');
+            expect(statusEl).toHaveAttribute('aria-live', 'assertive');
             expect(onRefreshDiag).not.toHaveBeenCalled();
         });
     });

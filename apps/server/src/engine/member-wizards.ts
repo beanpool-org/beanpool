@@ -188,7 +188,7 @@ export function issueRekeyCode(
         // Write system log
         db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)
-            VALUES (?, 'INFO', 'SECURITY', ?, ?)
+            VALUES (?, 'INFO', 'AUTH', ?, ?)
         `).run(
             nowIso,
             `Re-enrolment code issued for member ${member.callsign} (${oldPublicKey.slice(0, 10)}...) by operator ${operatorPubkey}`,
@@ -402,7 +402,7 @@ export function completeRekey(
         // 5. System log entry
         db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)
-            VALUES (?, 'INFO', 'SECURITY', ?, ?)
+            VALUES (?, 'INFO', 'AUTH', ?, ?)
         `).run(
             nowIso,
             `Member ${member.callsign} re-keyed: ${cleanOld.slice(0, 10)}... -> ${cleanNew.slice(0, 10)}... bound to new key by operator ${operatorPubkey}`,
@@ -584,7 +584,7 @@ export function executeOffboard(
                     throw new Error('Selected gift recipient is not an active member');
                 }
 
-                transfer(
+                const txRes = transfer(
                     cleanPub,
                     recipientPub,
                     balance,
@@ -593,6 +593,9 @@ export function executeOffboard(
                     false,
                     { signer: cleanOperator }
                 );
+                if (!txRes) {
+                    throw new Error('Failed to transfer offboarding balance to recipient');
+                }
             } else {
                 throw new Error('Positive balance requires either donating to Commons or gifting to a member');
             }

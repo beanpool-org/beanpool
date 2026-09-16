@@ -882,9 +882,10 @@ export function broadcast(event: any, recipients?: string[]): void {
 export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     try {
-        const invalidated = db.prepare("SELECT reason FROM invalidated_keys WHERE public_key = ?").get(publicKey) as any;
+        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?").get(publicKey) as any;
         if (invalidated) {
-            throw new Error(`Device key has been invalidated (${invalidated.reason}). Please re-enrol using your replacement device.`);
+            const rekeyDetail = invalidated.rekeyed_to ? ` and re-keyed to ${invalidated.rekeyed_to}` : '';
+            throw new Error(`Device key has been invalidated (${invalidated.reason}${rekeyDetail}). Please re-enrol using your replacement device.`);
         }
     } catch (e: any) {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
@@ -1375,7 +1376,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
     // #104: a bridge_<peer> account is the local payer when settling a visitor's purchase. It has no
     // trust profile, so the completed-trade gate would block every cross-node settlement.
-    if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // Operator/admin-signed transfers (e.g. member offboarding wizard gifts) are also exempt.
+    const isOperatorSigner = Boolean(auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
+    if (!isEscrow && !isOperatorSigner && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);

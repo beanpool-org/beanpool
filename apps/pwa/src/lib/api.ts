@@ -1539,6 +1539,10 @@ export interface Treasury {
     windUpInitiatedBy?: string | null;
     windUpFinalisedAt?: string | null;
     windUpGraceEndsAt?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
     keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
@@ -1611,6 +1615,25 @@ export interface EnterpriseStatus {
 
 export async function getEnterpriseStatuses(): Promise<{ enterprises: EnterpriseStatus[] }> {
     return request('GET', '/api/enterprises/statuses');
+}
+
+export interface EnterpriseMapPin {
+    publicKey: string;
+    name: string;
+    callsign: string;
+    avatar: string | null;
+    avatarUrl?: string | null;
+    purpose?: string | null;
+    lat: number;
+    lng: number;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
+    paused: boolean;
+    status: string;
+}
+
+export async function getEnterpriseMapPins(): Promise<{ enterprises: EnterpriseMapPin[] }> {
+    return request('GET', '/api/enterprises/map');
 }
 
 export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {

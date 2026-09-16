@@ -181,6 +181,10 @@ export function App() {
             }
             return;
         }
+        if (tab === 'enterprise' || tab === 'treasury') {
+            if (contextId) setOpenTreasuryPubkey(contextId);
+            return;
+        }
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
         if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
@@ -684,6 +688,7 @@ export function App() {
                                         initialGroupId={openNewPostGroupId}
                                         onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                        onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
                                     />
                                 </Suspense>
                             )}

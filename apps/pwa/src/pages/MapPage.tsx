@@ -16,7 +16,12 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses, getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group } from '../lib/api';
+import {
+    getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts,
+    getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
+    getEnterpriseMapPins, type EnterpriseMapPin,
+    getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group
+} from '../lib/api';
 import { haversineDistance } from '../lib/geo';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -47,9 +52,10 @@ interface Props {
     initialGroupId?: string;
     onOpenNewPostHandled?: () => void;
     onNavigate?: (tab: string, contextId?: string) => void;
+    onOpenTreasury?: (pubkey: string) => void;
 }
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -96,6 +102,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
+    const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
 
     // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
     useEffect(() => {
@@ -378,6 +385,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
+                getEnterpriseMapPins().then(res => {
+                    setEnterprises(res?.enterprises || []);
+                }).catch(() => {});
                 const localData = await getMarketplacePosts();
                 let allPosts: MarketplacePost[] = [...localData];
 
@@ -748,7 +758,75 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             });
             marker.addTo(markersRef.current!);
         });
-    }, [posts, useModernMarkers, blockedSet, inactiveEnterpriseKeys]);
+
+        // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)
+        enterprises
+            .filter(ent => ent.lat != null && ent.lng != null && ent.status !== 'completed')
+            .forEach(ent => {
+                const isPaused = ent.paused || ent.status === 'paused';
+                const borderColor = isPaused ? '#f59e0b' : '#e06d53';
+                const bgColor = isPaused ? '#451a03' : '#7c2d12';
+                const shadowColor = isPaused ? 'rgba(245,158,11,0.5)' : 'rgba(224,109,83,0.5)';
+
+                // Avatar or fallback icon
+                let avatarContent = `<span style="font-size: 20px; line-height: 1;">🌾</span>`;
+                if (ent.avatar) {
+                    if (ent.avatar.startsWith('bundled://') || ent.avatar.startsWith('data:') || ent.avatar.startsWith('/')) {
+                        avatarContent = `<img src="${ent.avatar}" alt="${ent.name}" style="width: 28px; height: 28px; border-radius: 8px; object-fit: cover;" />`;
+                    } else if (ent.avatar.length <= 4) {
+                        avatarContent = `<span style="font-size: 20px; line-height: 1;">${ent.avatar}</span>`;
+                    }
+                }
+
+                const pausedBadge = isPaused
+                    ? `<span style="
+                        position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+                        background: #b45309; color: #fef3c7; font-size: 8px; font-weight: 900;
+                        padding: 1px 5px; border-radius: 4px; text-transform: uppercase;
+                        letter-spacing: 0.5px; border: 1px solid #f59e0b; white-space: nowrap;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.4); z-index: 3;
+                    ">PAUSED</span>`
+                    : '';
+
+                const html = `
+                <div style="position: relative; width: 44px; height: 54px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.25)); cursor: pointer;" title="${ent.name}${isPaused ? ' (Paused)' : ''}">
+                    ${pausedBadge}
+                    <div style="
+                        width: 42px; height: 42px; border-radius: 12px;
+                        background: ${bgColor}; border: 2.5px solid ${borderColor};
+                        display: flex; flex-direction: column; align-items: center; justify-content: center;
+                        box-sizing: border-box; z-index: 2; position: relative;
+                        box-shadow: 0 0 8px ${shadowColor};
+                    ">
+                        ${avatarContent}
+                    </div>
+                    <div style="
+                        width: 0; height: 0;
+                        border-left: 7px solid transparent;
+                        border-right: 7px solid transparent;
+                        border-top: 10px solid ${borderColor};
+                        margin-top: -2px; z-index: 1; position: relative;
+                    "></div>
+                </div>`;
+
+                const icon = L.divIcon({
+                    className: 'custom-enterprise-pin hover:scale-110 transition-transform origin-bottom',
+                    html,
+                    iconSize: [44, 54],
+                    iconAnchor: [22, 54],
+                });
+
+                const marker = L.marker([ent.lat, ent.lng], { icon });
+                marker.on('click', () => {
+                    if (onOpenTreasury) {
+                        onOpenTreasury(ent.publicKey);
+                    } else if (onNavigate) {
+                        onNavigate('enterprise', ent.publicKey);
+                    }
+                });
+                marker.addTo(markersRef.current!);
+            });
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate]);
 
     return (
         <>

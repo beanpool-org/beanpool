@@ -146,16 +146,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         try {
             setSubmittingSuccession(true);
             setActionFeedback(null);
-            const res = await proposeEnterpriseSuccession(pubkey, selectedSuccessionCandidate);
-            if (res.leadMoved) {
+            const res: any = await proposeEnterpriseSuccession(pubkey, selectedSuccessionCandidate);
+            const passed = res.executed ?? res.leadMoved ?? false;
+            if (passed) {
                 setActionFeedback({
                     type: 'success',
                     message: 'Succession passed! Lead role moved to candidate.'
                 });
             } else {
+                const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
+                const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession proposal submitted (${res.votesCount} of ${res.votesRequired} votes). Awaiting other keepers.`
+                    message: `Succession proposal submitted (${count} of ${req} votes). Awaiting other keepers.`
                 });
             }
             setSelectedSuccessionCandidate('');
@@ -175,16 +178,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         try {
             setSubmittingSuccession(true);
             setActionFeedback(null);
-            const res = await voteEnterpriseSuccession(pubkey, proposalId);
-            if (res.leadMoved) {
+            const res: any = await voteEnterpriseSuccession(pubkey, proposalId);
+            const passed = res.executed ?? res.leadMoved ?? false;
+            if (passed) {
                 setActionFeedback({
                     type: 'success',
                     message: 'Succession vote registered and passed! Lead role has been transferred.'
                 });
             } else {
+                const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
+                const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession vote registered (${res.votesCount} of ${res.votesRequired} votes).`
+                    message: `Succession vote registered (${count} of ${req} votes).`
                 });
             }
             await load();
@@ -1374,13 +1380,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         )}
 
                         {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
-                        {leadInactivity?.isEligibleForSuccession && (
+                        {Boolean(leadInactivity?.isEligible ?? (leadInactivity as any)?.isEligibleForSuccession) && (
                             <div className="bg-amber-50/60 dark:bg-amber-950/30 border-2 border-amber-500/50 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="flex items-start gap-2.5">
                                     <span className="text-xl" aria-hidden="true">⚠️</span>
                                     <div>
                                         <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                            Lead Keeper Inactive ({leadInactivity.daysInactive} days)
+                                            Lead Keeper Inactive ({Math.floor(leadInactivity.daysInactive)} days)
                                         </div>
                                         <p className="text-xs text-amber-900 dark:text-amber-200 mt-1 leading-relaxed">
                                             The lead keeper ({leadInactivity.leadCallsign}) has recorded no node activity for 30+ days.

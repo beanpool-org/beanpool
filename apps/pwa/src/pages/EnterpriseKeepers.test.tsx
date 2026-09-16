@@ -225,6 +225,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                 leadPubkey: 'lead-alice-pubkey',
                 leadCallsign: 'Alice',
                 daysInactive: 32,
+                isEligible: true,
                 isEligibleForSuccession: true,
             },
             succession: {
@@ -232,6 +233,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
                     leadPubkey: 'lead-alice-pubkey',
                     leadCallsign: 'Alice',
                     daysInactive: 32,
+                    isEligible: true,
                     isEligibleForSuccession: true,
                 },
                 proposals: [],
@@ -247,6 +249,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
 
         const proposeSpy = vi.spyOn(api, 'proposeEnterpriseSuccession').mockResolvedValue({
             success: true,
+            executed: false,
             proposal: {
                 id: 'prop-1',
                 enterprisePubkey: 'enterprise-eggs-pubkey',

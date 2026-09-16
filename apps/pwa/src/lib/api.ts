@@ -1761,11 +1761,27 @@ export async function getEnterpriseSuccession(treasury: string): Promise<{ succe
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/succession`);
 }
 
-export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string): Promise<{ success: boolean; proposal: SuccessionProposalItem; status: string; votesCount: number; votesRequired: number; leadMoved: boolean }> {
+export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string): Promise<{
+    success: boolean;
+    executed: boolean;
+    leadMoved?: boolean;
+    votesCount?: number;
+    votesRequired?: number;
+    status?: string;
+    proposal: SuccessionProposalItem;
+}> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
 }
 
-export async function voteEnterpriseSuccession(treasury: string, proposalId: string): Promise<{ success: boolean; votesCount: number; votesRequired: number; status: string; leadMoved: boolean }> {
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string): Promise<{
+    success: boolean;
+    executed: boolean;
+    leadMoved?: boolean;
+    votesCount?: number;
+    votesRequired?: number;
+    status?: string;
+    proposal?: SuccessionProposalItem;
+}> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`);
 }
 

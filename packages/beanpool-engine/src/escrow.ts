@@ -72,7 +72,10 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         completedAt: r.completed_at,
         ratedByBuyer: !!r.ratedByBuyer,
         ratedBySeller: !!r.ratedBySeller,
-        coverImage
+        coverImage,
+        disputeResolution: r.dispute_resolution || undefined,
+        disputeResolvedAt: r.dispute_resolved_at || undefined,
+        disputeResolvedBy: r.dispute_resolved_by || undefined
     };
 }
 

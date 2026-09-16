@@ -403,6 +403,8 @@ export function initSchema() {
                     );
                     INSERT INTO activity_feed_migration (id, event_type, actor_pubkey, target_pubkey, metadata, created_at)
                         SELECT id, event_type, actor_pubkey, target_pubkey, metadata, created_at FROM activity_feed;
+                    INSERT OR REPLACE INTO sqlite_sequence (name, seq)
+                        SELECT 'activity_feed_migration', seq FROM sqlite_sequence WHERE name = 'activity_feed';
                     DROP TABLE activity_feed;
                     ALTER TABLE activity_feed_migration RENAME TO activity_feed;
                     CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);

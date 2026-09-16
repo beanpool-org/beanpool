@@ -282,5 +282,126 @@ describe('EconomySection Component', () => {
         expect(screen.getByText('Malformed Enterprise')).toBeInTheDocument();
         // Should not throw or crash
     });
+
+    it('revokes a keeper whose public key is stored on pubkey property', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        const keeperWithPubkey = [
+            {
+                pubkey: 'nostr_pubkey_keeper_999',
+                callsign: 'clara',
+            },
+        ];
+
+        const treasuriesWithCustomKeeper: any[] = [
+            {
+                publicKey: 'treasury_pk_custom_keeper',
+                name: 'Community Bakery',
+                avatar: '🥖',
+                balance: 100,
+                creditLine: 0,
+                liveOffers: 1,
+                keepers: keeperWithPubkey,
+            },
+        ];
+
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(treasuriesWithCustomKeeper as any);
+        vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(keeperWithPubkey as any);
+        vi.spyOn(nodeClient, 'revokeTreasuryKeeper').mockResolvedValue([]);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{
+                        members: [
+                            {
+                                pubkey: 'nostr_pubkey_keeper_999',
+                                name: 'clara',
+                                tier: 'Steward',
+                            },
+                        ],
+                    }}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        const manageButton = screen.getAllByRole('button', { name: /manage/i })[0];
+        await act(async () => {
+            fireEvent.click(manageButton);
+        });
+
+        const revokeButton = screen.getByRole('button', { name: /revoke/i });
+        await act(async () => {
+            fireEvent.click(revokeButton);
+        });
+
+        expect(nodeClient.revokeTreasuryKeeper).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_custom_keeper',
+            'nostr_pubkey_keeper_999',
+            mockProfile.adminPassword,
+            undefined
+        );
+    });
+
+    it('filters out existing keepers with pubkey property from directory dropdown', async () => {
+        const keeperWithPubkey = [
+            {
+                pubkey: 'already_assigned_pk',
+                callsign: 'keeper_one',
+            },
+        ];
+
+        const treasuries: any[] = [
+            {
+                publicKey: 'treasury_pk_filter_test',
+                name: 'Community Farm',
+                avatar: '🌱',
+                balance: 100,
+                creditLine: 0,
+                liveOffers: 1,
+                keepers: keeperWithPubkey,
+            },
+        ];
+
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(treasuries as any);
+        vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(keeperWithPubkey as any);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{
+                        members: [
+                            {
+                                pubkey: 'already_assigned_pk',
+                                name: 'keeper_one',
+                                tier: 'Steward',
+                            },
+                            {
+                                pubkey: 'unassigned_member_pk',
+                                name: 'unassigned_member',
+                                tier: 'Resident',
+                            },
+                        ],
+                    }}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        const manageButton = screen.getAllByRole('button', { name: /manage/i })[0];
+        await act(async () => {
+            fireEvent.click(manageButton);
+        });
+
+        const select = screen.getByLabelText(/Select Member/i) as HTMLSelectElement;
+        const optionValues = Array.from(select.options).map((opt) => opt.value);
+
+        expect(optionValues).toContain('unassigned_member_pk');
+        expect(optionValues).not.toContain('already_assigned_pk');
+    });
 });
 

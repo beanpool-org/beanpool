@@ -60,15 +60,16 @@ const DEFAULT_NODES: FleetNodeConfig[] = [
 
 export function nodeSlug(target: string | { id: string; url?: string; name?: string }): string {
     if (!target) return 'unknown';
-    const id = typeof target === 'string' ? target : target.id;
-    const url = typeof target === 'object' ? target.url : '';
-    const name = typeof target === 'object' ? target.name : '';
+    const rawId = typeof target === 'string' ? target : (target?.id || '');
+    const cleanId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const url = typeof target === 'object' ? (target?.url || '') : '';
+    const name = typeof target === 'object' ? (target?.name || '') : '';
 
-    if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(id)) {
-        return id;
+    if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(cleanId)) {
+        return cleanId;
     }
 
-    const str = `${id} ${url} ${name}`.toLowerCase();
+    const str = `${rawId} ${url} ${name}`.toLowerCase();
     if (str.includes('test')) return 'test';
     if (str.includes('mullum')) return 'mullum';
     if (str.includes('bris')) return 'bris';
@@ -80,7 +81,7 @@ export function nodeSlug(target: string | { id: string; url?: string; name?: str
     if (str.includes('review')) return 'review';
     if (str.includes('localhost') || str.includes('127.0.0.1')) return 'local-node';
 
-    return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return cleanId || 'unknown';
 }
 
 export function getNodes(): FleetNodeConfig[] {

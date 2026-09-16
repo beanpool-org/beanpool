@@ -771,6 +771,26 @@ describe('PeerConnectorsPanel Component', () => {
             expect(btn.className).toContain('min-h-[44px]');
         }
     });
+
+    it('marks peer address input as required and aria-required for accessibility', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation(() => {
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve([]),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Peer Address/i)).toBeInTheDocument();
+        });
+
+        const addressInput = screen.getByLabelText(/Peer Address/i);
+        expect(addressInput).toBeRequired();
+        expect(addressInput.getAttribute('aria-required')).toBe('true');
+    });
 });
 
 

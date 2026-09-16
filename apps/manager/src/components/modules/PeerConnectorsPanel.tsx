@@ -640,6 +640,8 @@ export function PeerConnectorsPanel({
                             <input
                                 id="new-connector-addr"
                                 type="text"
+                                required
+                                aria-required="true"
                                 value={newAddress}
                                 onChange={(e) => setNewAddress(e.target.value)}
                                 placeholder="e.g. us.beanpool.org:4001 or wss://peer.beanpool.org"

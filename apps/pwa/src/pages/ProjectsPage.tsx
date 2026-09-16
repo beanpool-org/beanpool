@@ -434,8 +434,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {filteredGroups.map(g => (
                                 <div
                                     key={g.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`View details for group ${g.name}`}
                                     onClick={() => setSelectedGroupForDetail(g)}
-                                    className="p-4 bg-nature-950/70 hover:bg-nature-900/80 border border-nature-800 hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedGroupForDetail(g);
+                                        }
+                                    }}
+                                    className="p-4 bg-nature-950/70 hover:bg-nature-900/80 border border-nature-800 hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0 flex-1">

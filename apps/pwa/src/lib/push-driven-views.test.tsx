@@ -49,6 +49,9 @@ vi.mock('./api', async (importOriginal) => {
         buildSignedWsParams: vi.fn(async () => ''),
         getPulseFeed: vi.fn(async () => ({ items: [], nextCursor: null })),
         getMemberChannels: vi.fn(async () => ({ channels: [] })),
+        getGroups: vi.fn(async () => []),
+        getTreasuries: vi.fn(async () => []),
+        getEnterpriseStatuses: vi.fn(async () => ({})),
     };
 });
 

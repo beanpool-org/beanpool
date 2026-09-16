@@ -56,6 +56,11 @@ export interface Group {
     memberCount?: number;
     currentUserRole?: GroupRole | null;
     currentUserStatus?: GroupMemberStatus | null;
+    viewerRole?: GroupRole | null;
+    viewerStatus?: GroupMemberStatus | null;
+    convenorPubkey?: string;
+    convenorCallsign?: string;
+    convenorAvatarUrl?: string | null;
 }
 
 export interface GroupMember {
@@ -89,3 +94,9 @@ export function isValidGroupCategory(val: unknown): val is GroupCategory {
 export function isValidGroupMemberStatus(val: unknown): val is GroupMemberStatus {
     return typeof val === 'string' && (GROUP_MEMBER_STATUSES as readonly string[]).includes(val as GroupMemberStatus);
 }
+
+export const isGroupRole = isValidGroupRole;
+export const isJoinPolicy = isValidJoinPolicy;
+export const isAudienceScope = isValidAudienceScope;
+export const isGroupCategory = isValidGroupCategory;
+export const isGroupMemberStatus = isValidGroupMemberStatus;

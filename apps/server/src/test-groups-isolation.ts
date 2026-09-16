@@ -36,6 +36,7 @@ import {
     approveGroupMember,
     inviteGroupMember,
     deleteGroupPost,
+    removePost,
     requestPost,
     closePoll,
     votePoll,
@@ -515,6 +516,46 @@ async function runTests() {
         const updatedRow = db.prepare("SELECT reach, reach_peers FROM posts WHERE id = ?").get(groupPostToUpdate!.id) as any;
         assert(updatedRow.reach === 'local' && updatedRow.reach_peers === null,
             '10v. updatePost strips non-local reach updates on group-scoped posts');
+
+        // 9. Convenor moderation scope boundary (§9):
+        // Convenor Alice CANNOT delete Bob's public post via removePost
+        const bobPublic = createPost('offer', 'tools', 'Bob Public Shovel', 'Public tool', 5, 'fixed', bob.pubKeyHex)!;
+        const aliceDeletePublic = removePost(bobPublic.id, alice.pubKeyHex);
+        assert(!aliceDeletePublic, '10w. Convenor Alice CANNOT delete Bob public post via removePost');
+        const bobPublicCheck = getPosts({ id: bobPublic.id, viewerPubkey: bob.pubKeyHex })[0];
+        assert(bobPublicCheck?.active === true && bobPublicCheck?.status === 'active', '10w-post. Bob public post remains active');
+
+        // Residual target_group_id on public post cannot be deleted by convenor
+        const publicResidual = createPost('offer', 'tools', 'Residual Public Post', 'Public with group id', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'public',
+            targetGroupId: gardenGroup.id
+        })!;
+        const aliceDeleteResidual = removePost(publicResidual.id, alice.pubKeyHex);
+        assert(!aliceDeleteResidual, '10x. Convenor Alice CANNOT delete public post even if residual target_group_id matches');
+        const residualCheck = getPosts({ id: publicResidual.id, viewerPubkey: bob.pubKeyHex })[0];
+        assert(residualCheck?.active === true && residualCheck?.status === 'active', '10x-post. Residual post remains active');
+
+        // 10. Re-narrowed WHERE prevents TOCTOU disagreement between auth decision and delete statement
+        const racePost = createPost('offer', 'tools', 'Race Post', 'Testing TOCTOU', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: gardenGroup.id
+        })!;
+        // Concurrently change post to public in DB
+        db.prepare("UPDATE posts SET audience_scope = 'public' WHERE id = ?").run(racePost.id);
+        const raceDelete = removePost(racePost.id, alice.pubKeyHex);
+        assert(!raceDelete, '10y. TOCTOU: removePost SQL guard prevents deleting post that became public');
+        const racePostCheck = getPosts({ id: racePost.id, viewerPubkey: bob.pubKeyHex })[0];
+        assert(racePostCheck?.active === true && racePostCheck?.status === 'active', '10y-post. Race post remains active');
+
+        // 11. Legitimate convenor can delete active group-scoped post via removePost
+        const validGroupPost = createPost('offer', 'tools', 'Valid Group Tool', 'For gardeners', 5, 'fixed', bob.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: gardenGroup.id
+        })!;
+        const aliceDeleteValid = removePost(validGroupPost.id, alice.pubKeyHex);
+        assert(aliceDeleteValid, '10z. Convenor Alice successfully deletes valid group-scoped post via removePost');
+        const validCheck = getPosts({ id: validGroupPost.id, viewerPubkey: alice.pubKeyHex, includeInactive: true })[0];
+        assert(validCheck?.status === 'cancelled' && validCheck?.active === false, '10z-post. Group post cancelled');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

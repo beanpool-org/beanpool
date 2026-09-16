@@ -289,7 +289,12 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     const postRow = db.prepare("SELECT id, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
     if (!postRow) return false;
 
-    const isAuthor = postRow.author_pubkey === callerPublicKey;
+    const isDirectAuthor = postRow.author_pubkey === callerPublicKey;
+    const isTreasuryAuthor = !isDirectAuthor && !!db.prepare(
+        "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
+    ).get(callerPublicKey, postRow.author_pubkey);
+    const isAuthor = isDirectAuthor || isTreasuryAuthor;
+
     let isConvenor = false;
     if (postRow.audience_scope === 'group' && postRow.target_group_id) {
         const convenorRow = db.prepare(
@@ -307,7 +312,21 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 
     let removed = false;
     db.transaction(() => {
-        const result = db.prepare(`UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`).run(id);
+        const result = db.prepare(`
+            UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ? AND (
+                author_pubkey = ?
+                OR author_pubkey IN (SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?)
+                OR (
+                    audience_scope = 'group'
+                    AND target_group_id IS NOT NULL
+                    AND target_group_id IN (
+                        SELECT group_id FROM group_members
+                        WHERE member_pubkey = ? AND role = 'convenor' AND status = 'active'
+                    )
+                )
+            )
+        `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);

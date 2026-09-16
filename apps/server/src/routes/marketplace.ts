@@ -206,22 +206,43 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             return;
         }
         const actor = ctx.state?.actor as string | undefined;
-        let entitled = false;
-        if (actor) {
-            if (actor === authorPublicKey) {
-                entitled = true;
-            } else {
-                const postRow = db.prepare("SELECT target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
-                if (postRow?.audience_scope === 'group' && postRow?.target_group_id) {
-                    const isConv = db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'").get(postRow.target_group_id, actor);
-                    if (isConv) {
-                        entitled = true;
-                    }
-                }
-            }
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
         }
-        if (!entitled && !assertActorEntitled(ctx, authorPublicKey)) return;
-        const removed = removePost(id, actor || authorPublicKey);
+
+        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
+        if (!postRow) {
+            ctx.status = 404;
+            ctx.body = { error: 'Post not found' };
+            return;
+        }
+
+        let entitled = false;
+        if (actor === postRow.author_pubkey) {
+            entitled = true;
+        } else if (postRow.audience_scope === 'group' && postRow.target_group_id) {
+            const isConv = db.prepare(
+                "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
+            ).get(postRow.target_group_id, actor);
+            if (isConv) {
+                entitled = true;
+            }
+        } else if (isTreasury(postRow.author_pubkey) && canOperateTreasury(actor, postRow.author_pubkey)) {
+            entitled = true;
+        }
+
+        if (!entitled) {
+            ctx.status = 403;
+            ctx.body = { error: isTreasury(postRow.author_pubkey)
+                ? 'You are not an authorized keeper of this enterprise'
+                : 'Not authorized to act on behalf of this identity'
+            };
+            return;
+        }
+
+        const removed = removePost(id, actor);
         if (removed) {
             syncPulseMarketplaceGate();
         }

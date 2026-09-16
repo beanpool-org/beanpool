@@ -244,6 +244,32 @@ describe('NodeIdentityPanel Component', () => {
         expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
     });
 
+    it('clears searching spinner when query characters are deleted below threshold', async () => {
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    onRefreshDiag={vi.fn()}
+                />
+            );
+        });
+
+        const searchInput = screen.getByPlaceholderText(/Search for a location.../i);
+
+        // Type 3 characters: searching spinner appears
+        await act(async () => {
+            fireEvent.change(searchInput, { target: { value: 'Syd' } });
+        });
+        expect(screen.getByText('🔄')).toBeInTheDocument();
+
+        // Delete back to 2 characters before debounce completes: searching spinner clears immediately
+        await act(async () => {
+            fireEvent.change(searchInput, { target: { value: 'Sy' } });
+        });
+        expect(screen.queryByText('🔄')).not.toBeInTheDocument();
+    });
+
     it('prevents accidental form submission on Enter in location search and supports arrow key navigation', async () => {
         const onRefreshDiag = vi.fn();
         await act(async () => {

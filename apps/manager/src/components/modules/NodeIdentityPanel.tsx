@@ -247,6 +247,7 @@ export function NodeIdentityPanel({
 
         const q = value.trim();
         if (q.length < 3) {
+            setSearching(false);
             setSearchResults([]);
             setShowResults(false);
             return;

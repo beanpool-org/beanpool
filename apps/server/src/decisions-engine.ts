@@ -322,7 +322,7 @@ export function getDecisionVoiceCredits(decisionId: string, voterPubkey: string)
     return {
         totalCredits,
         usedCredits: currentCreditsUsed,
-        availableCredits: Math.max(0, totalCredits),
+        availableCredits: Math.max(0, totalCredits - currentCreditsUsed),
     };
 }
 
@@ -771,11 +771,14 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'poll':
+                    // Polls are advisory tally only (§3.2): "A Poll never moves anything: if it passes and needs doing, a person does it."
+                    break;
                 case 'set_rule':
                 case 'write_off_deficit':
                 case 'set_levy':
-                    // Rule updates or parameter updates
-                    break;
+                    // TODO: Implement automated execution in future governance slice.
+                    // Block execution with an explicit reason rather than silently marking executed in ledger.
+                    throw new Error(`Effect '${decision.effect}' is scheduled for future governance slice; execution blocked`);
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }
@@ -911,7 +914,7 @@ export function tickDecisions(asOfTime?: number): {
     for (const r of openExpired) {
         evaluated++;
         const tally = tallyDecision(r.id, asOfTime);
-        const now = new Date().toISOString();
+        const now = nowIso;
 
         if (!tally.quorumMet) {
             db.prepare(`
@@ -956,7 +959,7 @@ export function tickDecisions(asOfTime?: number): {
 
     for (const r of graceDue) {
         graceExpired++;
-        const now = new Date().toISOString();
+        const now = nowIso;
         if (r.effect === 'remove_member' && r.subject) {
             const member = getMember(r.subject);
             if (!member || member.status === 'pruned') {
@@ -1015,7 +1018,7 @@ export function tickDecisions(asOfTime?: number): {
                     execution_reason = 'Queued grant expired after 90 days without sufficient pool funds',
                     updated_at = ?
                 WHERE id = ?
-            `).run(now.toISOString(), top.id);
+            `).run(nowIso, top.id);
             broadcast({ type: 'decision_updated', decision: getDecision(top.id)! });
         } else {
             const amount = Number(JSON.parse(top.params || '{}')?.amount || 0);

@@ -85,6 +85,7 @@ function seedTestMember(pk: string, callsign: string, opts?: {
     const status = opts?.status || 'active';
     const joinedAt = opts?.joinedAt || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
+    const uniqueCallsign = `${callsign}_${Math.random().toString(36).slice(2, 8)}`;
     db.prepare(`
         INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -93,7 +94,7 @@ function seedTestMember(pk: string, callsign: string, opts?: {
             credit_frozen = excluded.credit_frozen,
             is_treasury = excluded.is_treasury,
             earned_credit = excluded.earned_credit
-    `).run(pk, callsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
+    `).run(pk, uniqueCallsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
 
     db.prepare(`
         INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
@@ -121,7 +122,7 @@ async function runDecisionsSuite() {
 
     const admin = 'admin_user_' + Date.now();
     seedTestMember(admin, 'AdminDave', { earnedCredit: 500 });
-    grantNodeRole(admin, 'owner');
+    grantNodeRole(admin, 'owner', 'owner:password');
 
     // ── 1. Franchises & Eligibility ─────────────────────────────────────────
     console.log('\n--- 1. Franchises & Eligibility ---');
@@ -232,6 +233,10 @@ async function runDecisionsSuite() {
     testAssert(vResA.success && vResA.creditsUsed === 16, 'Quadratic voter A used 16 credits for 4 votes');
     castDecisionVote(decPool.id, voterB, true, 4);
     castDecisionVote(decPool.id, voterC, false, 2);
+
+    const creditsA = getDecisionVoiceCredits(decPool.id, voterA);
+    testAssert(creditsA.usedCredits === 16, 'Voter A recorded 16 usedCredits');
+    testAssert(creditsA.availableCredits === creditsA.totalCredits - 16, 'Voter A availableCredits accurately reflects totalCredits - usedCredits');
 
     const poolTally = tallyDecision(decPool.id);
     testAssert(poolTally.quorumMet, 'Quorum met with 3 voters');
@@ -575,6 +580,19 @@ async function runDecisionsSuite() {
     const execBadRes = executeDecision(badDecision.id);
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
+
+    // Unimplemented effect test: write_off_deficit blocks execution with descriptive message
+    const stubDecision = createDecision({
+        authorPubkey: admin,
+        title: 'Write off deficit for defaulted enterprise',
+        description: 'Testing stub effect blocking',
+        touches: 'pool',
+        effect: 'write_off_deficit',
+        subject: enterprise1,
+    });
+    const stubRes = executeDecision(stubDecision.id);
+    testAssert(!stubRes.success && stubRes.status === 'execution_blocked', 'Unimplemented effect write_off_deficit blocks execution');
+    testAssert(stubRes.error?.includes('scheduled for future governance slice'), 'Execution error explains scheduled slice');
 
     // ── 10. Backward Compatibility: Legacy Voting Rounds ─────────────────────
     console.log('\n--- 10. Backward Compatibility ---');

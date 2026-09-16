@@ -340,6 +340,18 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
+    // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
+    const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
+    if (hasNodeRoles) {
+        const nrColumns = (db.prepare("PRAGMA table_info(node_roles)").all() as any[]).map(c => c.name);
+        if (!nrColumns.includes('session_epoch')) {
+            db.prepare(`ALTER TABLE node_roles ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`).run();
+        }
+        if (!nrColumns.includes('break_glass_hash')) {
+            db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_hash TEXT`).run();
+        }
+    }
+
     // node_roles: ensure check constraint allows 'moderator'
     try {
         const nrSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='node_roles'").get() as any;
@@ -348,13 +360,16 @@ export function initSchema() {
                 db.exec(`
                     DROP TABLE IF EXISTS node_roles_migration;
                     CREATE TABLE node_roles_migration (
-                        member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
-                        role          TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
-                        granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                        granted_by    TEXT
+                        member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+                        role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
+                        granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        granted_by       TEXT,
+                        session_epoch    INTEGER NOT NULL DEFAULT 0,
+                        break_glass_hash TEXT
                     );
-                    INSERT INTO node_roles_migration (member_pubkey, role, granted_at, granted_by)
-                        SELECT member_pubkey, role, granted_at, granted_by FROM node_roles;
+                    INSERT INTO node_roles_migration (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                        SELECT member_pubkey, role, granted_at, granted_by,
+                               COALESCE(session_epoch, 0), break_glass_hash FROM node_roles;
                     DROP TABLE node_roles;
                     ALTER TABLE node_roles_migration RENAME TO node_roles;
                     CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);

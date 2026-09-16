@@ -15,8 +15,9 @@ import {
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPasswordAsync,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
-    getGatewayConfig,
+    getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
+import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken } from '../admin-auth.js';
 import qrcode from 'qrcode';
@@ -108,6 +109,52 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
         return next();
     }
+
+    // 1. Deep-link Handshake Token Exchange (phone button flow)
+    const token = ctx.query.token as string | undefined;
+    if (token) {
+        const exchangeRes = consumeHandshakeToken(token);
+        if (exchangeRes.ok && exchangeRes.sessionId) {
+            ctx.cookies.set('admin_session', exchangeRes.sessionId, {
+                httpOnly: true,
+                sameSite: 'lax',
+                maxAge: 12 * 3600 * 1000,
+                path: '/',
+            });
+            ctx.redirect('/settings');
+            return;
+        } else {
+            ctx.status = exchangeRes.replay ? 401 : (exchangeRes.expired ? 401 : 400);
+            ctx.type = 'text/html';
+            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${exchangeRes.error || 'The authentication token is invalid or has expired.'}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
+            return;
+        }
+    }
+
+    // 2. Break-glass mode enforcement: settings is restricted to enrolled key sessions
+    if (isBreakGlassMode()) {
+        const rawToken =
+            (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+            (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+            ctx.request?.headers?.['x-admin-session'] ||
+            ctx.headers?.['x-admin-session'];
+        const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+
+        const sessionRes = sessionToken ? validateAdminSession(sessionToken) : null;
+        const hasValidSession = sessionRes?.valid;
+        if (!hasValidSession) {
+            ctx.status = 403;
+            ctx.type = 'text/html';
+            const isExpired = sessionRes?.expired || sessionRes?.idleTimeout || sessionRes?.hardLimit;
+            const heading = isExpired ? 'Admin Session Expired' : 'Break-Glass Mode Active';
+            const message = isExpired
+                ? (sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
+                : 'Settings access is restricted to enrolled key sessions. Password access is disabled except for key enrolment.';
+            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${heading} — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">${isExpired ? "⏱️" : "🔒"}</span> ${heading}</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${message}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Sign In with Key</a></main></body></html>`;
+            return;
+        }
+    }
+
     const managerPath = resolveServerPath('public/settings/index.html');
     const publicPath = resolveServerPath('public/settings.html');
     const staticPath = resolveServerPath('static/settings.html');

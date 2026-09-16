@@ -28,6 +28,10 @@ import {
     listNodeRoles,
     grantNodeRole,
     revokeNodeRole,
+    getNodeRoleSessionEpoch,
+    bumpNodeRoleSessionEpoch,
+    setNodeRoleBreakGlassHash,
+    getNodeRoleBreakGlassHash,
     type MemberNodeRole,
     type NodeRoleRecord,
 } from './engine/node-roles.js';
@@ -39,6 +43,10 @@ export {
     listNodeRoles,
     grantNodeRole,
     revokeNodeRole,
+    getNodeRoleSessionEpoch,
+    bumpNodeRoleSessionEpoch,
+    setNodeRoleBreakGlassHash,
+    getNodeRoleBreakGlassHash,
     type MemberNodeRole,
     type NodeRoleRecord,
 };

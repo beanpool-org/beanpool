@@ -290,6 +290,16 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         const postRow = db.prepare("SELECT active, status FROM posts WHERE id = 'post_g1'").get() as any;
         assert.strictEqual(postRow.active, 0);
         assert.strictEqual(postRow.status, 'cancelled');
+
+        // Residual non-group post with target_group_id cannot be deleted by convenor
+        db.prepare(`
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
+            VALUES ('post_public_with_group', 'offer', 'tools', 'Public Ladder', 'Open ladder', 5, 'bob_pub', ?, ?, 'public', ?)
+        `).run(now, now, group.id);
+
+        assert.throws(() => {
+            deleteGroupPost(db, group.id, 'alice_pub', 'post_public_with_group');
+        }, /does not belong to this group/i);
     });
 
     it('audience scoping in getPosts and getPostCount excludes private posts from unauthorized viewers', () => {

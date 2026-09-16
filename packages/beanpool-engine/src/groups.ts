@@ -594,10 +594,10 @@ export function deleteGroupPost(db: Db, groupId: string, convenorPubkey: string,
         throw new Error('UNAUTHORIZED: Only a group convenor can moderate posts in this group');
     }
 
-    const post = db.prepare("SELECT id, target_group_id, active FROM posts WHERE id = ?").get(postId) as any;
+    const post = db.prepare("SELECT id, target_group_id, audience_scope, active FROM posts WHERE id = ?").get(postId) as any;
     if (!post) return false;
 
-    if (post.target_group_id !== groupId) {
+    if (post.audience_scope !== 'group' || post.target_group_id !== groupId) {
         throw new Error('Post does not belong to this group');
     }
 
@@ -611,7 +611,7 @@ export function deleteGroupPost(db: Db, groupId: string, convenorPubkey: string,
     let removed = false;
     db.transaction(() => {
         const result = db.prepare(
-            "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND target_group_id = ?"
+            "UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND target_group_id = ? AND audience_scope = 'group'"
         ).run(postId, groupId);
         if (result.changes === 0) return;
         removed = true;

@@ -21,6 +21,7 @@ import {
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
+    isKeeperOfEnterprise,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -1048,6 +1049,19 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };
+            return;
+        }
+        const mRow = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(actor) as any;
+        if (mRow?.credit_frozen === 1) {
+            ctx.status = 403;
+            ctx.body = { error: 'Frozen members cannot post in discussion threads' };
+            return;
+        }
+
         const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const text = typeof body.text === 'string' ? body.text : (typeof body.message === 'string' ? body.message : '');
         const clientId = typeof body.clientId === 'string' ? body.clientId : undefined;
@@ -1096,6 +1110,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
+        if (!isKeeperOfEnterprise(actor, treasury)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only a keeper of this enterprise can remove messages from its thread' };
+            return;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
+
         const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const messageId = ctx.params.messageId || body.messageId || body.id;
         if (!messageId) {

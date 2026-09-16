@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
+import { generateOfflineQrUrl } from '../../lib/qr';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -12,6 +13,7 @@ export interface GeneratedInviteItem {
     code: string;
     tier: InviteTier;
     fullUrl: string;
+    qrDataUrl: string;
 }
 
 export function InvitesModule({ activeNode }: InvitesModuleProps) {
@@ -21,10 +23,12 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const [copiedIndex, setCopiedIndex] = useState<string | number | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewQrItem, setPreviewQrItem] = useState<GeneratedInviteItem | null>(null);
+    const [showPrintSheet, setShowPrintSheet] = useState(false);
 
     useEffect(() => {
         setGeneratedTokens([]);
         setPreviewQrItem(null);
+        setShowPrintSheet(false);
     }, [activeNode?.id]);
 
     const buildFullUrl = (code: string) => {
@@ -57,10 +61,14 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     code = `INV-${rand1}-${rand2}`;
                 }
 
+                const fullUrl = buildFullUrl(code);
+                const qrDataUrl = generateOfflineQrUrl(fullUrl);
+
                 items.push({
                     code,
                     tier: inviteTier,
-                    fullUrl: buildFullUrl(code),
+                    fullUrl,
+                    qrDataUrl,
                 });
             }
             setGeneratedTokens(items);
@@ -121,42 +129,45 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
         const cardsHtml = generatedTokens
             .map(
-                (item) => `
-            <div style="border: 2px solid #166534; background: #052e16; color: #f0fdf4; border-radius: 16px; padding: 20px; font-family: monospace; page-break-inside: avoid; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #15803d; padding-bottom: 10px; margin-bottom: 15px;">
+                (item, idx) => `
+            <div class="print-card" style="border: 2px solid #166534; background: #ffffff; color: #052e16; border-radius: 12px; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; page-break-inside: avoid; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #15803d; padding-bottom: 12px; margin-bottom: 18px;">
                     <div>
-                        <strong style="color: #4ade80; font-size: 16px; text-transform: uppercase;">🌱 SOVEREIGN BEANPOOL ONBOARDING PASS</strong>
-                        <div style="font-size: 12px; color: #86efac; margin-top: 2px;">Target Node: ${safeNodeName} (${safeNodeUrl})</div>
+                        <div style="font-size: 16px; font-weight: 900; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">🌱 BEANPOOL ONBOARDING PASS</div>
+                        <div style="font-size: 12px; color: #374151; margin-top: 2px;">Community Node: <strong>${safeNodeName}</strong> (${safeNodeUrl})</div>
                     </div>
                     <div style="text-align: right;">
-                        <span style="background: #15803d; color: #ffffff; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold;">
+                        <span style="background: #15803d; color: #ffffff; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: bold;">
                             ${escapeHtml(getTierBadge(item.tier))}
                         </span>
+                        <div style="font-size: 10px; color: #6b7280; margin-top: 4px;">Pass #${idx + 1} of ${generatedTokens.length}</div>
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 20px; align-items: center;">
-                    <div style="background: #ffffff; padding: 10px; border-radius: 12px; display: inline-block;">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${escapeHtml(encodeURIComponent(item.fullUrl))}" width="140" height="140" style="display: block;" />
+                <div style="display: flex; gap: 24px; align-items: center;">
+                    <div style="background: #ffffff; padding: 8px; border: 2px solid #15803d; border-radius: 12px; display: inline-block; flex-shrink: 0;">
+                        <img src="${item.qrDataUrl || ''}" width="180" height="180" alt="QR Code for ${escapeHtml(item.code)}" style="display: block;" />
                     </div>
 
-                    <div style="flex: 1; space-y: 8px;">
-                        <div style="font-size: 11px; color: #86efac; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
-                        <div style="font-size: 22px; font-weight: 900; color: #4ade80; letter-spacing: 2px;">${escapeHtml(item.code)}</div>
-                        <div style="font-size: 11px; color: #a7f3d0; margin-top: 8px;">
-                            Scan the QR code with your camera or open this URL in your web browser:
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 11px; font-weight: bold; color: #4b5563; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
+                        <div style="font-size: 26px; font-weight: 900; color: #166534; font-family: monospace; letter-spacing: 2px; margin: 4px 0 10px 0;">${escapeHtml(item.code)}</div>
+                        <div style="font-size: 12px; color: #374151; margin-bottom: 6px; font-weight: 600;">
+                            Scan the large QR code with your phone camera or visit:
                         </div>
-                        <div style="font-size: 11px; color: #6ee7b7; word-break: break-all; font-weight: bold; background: rgba(0,0,0,0.3); padding: 6px 10px; border-radius: 6px; border: 1px solid #15803d;">
+                        <div style="font-size: 11px; font-family: monospace; color: #065f46; word-break: break-all; font-weight: bold; background: #f0fdf4; padding: 8px 12px; border-radius: 8px; border: 1px solid #a7f3d0;">
                             ${escapeHtml(item.fullUrl)}
                         </div>
                     </div>
                 </div>
 
-                <div style="margin-top: 15px; pt: 10px; border-top: 1px dashed #15803d; font-size: 10px; color: #86efac; display: flex; justify-content: space-between;">
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #64748b; display: flex; justify-content: space-between; align-items: center;">
                     <span>🔒 Single-use cryptographic invite code</span>
-                    <span>⏰ Valid for 30 days from issuance</span>
+                    <span>🤝 Face-to-face community onboarding</span>
+                    <span>⏰ Valid for 30 days</span>
                 </div>
             </div>
+            ${idx < generatedTokens.length - 1 ? '<div style="border-top: 1px dashed #94a3b8; margin: 16px 0; text-align: center; color: #94a3b8; font-size: 10px; letter-spacing: 2px;">✂ - - - - - - - - - CUT HERE - - - - - - - - - ✂</div>' : ''}
             `
             )
             .join('');
@@ -165,24 +176,28 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
             <!DOCTYPE html>
             <html>
                 <head>
-                    <title>BeanPool Onboarding Passes — ${safeNodeName}</title>
+                    <meta charset="utf-8" />
+                    <title>BeanPool Printable QR Invites — ${safeNodeName}</title>
                     <style>
-                        body { background: #022c22; color: #fff; padding: 40px; }
+                        body { background: #f8fafc; color: #0f172a; padding: 30px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
                         @media print {
-                            body { background: transparent; color: #000; padding: 0; }
+                            body { background: #ffffff !important; color: #000000 !important; padding: 0 !important; }
+                            .no-print { display: none !important; }
+                            .print-card { page-break-inside: avoid; border: 2px solid #000000 !important; box-shadow: none !important; }
                         }
                     </style>
                 </head>
                 <body>
-                    <div style="max-width: 650px; margin: 0 auto;">
-                        <div style="margin-bottom: 25px; text-align: center;">
-                            <h1 style="font-family: sans-serif; font-size: 24px; margin: 0; color: #4ade80;">🌱 Sovereign Onboarding Passes</h1>
-                            <p style="font-family: sans-serif; font-size: 13px; color: #86efac; margin-top: 4px;">Print or export as PDF for sharing offline or via external channels.</p>
+                    <div style="max-width: 680px; margin: 0 auto;">
+                        <div class="no-print" style="margin-bottom: 25px; text-align: center; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 12px;">
+                            <h1 style="font-size: 20px; margin: 0 0 6px 0; color: #065f46;">🌱 Sovereign Printable QR Invites (${generatedTokens.length} Cards)</h1>
+                            <p style="font-size: 12px; color: #047857; margin: 0 0 12px 0;">Print-friendly sheet of large QR codes carrying join URL and code for face-to-face onboarding.</p>
+                            <button onclick="window.print()" style="background: #059669; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: bold; cursor: pointer;">🖨️ Print Now</button>
                         </div>
                         ${cardsHtml}
                     </div>
                     <script>
-                        setTimeout(() => { window.print(); }, 500);
+                        setTimeout(() => { window.print(); }, 400);
                     </script>
                 </body>
             </html>
@@ -203,7 +218,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             </span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-1">
-                            Generate single-use cryptographic invite passes bound to this sovereign node.
+                            Generate single-use cryptographic invite passes and print large QR codes for face-to-face onboarding.
                         </p>
                     </div>
 
@@ -239,15 +254,18 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     </div>
 
                     <div className="space-y-1.5">
-                        <label className="text-nature-400 font-extrabold uppercase text-[10px] tracking-wider block">
-                            Quantity to Generate
-                        </label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex justify-between items-center">
+                            <label className="text-nature-400 font-extrabold uppercase text-[10px] tracking-wider block">
+                                Quantity to Generate (N)
+                            </label>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
                             {[1, 5, 10, 20].map((num) => (
                                 <button
                                     key={num}
+                                    type="button"
                                     onClick={() => setInviteCount(num)}
-                                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
+                                    className={`flex-1 min-w-[40px] py-2 rounded-xl text-xs font-bold transition-all border ${
                                         inviteCount === num
                                             ? 'bg-terra-500/20 text-terra-300 border-terra-500/50'
                                             : 'bg-nature-950 text-nature-400 border-nature-800 hover:border-nature-700'
@@ -256,6 +274,31 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                     {num}
                                 </button>
                             ))}
+                            <div className="flex items-center gap-1.5 ml-auto">
+                                <label htmlFor="custom-count-input" className="text-[10px] text-nature-400 font-bold uppercase whitespace-nowrap">
+                                    Custom:
+                                </label>
+                                <input
+                                    id="custom-count-input"
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={inviteCount}
+                                    onChange={(e) => {
+                                        const raw = e.target.value;
+                                        if (raw === '') {
+                                            setInviteCount(1);
+                                        } else {
+                                            const val = parseInt(raw, 10);
+                                            if (!isNaN(val)) {
+                                                setInviteCount(Math.max(1, Math.min(100, val)));
+                                            }
+                                        }
+                                    }}
+                                    aria-label="Custom quantity"
+                                    className="w-16 bg-nature-950 border border-nature-800 rounded-xl px-2.5 py-1.5 text-white font-mono font-bold text-xs text-center focus:outline-none focus:border-terra-500"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -269,7 +312,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             <span className="text-3xl text-terra-400 animate-spin" aria-hidden="true">🔄</span>
                             <h4 className="text-sm font-bold text-white m-0">Generating Cryptographic Passes...</h4>
                             <p className="text-xs text-nature-400 m-0 max-w-sm">
-                                Issuing {inviteCount} single-use onboarding pass{inviteCount > 1 ? 'es' : ''} from node API.
+                                Issuing {inviteCount} single-use onboarding pass{inviteCount > 1 ? 'es' : ''} with offline QR codes.
                             </p>
                         </>
                     ) : (
@@ -277,7 +320,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             <span className="text-4xl opacity-50 grayscale">🎟️</span>
                             <h4 className="text-sm font-bold text-nature-300 m-0">No Passes Generated Yet</h4>
                             <p className="text-xs text-nature-500 m-0 max-w-sm">
-                                Select a membership tier and quantity above, then click Generate to create single-use onboarding passes.
+                                Select a membership tier and quantity N above, then click Generate to create single-use onboarding passes and printable QR codes.
                             </p>
                         </>
                     )}
@@ -308,6 +351,13 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                 <span>{copiedIndex === 'all_links' ? '✓ Links Copied!' : 'Copy All Links'}</span>
                             </button>
                             <button
+                                onClick={() => setShowPrintSheet(true)}
+                                className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-xs font-bold border border-nature-700 transition-all flex items-center gap-1.5 active:scale-95"
+                            >
+                                <span>📄</span>
+                                <span>View Printable Sheet</span>
+                            </button>
+                            <button
                                 onClick={handlePrintCards}
                                 className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
@@ -323,7 +373,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                 <div className="flex gap-4 items-center">
                                     <div className="bg-white p-2 rounded-xl flex-shrink-0 border border-emerald-500/40 shadow-md">
                                         <img
-                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(item.fullUrl)}`}
+                                            src={item.qrDataUrl}
                                             alt={`QR Code for ${item.code}`}
                                             width="110"
                                             height="110"
@@ -348,6 +398,97 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 </div>
             )}
 
+            {/* Printable QR Sheet Modal */}
+            {showPrintSheet && generatedTokens.length > 0 && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
+                    <div className="bg-nature-900 border border-nature-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl my-8">
+                        <div className="flex items-center justify-between border-b border-nature-800 pb-4">
+                            <div>
+                                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                    <span>📄</span>
+                                    <span>Printable QR Onboarding Sheet ({generatedTokens.length} Passes)</span>
+                                </h3>
+                                <p className="text-xs text-nature-400 m-0 mt-0.5">
+                                    Sheet of large QR codes carrying the join URL and single-use code for face-to-face onboarding.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handlePrintCards}
+                                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-md"
+                                >
+                                    <span>🖨️</span>
+                                    <span>Print Sheet</span>
+                                </button>
+                                <button
+                                    onClick={() => setShowPrintSheet(false)}
+                                    className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold text-xs"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Sheet Grid Preview */}
+                        <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                            {generatedTokens.map((item, idx) => (
+                                <div key={idx} className="bg-white text-emerald-950 p-6 rounded-2xl border-2 border-emerald-700 shadow-md">
+                                    <div className="flex justify-between items-center border-b border-emerald-200 pb-3 mb-4">
+                                        <div>
+                                            <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
+                                                🌱 BEANPOOL ONBOARDING PASS
+                                            </span>
+                                            <div className="text-xs text-gray-600 font-semibold mt-0.5">
+                                                Node: {activeNode?.name || 'Sovereign Node'}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="bg-emerald-700 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                                {getTierBadge(item.tier)}
+                                            </span>
+                                            <div className="text-[10px] text-gray-500 mt-1">Pass #{idx + 1}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row gap-6 items-center">
+                                        <div className="bg-white p-2 rounded-xl border-2 border-emerald-600 shrink-0">
+                                            <img
+                                                src={item.qrDataUrl}
+                                                alt={`QR Code for ${item.code}`}
+                                                width="180"
+                                                height="180"
+                                                className="block"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2 flex-1 text-left">
+                                            <div className="text-xs font-bold uppercase text-gray-500 tracking-wider">
+                                                Single-Use Onboarding Code:
+                                            </div>
+                                            <div className="text-3xl font-black font-mono text-emerald-900 tracking-wider">
+                                                {item.code}
+                                            </div>
+                                            <div className="text-xs text-gray-700 font-medium">
+                                                Scan the large QR code with your camera or open this URL in your web browser:
+                                            </div>
+                                            <div className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200 break-all">
+                                                {item.fullUrl}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 pt-3 border-t border-dashed border-gray-300 flex justify-between text-[11px] text-gray-500">
+                                        <span>🔒 Single-use cryptographic invite</span>
+                                        <span>🤝 Face-to-face dinner onboarding</span>
+                                        <span>⏰ Valid for 30 days</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* QR Code Preview Modal */}
             {previewQrItem && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -366,11 +507,11 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
                         <div className="p-4 bg-white rounded-2xl inline-block border-2 border-emerald-500 shadow-lg">
                             <img
-                                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(previewQrItem.fullUrl)}`}
+                                src={previewQrItem.qrDataUrl}
                                 alt="Onboarding QR Code"
                                 width="220"
                                 height="220"
-                                className="rounded-lg"
+                                className="rounded-lg block"
                             />
                         </div>
 

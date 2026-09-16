@@ -923,6 +923,7 @@ export function assertMemberActive(publicKey: string): void {
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
 export function assertProfileComplete(publicKey: string): void {
@@ -1330,12 +1331,12 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
     const liveOffers = liveOfferCount(publicKey);
-    // usableFloor: the deepest you may actually spend right now (Trust Model v3) — the shallower of
-    // your earned limit and what your live Offers unlock. frozen: your debt sits below that line.
-    const uFloor = Math.max(floor, -offerCapForCount(liveOffers));
+    const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
+    const effectiveFloor = isTreasury ? getEnterpriseUnderlyingFloor(publicKey).floor : floor;
+    const uFloor = usableFloor(publicKey);
     return {
         balance,
-        floor,
+        floor: effectiveFloor,
         usableFloor: uFloor,
         liveOffers,
         frozen: balance < uFloor,
@@ -1353,7 +1354,7 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         // controls only on these cards — a control you can't use shouldn't be drawn.
         keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
-        isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
+        isTreasury,
         // nodeRole: explicit owner/admin role (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
         nodeRole: nodeRoleOf(publicKey),
     };
@@ -1384,6 +1385,10 @@ export function reconcileLedgerFromDb(): void {
 
 export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
+    if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
+        const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
+        if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    }
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
@@ -1857,9 +1862,88 @@ export function liveOfferCount(publicKey: string): number {
     return liveOfferCountEngine(db, publicKey);
 }
 
+/**
+ * Computes an enterprise's underlying credit floor based on keeper backing pledges
+ * (docs/the-commons.md §2.6) and its own trust profile (earned/granted credit).
+ */
+export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor: number; totalBacking: number; hasBacking: boolean } {
+    const backingRow = db.prepare(`
+        SELECT COALESCE(SUM(o.backing), 0) as totalBacking,
+               COUNT(CASE WHEN o.backing > 0 THEN 1 END) as hasBacking,
+               COUNT(*) as totalKeepers
+        FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ?
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
+    const pledgeRow = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) as total
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
+    const pledgeBacking = Number(pledgeRow?.total || 0);
+    const operatorBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
+    const totalBacking = Math.max(operatorBacking, pledgeBacking);
+    const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0 || pledgeBacking > 0;
+
+    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (memberRow?.status === 'completed' || memberRow?.credit_frozen === 1) {
+        return { floor: 0, totalBacking: 0, hasBacking: false };
+    }
+
+    const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
+    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+    if (legacyFloor > 0 && totalBacking >= legacyFloor) {
+        legacyFloor = 0;
+    }
+
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
+        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
+    }
+
+    return { floor: 0, totalBacking: 0, hasBacking: false };
+}
+
 export function usableFloor(publicKey: string): number {
-    const { floor } = getMemberTrustProfile(publicKey);
-    return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+    const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
+    if (!m?.is_treasury) {
+        const { floor } = getMemberTrustProfile(publicKey);
+        return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+    }
+
+    if (m.status === 'completed') return 0;
+
+    const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(publicKey);
+    const underlyingAllowance = Math.abs(underlyingFloor);
+    const liveOffers = liveOfferCount(publicKey);
+    const covenantAllowance = offerCapForCount(liveOffers);
+    const normalDerivedAllowance = Math.min(underlyingAllowance, covenantAllowance);
+
+    // If enterprise is paused (docs/the-commons.md §2.2):
+    if (m.paused === 1 && m.paused_floor_snapshot != null) {
+        const pausedAt = m.paused_at ? new Date(m.paused_at).getTime() : Date.now();
+        const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+        const isExpired = (Date.now() - pausedAt) > ninetyDaysMs;
+
+        if (!isExpired) {
+            const snapshotAllowance = Math.abs(Number(m.paused_floor_snapshot));
+            // While paused (up to 90 days):
+            // - Covenant floor can never pull it below snapshot (even with 0 offers).
+            // - Earned growth still counts (if earned credit raises the floor, use the higher value).
+            // - Keeper exits still release backing (if backing is removed, floor drops accordingly).
+            // Formula: max(snapshot, derived) where snapshot expires at 90 days. Keeper backing release overrides snapshot floor.
+            const effectiveAllowance = underlyingAllowance < snapshotAllowance
+                ? underlyingAllowance  // backing withdrawn — override snapshot
+                : Math.max(snapshotAllowance, underlyingAllowance);  // earned growth raises it
+            return -Math.max(effectiveAllowance, normalDerivedAllowance);
+        }
+    }
+
+    return -normalDerivedAllowance;
 }
 
 /**
@@ -1979,7 +2063,7 @@ export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseF
     return engine.getEnterpriseFloor(db, enterprisePubkey);
 }
 
-export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
+export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin', backing = 0): { ok: true } {
     const member = getMember(memberPubkey);
     if (!member) throw new Error('Member not found');
     if (member.isTreasury) throw new Error('A treasury cannot keep another treasury');
@@ -1987,8 +2071,9 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
-        db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-                    VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
+        db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+                    VALUES (?, ?, 'keeper', ?, ?)
+                    ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing`).run(treasuryPubkey, memberPubkey, grantedBy, backing);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
@@ -2382,6 +2467,10 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
  * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
  */
 export function processDeferredWageClaims(enterprisePubkey: string): number {
+    const ent = db.prepare('SELECT paused, status FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (ent?.paused === 1 || ent?.status === 'completed') {
+        return 0; // While paused: no wage payments out
+    }
     let paidCount = 0;
     const claims = db.prepare(`
         SELECT * FROM deferred_wage_claims
@@ -2511,6 +2600,477 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
 }
 
 export { recordDeferredWageClaim } from './engine/escrow.js';
+
+// ===================== ENTERPRISE LIFECYCLE (PAUSE, WIND-UP, LEDGER) =====================
+
+/**
+ * Pause an enterprise for a season (docs/the-commons.md §2.2).
+ * Authorised by canAdministerTreasury (a keeper or node admin).
+ * Takes a snapshot of the current credit floor (paused_floor_snapshot).
+ * Idempotent. Records auth_signer.
+ */
+export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    paused: boolean;
+    pausedAt?: string;
+    pausedFloorSnapshot?: number;
+    alreadyPaused?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
+        throw new Error('Not authorised to pause this enterprise');
+    }
+
+    if (member.paused === 1) {
+        return {
+            ok: true,
+            paused: true,
+            pausedAt: member.paused_at,
+            pausedFloorSnapshot: member.paused_floor_snapshot != null ? Number(member.paused_floor_snapshot) : undefined,
+            alreadyPaused: true,
+        };
+    }
+
+    const currentUsable = usableFloor(enterprisePubkey);
+    const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(enterprisePubkey);
+    const snapshot = currentUsable !== 0 ? currentUsable : underlyingFloor;
+
+    const now = new Date().toISOString();
+    db.prepare(`
+        UPDATE members
+        SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ?
+        WHERE public_key = ?
+    `).run(now, actorPubkey, snapshot, enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_paused', enterprisePubkey, pausedBy: actorPubkey, pausedAt: now, snapshot });
+
+    return {
+        ok: true,
+        paused: true,
+        pausedAt: now,
+        pausedFloorSnapshot: snapshot,
+    };
+}
+
+/**
+ * Resume a paused enterprise (docs/the-commons.md §2.2).
+ * Clears the credit floor snapshot; floor recomputes normally.
+ * Idempotent.
+ */
+export function resumeEnterprise(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    paused: boolean;
+    alreadyActive?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, paused, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — cannot be resumed');
+    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
+        throw new Error('Not authorised to resume this enterprise');
+    }
+
+    if (member.paused === 0 || member.paused == null) {
+        return {
+            ok: true,
+            paused: false,
+            alreadyActive: true,
+        };
+    }
+
+    db.prepare(`
+        UPDATE members
+        SET paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+        WHERE public_key = ?
+    `).run(enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_resumed', enterprisePubkey, resumedBy: actorPubkey });
+
+    return {
+        ok: true,
+        paused: false,
+    };
+}
+
+/**
+ * Step 1 of Enterprise Wind-up: Lead keeper initiates wind-up with 7-day grace period.
+ * (docs/the-commons.md §2.2, mirroring §3.8).
+ * Sets status to 'winding_up'.
+ */
+export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'winding_up';
+    initiatedAt: string;
+    initiatedBy: string;
+    graceEndsAt: string;
+    alreadyInitiated?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_initiated_by FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
+
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = !!op && opCount === 1;
+    const isLead = !!op && op.role === 'lead';
+    if (!isLead && !isSoleKeeper && !isAdminPubkey(actorPubkey)) {
+        throw new Error('Only the lead keeper may initiate wind-up');
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
+    if (member.status === 'winding_up') {
+        const graceEndsAt = new Date(new Date(member.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        return {
+            ok: true,
+            status: 'winding_up',
+            initiatedAt: member.wind_up_initiated_at,
+            initiatedBy: member.wind_up_initiated_by,
+            graceEndsAt,
+            alreadyInitiated: true,
+        };
+    }
+
+    const now = new Date().toISOString();
+    const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    db.prepare(`
+        UPDATE members
+        SET status = 'winding_up', wind_up_initiated_at = ?, wind_up_initiated_by = ?
+        WHERE public_key = ?
+    `).run(now, actorPubkey, enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_winding_up', enterprisePubkey, initiatedBy: actorPubkey, initiatedAt: now, graceEndsAt });
+
+    return {
+        ok: true,
+        status: 'winding_up',
+        initiatedAt: now,
+        initiatedBy: actorPubkey,
+        graceEndsAt,
+    };
+}
+
+/**
+ * Cancel wind-up during the 7-day grace period.
+ * Any keeper may cancel (§2.2, mirroring §3.8). Resets status to 'active'.
+ */
+export function cancelWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'active';
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (member.status !== 'winding_up') throw new Error('Enterprise is not winding up');
+
+    if (!canOperateTreasury(actorPubkey, enterprisePubkey) && !isAdminPubkey(actorPubkey)) {
+        throw new Error('Only a keeper of this enterprise may cancel wind-up');
+    }
+
+    db.prepare(`
+        UPDATE members
+        SET status = 'active', wind_up_initiated_at = NULL, wind_up_initiated_by = NULL
+        WHERE public_key = ?
+    `).run(enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_wind_up_cancelled', enterprisePubkey, cancelledBy: actorPubkey });
+
+    return {
+        ok: true,
+        status: 'active',
+    };
+}
+
+/**
+ * Step 2 of Enterprise Wind-up: Finalise after 7-day grace period and 0 open escrows.
+ * Sweeps remaining balance to Commons inside conservingTransaction.
+ * Releases all operators in treasury_operators and backing pledges.
+ * Status -> 'completed'. Name stays reserved.
+ */
+export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'completed';
+    finalisedAt: string;
+    sweptAmount: number;
+    alreadyCompleted?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_finalised_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') {
+        return {
+            ok: true,
+            status: 'completed',
+            finalisedAt: member.wind_up_finalised_at || new Date().toISOString(),
+            sweptAmount: 0,
+            alreadyCompleted: true,
+        };
+    }
+    if (member.status !== 'winding_up') {
+        throw new Error('Enterprise must be in winding_up state to finalise');
+    }
+
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = !!op && opCount === 1;
+    const isLead = !!op && op.role === 'lead';
+    if (!isLead && !isSoleKeeper && !isAdminPubkey(actorPubkey)) {
+        throw new Error('Only the lead keeper may finalise wind-up');
+    }
+
+    const initiatedAt = member.wind_up_initiated_at ? new Date(member.wind_up_initiated_at).getTime() : 0;
+    const gracePeriodMs = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - initiatedAt < gracePeriodMs) {
+        throw new Error('Cannot finalise wind-up before 7-day grace period has elapsed');
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
+    // Deliberately OUTSIDE conservingTransaction. This is an ordinary precondition — a keeper
+    // finalising while trades are still open is a normal thing to do, not an exceptional one — and
+    // conservingTransaction treats any throw as a possible conservation breach: it rolls back and
+    // then runs a full reconcileLedgerFromDb() to resync memory to rows, halting the process if
+    // that resync fails. Rebuilding the in-memory ledger every time someone clicks finalise too
+    // early is a steep price for a 400. The atomicity it would buy is illusory anyway: the sweep
+    // re-reads the balance inside the transaction, and the transaction holds the write lock, so no
+    // escrow can open between this check and the sweep.
+    const openEscrows = db.prepare(`
+        SELECT COUNT(*) as c FROM marketplace_transactions
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending', 'disputed')
+    `).get(enterprisePubkey, enterprisePubkey) as any;
+    if ((openEscrows?.c ?? 0) > 0) {
+        throw new Error(`Cannot finalise wind-up: ${openEscrows.c} open transaction(s) pending settlement`);
+    }
+
+    let sweptAmount = 0;
+    const now = new Date().toISOString();
+
+    conservingTransaction(() => {
+        const bal = ledger.getAccount(enterprisePubkey).balance;
+        if (bal > 0) {
+            const swept = moveToCommons(enterprisePubkey, bal, `Final wind-up sweep from ${enterprisePubkey.slice(0, 8)}`, { authSigner: actorPubkey });
+            if (!swept) throw new Error('Failed to sweep remaining balance to Commons');
+            sweptAmount = bal;
+        }
+
+        const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
+        db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
+
+        for (const op of ops) {
+            const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;
+            if (!remaining?.c) {
+                db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(op.member_pubkey);
+            }
+        }
+
+        db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE enterprise = ? AND released_at IS NULL").run(now, enterprisePubkey);
+        clearEnterpriseFloorCache(enterprisePubkey);
+
+        db.prepare(`
+            UPDATE members
+            SET status = 'completed', wind_up_finalised_at = ?,
+                legacy_credit_floor = NULL,
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+            WHERE public_key = ?
+        `).run(now, enterprisePubkey);
+
+        db.prepare(`
+            UPDATE deferred_wage_claims
+            SET status = 'cancelled'
+            WHERE enterprise_pubkey = ? AND status = 'pending'
+        `).run(enterprisePubkey);
+
+        db.prepare(`
+            UPDATE posts
+            SET status = 'cancelled', active = 0
+            WHERE author_pubkey = ? AND status IN ('active', 'pending')
+        `).run(enterprisePubkey);
+    });
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_wound_up', enterprisePubkey, finalisedBy: actorPubkey, finalisedAt: now, sweptAmount });
+
+    return {
+        ok: true,
+        status: 'completed',
+        finalisedAt: now,
+        sweptAmount,
+    };
+}
+
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerSummary {
+    totalIncome: number;
+    totalSpend: number;
+    netChange: number;
+    startingBalance: number;
+    endingBalance: number;
+    transactionCount: number;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: {
+        publicKey: string;
+        name: string;
+        purpose: string | null;
+        status: string;
+        paused: boolean;
+        balance: number;
+    };
+    period: {
+        since: string | null;
+        until: string | null;
+    };
+    summary: EnterpriseLedgerSummary;
+    entries: EnterpriseLedgerEntry[];
+}
+
+/**
+ * Read-only accountability ledger (docs/the-commons.md §2.2).
+ * Accessible to any member of the node.
+ * Resolves counterparties to display names.
+ * Computes running totals directly from the transactions table. Excludes nothing.
+ */
+export function getEnterpriseLedger(
+    enterprisePubkey: string,
+    opts?: { since?: string; until?: string; limit?: number }
+): EnterpriseLedgerResponse {
+    const member = db.prepare("SELECT callsign, purpose, status, paused FROM members WHERE public_key = ? AND is_treasury = 1").get(enterprisePubkey) as any;
+    if (!member) throw new Error('Not an enterprise');
+
+    const allTxns = db.prepare(`
+        SELECT id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer
+        FROM transactions
+        WHERE from_pubkey = ? OR to_pubkey = ?
+        ORDER BY timestamp ASC, rowid ASC
+    `).all(enterprisePubkey, enterprisePubkey) as any[];
+
+    const sinceTime = opts?.since ? new Date(opts.since).getTime() : null;
+    const untilTime = opts?.until ? new Date(opts.until).getTime() : null;
+
+    let running = 0;
+    let startingBalance = 0;
+    let periodIncome = 0;
+    let periodSpend = 0;
+    const filteredEntries: EnterpriseLedgerEntry[] = [];
+
+    const nameCache = new Map<string, string>();
+    const resolveName = (pk: string): string => {
+        if (nameCache.has(pk)) return nameCache.get(pk)!;
+        let resolved = pk;
+        if (pk === 'COMMONS_POOL') resolved = 'Commons Pool';
+        else if (pk === 'genesis') resolved = 'Genesis';
+        else if (pk.startsWith('escrow_')) {
+            const postId = pk.replace('escrow_', '');
+            const post = db.prepare('SELECT title FROM posts WHERE id = ?').get(postId) as any;
+            resolved = post?.title ? `Escrow: ${post.title}` : 'Escrow';
+        } else if (pk.startsWith('bridge_')) {
+            resolved = `Federation Bridge (${pk.replace('bridge_', '')})`;
+        } else {
+            const m = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(pk) as any;
+            resolved = m?.callsign || (pk.length > 12 ? `${pk.slice(0, 8)}...` : pk);
+        }
+        nameCache.set(pk, resolved);
+        return resolved;
+    };
+
+    let periodEndingBalance = 0;
+
+    for (const tx of allTxns) {
+        const txTime = new Date(tx.timestamp).getTime();
+        const isIncoming = tx.to_pubkey === enterprisePubkey;
+        const fee = Number(tx.tax_fee) || 0;
+        const gross = Number(tx.amount) || 0;
+        const netAmount = isIncoming ? (gross - fee) : -gross;
+
+        running = Math.round((running + netAmount) * 100) / 100;
+
+        const inPeriod = (!sinceTime || txTime >= sinceTime) && (!untilTime || txTime <= untilTime);
+
+        if (sinceTime && txTime < sinceTime) {
+            startingBalance = running;
+        }
+
+        if (inPeriod) {
+            if (isIncoming) {
+                periodIncome += gross;
+            } else {
+                periodSpend += gross;
+            }
+            periodEndingBalance = running;
+
+            const counterparty = isIncoming ? tx.from_pubkey : tx.to_pubkey;
+            filteredEntries.push({
+                id: tx.id,
+                timestamp: tx.timestamp,
+                direction: isIncoming ? 'income' : 'spend',
+                amount: gross,
+                fee,
+                netAmount: Math.round(netAmount * 100) / 100,
+                counterparty,
+                counterpartyName: resolveName(counterparty),
+                memo: tx.memo || '',
+                runningBalance: running,
+                authSigner: tx.auth_signer ?? null,
+            });
+        }
+    }
+
+    if (filteredEntries.length === 0) {
+        periodEndingBalance = startingBalance;
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    const entries = opts?.limit ? filteredEntries.slice(-opts.limit) : filteredEntries;
+
+    return {
+        enterprise: {
+            publicKey: enterprisePubkey,
+            name: member.callsign,
+            purpose: member.purpose ?? null,
+            status: member.status ?? 'active',
+            paused: member.paused === 1,
+            balance: currentBal,
+        },
+        period: {
+            since: opts?.since ?? null,
+            until: opts?.until ?? null,
+        },
+        summary: {
+            totalIncome: Math.round(periodIncome * 100) / 100,
+            totalSpend: Math.round(periodSpend * 100) / 100,
+            netChange: Math.round((periodEndingBalance - startingBalance) * 100) / 100,
+            startingBalance: Math.round(startingBalance * 100) / 100,
+            endingBalance: Math.round(periodEndingBalance * 100) / 100,
+            transactionCount: filteredEntries.length,
+        },
+        entries,
+    };
+}
 
 export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
     return closePollEngine(broadcast, postId, authorPublicKey);
@@ -3658,7 +4218,6 @@ export function createTreasury(
     if (!pubKeyHex) {
         const { publicKey } = crypto.generateKeyPairSync('ed25519', {
             publicKeyEncoding: { type: 'spki', format: 'pem' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
         });
         pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     }

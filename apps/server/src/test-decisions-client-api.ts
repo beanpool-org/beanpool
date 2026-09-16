@@ -206,7 +206,6 @@ async function runSuite() {
     });
     assert(resNoAuth.status === 401, 'Propose without actor fails with 401');
     assert(resNoAuth.body.error.includes('Authentication required'), 'Error cites auth required');
-
     // 1a. Gating: earnedCredit > 0 required
     const resDave = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: daveZeroStanding,
@@ -247,6 +246,21 @@ async function runSuite() {
     });
     assert(resEnt.status === 400, 'Propose by enterprise fails with 400');
 
+    // 1d-0. Gating: Description validation (at least 10 chars)
+    const resShortDesc = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        actor: alice,
+        body: {
+            authorPubkey: alice,
+            title: 'Too Short Description',
+            description: 'Short',
+            touches: 'pool',
+            effect: 'grant_enterprise',
+            subject: enterprise,
+            params: { amount: 80 },
+        },
+    });
+    assert(resShortDesc.status === 400, 'Propose with description < 10 chars fails with 400');
+    assert(resShortDesc.body.error.includes('description must be at least 10 characters'), 'Error cites description requirement');
     // 1d. Successful propose with no bond charged
     const aliceBalanceBefore = getBalance(alice).balance;
     const resAlice = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {

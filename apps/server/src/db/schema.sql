@@ -57,10 +57,17 @@ CREATE TABLE IF NOT EXISTS members (
     deadline_at DATETIME DEFAULT NULL,
     lifecycle TEXT DEFAULT 'ongoing' CHECK (lifecycle IN ('ongoing', 'bounded')),
     paused INTEGER DEFAULT 0 CHECK (paused IN (0, 1)),
+    paused_at DATETIME,
+    paused_by TEXT,
+    paused_floor_snapshot REAL,
+    wind_up_initiated_at DATETIME,
+    wind_up_initiated_by TEXT,
+    wind_up_finalised_at DATETIME,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
 
 -- 2. Invite Codes
@@ -577,7 +584,8 @@ AFTER UPDATE OF
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
     legacy_credit_floor,
-    purpose, goal_amount, deadline_at, lifecycle, paused
+    purpose, goal_amount, deadline_at, lifecycle, paused,
+    paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -733,6 +741,7 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
     role            TEXT NOT NULL DEFAULT 'keeper',
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
+    backing         REAL DEFAULT 0,
     PRIMARY KEY (treasury_pubkey, member_pubkey)
 );
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that

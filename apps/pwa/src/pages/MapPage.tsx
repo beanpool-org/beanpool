@@ -16,7 +16,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group } from '../lib/api';
+import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses, getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group } from '../lib/api';
 import { haversineDistance } from '../lib/geo';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -95,6 +95,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         triggerElement?: HTMLElement | null;
     } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
+    const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
 
     // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
     useEffect(() => {
@@ -120,10 +121,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const blockedSet = useMemo(() => new Set(getBlockedUsers()), [blocklistVersion]);
 
     useEffect(() => {
-        if (previewPost && blockedSet.has(previewPost.authorPublicKey)) {
+        if (previewPost && (blockedSet.has(previewPost.authorPublicKey) || inactiveEnterpriseKeys.has(previewPost.authorPublicKey))) {
             setPreviewPost(null);
         }
-    }, [previewPost, blockedSet]);
+    }, [previewPost, blockedSet, inactiveEnterpriseKeys]);
 
     const [useModernMarkers, setUseModernMarkers] = useState(() => {
         return localStorage.getItem('beanpool_modern_markers') !== 'false';
@@ -360,6 +361,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             try {
+                getEnterpriseStatuses().then(res => {
+                    const inactiveKeys = new Set(
+                        (res?.enterprises || [])
+                            .filter((t: any) => t.paused || t.status === 'winding_up' || t.status === 'completed')
+                            .map((t: any) => t.publicKey)
+                    );
+                    setInactiveEnterpriseKeys(inactiveKeys);
+                }).catch(() => {
+                    getTreasuries().then(res => {
+                        const inactiveKeys = new Set(
+                            (res?.treasuries || [])
+                                .filter((t: any) => t.paused || t.status === 'winding_up' || t.status === 'completed')
+                                .map((t: any) => t.publicKey)
+                        );
+                        setInactiveEnterpriseKeys(inactiveKeys);
+                    }).catch(() => {});
+                });
                 const localData = await getMarketplacePosts();
                 let allPosts: MarketplacePost[] = [...localData];
 
@@ -641,7 +659,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         markersRef.current.clearLayers();
 
         posts
-            .filter(post => post.type !== 'poll' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey))
+            .filter(post => post.type !== 'poll' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
             .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
@@ -730,7 +748,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             });
             marker.addTo(markersRef.current!);
         });
-    }, [posts, useModernMarkers, blockedSet]);
+    }, [posts, useModernMarkers, blockedSet, inactiveEnterpriseKeys]);
 
     return (
         <>

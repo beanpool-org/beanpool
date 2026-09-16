@@ -148,16 +148,22 @@ router.post('/api/commons/decisions', async (ctx) => {
         ctx.body = { error: 'title, touches, and effect are required' };
         return;
     }
+    if (!description || description.trim().length < 10) {
+        ctx.status = 400;
+        ctx.body = { error: 'description must be at least 10 characters for governance accountability' };
+        return;
+    }
+    const closesAtOverride = process.env.NODE_ENV === 'test' ? closesAt : undefined;
     try {
         const decision = createDecision({
             authorPubkey: actor,
             title,
-            description: description || '',
+            description: description.trim(),
             touches,
             effect,
             subject,
             params,
-            closesAt,
+            closesAt: closesAtOverride,
         });
         ctx.body = { success: true, decision };
     } catch (err: any) {

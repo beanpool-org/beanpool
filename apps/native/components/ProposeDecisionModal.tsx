@@ -35,7 +35,6 @@ interface Props {
 const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: string; icon: string }> = [
     { id: 'member', label: 'Member', icon: 'account-cog' },
     { id: 'pool', label: 'Commons Pool', icon: 'bank' },
-    { id: 'rule', label: 'Node Rule', icon: 'tune' },
 ];
 
 const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: string; desc: string }>> = {
@@ -58,11 +57,8 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'grant_enterprise', label: 'Grant to Enterprise', desc: 'Disburse Commons funds directly to an enterprise account' },
         { id: 'grant_hardship', label: 'Hardship Grant', desc: 'Direct emergency support grant from Commons pool to a member' },
         { id: 'write_off_deficit', label: 'Write Off Deficit', desc: 'Absorb bad debt of a defaulted enterprise' },
-        { id: 'set_levy', label: 'Set Fee Levy', desc: 'Adjust trade contribution rate to Commons pool' },
     ],
-    rule: [
-        { id: 'set_rule', label: 'Protocol Rule', desc: 'Change community-wide node parameter (fee, demurrage, invite policy)' },
-    ],
+    rule: [],
     nothing: [
         { id: 'poll', label: 'Poll', desc: 'Everyday question' },
     ],

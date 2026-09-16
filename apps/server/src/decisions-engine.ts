@@ -826,9 +826,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'remove_lead_keeper': {
-                    const entPubkey = decision.params?.enterprisePubkey;
+                    let entPubkey = decision.params?.enterprisePubkey;
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
-                    if (entPubkey && entPubkey !== leadPubkey) {
+                    if (!entPubkey || entPubkey === leadPubkey) {
+                        const op = db.prepare("SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'").get(leadPubkey) as any;
+                        if (op?.treasury_pubkey) entPubkey = op.treasury_pubkey;
+                    }
+                    if (entPubkey) {
                         db.prepare(
                             "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
                         ).run(entPubkey, leadPubkey);
@@ -1065,7 +1069,7 @@ export function tickDecisions(asOfTime?: number): {
     for (const r of openExpired) {
         evaluated++;
         try {
-            const now = new Date().toISOString();
+            const now = nowIso;
 
             if (r.status === 'passed') {
                 const res = executeDecision(r.id);
@@ -1112,7 +1116,7 @@ export function tickDecisions(asOfTime?: number): {
                 executed++;
             }
         } catch (err: any) {
-            const now = new Date().toISOString();
+            const now = nowIso;
             console.error(`[Decisions] Failed to evaluate decision ${r.id}:`, err);
             db.prepare(`
                 UPDATE decisions SET
@@ -1132,7 +1136,7 @@ export function tickDecisions(asOfTime?: number): {
 
     for (const r of graceDue) {
         graceExpired++;
-        const now = new Date().toISOString();
+        const now = nowIso;
         if (r.effect === 'remove_member' && r.subject) {
             const member = getMember(r.subject);
             if (!member || member.status === 'pruned') {
@@ -1191,7 +1195,7 @@ export function tickDecisions(asOfTime?: number): {
                     execution_reason = 'Queued grant expired after 90 days without sufficient pool funds',
                     updated_at = ?
                 WHERE id = ?
-            `).run(now.toISOString(), top.id);
+            `).run(nowIso, top.id);
             broadcast({ type: 'decision_updated', decision: getDecision(top.id)! });
         } else {
             let requiredAmount = 0;

@@ -17,6 +17,7 @@ import {
     createPost, approvePostRequest, completePostTransaction, rejectPostRequest,
     getBalance, moveToCommons, conservingTransaction,
     sweepEnterpriseCeiling,
+    pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
 } from '../state-engine.js';
@@ -89,10 +90,37 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return null;
         }
         // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
+            return null;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return null;
+        }
+        return actor;
+    };
+
+    /**
+     * Authorisation guard for lifecycle mutations (pause, resume, initiateWindUp, cancelWindUp, finaliseWindUp).
+     * Requires the actor to be an authorised keeper or node admin.
+     * Also checks that both enterprise and actor are not explicitly suspended or pruned.
+     */
+    const requireKeeperOrAdmin = (ctx: any, treasury: string) => {
+        const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!actor || !canAdministerTreasury(actor, treasury)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may perform this action' };
+            return null;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so it can no longer be modified.' };
             return null;
         }
         if (blocked(statusOf(actor))) {
@@ -110,7 +138,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ? "is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
             : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND status NOT IN ('pruned', 'deleted')";
         const rows = db.prepare(
-            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -119,6 +147,27 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = {
             treasuries: rows.map(r => {
                 const b = getBalance(r.public_key);
+                let pauseExpiresAt: string | null = null;
+                let pauseDaysRemaining: number | null = null;
+                let pauseExpiringSoon = false;
+                let pauseWarning: string | null = null;
+                if (r.paused === 1 && r.paused_at) {
+                    const expiresTime = new Date(r.paused_at).getTime() + 90 * 24 * 60 * 60 * 1000;
+                    pauseExpiresAt = new Date(expiresTime).toISOString();
+                    pauseDaysRemaining = Math.max(0, Math.ceil((expiresTime - Date.now()) / (24 * 60 * 60 * 1000)));
+                    pauseExpiringSoon = pauseDaysRemaining <= 14;
+                    pauseWarning = pauseDaysRemaining === 0
+                        ? 'Pause credit floor snapshot has expired'
+                        : pauseDaysRemaining <= 14
+                            ? `Pause credit floor snapshot expires in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
+                            : null;
+                }
+
+                let windUpGraceEndsAt: string | null = null;
+                if (r.status === 'winding_up' && r.wind_up_initiated_at) {
+                    windUpGraceEndsAt = new Date(new Date(r.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                }
+
                 const floorInfo = getEnterpriseFloor(r.public_key);
                 // #143 step 3: a federation link is an enterprise, so it appears in this list like any
                 // other — but it carries a SECOND number that must never be added to its balance. The
@@ -157,6 +206,17 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     lifecycle: r.lifecycle ?? 'ongoing',
                     status: r.status ?? 'active',
                     paused: !!r.paused,
+                    pausedAt: r.paused_at ?? null,
+                    pausedBy: r.paused_by ?? null,
+                    pausedFloorSnapshot: r.paused_floor_snapshot != null ? Number(r.paused_floor_snapshot) : null,
+                    pauseExpiresAt,
+                    pauseDaysRemaining,
+                    pauseExpiringSoon,
+                    pauseWarning,
+                    windUpInitiatedAt: r.wind_up_initiated_at ?? null,
+                    windUpInitiatedBy: r.wind_up_initiated_by ?? null,
+                    windUpFinalisedAt: r.wind_up_finalised_at ?? null,
+                    windUpGraceEndsAt,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
@@ -169,12 +229,51 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/treasuries', listTreasuriesHandler);
     router.get('/api/enterprises', listTreasuriesHandler);
 
+    // Lightweight statuses endpoint for marketplace / search / map filtering without balance computation & keeper lookups
+    const listEnterpriseStatusesHandler = async (ctx: any) => {
+        const rows = db.prepare(
+            "SELECT public_key, callsign, paused, status FROM members WHERE is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
+        ).all() as any[];
+        ctx.body = {
+            enterprises: rows.map(r => ({
+                publicKey: r.public_key,
+                name: r.callsign || 'Unnamed',
+                paused: r.paused === 1,
+                status: r.status || 'active',
+            })),
+        };
+    };
+    router.get('/api/enterprises/statuses', listEnterpriseStatusesHandler);
+    router.get('/api/treasuries/statuses', listEnterpriseStatusesHandler);
+
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
+
+        let pauseExpiresAt: string | null = null;
+        let pauseDaysRemaining: number | null = null;
+        let pauseExpiringSoon = false;
+        let pauseWarning: string | null = null;
+        if (m.paused === 1 && m.paused_at) {
+            const expiresTime = new Date(m.paused_at).getTime() + 90 * 24 * 60 * 60 * 1000;
+            pauseExpiresAt = new Date(expiresTime).toISOString();
+            pauseDaysRemaining = Math.max(0, Math.ceil((expiresTime - Date.now()) / (24 * 60 * 60 * 1000)));
+            pauseExpiringSoon = pauseDaysRemaining <= 14;
+            pauseWarning = pauseDaysRemaining === 0
+                ? 'Pause credit floor snapshot has expired'
+                : pauseDaysRemaining <= 14
+                    ? `Pause credit floor snapshot expires in ${pauseDaysRemaining} day${pauseDaysRemaining === 1 ? '' : 's'}`
+                    : null;
+        }
+
+        let windUpGraceEndsAt: string | null = null;
+        if (m.status === 'winding_up' && m.wind_up_initiated_at) {
+            windUpGraceEndsAt = new Date(new Date(m.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
         const posts = db.prepare(
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') ORDER BY created_at DESC"
         ).all(treasury) as any[];
@@ -249,6 +348,17 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             lifecycle: m.lifecycle ?? 'ongoing',
             status: m.status ?? 'active',
             paused: !!m.paused,
+            pausedAt: m.paused_at ?? null,
+            pausedBy: m.paused_by ?? null,
+            pausedFloorSnapshot: m.paused_floor_snapshot != null ? Number(m.paused_floor_snapshot) : null,
+            pauseExpiresAt,
+            pauseDaysRemaining,
+            pauseExpiringSoon,
+            pauseWarning,
+            windUpInitiatedAt: m.wind_up_initiated_at ?? null,
+            windUpInitiatedBy: m.wind_up_initiated_by ?? null,
+            windUpFinalisedAt: m.wind_up_finalised_at ?? null,
+            windUpGraceEndsAt,
             deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
@@ -626,6 +736,137 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = { success: true, swept: amt, balance: getBalance(treasury).balance };
     });
 
+    // ---- Enterprise Season / Lifecycle (docs/the-commons.md §2.2) -----------------------
+
+    // Pause enterprise for a season (keeper / admin)
+    const pauseHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        try {
+            const res = pauseEnterprise(treasury, actor);
+            ctx.body = {
+                success: true,
+                paused: true,
+                pausedAt: res.pausedAt,
+                pausedFloorSnapshot: res.pausedFloorSnapshot,
+                alreadyPaused: !!res.alreadyPaused,
+            };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to pause enterprise' };
+        }
+    };
+    router.post('/api/treasury/:treasury/pause', pauseHandler);
+    router.post('/api/enterprise/:treasury/pause', pauseHandler);
+
+    // Resume enterprise from pause (keeper / admin)
+    const resumeHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        try {
+            const res = resumeEnterprise(treasury, actor);
+            ctx.body = {
+                success: true,
+                paused: false,
+                alreadyActive: !!res.alreadyActive,
+            };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to resume enterprise' };
+        }
+    };
+    router.post('/api/treasury/:treasury/resume', resumeHandler);
+    router.post('/api/enterprise/:treasury/resume', resumeHandler);
+
+    // Initiate wind-up (lead keeper only)
+    const initiateWindUpHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        try {
+            const res = initiateWindUp(treasury, actor);
+            ctx.body = {
+                success: true,
+                status: res.status,
+                initiatedAt: res.initiatedAt,
+                initiatedBy: res.initiatedBy,
+                graceEndsAt: res.graceEndsAt,
+                alreadyInitiated: !!res.alreadyInitiated,
+            };
+        } catch (e: any) {
+            const isAuth = /Only the lead keeper/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to initiate wind-up' };
+        }
+    };
+    router.post('/api/treasury/:treasury/wind-up/initiate', initiateWindUpHandler);
+    router.post('/api/enterprise/:treasury/wind-up/initiate', initiateWindUpHandler);
+
+    // Cancel wind-up during 7-day grace period (any keeper)
+    const cancelWindUpHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        try {
+            const res = cancelWindUp(treasury, actor);
+            ctx.body = {
+                success: true,
+                status: res.status,
+            };
+        } catch (e: any) {
+            const isAuth = /Only a keeper/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to cancel wind-up' };
+        }
+    };
+    router.post('/api/treasury/:treasury/wind-up/cancel', cancelWindUpHandler);
+    router.post('/api/enterprise/:treasury/wind-up/cancel', cancelWindUpHandler);
+
+    // Finalise wind-up after 7-day grace period and 0 open escrows (keeper / admin)
+    const finaliseWindUpHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = requireKeeperOrAdmin(ctx, treasury);
+        if (!actor) return;
+        try {
+            const res = finaliseWindUp(treasury, actor);
+            ctx.body = {
+                success: true,
+                status: res.status,
+                finalisedAt: res.finalisedAt,
+                sweptAmount: res.sweptAmount,
+                alreadyCompleted: !!res.alreadyCompleted,
+            };
+        } catch (e: any) {
+            const isAuth = /Not authorised/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to finalise wind-up' };
+        }
+    };
+    router.post('/api/treasury/:treasury/wind-up/finalise', finaliseWindUpHandler);
+    router.post('/api/enterprise/:treasury/wind-up/finalise', finaliseWindUpHandler);
+
+    // Read-only accountability ledger (public to all node members)
+    const getLedgerHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const { since, until, limit } = ctx.query;
+        try {
+            const ledger = getEnterpriseLedger(treasury, {
+                since: since ? String(since) : undefined,
+                until: until ? String(until) : undefined,
+                limit: limit ? Number(limit) : undefined,
+            });
+            ctx.body = ledger;
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to retrieve enterprise ledger' };
+        }
+    };
+    router.get('/api/treasury/:treasury/ledger', getLedgerHandler);
+    router.get('/api/enterprise/:treasury/ledger', getLedgerHandler);
+
     // ---- Backing pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4) ----------------
     // Get active backing pledges for an enterprise
     const getPledgesHandler = async (ctx: any) => {
@@ -723,7 +964,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };

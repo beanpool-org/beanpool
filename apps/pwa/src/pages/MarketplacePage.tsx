@@ -32,7 +32,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
-    getMembers,
+    getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing,
     getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
@@ -188,6 +188,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+    const [inactiveEnterprises, setInactiveEnterprises] = useState<Map<string, { paused: boolean; status: string; name: string }>>(new Map());
+    const [selectedPostEnterprise, setSelectedPostEnterprise] = useState<{ paused: boolean; status: string; name: string } | null>(null);
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
         photos: string[];
@@ -374,13 +376,32 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (beansOnly) filter.beansOnly = true;
                 if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
 
-                // Always fetch home node listings and the viewer's OWN posts (to surface & re-activate
-                // paused Offers, which the general feed omits). Transactions are polled by App.tsx
-                // and passed down via props, eliminating the duplicate transactions fetch.
-                const [homeData, myOwnPosts] = await Promise.all([
+                // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
+                // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
+                const statusesPromise = getEnterpriseStatuses().catch(() => null);
+                const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
                     getMarketplacePosts(filter),
-                    identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
+                    identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
+                    statusesPromise,
+                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
+                    statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
                 ]);
+
+                const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
+                if (statusesData?.enterprises) {
+                    for (const t of statusesData.enterprises) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
+                    }
+                } else if (fallbackTreasuries?.treasuries) {
+                    for (const t of fallbackTreasuries.treasuries) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
+                    }
+                }
+                setInactiveEnterprises(inactiveMap);
 
                 // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
                 const byId = new Map<string, MarketplacePost>();
@@ -560,7 +581,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Load author profile + ratings when detail view opens
     useEffect(() => {
-        if (!selectedPost) return;
+        if (!selectedPost) {
+            setSelectedPostEnterprise(null);
+            return;
+        }
+        let cancelled = false;
+        setSelectedPostEnterprise(null);
         setLoadingProfile(true);
         setAuthorProfile(null);
         setAuthorAvgRating({ average: 0, count: 0 });
@@ -569,6 +595,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         setShowRatingForm(false);
         setShowReportForm(false);
         setReportReason('');
+
+        // Check if author is a paused / wound-up / completed enterprise (guards cached post copy & deep links)
+        const cachedEnt = inactiveEnterprises.get(selectedPost.authorPublicKey);
+        if (cachedEnt) {
+            setSelectedPostEnterprise(cachedEnt);
+        } else {
+            getTreasury(selectedPost.authorPublicKey)
+                .then((t: any) => {
+                    if (cancelled) return;
+                    if (t && (t.paused || t.status === 'winding_up' || t.status === 'completed')) {
+                        const ent = { paused: !!t.paused, status: t.status || 'active', name: t.name };
+                        setSelectedPostEnterprise(ent);
+                        setInactiveEnterprises(prev => new Map(prev).set(selectedPost.authorPublicKey, ent));
+                    } else {
+                        setSelectedPostEnterprise(null);
+                    }
+                })
+                .catch(() => {
+                    if (!cancelled) setSelectedPostEnterprise(null);
+                });
+        }
+
         getMemberProfile(selectedPost.authorPublicKey, identity?.publicKey)
             .then(p => setAuthorProfile(p))
             .catch(() => setAuthorProfile(null))
@@ -626,6 +674,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } else {
             setRequests([]);
         }
+        return () => {
+            cancelled = true;
+        };
     }, [selectedPost?.id, identity?.publicKey, openNeedBidIds]);
 
     async function handleMessageAuthor() {
@@ -700,6 +751,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const postedDate = new Date(selectedPost.createdAt);
         const ago = getTimeAgo(postedDate);
         const isOwnPost = identity?.publicKey === selectedPost.authorPublicKey;
+        const authorEnterpriseInactive = selectedPostEnterprise || inactiveEnterprises.get(selectedPost.authorPublicKey) || null;
         // #109: a cross-browsed post lives on another node, and cross-community messaging
         // has no working path yet — don't offer a button that can't deliver.
         //
@@ -777,6 +829,53 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     {/* Content */}
                     <div className="p-5">
+                        {/* Enterprise Season State Banners */}
+                        {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">⏸️</span>
+                                <div>
+                                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100">Enterprise Paused for Season</div>
+                                    <p className="mt-0.5 text-amber-800 dark:text-amber-200 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is currently paused for the season. Listings cannot be bought right now.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {authorEnterpriseInactive?.status === 'winding_up' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-600 text-rose-950 dark:text-rose-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">⏳</span>
+                                <div>
+                                    <div className="font-bold text-sm text-rose-900 dark:text-rose-100">Enterprise Winding Up</div>
+                                    <p className="mt-0.5 text-rose-800 dark:text-rose-200 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is winding down. Listings cannot be bought.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {authorEnterpriseInactive?.status === 'completed' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-stone-100 dark:bg-stone-900 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">🏁</span>
+                                <div>
+                                    <div className="font-bold text-sm">Enterprise Closed</div>
+                                    <p className="mt-0.5 text-stone-600 dark:text-stone-400 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which has closed permanently.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
                             {selectedPost.status === 'paused' && (
                                 <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">⏸ Paused</span>
@@ -1260,7 +1359,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </button>
                                     <button
                                         onClick={async () => {
-                                            if (!identity || !selectedPost) return;
+                                            if (!identity || !selectedPost || authorEnterpriseInactive) return;
                                             setAccepting(true);
                                             try {
                                                 const isVariable = selectedPost.priceType !== 'fixed';
@@ -1300,9 +1399,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
-                                            accepting || isRemotePost
+                                            accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-emerald-400 cursor-not-allowed opacity-60'
                                                 : 'bg-emerald-600 hover:bg-emerald-700'
                                         }`}
@@ -1437,6 +1536,33 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         )}
                                     </div>
                                 )}
+                            </div>
+                        ) : authorEnterpriseInactive ? (
+                            <div className="space-y-2">
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="w-full py-3.5 rounded-xl font-bold text-white text-[15px] bg-nature-400 dark:bg-nature-700 cursor-not-allowed opacity-60 flex items-center justify-center gap-2"
+                                >
+                                    <span>
+                                        {authorEnterpriseInactive.status === 'completed'
+                                            ? '🏁 Enterprise Closed'
+                                            : authorEnterpriseInactive.status === 'winding_up'
+                                                ? '⏳ Enterprise Winding Up'
+                                                : authorEnterpriseInactive.paused
+                                                    ? '⏸️ Enterprise Paused for Season'
+                                                    : ''}
+                                    </span>
+                                </button>
+                                <p className="text-xs text-nature-500 dark:text-nature-400 text-center font-medium">
+                                    {authorEnterpriseInactive.status === 'completed'
+                                        ? 'This community enterprise has wound up.'
+                                        : authorEnterpriseInactive.status === 'winding_up'
+                                            ? 'This community enterprise is winding down and no longer accepting deals.'
+                                            : authorEnterpriseInactive.paused
+                                                ? 'This community enterprise is paused for the season and not taking orders.'
+                                                : ''}
+                                </p>
                             </div>
                         ) : (
                             <button
@@ -2200,6 +2326,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 let filtered = posts.filter(p => {
                     if (p.type === 'poll') {
                         return p.status === 'active' || p.status === 'completed';
+                    }
+                    if (inactiveEnterprises.has(p.authorPublicKey)) {
+                        return false;
                     }
                     return p.status === 'active';
                 });

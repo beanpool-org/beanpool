@@ -1515,6 +1515,8 @@ export interface Treasury {
     avatarUrl?: string | null;
     balance: number;
     creditLine: number;
+    floor?: number;
+    usableFloor?: number;
     liveOffers: number;
     earnedSurplus?: number;
     workingCapitalCeiling?: number | null;
@@ -1524,9 +1526,20 @@ export interface Treasury {
     currentAmount?: number | null;
     deadlineAt?: string | null;
     lifecycle?: string;
-    status?: string;
+    status?: 'active' | 'winding_up' | 'completed' | string;
     paused?: boolean;
-    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role: string }>;
+    pausedAt?: string | null;
+    pausedBy?: string | null;
+    pausedFloorSnapshot?: number | null;
+    pauseExpiresAt?: string | null;
+    pauseDaysRemaining?: number | null;
+    pauseExpiringSoon?: boolean;
+    pauseWarning?: string | null;
+    windUpInitiatedAt?: string | null;
+    windUpInitiatedBy?: string | null;
+    windUpFinalisedAt?: string | null;
+    windUpGraceEndsAt?: string | null;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -1549,12 +1562,93 @@ export interface Treasury {
     } | null;
 }
 
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerSummary {
+    totalIncome: number;
+    totalSpend: number;
+    netChange: number;
+    startingBalance: number;
+    endingBalance: number;
+    transactionCount: number;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: {
+        publicKey: string;
+        name: string;
+        purpose: string | null;
+        status: string;
+        paused: boolean;
+        balance: number;
+    };
+    period: {
+        since: string | null;
+        until: string | null;
+    };
+    summary: EnterpriseLedgerSummary;
+    entries: EnterpriseLedgerEntry[];
+}
+
+export interface EnterpriseStatus {
+    publicKey: string;
+    name: string;
+    paused: boolean;
+    status: string;
+}
+
+export async function getEnterpriseStatuses(): Promise<{ enterprises: EnterpriseStatus[] }> {
+    return request('GET', '/api/enterprises/statuses');
+}
+
 export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {
     return request('GET', '/api/treasuries');
 }
 
 export async function getTreasury(publicKey: string): Promise<any> {
     return request('GET', `/api/treasury/${encodeURIComponent(publicKey)}`);
+}
+
+// Enterprise Season / Lifecycle API (docs/the-commons.md §2.2)
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/pause`);
+}
+
+export async function resumeEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; alreadyActive?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/resume`);
+}
+
+export async function initiateWindUp(treasury: string): Promise<{ success: boolean; status: string; initiatedAt: string; initiatedBy: string; graceEndsAt: string; alreadyInitiated?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/initiate`);
+}
+
+export async function cancelWindUp(treasury: string): Promise<{ success: boolean; status: string }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`);
+}
+
+export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`);
+}
+
+export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {
+    const params = new URLSearchParams();
+    if (opts?.since) params.set('since', opts.since);
+    if (opts?.until) params.set('until', opts.until);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
 }
 
 export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {

@@ -67,6 +67,7 @@ function assertMemberActive(publicKey: string): void {
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
 function assertProfileComplete(publicKey: string): void {
@@ -101,6 +102,19 @@ export function requestPost(
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
     if (!post) throw new Error('Post not found');
     if (post.status !== 'active') throw new Error('Post is not active');
+    assertMemberActive(post.author_pubkey);
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new requests');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    const requesterMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(requesterPublicKey) as any;
+    if (requesterMember?.is_treasury) {
+        if (requesterMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
+        if (requesterMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot place new requests');
+        if (requesterMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
@@ -218,7 +232,7 @@ export function approvePostRequest(
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
     // must NOT be the counterparty being paid (self-dealing prevention).
-    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const buyerMember = db.prepare('SELECT is_treasury, paused, status, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
     const isEnterpriseNeed = !isOffer && Boolean(buyerMember?.is_treasury);
     if (isEnterpriseNeed && opts?.authSigner && opts.authSigner === row.seller_pubkey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
@@ -233,6 +247,18 @@ export function approvePostRequest(
     assertNotOnHoliday(authorPublicKey);
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
         throw new Error('Trading is paused while a member is in holiday mode.');
+    }
+
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(authorPublicKey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    if (buyerMember?.is_treasury) {
+        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
     }
 
     // #102: the approver is the post author, but the money moves from the BUYER on this row.
@@ -437,6 +463,19 @@ export function acceptPost(
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post) throw new Error('Post not found or not active');
+    assertMemberActive(post.authorPublicKey);
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    const buyerMember = db.prepare('SELECT is_treasury, paused, status, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
+    if (buyerMember?.is_treasury) {
+        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
+        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
+        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
 
     // NOTE: post comes from getPosts() which returns camelCase MarketplacePost.
     // Support both camelCase and snake_case for resilience across refactors.
@@ -490,7 +529,6 @@ export function acceptPost(
     // payee is always the post's author — a visitor, on a pulled listing.
     assertTradableHere(post, post.authorPublicKey);
 
-    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
@@ -660,6 +698,18 @@ export function completePostTransaction(
             err.status = 403;
             err.statusCode = 403;
             err.code = 'TWO_PERSON_RULE';
+            throw err;
+        }
+
+        const isPayeeKeeper = Boolean(
+            db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                .get(row.buyer_pubkey, row.seller_pubkey)
+        );
+        const trow = db.prepare('SELECT paused FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+        if (trow?.paused === 1 && isPayeeKeeper) {
+            const err: any = new Error('Enterprise is paused — wage payments to keepers cannot be made while paused.');
+            err.status = 403;
+            err.statusCode = 403;
             throw err;
         }
     }

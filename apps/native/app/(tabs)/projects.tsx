@@ -464,7 +464,7 @@ export default function ProjectsScreen() {
     return (
         <View style={styles.safeArea}>
             <FlatList
-                data={activeSection === 'groups' ? (filteredGroups as any[]) : filteredEnterprises}
+                data={activeSection === 'decide' ? [] : activeSection === 'groups' ? (filteredGroups as any[]) : filteredEnterprises}
                 keyExtractor={item => activeSection === 'groups' ? (item as any).id : (item as any).publicKey}
                 renderItem={activeSection === 'groups' ? (renderGroupItem as any) : renderItem}
                 contentContainerStyle={styles.listContainer}

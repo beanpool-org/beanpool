@@ -470,13 +470,23 @@ async function main() {
     const eggsRowAfterInit = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(eggs) as any;
     assert(eggsRowAfterInit.legacy_credit_floor === null, 'initSchema() does not resurrect cleared legacy floor on Community Eggs');
 
-    // 10.2: members_touch_updated_at trigger whitelists legacy_credit_floor
+    // 10.2: members_touch_updated_at trigger whitelists legacy_credit_floor and lifecycle columns
     const triggerMember = 'trigger-test-member-00000000000000000001';
     seedMember(triggerMember, 'TriggerMember');
     db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(triggerMember);
     db.prepare("UPDATE members SET legacy_credit_floor = 150 WHERE public_key = ?").run(triggerMember);
     const updatedMember = db.prepare("SELECT updated_at FROM members WHERE public_key = ?").get(triggerMember) as any;
     assert(updatedMember.updated_at > '2020-01-01T00:00:00.000Z', 'Updating legacy_credit_floor fires members_touch_updated_at trigger');
+
+    db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(triggerMember);
+    db.prepare("UPDATE members SET paused_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(triggerMember);
+    const updatedMemberPaused = db.prepare("SELECT updated_at FROM members WHERE public_key = ?").get(triggerMember) as any;
+    assert(updatedMemberPaused.updated_at > '2020-01-01T00:00:00.000Z', 'Updating paused_at fires members_touch_updated_at trigger');
+
+    db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(triggerMember);
+    db.prepare("UPDATE members SET wind_up_initiated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(triggerMember);
+    const updatedMemberWindUp = db.prepare("SELECT updated_at FROM members WHERE public_key = ?").get(triggerMember) as any;
+    assert(updatedMemberWindUp.updated_at > '2020-01-01T00:00:00.000Z', 'Updating wind_up_initiated_at fires members_touch_updated_at trigger');
 
     // 10.3: Inactive or credit-frozen keeper excluded from getEnterpriseFloor
     const { publicKey: freezeEnt } = createTreasury('FreezeEnterprise', AVATAR, 0);

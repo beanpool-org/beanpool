@@ -47,6 +47,7 @@ describe('Posts Archetype Filtering & LIKE Metacharacter Escaping', () => {
                 avatar_url TEXT,
                 status TEXT DEFAULT 'active',
                 earned_credit REAL DEFAULT 0,
+                paused INTEGER DEFAULT 0,
                 joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE groups (

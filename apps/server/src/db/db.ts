@@ -357,6 +357,16 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
+    // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_floor_snapshot REAL`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
+
     // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
     const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
     if (hasNodeRoles) {
@@ -540,6 +550,7 @@ export function initSchema() {
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL`).run(); } catch { }
 
     // Enterprise Credit Model (Rule 6): One-time backfill of earned_surplus for pre-existing enterprises
@@ -1016,9 +1027,11 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     try {
         const txSum = (db.prepare(`
             SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND to_pubkey = 'escrow_' || ?
-        `).get(e.public_key, e.public_key) as any)?.s || 0;
-        currentAmount = Math.max(currentAmount, txSum);
+            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
+              AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%'
+        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
+        const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
+        currentAmount = Math.max(currentAmount, txSum, accBal);
     } catch { }
 
     const status = (e.status || legacyP?.status || 'ACTIVE').toUpperCase();
@@ -1191,6 +1204,12 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
     }
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
+    const entPub = (project as any).enterprise_pubkey || project.id;
+    const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
+    if (ent?.is_treasury) {
+        if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
+        if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");
+    }
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow
     // into their balance. Settled unconditionally rather than only inside the FUNDED branch, because the

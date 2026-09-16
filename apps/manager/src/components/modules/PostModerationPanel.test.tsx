@@ -191,4 +191,63 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.queryByText('Confirm Post Deletion')).not.toBeInTheDocument();
     });
+
+    it('dismisses delete confirmation dialog when Escape key is pressed', async () => {
+        render(
+            <PostModerationPanel
+                posts={mockPosts}
+                activeNode={mockNode}
+                onRefresh={vi.fn()}
+            />
+        );
+
+        const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+        await userEvent.click(deleteButtons[0]);
+
+        expect(screen.getByText('Confirm Post Deletion')).toBeInTheDocument();
+
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByText('Confirm Post Deletion')).not.toBeInTheDocument();
+    });
+
+    it('guards against Escape key and close dismissal while deletion is in flight', async () => {
+        let resolveDelete: () => void = () => {};
+        const pendingDelete = new Promise<void>((resolve) => {
+            resolveDelete = resolve;
+        });
+        const handleDeletePost = vi.fn().mockReturnValue(pendingDelete);
+
+        render(
+            <PostModerationPanel
+                posts={mockPosts}
+                activeNode={mockNode}
+                onRefresh={vi.fn()}
+                onDeletePost={handleDeletePost}
+            />
+        );
+
+        const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+        await userEvent.click(deleteButtons[0]);
+
+        const confirmBtn = screen.getByRole('button', { name: /Confirm Delete/i });
+        await userEvent.click(confirmBtn);
+
+        // Deleting is in flight
+        expect(screen.getByText('Deleting...')).toBeInTheDocument();
+
+        // Try to press Escape while in flight
+        await userEvent.keyboard('{Escape}');
+        expect(screen.getByText('Confirm Post Deletion')).toBeInTheDocument();
+
+        // Close button should be disabled
+        const closeBtn = screen.getByRole('button', { name: /Close delete confirmation/i });
+        expect(closeBtn).toBeDisabled();
+
+        // Resolve pending delete
+        resolveDelete();
+        await waitFor(() => {
+            expect(screen.queryByText('Confirm Post Deletion')).not.toBeInTheDocument();
+        });
+    });
 });
+

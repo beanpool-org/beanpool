@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, deleteNodePost } from '../../lib/node-client';
+import { getTfaSessionToken, deleteNodePost } from '../../lib/node-client';
 
 export interface PostModerationItem {
     id: string;
@@ -126,6 +126,18 @@ export function PostModerationPanel({
             setIsDeleting(false);
         }
     };
+
+    useEffect(() => {
+        if (!deletingPost) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !isDeleting) {
+                e.preventDefault();
+                setDeletingPost(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [deletingPost, isDeleting]);
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5 font-sans">
@@ -303,7 +315,7 @@ export function PostModerationPanel({
                     aria-labelledby="delete-post-dialog-title"
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                     onClick={(e) => {
-                        if (e.target === e.currentTarget) setDeletingPost(null);
+                        if (e.target === e.currentTarget && !isDeleting) setDeletingPost(null);
                     }}
                 >
                     <div className="bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
@@ -314,8 +326,11 @@ export function PostModerationPanel({
                             </h3>
                             <button
                                 type="button"
-                                onClick={() => setDeletingPost(null)}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                onClick={() => {
+                                    if (!isDeleting) setDeletingPost(null);
+                                }}
+                                disabled={isDeleting}
+                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close delete confirmation"
                             >
                                 ✕

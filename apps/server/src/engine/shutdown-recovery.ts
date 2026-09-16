@@ -181,17 +181,17 @@ export function initShutdownRecovery(options?: {
 
     if (!cleanShutdownRegistered) {
         cleanShutdownRegistered = true;
-        const onExit = () => {
-            markCleanShutdown();
+        const onExit = (code: number) => {
+            if (code === 0) {
+                markCleanShutdown();
+            }
         };
         process.once('exit', onExit);
         process.once('SIGINT', () => {
             markCleanShutdown();
-            process.exit(0);
         });
         process.once('SIGTERM', () => {
             markCleanShutdown();
-            process.exit(0);
         });
     }
 

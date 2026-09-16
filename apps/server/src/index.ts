@@ -69,19 +69,20 @@ async function main() {
     // Step 2: Admin password (first boot: env var or auto-generate)
     initAdminPassword();
 
-    // Step 2.5: Initialize state engine (ledger, members, marketplace)
-    initStateEngine();
-    migrateAdminConversations();
-
-    // Step 2.51: Unclean shutdown detection & SQLite PRAGMA integrity_check
+    // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
     if (shutdownRecovery.uncleanShutdown) {
         if (shutdownRecovery.ok) {
             console.log(`🛡️  ${shutdownRecovery.message}`);
         } else {
-            console.error(`🚨 ${shutdownRecovery.message}`);
+            console.error(`🚨 FATAL: ${shutdownRecovery.message}`);
+            process.exit(1);
         }
     }
+
+    // Step 2.5: Initialize state engine (ledger, members, marketplace)
+    initStateEngine();
+    migrateAdminConversations();
 
     // Step 2.55: Auto-snapshot scheduler — periodic local DB snapshots into
     // data/snapshots/ (Backup tab). Defaults to daily, keeping the last 7.

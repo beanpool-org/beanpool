@@ -892,7 +892,7 @@ export function assertMemberActive(publicKey: string): void {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
         // If table does not exist during early boot or mock, ignore
     }
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(cleanKey) as any;
+    const member = db.prepare("SELECT status FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');

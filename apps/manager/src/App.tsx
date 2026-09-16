@@ -27,6 +27,7 @@ import {
     createNodeTreasury,
     seedTreasuryOffer,
     loginToNode,
+    acknowledgeShutdownStatus,
     resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
@@ -989,6 +990,12 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             onRunLedgerAudit={handleRunLedgerAudit}
                                             auditState={auditState}
                                             onStartColdStartWizard={() => setShowColdStart(true)}
+                                            onAcknowledgeShutdown={async () => {
+                                                if (activeNode) {
+                                                    await acknowledgeShutdownStatus(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
+                                                    await refreshFleetDiagnostics({ manual: true });
+                                                }
+                                            }}
                                         />
                                     </SectionErrorBoundary>
                                 );

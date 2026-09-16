@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { HomeScreen } from './HomeScreen';
 
@@ -52,4 +52,95 @@ describe('HomeScreen Component', () => {
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
         expect(circulationCard).toHaveTextContent('50.4 beans');
     });
+
+    it('renders plain-language reassurance card on clean recovery after unclean shutdown', async () => {
+        const mockDiag: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: true,
+                ok: true,
+                powerLossAt: '04:12',
+                message: 'Recovered from power loss at 04:12. Database verified, no corruption.',
+                acknowledged: false,
+            },
+        };
+
+        const onAcknowledge = vi.fn().mockResolvedValue(undefined);
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} onAcknowledgeShutdown={onAcknowledge} />);
+
+        // Should display the plain-language card
+        expect(screen.getByText(/Recovered from power loss at 04:12\. Database verified, no corruption\./i)).toBeInTheDocument();
+        expect(screen.getByText(/PRAGMA integrity_check: ok/i)).toBeInTheDocument();
+
+        // Dismissing card
+        const dismissBtn = screen.getByRole('button', { name: /Dismiss/i });
+        await act(async () => {
+            dismissBtn.click();
+        });
+        expect(onAcknowledge).toHaveBeenCalled();
+    });
+
+    it('renders loud critical alert card when database corruption is detected after unclean shutdown', () => {
+        const mockDiag: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: false,
+                ok: false,
+                powerLossAt: '04:12',
+                error: 'Page 42 is corrupted',
+                message: 'Database corruption detected after power loss at 04:12!',
+                acknowledged: false,
+            },
+        };
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} />);
+
+        expect(screen.getByText(/CRITICAL ALERT · DATABASE CORRUPTION DETECTED/i)).toBeInTheDocument();
+        expect(screen.getByText(/Database corruption detected after power loss at 04:12!/i)).toBeInTheDocument();
+        expect(screen.getByText(/Page 42 is corrupted/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Restore from Backup/i })).toBeInTheDocument();
+    });
+
+    it('shows storage warning at 80% or greater in Action Required', () => {
+        const mockDiag: any = {
+            diskHealth: {
+                usedPercent: 82,
+                warning: true,
+            },
+        };
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} />);
+
+        expect(screen.getByText(/Storage 82%/i)).toBeInTheDocument();
+    });
+
+    it('resets shutdownDismissed state when active node communityName or diagnostic status changes', async () => {
+        const mockDiag1: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: true,
+                ok: true,
+                powerLossAt: '04:12',
+                powerLossTimestamp: '2026-09-17T04:12:00.000Z',
+                checkedAt: '2026-09-17T04:15:00.000Z',
+                message: 'Recovered from power loss at 04:12.',
+                acknowledged: false,
+            },
+        };
+
+        const { rerender } = render(<HomeScreen {...defaultProps} communityName="Node Alpha" diag={mockDiag1} />);
+        expect(screen.getByTestId('unclean-shutdown-reassurance')).toBeInTheDocument();
+
+        // Dismiss on Node Alpha
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
+        });
+        expect(screen.queryByTestId('unclean-shutdown-reassurance')).not.toBeInTheDocument();
+
+        // Switch to Node Beta
+        rerender(<HomeScreen {...defaultProps} communityName="Node Beta" diag={mockDiag1} />);
+        expect(screen.getByTestId('unclean-shutdown-reassurance')).toBeInTheDocument();
+    });
 });
+

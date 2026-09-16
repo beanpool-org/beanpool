@@ -800,6 +800,13 @@ export interface MarketplacePost {
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
+    // Audience scoping (docs/the-commons.md §9, Item 10)
+    audienceScope?: 'public' | 'group' | 'direct';
+    targetGroupId?: string;
+    targetGroupName?: string;
+    targetPubkey?: string;
+    assignedTo?: string;
+    targetArchetypes?: string;
 }
 
 export interface MarketplaceTransaction {
@@ -819,7 +826,19 @@ export interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean; updatedAfter?: string }): Promise<MarketplacePost[]> {
+export async function getMarketplacePosts(filter?: {
+    id?: string;
+    type?: string;
+    category?: string;
+    author?: string;
+    beansOnly?: boolean;
+    updatedAfter?: string;
+    audienceScope?: string;
+    targetGroupId?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
@@ -827,6 +846,11 @@ export async function getMarketplacePosts(filter?: { id?: string; type?: string;
     if (filter?.author) params.set('author', filter.author);
     if (filter?.beansOnly) params.set('beansOnly', 'true');
     if (filter?.updatedAfter) params.set('updatedAfter', filter.updatedAfter);
+    if (filter?.audienceScope) params.set('audienceScope', filter.audienceScope);
+    if (filter?.targetGroupId) params.set('targetGroupId', filter.targetGroupId);
+    if (filter?.q) params.set('q', filter.q);
+    if (filter?.limit) params.set('limit', String(filter.limit));
+    if (filter?.offset) params.set('offset', String(filter.offset));
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
@@ -849,8 +873,131 @@ export async function createMarketplacePost(post: {
     reachPeers?: string[];
     pollOptions?: Array<{ id: string; text: string }>;
     durationDays?: number;
+    audienceScope?: 'public' | 'group' | 'direct';
+    targetGroupId?: string;
+    targetPubkey?: string;
+    assignedTo?: string;
+    targetArchetypes?: string;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
+}
+
+// ===================== GROUPS =====================
+// Docs: docs/the-commons.md §9 (Item 10)
+// Hard rules: roles are convenor / member / observer. Never "steward", never "admin".
+// A group is an audience scope and NOTHING else.
+
+export type GroupRole = 'convenor' | 'member' | 'observer';
+export type JoinPolicy = 'open' | 'request_to_join' | 'invite_only';
+export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+
+export interface Group {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+    avatarUrl?: string | null;
+    category: GroupCategory;
+    createdBy: string;
+    joinPolicy: JoinPolicy;
+    createdAt: string;
+    updatedAt?: string;
+    memberCount?: number;
+    viewerRole?: GroupRole | null;
+    viewerStatus?: GroupMemberStatus | null;
+    convenorPubkey?: string;
+    convenorCallsign?: string;
+    convenorAvatarUrl?: string | null;
+}
+
+export interface GroupMember {
+    groupId: string;
+    memberPubkey: string;
+    callsign?: string;
+    avatarUrl?: string | null;
+    role: GroupRole;
+    status: GroupMemberStatus;
+    joinedAt: string;
+    invitedBy?: string | null;
+    updatedAt?: string;
+}
+
+export async function getGroups(filter?: { category?: string; q?: string; member?: string; limit?: number; offset?: number }): Promise<Group[]> {
+    const params = new URLSearchParams();
+    if (filter?.category) params.set('category', filter.category);
+    if (filter?.q) params.set('q', filter.q);
+    if (filter?.member) params.set('member', filter.member);
+    if (filter?.limit) params.set('limit', String(filter.limit));
+    if (filter?.offset) params.set('offset', String(filter.offset));
+    const qs = params.toString();
+    return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
+}
+
+export async function getGroup(id: string): Promise<Group> {
+    return request('GET', `/api/groups/${encodeURIComponent(id)}`);
+}
+
+export async function createGroup(data: {
+    name: string;
+    slug?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: GroupCategory | string;
+    joinPolicy?: JoinPolicy;
+}): Promise<Group> {
+    return request('POST', '/api/groups', data);
+}
+
+export async function joinGroup(groupId: string): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+}
+
+export async function getGroupMembers(groupId: string, filter?: { status?: string; role?: string }): Promise<GroupMember[]> {
+    const params = new URLSearchParams();
+    if (filter?.status) params.set('status', filter.status);
+    if (filter?.role) params.set('role', filter.role);
+    const qs = params.toString();
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/members${qs ? `?${qs}` : ''}`);
+}
+
+export async function approveGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        action: 'approve'
+    });
+}
+
+export async function inviteGroupMember(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        role,
+        action: 'invite'
+    });
+}
+
+export async function setGroupMemberRole(groupId: string, memberPubkey: string, role: GroupRole): Promise<{ success: boolean; member: GroupMember }> {
+    return request('PATCH', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`, {
+        role
+    });
+}
+
+export async function removeGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+}
+
+export async function updateGroup(groupId: string, data: {
+    name?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: GroupCategory | string;
+    joinPolicy?: JoinPolicy;
+}): Promise<{ success: boolean; group: Group }> {
+    return request('PATCH', `/api/groups/${encodeURIComponent(groupId)}`, data);
+}
+
+export async function deleteGroupPost(groupId: string, postId: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
 }
 
 export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {

@@ -179,3 +179,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-29 - O(1) Invite Code Lookups in Native People Screen
 **Learning:** In `apps/native/app/(tabs)/people.tsx`, `loadOfflineInvites` iterated over `localInvites` and called `serverInvites.find(...)` for every local invite, followed by `serverInvites.forEach` calling `updatedInvites.some(...)` for every server invite. This resulted in an $O(N \times M)$ nested array scan during offline invite synchronization.
 **Action:** Pre-computed `serverInvitesMap` (indexed by lowercase invite code) and `updatedCodes` Set before array operations, converting invite code lookups and uniqueness checks into $O(1)$ retrievals ($O(N + M)$ overall).
+
+## 2026-09-30 - O(1) Option Lookups in Poll Open Ballot Voter Lists
+**Learning:** In `apps/pwa/src/components/PollCard.tsx` and `apps/native/components/PollCard.tsx`, rendering open ballot voter lists iterated over `votesList` and ran `options.find(o => o.id === ...)` for every vote, causing $O(V \times O)$ linear array scans when displaying voter choices.
+**Action:** Pre-computed `optionsById` Map (indexed by option ID via `useMemo`) at component scope to reduce poll option resolution to constant-time $O(1)$ retrievals ($O(V + O)$ overall).

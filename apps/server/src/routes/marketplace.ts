@@ -106,6 +106,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const offset = clampOffset(ctx.query.offset);
     const updatedAfter = ctx.query.updatedAfter as string | undefined;
     const sync = ctx.query.sync === 'true';
+    const audienceScope = ctx.query.audienceScope as string | undefined;
+    const targetGroupId = ctx.query.targetGroupId as string | undefined;
+    const assignedTo = ctx.query.assignedTo as string | undefined;
+    const targetArchetype = ctx.query.targetArchetype as string | undefined;
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
@@ -145,7 +149,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     }
 
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly });
+    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo, targetArchetype });
     const bodyStr = JSON.stringify(posts);
 
     ctx.status = 200;
@@ -154,7 +158,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo, targetArchetypes } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -175,7 +179,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays }
+            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo, targetArchetypes }
         );
         if (!post) {
             ctx.status = 400;
@@ -201,8 +205,44 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             ctx.body = { error: 'id and authorPublicKey are required' };
             return;
         }
-        if (!assertActorEntitled(ctx, authorPublicKey)) return;
-        const removed = removePost(id, authorPublicKey);
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+
+        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
+        if (!postRow) {
+            ctx.status = 404;
+            ctx.body = { error: 'Post not found' };
+            return;
+        }
+
+        let entitled = false;
+        if (actor === postRow.author_pubkey) {
+            entitled = true;
+        } else if (postRow.audience_scope === 'group' && postRow.target_group_id) {
+            const isConv = db.prepare(
+                "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
+            ).get(postRow.target_group_id, actor);
+            if (isConv) {
+                entitled = true;
+            }
+        } else if (isTreasury(postRow.author_pubkey) && canOperateTreasury(actor, postRow.author_pubkey)) {
+            entitled = true;
+        }
+
+        if (!entitled) {
+            ctx.status = 403;
+            ctx.body = { error: isTreasury(postRow.author_pubkey)
+                ? 'You are not an authorized keeper of this enterprise'
+                : 'Not authorized to act on behalf of this identity'
+            };
+            return;
+        }
+
+        const removed = removePost(id, actor);
         if (removed) {
             syncPulseMarketplaceGate();
         }

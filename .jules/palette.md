@@ -149,3 +149,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-15 - PulseFeedCard Focus Rings and Touch Target Sizing
 **Learning:** `PulseFeedCard.tsx` interactive buttons (author profile trigger, hide/delete action buttons, and modal confirmation triggers) lacked minimum touch target sizing (< 44px) and focus-visible outline rings for keyboard users.
 **Action:** Added `min-h-[44px]` touch target sizing and `focus-visible:outline-none focus-visible:ring-2` focus rings across interactive controls in `PulseFeedCard.tsx`, and added component test coverage.
+
+## 2026-09-16 - CreateGroupModal Dialog Title Linking, Emojis, and Focus Rings
+**Learning:** `CreateGroupModal.tsx` modal header lacked title ID linking (`id="create-group-title"` with `aria-labelledby="create-group-title"`), raw decorative emojis (`👥`, `ℹ️`, `🤝`, `🛠️`, `🛡️`, `☕`, `💬`, `🚪`, `⏳`, `🔒`) were unhidden from screen readers, and interactive controls (close button, category selection buttons, and join policy buttons) lacked visible keyboard focus ring indicators (`focus-visible:ring-2`).
+**Action:** Linked modal header title via `id="create-group-title"` and `aria-labelledby="create-group-title"`, wrapped decorative emojis with `<span aria-hidden="true">`, added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all modal interactive controls, and added unit test coverage in `CreateGroupModal.test.tsx`.

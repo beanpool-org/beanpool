@@ -277,6 +277,22 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN reach TEXT NOT NULL DEFAULT 'local'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN reach_peers TEXT`).run(); } catch { }
 
+    // Audience scoping on posts (docs/the-commons.md §9, Item 10)
+    // Additive and idempotent migration: every existing post defaults to 'public'.
+    //
+    // ORPHANED ROWS NOTE: SQLite does NOT enforce REFERENCES ... ON DELETE CASCADE added via
+    // ALTER TABLE ADD COLUMN on upgraded nodes (the clause is parsed by SQLite but ignored).
+    // If a group is deleted on an upgraded node without compensation, group-scoped posts would
+    // retain a dangling target_group_id, rendering them orphaned and invisible to everyone.
+    // We enforce this cascade explicitly via the posts_cleanup_on_group_delete trigger defined
+    // in schema.sql and ensured below.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN audience_scope TEXT NOT NULL DEFAULT 'public'`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN assigned_to TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT`).run(); } catch { }
+    try { db.prepare(`UPDATE posts SET audience_scope = 'public' WHERE audience_scope IS NULL`).run(); } catch { }
+
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN project_id TEXT REFERENCES projects(id)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE)`).run(); } catch { }
@@ -598,6 +614,20 @@ export function initSchema() {
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
+    try {
+        db.exec(`
+            DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;
+            CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
+            AFTER DELETE ON groups
+            FOR EACH ROW
+            BEGIN
+                UPDATE posts SET target_group_id = NULL,
+                       active = 0, status = 'cancelled',
+                       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE target_group_id = OLD.id;
+            END;
+        `);
+    } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();

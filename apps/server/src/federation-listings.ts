@@ -82,6 +82,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
           AND p.active = 1
           AND p.origin_node IS NULL
           AND p.reach != 'local'
+          AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
         ORDER BY p.created_at DESC
     `).all() as any[];
 

@@ -126,6 +126,10 @@ export function createPost(
         throw new Error(`Invalid audience scope: ${audienceScope}`);
     }
 
+    if (audienceScope !== 'public') {
+        options = { ...options, reach: 'local', reachPeers: null };
+    }
+
     if (audienceScope === 'group') {
         if (!options?.targetGroupId) {
             throw new Error('targetGroupId is required when audienceScope is group');
@@ -134,9 +138,11 @@ export function createPost(
         if (!grp) {
             throw new Error('Group not found');
         }
-        const isMem = db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(options.targetGroupId, authorPublicKey);
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(options.targetGroupId, authorPublicKey);
         if (!isMem) {
-            throw new Error('UNAUTHORIZED: Must be an active group member to post to a group');
+            throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
         }
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {
@@ -285,7 +291,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 
     const isAuthor = postRow.author_pubkey === callerPublicKey;
     let isConvenor = false;
-    if (postRow.target_group_id) {
+    if (postRow.audience_scope === 'group' && postRow.target_group_id) {
         const convenorRow = db.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
         ).get(postRow.target_group_id, callerPublicKey);
@@ -323,7 +329,7 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 }
 
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
-    const existingPost = getPosts(db, { id })[0] ?? null;
+    const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
 
     if (existingPost.type === 'poll') {
@@ -459,7 +465,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 }
 
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
-    const post = getPosts(db, { id: postId })[0];
+    const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     if (!post || post.type !== 'poll') {
         throw new Error('Poll not found');
     }
@@ -472,7 +478,7 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     const now = new Date().toISOString();
     db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(now, postId);
     bumpPostsVersion();
-    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey })[0] ?? null;
+    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey, includeAllScopes: true })[0] ?? null;
     if (updated) broadcast({ type: 'post_updated', post: updated });
     return updated;
 }
@@ -493,12 +499,20 @@ export function votePoll(
         throw new Error('Credit-frozen members cannot vote in polls');
     }
 
-    const post = getPosts(db, { id: postId })[0];
+    const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     if (!post || post.type !== 'poll') {
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {
         throw new Error('This poll is closed');
+    }
+    if (post.audienceScope === 'group' && post.targetGroupId) {
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+        ).get(post.targetGroupId, voterPublicKey);
+        if (!isMem && post.authorPublicKey !== voterPublicKey) {
+            throw new Error('UNAUTHORIZED: Must be an active member of the group to vote in this poll');
+        }
     }
     const nowIso = new Date().toISOString();
     if (post.pollClosesAt && post.pollClosesAt <= nowIso) {

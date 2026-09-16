@@ -412,8 +412,22 @@ export function acceptPost(
 ): MarketplaceTransaction {
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
-    const post = getPosts(db, { id: postId, status: 'active' })[0];
+    const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post) throw new Error('Post not found or not active');
+    if (post.audienceScope === 'group' && post.targetGroupId) {
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+        ).get(post.targetGroupId, buyerPublicKey);
+        if (!isMem) {
+            throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');
+        }
+    }
+    if (post.audienceScope === 'direct') {
+        const isTarget = post.targetPubkey === buyerPublicKey || post.assignedTo === buyerPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
+        }
+    }
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 

@@ -92,6 +92,7 @@ export interface PostFilter {
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
     includeInactive?: boolean;
+    includeAllScopes?: boolean;
     audienceScope?: AudienceScope | string;
     targetGroupId?: string;
     assignedTo?: string;
@@ -317,7 +318,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
     const viewer = filter?.viewerPubkey;
-    if (filter?.audienceScope === 'public') {
+    if (filter?.includeAllScopes) {
+        // Internal engine lookup bypasses feed scoping
+    } else if (filter?.audienceScope === 'public') {
         query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     } else if (filter?.audienceScope === 'group') {
         query += " AND p.audience_scope = 'group'";
@@ -487,12 +490,15 @@ export function getPostCount(db: Db, filter?: {
     audienceScope?: AudienceScope | string;
     viewerPubkey?: string;
     targetGroupId?: string;
+    includeAllScopes?: boolean;
 }): number {
     let query = "SELECT COUNT(*) as c FROM posts p WHERE p.active = 1";
     const params: any[] = [];
 
     const viewer = filter?.viewerPubkey;
-    if (filter?.audienceScope === 'public') {
+    if (filter?.includeAllScopes) {
+        // Internal lookup bypasses feed scoping
+    } else if (filter?.audienceScope === 'public') {
         query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     } else if (filter?.audienceScope === 'group') {
         query += " AND p.audience_scope = 'group'";

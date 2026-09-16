@@ -1192,7 +1192,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 );
 CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
 CREATE INDEX IF NOT EXISTS idx_group_members_updated_at ON group_members(updated_at);
-CREATE INDEX IF NOT EXISTS idx_group_members_role ON group_members(group_id, role, status);
+CREATE INDEX IF NOT EXISTS idx_group_members_status_role ON group_members(group_id, status, role);
 
 CREATE TRIGGER IF NOT EXISTS groups_touch_updated_at
 AFTER UPDATE ON groups

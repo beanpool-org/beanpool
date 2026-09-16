@@ -241,6 +241,9 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/crowdfund/projects',       // public crowdfund list
     '/api/treasuries',               // community transparency: list of treasuries
     '/api/enterprises',              // community transparency: list of enterprises
+    '/api/enterprises/map',          // map pins: enterprises with a location
+    '/api/map/enterprises',          // map pins: alias
+    '/api/treasuries/map',           // map pins: alias
     '/api/commons/decisions',        // governance transparency: list of decisions
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity

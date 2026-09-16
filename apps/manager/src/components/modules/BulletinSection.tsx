@@ -272,7 +272,14 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                             disabled={sendingAnnouncement}
                             className="px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md flex items-center gap-2 disabled:opacity-50"
                         >
-                            {sendingAnnouncement ? 'Broadcasting...' : 'Broadcast to Community'}
+                            {sendingAnnouncement ? (
+                                <>
+                                    <span className="animate-spin">⏳</span>
+                                    <span>Broadcasting...</span>
+                                </>
+                            ) : (
+                                'Broadcast to Community'
+                            )}
                         </button>
                     </form>
                 </div>
@@ -298,7 +305,10 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                     </div>
 
                     {loadingChannels ? (
-                        <div className="p-8 text-center text-xs text-nature-400">Loading channels...</div>
+                        <div className="p-8 text-center text-xs text-nature-400 flex items-center justify-center gap-2">
+                            <span className="animate-spin text-terra-400">⏳</span>
+                            <span>Loading channels...</span>
+                        </div>
                     ) : (Array.isArray(channels) ? channels : []).length === 0 ? (
                         <div className="p-8 text-center bg-nature-900/40 border border-nature-800 rounded-2xl">
                             <p className="text-sm font-semibold text-white mb-1">No channels added yet</p>
@@ -391,9 +401,16 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                                 <button
                                     type="submit"
                                     disabled={addingChannel}
-                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50 flex items-center gap-1.5"
                                 >
-                                    {addingChannel ? 'Adding...' : 'Add Channel'}
+                                    {addingChannel ? (
+                                        <>
+                                            <span className="animate-spin">⏳</span>
+                                            <span>Adding...</span>
+                                        </>
+                                    ) : (
+                                        'Add Channel'
+                                    )}
                                 </button>
                             </div>
                         </form>

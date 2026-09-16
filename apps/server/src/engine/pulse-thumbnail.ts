@@ -631,16 +631,30 @@ export class PulseThumbnailService {
         }
 
         if (!row.thumbnail_url || !row.thumbnail_url.trim()) {
-            try {
-                const recovered = await this.attemptThumbnailRecovery(itemId, row, options);
-                if (recovered) return recovered;
-            } catch (recoveryErr: any) {
-                if (recoveryErr instanceof SsrfSecurityError) {
-                    this.cache.setNegative(itemId, 400, recoveryErr.message);
-                    return { status: 400, error: recoveryErr.message };
+            const pending = this.inFlight.get(itemId);
+            if (pending) return await pending;
+
+            const recoveryPromise = (async (): Promise<ThumbnailResult> => {
+                try {
+                    const recovered = await this.attemptThumbnailRecovery(itemId, row, options);
+                    if (recovered) return recovered;
+                } catch (recoveryErr: any) {
+                    if (recoveryErr instanceof SsrfSecurityError) {
+                        logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
+                        this.cache.setNegative(itemId, 400, recoveryErr.message);
+                        return { status: 400, error: recoveryErr.message };
+                    }
                 }
+                this.cache.setNegative(itemId, 404, 'Item has no thumbnail');
+                return { status: 404, error: 'Item has no thumbnail' };
+            })();
+
+            this.inFlight.set(itemId, recoveryPromise);
+            try {
+                return await recoveryPromise;
+            } finally {
+                this.inFlight.delete(itemId);
             }
-            return { status: 404, error: 'Item has no thumbnail' };
         }
 
         const rawUrl = row.thumbnail_url.trim();

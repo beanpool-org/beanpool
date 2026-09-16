@@ -356,6 +356,21 @@ async function main(): Promise<void> {
     });
     const resNoThumb = await callRouter(router, 'GET', `/api/pulse/items/${noThumbItemId}/thumbnail`);
     assert(resNoThumb.status === 404, 'Item with no thumbnail_url is refused with 404');
+    assert(thumbnailService.cache.getNegative(noThumbItemId)?.status === 404, 'Negative cache records 404 for item with no thumbnail_url');
+
+    // Concurrent requests for item without thumbnail are coalesced
+    const noThumbCoalesceId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/NO_THUMB_COALESCE/',
+        externalId: 'NO_THUMB_COALESCE',
+        thumbnailUrl: null,
+    });
+    const [coalesceRes1, coalesceRes2] = await Promise.all([
+        callRouter(router, 'GET', `/api/pulse/items/${noThumbCoalesceId}/thumbnail`),
+        callRouter(router, 'GET', `/api/pulse/items/${noThumbCoalesceId}/thumbnail`),
+    ]);
+    assert(coalesceRes1.status === 404 && coalesceRes2.status === 404, 'Concurrent requests for missing thumbnail coalesce and return 404');
+    assert(thumbnailService.cache.getNegative(noThumbCoalesceId)?.status === 404, 'Coalesced recovery sets negative cache 404');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Requirement 7.3: An over-size upstream is refused

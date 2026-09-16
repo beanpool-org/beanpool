@@ -109,6 +109,14 @@ async function main() {
         assert(initialShedRow.lat === null && initialShedRow.lng === null, 'Existing enterprise has no initial location (null)');
         assert(initialShedRow.location_auth_signer === null, 'Existing enterprise has no initial location_auth_signer (null)');
 
+        // Enterprise created without location has null location_auth_signer even when leadKeeperPubkey is provided
+        const { publicKey: unlocatedWithKeeper } = createTreasury('UnlocatedCoop', AVATAR, 0, {
+            leadKeeperPubkey: aliceKeeper.pubKeyHex,
+        });
+        const unlocatedRow = db.prepare('SELECT lat, lng, location_auth_signer, auth_signer FROM members WHERE public_key = ?').get(unlocatedWithKeeper) as any;
+        assert(unlocatedRow.location_auth_signer === null, 'Enterprise created without location has null location_auth_signer even with lead keeper');
+        assert(unlocatedRow.auth_signer === null, 'Enterprise created without location has null auth_signer even with lead keeper');
+
         // ── 3. Auth checks: stranger vs keeper vs admin ──
         // Bob (stranger) attempts to set location -> rejected 403
         const strangerRes = await signedFetch('POST', `/api/enterprise/${shed}/location`, bobStranger, {

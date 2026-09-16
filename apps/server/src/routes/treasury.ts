@@ -504,7 +504,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     leadKeeperPubkey: actor,
                     lat: parsedLat,
                     lng: parsedLng,
-                    locationAuthSigner: actor,
+                    locationAuthSigner: parsedLat != null ? actor : undefined,
                 }
             );
 

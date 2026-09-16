@@ -14,6 +14,9 @@ import {
     setTfaSessionToken,
 } from '../../lib/node-client';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { PublicAddressPanel } from './PublicAddressPanel';
+import { PeerConnectorsPanel } from './PeerConnectorsPanel';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 
@@ -32,7 +35,7 @@ interface ApplianceSectionProps {
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
-    initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'identity' | 'access';
+    initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
 }
 
 export function ApplianceSection({
@@ -52,7 +55,7 @@ export function ApplianceSection({
     auditState,
     initialSubTab = 'diagnostics',
 }: ApplianceSectionProps) {
-    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'identity' | 'access'>(initialSubTab);
+    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab);
 
     // Snapshots & Backups state
     const [snapshots, setSnapshots] = useState<SnapshotItem[]>([]);
@@ -93,11 +96,6 @@ export function ApplianceSection({
     const [updateInfo, setUpdateInfo] = useState<string | null>(null);
     const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
     const [checkingUpdate, setCheckingUpdate] = useState(false);
-
-    // Connectors state
-    const [connectors, setConnectors] = useState<any[]>([]);
-    const [peerAddress, setPeerAddress] = useState('');
-    const [connectingPeer, setConnectingPeer] = useState(false);
 
     const loadSnapshots = async () => {
         setLoadingSnapshots(true);
@@ -144,22 +142,10 @@ export function ApplianceSection({
         } catch {}
     };
 
-    const loadConnectors = async () => {
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/connectors');
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-                setConnectors(Array.isArray(data) ? data : data.connectors || []);
-            }
-        } catch {}
-    };
-
     useEffect(() => {
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
-        loadConnectors();
     }, [activeNode?.id, activeNode?.url]);
 
     const handleCreateSnapshot = async () => {
@@ -402,29 +388,6 @@ export function ApplianceSection({
         }
     };
 
-    const handleAddPeer = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!peerAddress.trim()) return;
-        setConnectingPeer(true);
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/connectors/connect');
-            await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({
-                    password: activeNode.adminPassword,
-                    address: peerAddress.trim(),
-                }),
-            });
-            setPeerAddress('');
-            await loadConnectors();
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        } finally {
-            setConnectingPeer(false);
-        }
-    };
-
     const handleResetNode = async () => {
         if (!confirm('CRITICAL DANGER: Are you sure you want to reset this node? All identity and local configs will be erased.')) return;
         if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
@@ -499,6 +462,16 @@ export function ApplianceSection({
                         }`}
                     >
                         Gateway &amp; Peers
+                    </button>
+                    <button
+                        onClick={() => setSubTab('network')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            subTab === 'network'
+                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                : 'text-nature-400 hover:text-white border border-transparent'
+                        }`}
+                    >
+                        Public Address
                     </button>
                     <button
                         onClick={() => setSubTab('identity')}
@@ -943,55 +916,26 @@ export function ApplianceSection({
                     />
 
                     {/* Connected Peers & Connectors */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="border-b border-nature-800 pb-3">
-                            <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                                <span>🔌</span>
-                                <span>Mesh Connectors &amp; Peering</span>
-                            </h3>
-                            <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                Active connections: {diag?.activeWsConnections ?? 0} active ws streams · {diag?.p2pActivePeers ?? 0} p2p peers
-                            </p>
-                        </div>
-
-                        {/* Add Peer Form */}
-                        <form onSubmit={handleAddPeer} className="flex gap-2">
-                            <input
-                                type="text"
-                                value={peerAddress}
-                                onChange={(e) => setPeerAddress(e.target.value)}
-                                placeholder="wss://peer.beanpool.org or multiaddr"
-                                className="flex-1 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500"
-                            />
-                            <button
-                                type="submit"
-                                disabled={connectingPeer}
-                                className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
-                            >
-                                {connectingPeer ? 'Connecting...' : 'Add Peer'}
-                            </button>
-                        </form>
-
-                        {/* Peer List */}
-                        <div className="space-y-2">
-                            {(Array.isArray(connectors) ? connectors : []).length === 0 ? (
-                                <div className="text-xs text-nature-400 italic">No external peers currently linked.</div>
-                            ) : (
-                                (Array.isArray(connectors) ? connectors : []).map((c, i) => (
-                                    <div
-                                        key={c.id || i}
-                                        className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between text-xs font-mono"
-                                    >
-                                        <span className="text-white">{c.name || c.peerId || c.url}</span>
-                                        <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">
-                                            Connected
-                                        </span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
+                    <SectionErrorBoundary sectionName="Peer Connectors" resetKey={activeNode.id}>
+                        <PeerConnectorsPanel
+                            key={activeNode.id}
+                            activeNode={activeNode}
+                            activeWsConnections={diag?.activeWsConnections}
+                            p2pActivePeers={diag?.p2pActivePeers}
+                        />
+                    </SectionErrorBoundary>
                 </div>
+            )}
+
+            {/* Subtab: Public Address & Tunnel */}
+            {subTab === 'network' && (
+                <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
+                    <PublicAddressPanel
+                        key={activeNode.id}
+                        activeNode={activeNode}
+                        onRefreshDiag={onRefreshDiag}
+                    />
+                </SectionErrorBoundary>
             )}
 
             {/* Subtab: Node Identity */}

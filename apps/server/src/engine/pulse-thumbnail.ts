@@ -501,6 +501,9 @@ export class PulseThumbnailService {
                         method: 'GET',
                         timeoutMs: this.timeoutMs,
                         maxBytes: 512 * 1024,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        },
                         allowedContentTypes: ['text/html', 'text/plain'],
                     });
                     if (embedRes.status === 200) {

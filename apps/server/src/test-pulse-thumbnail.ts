@@ -168,6 +168,8 @@ async function main(): Promise<void> {
     let upstreamFetchCount = 0;
     const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
+    let lastEmbedUserAgent: string | undefined;
+
     const mockFetchFn = async (url: string, opts?: any): Promise<SsrfSafeResponse> => {
         upstreamFetchCount++;
 
@@ -204,6 +206,7 @@ async function main(): Promise<void> {
 
         // Simulate Instagram embed page recovery
         if (url.includes('instagram.com/p/RECOVER123/embed/')) {
+            lastEmbedUserAgent = opts?.headers?.['User-Agent'];
             const embedHtml = `
                 <!DOCTYPE html>
                 <html><body>
@@ -382,6 +385,7 @@ async function main(): Promise<void> {
 
     // 1 fetch for dead CDN link + 1 fetch for embed HTML + 1 fetch for fresh image bytes = 3 fetches
     assert(upstreamFetchCount - fetchesBeforeRecovery === 3, 'Recovery performed 1 initial fetch + 1 embed fetch + 1 fresh image fetch');
+    assert(Boolean(lastEmbedUserAgent && lastEmbedUserAgent.includes('Mozilla/5.0')), 'Embed recovery supplied standard browser User-Agent header');
 
     // Verify pulse_items table was updated with the fresh CDN URL
     const updatedRow = db.prepare(

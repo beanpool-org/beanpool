@@ -484,7 +484,16 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(now, postId);
     bumpPostsVersion();
     const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey, includeAllScopes: true })[0] ?? null;
-    if (updated) broadcast({ type: 'post_updated', post: updated });
+    if (updated) {
+        let recipients: string[] | undefined;
+        if (updated.audienceScope === 'group' && updated.targetGroupId) {
+            const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updated.targetGroupId) as any[];
+            recipients = rows.map(r => r.member_pubkey);
+        } else if (updated.audienceScope === 'direct') {
+            recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
+        }
+        broadcast({ type: 'post_updated', post: updated }, recipients);
+    }
     return updated;
 }
 
@@ -575,8 +584,15 @@ export function votePoll(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey })[0]!;
-    broadcast({ type: 'post_updated', post: updatedPost });
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true })[0]!;
+    let recipients: string[] | undefined;
+    if (updatedPost.audienceScope === 'group' && updatedPost.targetGroupId) {
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updatedPost.targetGroupId) as any[];
+        recipients = rows.map(r => r.member_pubkey);
+    } else if (updatedPost.audienceScope === 'direct') {
+        recipients = Array.from(new Set([updatedPost.authorPublicKey, updatedPost.targetPubkey, updatedPost.assignedTo].filter(Boolean) as string[]));
+    }
+    broadcast({ type: 'post_updated', post: updatedPost }, recipients);
     return { success: true, post: updatedPost };
 }
 

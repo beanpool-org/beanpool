@@ -37,6 +37,8 @@ import {
     inviteGroupMember,
     deleteGroupPost,
     requestPost,
+    closePoll,
+    votePoll,
     broadcast,
     addWsClient,
     removeWsClient
@@ -297,6 +299,31 @@ async function runTests() {
         assert(!bobGotDir, '7d. Bob DID NOT receive direct post sent to Carol');
         assert(carolGotDir, '7e. Recipient Carol DID receive direct post WebSocket broadcast');
         assert(!anonGotDir, '7f. Anonymous socket DID NOT receive direct post WebSocket broadcast');
+
+        // 3. Broadcast group poll vote and close in Gardeners (Bob is member, Carol is not)
+        const grpPoll = createPost('poll', 'other', 'Garden Schedule Poll', 'When to meet?', 0, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: gardenGroup.id,
+            pollOptions: [{ id: 'opt_1', text: 'Saturday' }, { id: 'opt_2', text: 'Sunday' }]
+        });
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        votePoll(grpPoll!.id, bob.pubKeyHex, 'opt_1');
+        assert(receivedBob.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7g. Member Bob received votePoll post_updated broadcast');
+        assert(!receivedCarol.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7h. Non-member Carol DID NOT receive votePoll post_updated broadcast');
+        assert(!receivedAnon.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7i. Anonymous socket DID NOT receive votePoll post_updated broadcast');
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        closePoll(grpPoll!.id, alice.pubKeyHex);
+        assert(receivedBob.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7j. Member Bob received closePoll post_updated broadcast');
+        assert(!receivedCarol.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7k. Non-member Carol DID NOT receive closePoll post_updated broadcast');
+        assert(!receivedAnon.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7l. Anonymous socket DID NOT receive closePoll post_updated broadcast');
 
         removeWsClient(wsBob);
         removeWsClient(wsCarol);

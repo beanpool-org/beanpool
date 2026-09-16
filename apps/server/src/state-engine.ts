@@ -881,8 +881,9 @@ export function broadcast(event: any, recipients?: string[]): void {
 
 export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
+    const cleanKey = typeof publicKey === 'string' ? publicKey.trim().toLowerCase() : '';
     try {
-        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?").get(publicKey) as any;
+        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
         if (invalidated) {
             const rekeyDetail = invalidated.rekeyed_to ? ` and re-keyed to ${invalidated.rekeyed_to}` : '';
             throw new Error(`Device key has been invalidated (${invalidated.reason}${rekeyDetail}). Please re-enrol using your replacement device.`);
@@ -891,7 +892,7 @@ export function assertMemberActive(publicKey: string): void {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
         // If table does not exist during early boot or mock, ignore
     }
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(cleanKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
@@ -3707,6 +3708,7 @@ export function adminPruneUser(publicKey: string) {
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });

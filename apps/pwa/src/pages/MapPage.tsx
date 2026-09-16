@@ -385,10 +385,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
-                getEnterpriseMapPins().then(res => {
-                    setEnterprises(res?.enterprises || []);
-                }).catch(() => {});
-                const localData = await getMarketplacePosts();
+                const [pinsRes, localData] = await Promise.all([
+                    getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
+                    getMarketplacePosts(),
+                ]);
+                setEnterprises(pinsRes?.enterprises || []);
                 let allPosts: MarketplacePost[] = [...localData];
 
                 // Only fetch from peers the user has toggled on

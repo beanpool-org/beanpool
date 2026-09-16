@@ -125,4 +125,75 @@ describe('MemberDetailModal', () => {
         expect(screen.getByText('SUSPICIOUS_ACTIVITY')).toBeInTheDocument();
         expect(screen.getByText('Flagged node for pubkey-1234567890-abcdef anomaly')).toBeInTheDocument();
     });
+
+    it('renders node role badge and handles grant role', async () => {
+        const handleGrantRole = vi.fn().mockResolvedValue(undefined);
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('No Node Role')).toBeInTheDocument();
+        await userEvent.click(screen.getByText('⚡ Grant Admin'));
+        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin');
+    });
+
+    it('surfaces last-owner guard when revoking the last owner fails', async () => {
+        const handleRevokeRole = vi.fn().mockRejectedValue(new Error('Cannot remove the last owner'));
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'owner' }}
+                isFrozen={false}
+                nodeRole="owner"
+                onToggleFreeze={vi.fn()}
+                onRevokeNodeRole={handleRevokeRole}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('Last-owner guard active:')).toBeInTheDocument();
+        await userEvent.click(screen.getByText('Revoke owner'));
+        expect(handleRevokeRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        expect(await screen.findByText(/Cannot remove the last owner/)).toBeInTheDocument();
+    });
+
+    it('forwards accounts to PruneBranchModal and surfaces calculated financial impact', async () => {
+        const childMember = {
+            publicKey: 'child-pubkey-789',
+            callsign: 'ChildMember',
+            invitedBy: 'pubkey-1234567890-abcdef',
+        };
+        const mockAccounts = [
+            { publicKey: 'pubkey-1234567890-abcdef', balance: -150 },
+            { publicKey: 'child-pubkey-789', balance: 350 },
+        ];
+
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                members={[mockMember, childMember]}
+                accounts={mockAccounts}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onPruneBranch={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const pruneBranchBtn = screen.getByText('🗑️ Prune Branch');
+        expect(pruneBranchBtn).toBeInTheDocument();
+        await userEvent.click(pruneBranchBtn);
+
+        // Verify PruneBranchModal opened with accounts passed through
+        expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toContain('150 🫘 bad debt');
+        expect(document.getElementById('prune-credit-confiscated')?.textContent).toContain('350 🫘 credit');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('+200 🫘');
+    });
 });

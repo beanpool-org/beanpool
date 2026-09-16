@@ -1,7 +1,7 @@
 import { db } from '../db/db.js';
 import { getMember } from '@beanpool/engine';
 
-export type MemberNodeRole = 'owner' | 'admin';
+export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
 
 export interface NodeRoleRecord {
@@ -9,6 +9,8 @@ export interface NodeRoleRecord {
     role: MemberNodeRole;
     granted_at: string;
     granted_by: string | null;
+    session_epoch?: number;
+    has_break_glass?: boolean;
     callsign?: string;
 }
 
@@ -79,13 +81,18 @@ export function getFirstNodeAdminPubkey(): string {
  * Lists all active node role assignments with member callsign.
  */
 export function listNodeRoles(): NodeRoleRecord[] {
-    return db.prepare(
-        `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, m.callsign
+    const rows = db.prepare(
+        `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, nr.session_epoch,
+                (nr.break_glass_hash IS NOT NULL) as has_break_glass, m.callsign
          FROM node_roles nr
          JOIN members m ON nr.member_pubkey = m.public_key
          WHERE m.status = 'active'
          ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC`
-    ).all() as NodeRoleRecord[];
+    ).all() as any[];
+    return rows.map(r => ({
+        ...r,
+        has_break_glass: Boolean(r.has_break_glass),
+    })) as NodeRoleRecord[];
 }
 
 /**
@@ -101,8 +108,8 @@ export function listNodeRoles(): NodeRoleRecord[] {
  * - Demoting the last owner to admin is blocked
  */
 export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
-    if (role !== 'owner' && role !== 'admin') {
-        throw new Error("Role must be 'owner' or 'admin'");
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
     if (targetPubkey === 'SYSTEM' || targetPubkey.toUpperCase() === 'SYSTEM') {
@@ -137,40 +144,48 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              WHERE nr.role = 'owner' AND m.status = 'active'`
         ).get() as any)?.c || 0;
 
-        const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
+        const isOwner =
+            actorPubkey === 'owner:password' ||
+            actorPubkey === 'break-glass:enrolment' ||
+            actorPubkey === 'SYSTEM' ||
+            (!!actorPubkey && isNodeOwner(actorPubkey));
 
         if (role === 'owner') {
             if (ownerCount > 0 && !isOwner) {
                 throw new Error('Only an owner may grant the owner role');
             }
-        } else if (role === 'admin') {
+        } else if (role === 'admin' || role === 'moderator') {
             if (!isOwner) {
-                throw new Error('Only an owner may grant the admin role');
+                throw new Error(`Only an owner may grant the ${role} role`);
             }
             if (isNodeOwner(targetPubkey) && ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
         }
 
+        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
+        const epoch = existing ? (existing.role !== role ? existing.session_epoch + 1 : existing.session_epoch) : 0;
+        const breakGlass = role === 'owner' ? (existing?.break_glass_hash || null) : null;
+
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(targetPubkey);
         db.prepare(
-            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by)
-             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?)`
-        ).run(targetPubkey, role, actorPubkey || null);
+            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)`
+        ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass);
     })();
 }
 
 /**
- * Revokes a node role ('owner' or 'admin') from a member.
+ * Revokes a node role ('owner', 'admin', or 'moderator') from a member.
  *
  * Enforces:
  * - Only an owner may revoke 'owner'
  * - Never allow the last owner to be removed
- * - Only an owner may revoke 'admin'
+ * - Only an owner may revoke 'admin' or 'moderator'
  */
 export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
-    if (role !== 'owner' && role !== 'admin') {
-        throw new Error("Role must be 'owner' or 'admin'");
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
     db.transaction(() => {
@@ -192,12 +207,49 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             if (ownerCount <= 1) {
                 throw new Error('Cannot remove the last owner');
             }
-        } else if (role === 'admin') {
+        } else if (role === 'admin' || role === 'moderator') {
             if (!isOwner) {
-                throw new Error('Only an owner may revoke the admin role');
+                throw new Error(`Only an owner may revoke the ${role} role`);
             }
         }
 
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
     })();
+}
+
+/**
+ * Returns the current session_epoch for a member holding a node role, or 0.
+ */
+export function getNodeRoleSessionEpoch(pubkey: string): number {
+    if (!pubkey) return 0;
+    const row = db.prepare("SELECT session_epoch FROM node_roles WHERE member_pubkey = ?").get(pubkey) as { session_epoch: number } | undefined;
+    return row?.session_epoch ?? 0;
+}
+
+/**
+ * Increments the session_epoch for a member holding a node role.
+ * Invalidates all outstanding browser sessions for this member.
+ * Returns the new epoch number.
+ */
+export function bumpNodeRoleSessionEpoch(pubkey: string): number {
+    if (!pubkey) return 0;
+    db.prepare("UPDATE node_roles SET session_epoch = session_epoch + 1 WHERE member_pubkey = ?").run(pubkey);
+    return getNodeRoleSessionEpoch(pubkey);
+}
+
+/**
+ * Sets or clears the break_glass_hash for an owner in node_roles.
+ */
+export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null): void {
+    if (!pubkey) return;
+    db.prepare("UPDATE node_roles SET break_glass_hash = ? WHERE member_pubkey = ?").run(hash, pubkey);
+}
+
+/**
+ * Returns the stored break_glass_hash for an owner, or null.
+ */
+export function getNodeRoleBreakGlassHash(pubkey: string): string | null {
+    if (!pubkey) return null;
+    const row = db.prepare("SELECT break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(pubkey) as { break_glass_hash: string | null } | undefined;
+    return row?.break_glass_hash || null;
 }

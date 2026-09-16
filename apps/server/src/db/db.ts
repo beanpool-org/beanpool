@@ -242,6 +242,8 @@ export function initSchema() {
     // Enterprise Credit Model (Rules 6 & 7)
     try { db.prepare(`ALTER TABLE members ADD COLUMN earned_surplus REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN working_capital_ceiling REAL DEFAULT NULL`).run(); } catch { }
+    // Grandfathered enterprise floor (Slice 4)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN legacy_credit_floor REAL DEFAULT NULL`).run(); } catch { }
     // Profile sync: profile mutation timestamp for cache-busting.
     try { db.prepare(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME`).run(); } catch { }
     // Community Working Style / Archetype signature
@@ -347,6 +349,83 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
 
+    // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
+    const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
+    if (hasNodeRoles) {
+        const nrColumns = (db.prepare("PRAGMA table_info(node_roles)").all() as any[]).map(c => c.name);
+        if (!nrColumns.includes('session_epoch')) {
+            db.prepare(`ALTER TABLE node_roles ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0`).run();
+        }
+        if (!nrColumns.includes('break_glass_hash')) {
+            db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_hash TEXT`).run();
+        }
+    }
+
+    // node_roles: ensure check constraint allows 'moderator'
+    try {
+        const nrSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='node_roles'").get() as any;
+        if (nrSql?.sql && !nrSql.sql.includes('moderator')) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS node_roles_migration;
+                    CREATE TABLE node_roles_migration (
+                        member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+                        role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
+                        granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        granted_by       TEXT,
+                        session_epoch    INTEGER NOT NULL DEFAULT 0,
+                        break_glass_hash TEXT
+                    );
+                    INSERT INTO node_roles_migration (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                        SELECT member_pubkey, role, granted_at, granted_by,
+                               COALESCE(session_epoch, 0), break_glass_hash FROM node_roles;
+                    DROP TABLE node_roles;
+                    ALTER TABLE node_roles_migration RENAME TO node_roles;
+                    CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
+                `);
+            })();
+            console.log('[DB] ✅ Migrated node_roles CHECK constraint to allow moderator');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
+    }
+
+    // Escrow dispute arbitration (§5 item 2, §6 correction 2)
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_by TEXT`).run(); } catch { }
+
+    // activity_feed: ensure check constraint allows 'dispute_resolved'
+    try {
+        const afSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_feed'").get() as any;
+        if (afSql?.sql && !afSql.sql.includes('dispute_resolved')) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS activity_feed_migration;
+                    CREATE TABLE activity_feed_migration (
+                        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created', 'dispute_resolved')),
+                        actor_pubkey  TEXT NOT NULL,
+                        target_pubkey TEXT,
+                        metadata      TEXT,
+                        created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    );
+                    INSERT INTO activity_feed_migration (id, event_type, actor_pubkey, target_pubkey, metadata, created_at)
+                        SELECT id, event_type, actor_pubkey, target_pubkey, metadata, created_at FROM activity_feed;
+                    INSERT OR REPLACE INTO sqlite_sequence (name, seq)
+                        SELECT 'activity_feed_migration', seq FROM sqlite_sequence WHERE name = 'activity_feed';
+                    DROP TABLE activity_feed;
+                    ALTER TABLE activity_feed_migration RENAME TO activity_feed;
+                    CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
+                    CREATE INDEX IF NOT EXISTS idx_activity_feed_event ON activity_feed(event_type, created_at DESC);
+                `);
+            })();
+            console.log('[DB] ✅ Migrated activity_feed CHECK constraint to allow dispute_resolved');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
+    }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 
@@ -361,6 +440,25 @@ export function initSchema() {
             console.error("❌ Ratings fix failed:", err.message);
         }
     }
+
+    // Slice 4 Grandfather migration: existing enterprises keep their fixed line as legacy_credit_floor (min 200)
+    // until keepers' pledges exceed it. Gated behind node_config so it runs strictly once.
+    try {
+        const alreadyMigrated = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_legacy_credit_floor_v1'").get();
+        if (!alreadyMigrated) {
+            db.prepare(`
+                UPDATE members
+                SET legacy_credit_floor = CASE WHEN earned_credit > 200 THEN earned_credit ELSE 200 END
+                WHERE is_treasury = 1 AND legacy_credit_floor IS NULL
+            `).run();
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_legacy_credit_floor_v1', '1')").run();
+        }
+    } catch { }
+
+    // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
+    try {
+        db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();
+    } catch { }
 
     // SRV-20: cryptographic authorship columns on transactions (see schema.sql).
     // posts.updated_at, posts.search_keywords, members.earned_credit and members.profile_updated_at used to
@@ -507,6 +605,7 @@ export function initSchema() {
     // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
@@ -874,6 +973,8 @@ export interface ProjectRow {
     deadline_at: string | null;
     status: string;
     created_at: string;
+    enterprise_pubkey?: string;
+    migrated_at?: string | null;
 }
 
 function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
@@ -912,6 +1013,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         deadline_at: e.deadline_at ?? legacyP?.deadline_at ?? null,
         status,
         created_at: e.joined_at ?? legacyP?.created_at ?? new Date().toISOString(),
+        enterprise_pubkey: e.public_key || legacyP?.enterprise_pubkey || legacyP?.id,
     };
 }
 
@@ -922,14 +1024,14 @@ export function getCrowdfundProjects(): ProjectRow[] {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded'
+        WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
     `).all() as any[];
 
     const projectMap = new Map<string, any>();
     try {
-        const pRows = db.prepare("SELECT * FROM projects").all() as any[];
+        const pRows = db.prepare("SELECT * FROM projects WHERE status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").all() as any[];
         for (const p of pRows) projectMap.set(p.id, p);
     } catch { }
 
@@ -943,10 +1045,14 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
         FROM members m
-        WHERE m.public_key = ? AND m.is_treasury = 1
+        WHERE m.public_key = ? AND m.is_treasury = 1 AND m.status NOT IN ('pruned', 'deleted')
     `).get(id) as any;
 
-    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as any;
+    // If e was soft-deleted or pruned in members, it's deleted - don't resurrect from legacy projects table
+    const prunedOrDeleted = db.prepare("SELECT 1 FROM members WHERE public_key = ? AND status IN ('pruned', 'deleted')").get(id);
+    if (prunedOrDeleted) return undefined;
+
+    const legacyP = db.prepare("SELECT * FROM projects WHERE id = ? AND status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").get(id) as any;
     if (!e && !legacyP) return undefined;
     if (e) return rowToProjectRow(e, legacyP);
     return legacyP as ProjectRow;
@@ -963,21 +1069,15 @@ export function createCrowdfundProject(
 ) {
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();
+    const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
+    const existingCallsign = db.prepare(
+        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(baseCallsign, id) as any;
+    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
-    db.prepare(`
-        INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
-    `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
-
-    const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
-    if (!existing) {
-        const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
-        const existingCallsign = db.prepare(
-            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-        ).get(baseCallsign, id) as any;
-        const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
-
-        db.transaction(() => {
+    db.transaction(() => {
+        const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
+        if (!existing) {
             db.prepare(`
                 INSERT INTO members (
                     public_key, callsign, joined_at, avatar_url, bio, status,
@@ -994,8 +1094,13 @@ export function createCrowdfundProject(
                 `).run(id, creator_pubkey, now);
                 db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
             }
-        })();
-    }
+        }
+
+        db.prepare(`
+            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
+        `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
+    })();
 }
 
 export function updateCrowdfundProject(
@@ -1053,8 +1158,17 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Pledge amount must be positive");
 
-    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
-    if (!project) throw new Error("Project not found");
+    let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
+    if (!project) {
+        const memberEnterprise = db.prepare(`SELECT public_key, callsign, purpose, bio, goal_amount, deadline_at, status FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).get(projectId) as any;
+        if (!memberEnterprise) throw new Error("Project not found");
+        const lead = (db.prepare(`SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead' LIMIT 1`).get(projectId) as any)?.member_pubkey || memberEnterprise.public_key;
+        db.prepare(`
+            INSERT OR IGNORE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, ?, ?, '[]', ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
+        project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
+    }
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
     const entPub = (project as any).enterprise_pubkey || project.id;
     const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
@@ -1073,7 +1187,8 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     // out of beans demurrage has already taken — the member spends them once and is charged for them again on
     // their next read. Settling the payer was already unavoidable in the creator-pledges-to-their-own-project
     // case, so excluding it for everyone else would only have made the same path behave two different ways.
-    onSettleDemurrage?.([project.creator_pubkey, fromPubkey]);
+    const targetAccount = project.enterprise_pubkey || projectId;
+    onSettleDemurrage?.([targetAccount, project.creator_pubkey, fromPubkey]);
 
     const sender = db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(fromPubkey) as { balance: number } | undefined;
     if (!sender) throw new Error("Sender account not found");
@@ -1121,14 +1236,14 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
             if (escrowBalance > 0) {
                 // Drain Escrow
                 db.prepare(`UPDATE accounts SET balance = 0, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowPubkey);
-                // Credit actual Creator (settled by onSettleDemurrage above to protect against retroactive tax)
-                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, project.creator_pubkey);
+                // Credit Enterprise Treasury Account (Slice 3: pledges land in enterprise account)
+                db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(escrowBalance, targetAccount);
 
-                // Record atomic Sweep Transaction
+                // Record atomic Sweep Transaction to the enterprise
                 db.prepare(`
                     INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, project_id)
                     VALUES (?, ?, ?, ?, ?, ?)
-                `).run(`sweep_${txId}`, escrowPubkey, project.creator_pubkey, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
+                `).run(`sweep_${txId}`, escrowPubkey, targetAccount, escrowBalance, 'Escrow Release: Funding Goal Reached', projectId);
             }
         }
     });
@@ -1144,6 +1259,17 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
+
+    // Guard against deleting funded/completed projects
+    if (project.status !== 'ACTIVE') {
+        throw new Error('Cannot delete a project that is already funded or completed');
+    }
+
+    // Guard against non-zero account balance to maintain ledger conservation
+    const account = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (account && Math.abs(account.balance) > 0.0001) {
+        throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
+    }
 
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
@@ -1191,12 +1317,30 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         // failure while retaining complete transaction history (pledges, refunds, sweeps) in the ledger.
         db.prepare(`UPDATE transactions SET project_id = NULL WHERE project_id = ?`).run(projectId);
 
+        const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+        if (acc && Math.abs(acc.balance) > 1e-9) {
+            throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+        }
+
         // Shred the Project — and tombstone it so mirrors propagate the delete.
         db.prepare(`DELETE FROM projects WHERE id = ?`).run(projectId);
         db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ?`).run(projectId);
-        db.prepare(`DELETE FROM members WHERE public_key = ? AND is_treasury = 1 AND lifecycle = 'bounded'`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
+        try {
+            const cpRow = db.prepare("SELECT value FROM node_config WHERE key = 'commons_projects'").get() as any;
+            if (cpRow && cpRow.value) {
+                const projects = JSON.parse(cpRow.value);
+                if (Array.isArray(projects)) {
+                    const filtered = projects.filter((p: any) => p.id !== projectId);
+                    if (filtered.length !== projects.length) {
+                        db.prepare("UPDATE node_config SET value = ? WHERE key = 'commons_projects'").run(JSON.stringify(filtered));
+                    }
+                }
+            }
+        } catch { }
         writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
     });
 
     executeDelete();

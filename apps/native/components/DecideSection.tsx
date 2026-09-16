@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -13,13 +13,14 @@ import { palette } from '../constants/colors';
 import {
     type DecisionWithTally,
     castDecisionVote,
+    getGovernanceCredits,
 } from '../utils/db';
 
 interface Props {
     decisions: DecisionWithTally[];
     activeMembers30d: number;
     identity: any;
-    balanceState: { earnedCredit: number; commons: number };
+    balanceState: { earnedCredit: number; commons: number; qualifiedValue?: number };
     onRefresh: () => Promise<void>;
     onOpenPropose: () => void;
     canPropose: boolean;
@@ -44,6 +45,13 @@ export function DecideSection({
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
+    const [voiceCredits, setVoiceCredits] = useState<{ totalCredits: number; usedCredits: number; availableCredits: number } | null>(null);
+
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
+        }
+    }, [identity?.publicKey]);
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -82,7 +90,13 @@ export function DecideSection({
         const count = selectedVoteCount[decision.id] || 1;
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
-            const available = balanceState.earnedCredit || 0;
+            let available = voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
+            try {
+                const fresh = await getGovernanceCredits(identity.publicKey);
+                setVoiceCredits(fresh);
+                available = fresh.availableCredits ?? 0;
+            } catch { }
+
             if (cost > available) {
                 Alert.alert('Insufficient Credits', `Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
                 return;
@@ -99,6 +113,9 @@ export function DecideSection({
 
             if (res.success) {
                 Alert.alert('Vote Recorded', `Your ${support ? 'YES' : 'NO'} vote (${count} weight) has been cast.`);
+                if (identity?.publicKey) {
+                    getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
+                }
                 await onRefresh();
             } else {
                 Alert.alert('Voting Error', (res as any).error || 'Failed to record vote');
@@ -388,6 +405,10 @@ export function DecideSection({
         },
         stepperBtn: {
             padding: 4,
+            minWidth: 44,
+            minHeight: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         qvLabel: {
             fontSize: 12,
@@ -481,9 +502,11 @@ export function DecideSection({
     return (
         <View style={styles.container}>
             {/* View Switcher: Open Decisions vs History */}
-            <View style={styles.viewSelector}>
+            <View style={styles.viewSelector} accessibilityRole="tablist" accessibilityLabel="Decisions view">
                 <Pressable
-                    accessibilityRole="button"
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeView === 'open' }}
+                    accessibilityLabel="Open Decisions"
                     style={[styles.viewTab, activeView === 'open' && styles.viewTabActive]}
                     onPress={() => onChangeView('open')}
                 >
@@ -503,7 +526,9 @@ export function DecideSection({
                 </Pressable>
 
                 <Pressable
-                    accessibilityRole="button"
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeView === 'history' }}
+                    accessibilityLabel="Decisions History"
                     style={[styles.viewTab, activeView === 'history' && styles.viewTabActive]}
                     onPress={() => onChangeView('history')}
                 >
@@ -634,7 +659,12 @@ export function DecideSection({
                                                     {tally.quorumMet ? 'Met ✅' : 'Pending'}
                                                 </Text>
                                             </View>
-                                            <View style={styles.barBg}>
+                                            <View
+                                                style={styles.barBg}
+                                                accessibilityRole="progressbar"
+                                                accessibilityValue={{ min: 0, max: 100, now: Math.min(100, quorumPct) }}
+                                                accessibilityLabel="Quorum progress"
+                                            >
                                                 <View
                                                     style={[
                                                         styles.barFill,
@@ -654,7 +684,12 @@ export function DecideSection({
                                                     Needs {thresholdPct}%
                                                 </Text>
                                             </View>
-                                            <View style={styles.barBg}>
+                                            <View
+                                                style={styles.barBg}
+                                                accessibilityRole="progressbar"
+                                                accessibilityValue={{ min: 0, max: 100, now: Math.min(100, supportPct) }}
+                                                accessibilityLabel="Support progress"
+                                            >
                                                 <View
                                                     style={[
                                                         styles.barFill,
@@ -670,12 +705,16 @@ export function DecideSection({
                                         {item.franchise === 'quadratic_trade' && (
                                             <View style={styles.qvStepper}>
                                                 <Text style={styles.qvLabel}>
-                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits)
+                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
                                                 </Text>
-                                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        style={styles.stepperBtn}
+                                                        accessibilityLabel="Decrease votes"
+                                                        accessibilityHint={`Decreases vote count from ${currentCount}`}
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        disabled={votingId === item.id || currentCount <= 1}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, (votingId === item.id || currentCount <= 1) && { opacity: 0.5 }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
@@ -683,11 +722,15 @@ export function DecideSection({
                                                             }));
                                                         }}
                                                     >
-                                                        <MaterialCommunityIcons name="minus-circle-outline" size={22} color={colors.brand.primary} />
+                                                        <MaterialCommunityIcons name="minus-circle-outline" size={24} color={colors.brand.primary} />
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
-                                                        style={styles.stepperBtn}
+                                                        accessibilityLabel="Increase votes"
+                                                        accessibilityHint={`Increases vote count from ${currentCount}`}
+                                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                        disabled={votingId === item.id}
+                                                        style={[styles.stepperBtn, { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, votingId === item.id && { opacity: 0.5 }]}
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
@@ -695,7 +738,7 @@ export function DecideSection({
                                                             }));
                                                         }}
                                                     >
-                                                        <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.brand.primary} />
+                                                        <MaterialCommunityIcons name="plus-circle-outline" size={24} color={colors.brand.primary} />
                                                     </Pressable>
                                                 </View>
                                             </View>

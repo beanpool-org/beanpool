@@ -390,7 +390,6 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 },
             ];
 
-            vi.spyOn(api, 'getCrowdfundProjects').mockResolvedValue({ projects: [] } as any);
             vi.spyOn(api, 'getAllMembers').mockResolvedValue([]);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: mockTreasuries });
             vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [], activeMembers30d: 5 } as any);
@@ -400,7 +399,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
             render(<ProjectsPage identity={mockIdentity} />);
 
             // Switch to Enterprises section
-            const enterprisesTab = screen.getByRole('button', { name: /Enterprises/i });
+            const enterprisesTab = screen.getByRole('button', { name: /🏛️\s*Enterprises/i });
             fireEvent.click(enterprisesTab);
 
             await waitFor(() => {

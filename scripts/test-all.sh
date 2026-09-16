@@ -107,6 +107,10 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 
+# Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
+# is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
+run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -157,8 +161,7 @@ run_federation_suites() {
     # NO `set -e`, and every suite runs even after one fails (review finding). Aborting on the first failure
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
-    FAILED=""
-    for t in test-schema-upgrade test-creator-channels test-pulse-resolver test-pulse-submit test-pulse-oauth test-oauth-ingest-bounds test-pulse-curated test-pulse-admin-channels test-pulse-thumbnail test-callsign-predicates test-recovery-shares test-sso test-daily-pulse test-pairing-relay test-pricing-guide test-pricing-aggregator-lifecycle test-activity-feed test-member-purge test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-keeper-http test-commons-conservation test-ledger-rollback test-treasury-keepership test-treasury-eggs test-enterprise-credit-rules test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-totp-helpers test-moderation-admin test-ledger-export test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-genesis test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability test-public-address test-invite-trampoline test-request-body test-admin-thresholds test-manager-backups test-push-preferences test-settings test-srv20-ledger-reset test-harvester test-membership-probe test-message-attachment test-social-ratings test-app-store-versions test-funnel-event test-handshake test-post-pause-resume test-cancel-post-request test-marketplace-auth test-escrow-fail-closed test-version-resolution test-avatar-endpoint test-etag-short-circuit test-api-headers-and-feed-etag test-directory-publisher test-members-holiday test-admin-seed-invite test-admin-genesis-pubkey test-admin-empty-sentinel test-node-roles test-federation-link-binding test-ws-pong-watchdog test-polls test-migration-projects-enterprises test-decisions-engine test-decisions-client-api test-enterprise-pause test-enterprise-season-lifecycle; do
+    for t in test-schema-upgrade test-creator-channels test-pulse-resolver test-pulse-submit test-pulse-oauth test-oauth-ingest-bounds test-pulse-curated test-pulse-admin-channels test-pulse-thumbnail test-callsign-predicates test-recovery-shares test-sso test-daily-pulse test-pairing-relay test-pricing-guide test-pricing-aggregator-lifecycle test-activity-feed test-member-purge test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-keeper-http test-commons-conservation test-ledger-rollback test-treasury-keepership test-treasury-eggs test-enterprise-credit-rules test-derived-enterprise-floor test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-totp-helpers test-moderation-admin test-ledger-export test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-admin-key-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-genesis test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability test-public-address test-invite-trampoline test-request-body test-admin-thresholds test-manager-backups test-push-preferences test-settings test-srv20-ledger-reset test-harvester test-membership-probe test-message-attachment test-social-ratings test-app-store-versions test-funnel-event test-handshake test-post-pause-resume test-cancel-post-request test-marketplace-auth test-escrow-fail-closed test-version-resolution test-avatar-endpoint test-etag-short-circuit test-api-headers-and-feed-etag test-directory-publisher test-members-holiday test-admin-seed-invite test-admin-genesis-pubkey test-admin-empty-sentinel test-node-roles test-federation-link-binding test-ws-pong-watchdog test-polls test-migration-projects-enterprises test-commons-reject-project test-commons-projects-update-delete test-decisions-engine test-decisions-client-api test-escrow-disputes test-enterprise-pause test-enterprise-season-lifecycle; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -257,8 +260,22 @@ run_federation_suites() {
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
+  # Check 1: Stripe / payment tokens
   if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.build --exclude-dir=.expo 2>/dev/null; then
     echo "❌ Error: Hardcoded secret keys found in codebase" && exit 1
+  fi
+
+  # Check 2: Tracked secret or environment files
+  TRACKED_SECRETS=$(git ls-files | grep -iE "(^|/)\.env(\..+)?$|community\.key$|tunnel-token$|pc-api-key\.json$|\.p8$|\.pem$|\.keystore$" | grep -v "\.env\.example$" || true)
+  if [ -n "$TRACKED_SECRETS" ]; then
+    echo "❌ Error: Tracked secret file(s) found in git: $TRACKED_SECRETS" && exit 1
+  fi
+
+  # Check 3: Inventoried secret keys assigned hardcoded values in tracked files
+  INVENTORIED_KEYS="ADMIN_PASSWORD|BACKUP_ADMIN_PASSWORD|ADMIN_SECRET|CF_API_TOKEN|CF_TUNNEL_TOKEN|CLOUDFLARE_API_KEY|CLOUDFLARE_API_TOKEN|TIKTOK_CLIENT_SECRET|INSTAGRAM_APP_SECRET|INSTAGRAM_CLIENT_SECRET|BACKUP_REPLICATION_TOKEN"
+  LEAKS=$(git grep -nE "^[[:space:]]*(-[[:space:]]+)?(export[[:space:]]+)?($INVENTORIED_KEYS)=" 2>/dev/null | grep -vE "=['\''\"]?\\$\\{[A-Za-z0-9_]+(:-)?\\}['\''\"]?$" | grep -vE "(\.env\.example|apps/server/README\.md|deploy\.sh|docs/|apps/registrar/\.dev\.vars|scripts/bootstrap-community-eggs\.mjs|scripts/grant-operator\.mjs)" || true)
+  if [ -n "$LEAKS" ]; then
+    echo "❌ Error: Hardcoded assignment to inventoried secret key found in tracked file:" && echo "$LEAKS" && exit 1
   fi
 '
 

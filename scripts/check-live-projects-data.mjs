@@ -71,10 +71,13 @@ if (tableExists('node_config')) {
 }
 
 if (tableExists('members')) {
-    const countRow = db.prepare('SELECT COUNT(*) as c FROM members WHERE is_treasury = 1').get();
-    report.treasuries.count = countRow ? countRow.c : 0;
-    if (report.treasuries.count > 0) {
-        report.treasuries.rows = db.prepare('SELECT public_key, callsign, status, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury = 1').all();
+    const memberCols = db.prepare("PRAGMA table_info(members)").all().map(c => c.name);
+    if (memberCols.includes('is_treasury')) {
+        const countRow = db.prepare('SELECT COUNT(*) as c FROM members WHERE is_treasury = 1').get();
+        report.treasuries.count = countRow ? countRow.c : 0;
+        if (report.treasuries.count > 0) {
+            report.treasuries.rows = db.prepare('SELECT public_key, callsign, status, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury = 1').all();
+        }
     }
 }
 

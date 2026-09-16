@@ -11,7 +11,7 @@ import {
     adminRejectProject,
     createDecision, getDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
-    getActiveMembersCount30d,
+    getActiveMembersCount30d, getDecisionVoiceCredits,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -115,12 +115,13 @@ router.get('/api/commons/rounds', async (ctx) => {
 router.get('/api/commons/decisions', async (ctx) => {
     const status = ctx.query.status as any;
     const decisions = getAllDecisions(status);
+    const activeMembers30d = getActiveMembersCount30d();
     ctx.body = {
         decisions: decisions.map(d => ({
             ...d,
-            tally: tallyDecision(d.id),
+            tally: tallyDecision(d.id, undefined, activeMembers30d),
         })),
-        activeMembers30d: getActiveMembersCount30d(),
+        activeMembers30d,
     };
 });
 
@@ -129,15 +130,22 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     if (!decision) return ctx.throw(404, 'Decision not found');
     const tally = tallyDecision(decision.id);
     const votes = getDecisionVotes(decision.id);
-    ctx.body = { decision, tally, votes };
+    const actor = (ctx.state as any)?.actor || (ctx.query?.voterPubkey as string);
+    const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
+    ctx.body = { decision, tally, votes, voiceCredits };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
-    const { authorPubkey, title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || authorPubkey;
-    if (!actor || !title || !touches || !effect) {
+    const { title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required to propose a decision' };
+        return;
+    }
+    if (!title || !touches || !effect) {
         ctx.status = 400;
-        ctx.body = { error: 'authorPubkey, title, touches, and effect are required' };
+        ctx.body = { error: 'title, touches, and effect are required' };
         return;
     }
     if (!description || description.trim().length < 10) {
@@ -165,11 +173,16 @@ router.post('/api/commons/decisions', async (ctx) => {
 });
 
 router.post('/api/commons/decisions/:id/vote', async (ctx) => {
-    const { voterPubkey, support, voteCount, signature } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || voterPubkey;
-    if (!actor || support === undefined) {
+    const { support, voteCount, signature } = (ctx as any).requestBody || {};
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required to vote' };
+        return;
+    }
+    if (support === undefined) {
         ctx.status = 400;
-        ctx.body = { error: 'voterPubkey and support (boolean) are required' };
+        ctx.body = { error: 'support (boolean) is required' };
         return;
     }
     const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);

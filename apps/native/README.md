@@ -17,9 +17,9 @@ apps/native/
 │   ├── IdentityContext.tsx       # Global identity provider (SecureStore)
 │   ├── welcome.tsx              # Onboarding: Create / Recover identity
 │   ├── recover-identity.tsx     # Account restoration (SSO sign-in and 12-word mnemonic restore)
-│   ├── propose-project.tsx      # Propose community crowdfund project
-│   ├── edit-project.tsx         # Edit existing community project
-│   ├── project-detail.tsx       # Detailed view of a specific project
+│   ├── propose-project.tsx      # Propose enterprise / community project
+│   ├── project-detail.tsx       # Detailed view of a specific enterprise/project (routes to treasury-detail)
+│   ├── treasury-detail.tsx      # Enterprise detail and operator console
 │   ├── public-profile.tsx       # Public profile view for members
 │   ├── chat/[id].tsx            # Individual chat conversation
 │   ├── post/[id].tsx            # Post detail view
@@ -27,7 +27,7 @@ apps/native/
 │   └── (tabs)/
 │       ├── _layout.tsx          # Tab navigator — neon-vine branded bar
 │       ├── index.tsx            # 🗺️ Map — Google Maps with native markers + clustering
-│       ├── projects.tsx         # 🌱 Projects — community crowdfunding
+│       ├── projects.tsx         # 🌱 Commons — community enterprises & projects
 │       ├── market.tsx           # 🤝 Market — 14-category marketplace
 │       ├── chats.tsx            # 💬 Chat — conversations list
 │       ├── people.tsx           # 👥 People — community browser
@@ -75,7 +75,7 @@ apps/native/
 | Tab | Emoji | Screen | Purpose |
 |-----|-------|--------|---------|
 | Map | 🗺️ | `index.tsx` | Community map with pre-rendered markers + clustering (Google Maps native) |
-| Projects | 🌱 | `projects.tsx` | Community crowdfunding — propose and fund shared goals with Beans |
+| Commons | 🌱 | `projects.tsx` | Community enterprises & projects — propose and back initiatives with Beans |
 | Market | 🤝 | `market.tsx` | 14-category marketplace — grid/list view, search, category filter, block users |
 | Chat | 💬 | `chats.tsx` | DM and group conversations |
 | People | 👥 | `people.tsx` | Community member browser |
@@ -108,7 +108,7 @@ apps/native/
 - **Guest Mode** — multi-node onboarding flow with membership probe; guest indicators in header and sync status when visiting a node you're not a member of
 - **Community Search** — search and infinite scroll on the Community member list
 - **App Store & Play Store Submission** — Published/built for both stores (v1.1.40, Android versionCode 156, iOS build 141).
-- **Community Projects** — crowdfund tab with progress bars, funding badges, and proposal creation
+- **The Commons** — unified enterprise and projects tab with progress bars, funding badges, and initiative proposal
 - **Branded Tab Bar** — neon-vine artwork background with semi-transparent overlay
 - **Post Detail View** — full-screen view with photos, credits, author info
 - **Global Notifications** — red tab bar badges dynamically map to internal SQLite `last_read_at` unread calculations across inactive threads

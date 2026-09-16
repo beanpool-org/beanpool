@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
-    treasuryPostOffer, treasuryPostNeed,
+    treasuryPostOffer, treasuryPostNeed, treasuryPledge,
+    deleteCrowdfundProject,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp,
     getEnterpriseLedger, type EnterpriseLedgerResponse,
     type BalanceInfo
@@ -10,6 +11,7 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
+import { ReportModal } from '../components/ReportModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -44,6 +46,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [ledgerError, setLedgerError] = useState<string | null>(null);
     const [ledgerPeriod, setLedgerPeriod] = useState<'all' | '30d' | '90d' | '365d'>('all');
 
+    // Pledge States
+    const [pledgeAmount, setPledgeAmount] = useState('');
+    const [pledgeMemo, setPledgeMemo] = useState('');
+    const [pledging, setPledging] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
     const [postTitle, setPostTitle] = useState('');
@@ -54,6 +63,38 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [postRepeatable, setPostRepeatable] = useState(true);
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
+
+    const handlePledge = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (pledging) return;
+        const amt = Number(pledgeAmount);
+        if (isNaN(amt) || amt <= 0) {
+            setActionFeedback({ type: 'error', message: 'Please enter a positive amount of Beans to pledge.' });
+            return;
+        }
+        try {
+            setPledging(true);
+            setActionFeedback(null);
+            await treasuryPledge(pubkey, amt, pledgeMemo.trim() || undefined);
+            setPledgeAmount('');
+            setPledgeMemo('');
+            setActionFeedback({ type: 'success', message: `Successfully pledged ${amt} 🫘 to ${detail?.name || 'enterprise'}!` });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({ type: 'error', message: err.message || 'Failed to complete pledge.' });
+        } finally {
+            setPledging(false);
+        }
+    };
+
+    const getDaysRemaining = (deadline: string | null | undefined) => {
+        if (!deadline) return null;
+        const diff = new Date(deadline).getTime() - new Date().getTime();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (days < 0) return 'Expired';
+        if (days === 0) return 'Ends today';
+        return `${days} days left`;
+    };
 
     const load = useCallback(async () => {
         try {
@@ -288,6 +329,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         }
     };
 
+    const handleCancelInitiative = async () => {
+        if (!pubkey || cancelling) return;
+        const confirmed = window.confirm(
+            'Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.'
+        );
+        if (!confirmed) return;
+        try {
+            setCancelling(true);
+            setActionFeedback(null);
+            await deleteCrowdfundProject(pubkey, identity?.publicKey);
+            alert('Initiative Cancelled 🌱\n\nPledges have been refunded to backers.');
+            onBack();
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e.message || 'Could not cancel initiative.' });
+        } finally {
+            setCancelling(false);
+        }
+    };
+
     const handleCreatePost = async (e: React.FormEvent) => {
         e.preventDefault();
         const creditsNum = Number(postCredits);
@@ -372,13 +432,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     };
 
     const balance = detail?.balance ?? 0;
-    const name = detail?.name || 'Community Treasury';
+    const name = detail?.name || 'Community Enterprise';
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
     const pendingBids: any[] = detail?.pendingBids || [];
     const activeDeals: any[] = detail?.activeDeals || [];
     const posts: any[] = detail?.posts || [];
     const flow: any[] = detail?.flow || [];
     const keepers: any[] = detail?.keepers || [];
+    const deferredClaims: any[] = detail?.deferredClaims || [];
+    const pendingClaims = deferredClaims.filter((c: any) => c.status === 'pending');
+    const pendingClaimsTotal = pendingClaims.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0);
 
     const heldCredit = detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0;
     const pauseExpiresAt = detail?.pauseExpiresAt || (detail?.pausedAt ? new Date(new Date(detail.pausedAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString() : null);
@@ -413,12 +476,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                 <div className="w-12" />
             </div>
 
-            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
+            <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
-                    <div className="py-20 text-center text-nature-500 font-medium">Loading treasury details…</div>
+                    <div className="py-20 text-center text-nature-500 font-medium">Loading enterprise details…</div>
                 ) : error ? (
                     <div className="p-6 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-center">
-                        <p className="font-bold mb-2">Error loading treasury</p>
+                        <p className="font-bold mb-2">Error loading enterprise</p>
                         <p className="text-sm">{error}</p>
                         <button
                             onClick={load}
@@ -428,7 +491,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         </button>
                     </div>
                 ) : !detail ? (
-                    <div className="py-20 text-center text-nature-500">Treasury not found.</div>
+                    <div className="py-20 text-center text-nature-500">Enterprise not found.</div>
                 ) : (
                     <>
                         {/* Identity Banner */}
@@ -441,7 +504,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 />
                             ) : (
                                 <div className="w-16 h-16 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-3xl border border-nature-200 dark:border-nature-700">
-                                    🏛️
+                                    {detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
@@ -449,7 +512,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     {name}
                                 </h1>
                                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 mt-0.5">
-                                    Community enterprise · run by the Commons
+                                    {detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}
                                 </p>
                             </div>
                         </div>
@@ -528,6 +591,95 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </p>
                             </div>
                         )}
+                        {/* Purpose Statement (docs/the-commons.md §2.1) */}
+                        {detail?.purpose && (
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-2">
+                                <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                    Purpose
+                                </div>
+                                <p className="text-sm text-nature-800 dark:text-nature-200 leading-relaxed">
+                                    {detail.purpose}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Funding Progress (for Bounded Enterprises with a goal) */}
+                        {detail.goalAmount != null && detail.goalAmount > 0 && (() => {
+                            const current = detail.currentAmount != null ? detail.currentAmount : Math.max(0, balance);
+                            const goal = detail.goalAmount;
+                            const progress = Math.min(100, (current / goal) * 100);
+                            const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
+                            const daysRemaining = getDaysRemaining(detail.deadlineAt);
+
+                            return (
+                                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
+                                    <div className="flex justify-between items-end">
+                                        <div>
+                                            <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                                Funding Progress
+                                            </div>
+                                            <div className={`text-2xl font-black mt-1 ${isFunded ? 'text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}>
+                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500">raised of {goal} 🫘 goal</span>
+                                            </div>
+                                        </div>
+                                        {daysRemaining && (
+                                            <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                                                daysRemaining === 'Expired'
+                                                    ? 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400'
+                                                    : 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                                            }`}>
+                                                ⏳ {daysRemaining}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="w-full bg-nature-100 dark:bg-nature-800 h-2.5 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${isFunded ? 'bg-emerald-500' : 'bg-emerald-600'}`}
+                                            style={{ width: `${progress}%` }}
+                                        />
+                                    </div>
+
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
+                                        {isFunded
+                                            ? "🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise account."
+                                            : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
+                                    </p>
+
+                                    {/* Inline Pledge Form */}
+                                    <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
+                                        <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                                            Back this initiative
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                placeholder="Amount (🫘)"
+                                                value={pledgeAmount}
+                                                onChange={(e) => setPledgeAmount(e.target.value)}
+                                                className="w-32 sm:w-36 min-w-[7.5rem] bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Memo (optional)"
+                                                value={pledgeMemo}
+                                                onChange={(e) => setPledgeMemo(e.target.value)}
+                                                className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-3 py-2 text-sm text-nature-900 dark:text-white placeholder-nature-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            />
+                                            <button
+                                                type="submit"
+                                                disabled={pledging || !pledgeAmount}
+                                                className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                            >
+                                                {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            );
+                        })()}
 
                         {/* Balance Card */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
@@ -582,6 +734,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     </div>
                                 </div>
                             </div>
+
+                            {pendingClaims.length > 0 && (
+                                <div className="mt-4 p-3.5 rounded-xl bg-nature-50 dark:bg-nature-800/50 border border-nature-200 dark:border-nature-700">
+                                    <div className="flex justify-between items-center text-xs">
+                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                            Pending Wage Claims ({pendingClaims.length})
+                                        </span>
+                                        <span className="font-black text-amber-500 dark:text-amber-400 text-sm">
+                                            {pendingClaimsTotal} 🫘
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 leading-relaxed">
+                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Action feedback alert */}
@@ -988,6 +1156,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                         )}
                                     </div>
                                 )}
+
+                                {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                    <div className="pt-4 border-t border-emerald-500/20">
+                                        <button
+                                            type="button"
+                                            onClick={handleCancelInitiative}
+                                            disabled={cancelling}
+                                            className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            <span aria-hidden="true">🛑</span>
+                                            {cancelling ? 'Cancelling & Refunding Backers…' : 'Cancel Initiative & Refund Escrow'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1000,7 +1182,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => (
                                         <div
-                                            key={k.publicKey}
+                                            key={k.publicKey || k.pubkey}
                                             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200"
                                         >
                                             <span aria-hidden="true">👤</span>
@@ -1238,6 +1420,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             )}
                         </div>
+
+                        {/* Report Enterprise Action */}
+                        <div className="pt-4 border-t border-nature-200 dark:border-nature-800 flex justify-center">
+                            <button
+                                type="button"
+                                onClick={() => setShowReportModal(true)}
+                                className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                            >
+                                <span aria-hidden="true">🛡️</span> Report Enterprise
+                            </button>
+                        </div>
                     </>
                 )}
             </div>
@@ -1384,6 +1577,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         </form>
                     </div>
                 </div>
+            )}
+
+            {showReportModal && identity && (
+                <ReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    reporterPubkey={identity.publicKey}
+                    targetPubkey={pubkey}
+                    targetName={name}
+                />
             )}
         </div>
     );

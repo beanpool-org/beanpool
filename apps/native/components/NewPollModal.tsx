@@ -160,6 +160,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             hitSlop={12}
                             style={[styles.postBtn, submitting && { opacity: 0.5 }]}
                             accessibilityRole="button"
+                            accessibilityLabel={submitting ? "Creating poll" : "Create poll"}
+                            accessibilityHint="Publishes your community poll"
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color="#fff" />

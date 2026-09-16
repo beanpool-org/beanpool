@@ -1,5 +1,9 @@
-import React, { useState } from 'react';
-import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getMemberDisplayName, getMemberAvatar, getMemberRawAvatar, fmtDate, fmtLastActive } from './MembersModule';
+import { PruneBranchModal } from './PruneBranchModal';
+import { Avatar } from '../common/Avatar';
+
+export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
 export interface MemberModalItem {
     publicKey?: string;
@@ -7,6 +11,7 @@ export interface MemberModalItem {
     platform?: string;
     canVouch?: boolean;
     standing?: string;
+    nodeRole?: MemberNodeRole | null;
     vouched_by_pubkey?: string;
     joinedAt?: string;
     joined_at?: string;
@@ -20,19 +25,26 @@ export interface MemberFlag {
     type?: string;
     description?: string;
     severity?: string;
+    [key: string]: unknown;
 }
 
 interface MemberDetailModalProps {
     member: MemberModalItem | null;
     profiles?: Record<string, unknown>[];
     flags?: MemberFlag[];
+    members?: any[];
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     isFrozen: boolean;
     isVoucher?: boolean;
     isOperator?: boolean;
+    nodeRole?: MemberNodeRole | null;
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onPrune?: (pubkey: string) => void;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onClose: () => void;
 }
 
@@ -40,20 +52,44 @@ export function MemberDetailModal({
     member,
     profiles = [],
     flags = [],
+    members = [],
+    accounts,
     isFrozen,
     isVoucher,
     isOperator,
+    nodeRole,
     onToggleFreeze,
     onToggleVouch,
     onToggleOperator,
+    onGrantNodeRole,
+    onRevokeNodeRole,
     onPrune,
+    onPruneBranch,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
     const [revokedVouch, setRevokedVouch] = useState(false);
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
+    const [showPruneBranch, setShowPruneBranch] = useState(false);
+    const [roleLoading, setRoleLoading] = useState(false);
+    const [roleError, setRoleError] = useState<string | null>(null);
+    const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
 
     const pubkey = member?.publicKey || member?.pubkey || '';
+    const [localRole, setLocalRole] = useState<MemberNodeRole | null>(
+        () => (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null
+    );
+
+    const hasChildren = useMemo(() => {
+        if (!Array.isArray(members) || !pubkey) return false;
+        return members.some((m) => m && (m.invitedBy === pubkey || (m as any).invited_by === pubkey));
+    }, [members, pubkey]);
+
+    useEffect(() => {
+        setLocalRole((nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null);
+    }, [nodeRole, member?.nodeRole]);
+
+    const currentRole = localRole;
     const displayName = getMemberDisplayName(member, profiles);
     const initial = displayName.charAt(0).toUpperCase();
 
@@ -70,6 +106,48 @@ export function MemberDetailModal({
         setTimeout(() => setCopiedPubkey(false), 2000);
     };
 
+    const handleGrantRole = async (targetRole: MemberNodeRole) => {
+        if (!pubkey || !onGrantNodeRole) return;
+        setRoleLoading(true);
+        setRoleError(null);
+        setRoleSuccess(null);
+        try {
+            await onGrantNodeRole(pubkey, targetRole);
+            setLocalRole(targetRole);
+            setRoleSuccess(`Granted ${targetRole} role successfully`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
+                setRoleError('⚠️ Protocol Guard: Cannot remove or demote the last owner. Appoint another owner first.');
+            } else {
+                setRoleError(msg);
+            }
+        } finally {
+            setRoleLoading(false);
+        }
+    };
+
+    const handleRevokeRole = async () => {
+        if (!pubkey || !currentRole || !onRevokeNodeRole) return;
+        setRoleLoading(true);
+        setRoleError(null);
+        setRoleSuccess(null);
+        try {
+            await onRevokeNodeRole(pubkey, currentRole);
+            setLocalRole(null);
+            setRoleSuccess(`Revoked ${currentRole} role successfully`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (msg.includes('last owner') || msg.includes('Cannot remove the last owner')) {
+                setRoleError('⚠️ Protocol Guard: Cannot remove the last owner. The community must have at least one owner. Appoint another owner before revoking.');
+            } else {
+                setRoleError(msg);
+            }
+        } finally {
+            setRoleLoading(false);
+        }
+    };
+
     // Calculate synthetic or real trust metrics
     const trustScore = isFrozen ? 12 : activeMemberFlags.length > 0 ? 38 : member?.canVouch ? 96 : 78;
 
@@ -80,27 +158,16 @@ export function MemberDetailModal({
                 {/* Modal Header */}
                 <div className="flex items-start justify-between border-b border-nature-800 pb-4">
                     <div className="flex items-center gap-3.5">
-                        {(() => {
-                            const avatar = getMemberAvatar(member, profiles);
-                            if (avatar) {
-                                return (
-                                    <img
-                                        src={avatar}
-                                        alt={displayName}
-                                        className="w-12 h-12 rounded-2xl object-cover shrink-0 border border-terra-500/40 shadow-md"
-                                    />
-                                );
-                            }
-                            return (
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border ${
-                                    isFrozen
-                                        ? 'bg-red-950/80 text-red-400 border-red-800/80'
-                                        : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
-                                }`}>
-                                    {initial}
-                                </div>
-                            );
-                        })()}
+                        <Avatar
+                            src={getMemberRawAvatar(member, profiles as any)}
+                            alt={displayName}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center font-extrabold text-lg border shrink-0 overflow-hidden shadow-md ${
+                                isFrozen
+                                    ? 'bg-red-950/80 text-red-400 border-red-800/80'
+                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/40'
+                            }`}
+                            fallbackGlyph={initial}
+                        />
                         <div>
                             <h3 className="text-lg font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>{displayName}</span>
@@ -119,6 +186,19 @@ export function MemberDetailModal({
                                             : member.platform.toLowerCase() === 'android'
                                             ? '🤖 Android'
                                             : '🌐 PWA'}
+                                    </span>
+                                )}
+                                {currentRole && (
+                                    <span
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                                            currentRole === 'owner'
+                                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                                : currentRole === 'admin'
+                                                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                                                : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                        }`}
+                                    >
+                                        {currentRole === 'owner' ? '👑 Owner' : currentRole === 'admin' ? '⚡ Admin' : '🛡️ Moderator'}
                                     </span>
                                 )}
                                 {isFrozen && (
@@ -208,6 +288,104 @@ export function MemberDetailModal({
                                 {fmtLastActive(member?.lastActiveAt || member?.last_active_at || member?.last_seen)}
                             </span>
                         </div>
+                    </div>
+                </div>
+
+                {/* Node Role & Authority Section */}
+                <div className="bg-nature-900/80 border border-nature-800 p-4 rounded-2xl space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-nature-400 block">
+                            Node Authority &amp; Role
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                            currentRole === 'owner'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : currentRole === 'admin'
+                                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                                : currentRole === 'moderator'
+                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                                : 'bg-nature-900 text-nature-400 border-nature-800'
+                        }`}>
+                            {currentRole === 'owner'
+                                ? '👑 Owner'
+                                : currentRole === 'admin'
+                                ? '⚡ Admin'
+                                : currentRole === 'moderator'
+                                ? '🛡️ Moderator'
+                                : 'No Node Role'}
+                        </span>
+                    </div>
+
+                    {currentRole === 'owner' && (
+                        <div className="text-[11px] text-amber-300/90 bg-amber-950/30 border border-amber-800/40 rounded-xl p-2.5 flex items-start gap-2">
+                            <span>🛡️</span>
+                            <span>
+                                <strong>Last-owner guard active:</strong> The node requires at least one active owner. Demoting or revoking the sole owner is blocked by protocol invariant.
+                            </span>
+                        </div>
+                    )}
+
+                    {roleError && (
+                        <div className="p-3 bg-red-950/80 border border-red-800 rounded-xl text-xs text-red-200 space-y-1">
+                            <span className="font-bold block">Action Blocked</span>
+                            <p className="m-0 text-[11px] font-mono">{roleError}</p>
+                        </div>
+                    )}
+
+                    {roleSuccess && (
+                        <div className="p-2.5 bg-emerald-950/60 border border-emerald-800 rounded-xl text-xs text-emerald-300 font-medium">
+                            ✓ {roleSuccess}
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="text-[11px] text-nature-400 mr-1">Assign role:</span>
+                        <button
+                            type="button"
+                            disabled={roleLoading || isFrozen || currentRole === 'owner'}
+                            onClick={() => handleGrantRole('owner')}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                currentRole === 'owner'
+                                    ? 'bg-amber-950/50 text-amber-300/50 border-amber-900/40 cursor-default'
+                                    : 'bg-nature-950 text-amber-300 border-amber-600/50 hover:bg-amber-950 hover:border-amber-500'
+                            }`}
+                        >
+                            👑 Grant Owner
+                        </button>
+                        <button
+                            type="button"
+                            disabled={roleLoading || isFrozen || currentRole === 'admin'}
+                            onClick={() => handleGrantRole('admin')}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                currentRole === 'admin'
+                                    ? 'bg-sky-950/50 text-sky-300/50 border-sky-900/40 cursor-default'
+                                    : 'bg-nature-950 text-sky-300 border-sky-600/50 hover:bg-sky-950 hover:border-sky-500'
+                            }`}
+                        >
+                            ⚡ Grant Admin
+                        </button>
+                        <button
+                            type="button"
+                            disabled={roleLoading || isFrozen || currentRole === 'moderator'}
+                            onClick={() => handleGrantRole('moderator')}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                currentRole === 'moderator'
+                                    ? 'bg-purple-950/50 text-purple-300/50 border-purple-900/40 cursor-default'
+                                    : 'bg-nature-950 text-purple-300 border-purple-600/50 hover:bg-purple-950 hover:border-purple-500'
+                            }`}
+                        >
+                            🛡️ Grant Moderator
+                        </button>
+                        {currentRole && (
+                            <button
+                                type="button"
+                                disabled={roleLoading || isFrozen}
+                                onClick={handleRevokeRole}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-red-300 bg-red-950/40 border border-red-800/80 hover:bg-red-900/50 transition-all ml-auto"
+                            >
+                                {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -316,11 +494,35 @@ export function MemberDetailModal({
                                     <span>🗑️ Prune Account</span>
                                 </button>
                             )}
+
+                            {onPruneBranch && hasChildren && (
+                                <button
+                                    onClick={() => setShowPruneBranch(true)}
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-200 border-red-700 text-[11px]"
+                                    title="Prune this member and all invitees in their subtree"
+                                >
+                                    <span>🗑️ Prune Branch</span>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
 
             </div>
+
+            {showPruneBranch && (
+                <PruneBranchModal
+                    rootMember={member as any}
+                    members={members}
+                    accounts={accounts}
+                    onConfirm={async (pk) => {
+                        await onPruneBranch?.(pk);
+                        onClose();
+                    }}
+                    onClose={() => setShowPruneBranch(false)}
+                />
+            )}
         </div>
     );
 }
+

@@ -44,16 +44,19 @@ CREATE TABLE IF NOT EXISTS members (
     -- Enterprise Credit Model (Rules 6 & 7)
     earned_surplus REAL DEFAULT 0,
     working_capital_ceiling REAL DEFAULT NULL,
+    -- Grandfathered credit floor for enterprises (docs/the-commons.md §2.4, §6 Slice 4).
+    -- Auto-cleared once keepers' pledges exceed it.
+    legacy_credit_floor REAL DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
     archetype TEXT,
     -- Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
     purpose TEXT,
-    goal_amount REAL DEFAULT NULL,
+    goal_amount REAL DEFAULT NULL CHECK (goal_amount IS NULL OR goal_amount >= 0),
     deadline_at DATETIME DEFAULT NULL,
-    lifecycle TEXT DEFAULT 'ongoing',
-    paused INTEGER DEFAULT 0,
+    lifecycle TEXT DEFAULT 'ongoing' CHECK (lifecycle IN ('ongoing', 'bounded')),
+    paused INTEGER DEFAULT 0 CHECK (paused IN (0, 1)),
     paused_at DATETIME,
     paused_by TEXT,
     paused_floor_snapshot REAL,
@@ -233,7 +236,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- Marketplace hygiene: when a lingering escrow deal was last nudged. Same reasoning as
     -- invite_codes.genesis_type above — the ALTER runs pre-exec, so a fresh database gets the
     -- column from here or not at all.
-    last_reminded_at DATETIME
+    last_reminded_at DATETIME,
+    -- Escrow dispute arbitration (§5 item 2, §6 correction 2): resolution type, timestamp and acting admin
+    dispute_resolution TEXT,
+    dispute_resolved_at DATETIME,
+    dispute_resolved_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -341,11 +348,13 @@ CREATE TABLE IF NOT EXISTS projects (
     deadline_at DATETIME,
     status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'FUNDED', 'FAILED', 'COMPLETED'
     migrated_at DATETIME,
-    enterprise_pubkey TEXT,
+    enterprise_pubkey TEXT REFERENCES members(public_key),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
+CREATE INDEX IF NOT EXISTS idx_projects_unmigrated ON projects(id) WHERE migrated_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_enterprise ON projects(enterprise_pubkey);
 
 -- 10. Invite Links (Deferred Deep Linking Shortener)
 CREATE TABLE IF NOT EXISTS invite_links (
@@ -561,7 +570,9 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key
+    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
+    legacy_credit_floor,
+    purpose, goal_amount, deadline_at, lifecycle, paused
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -731,10 +742,12 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- role CHECK IN ('owner', 'admin').
 -- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
 CREATE TABLE IF NOT EXISTS node_roles (
-    member_pubkey TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
-    role          TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
-    granted_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    granted_by    TEXT
+    member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+    role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
+    granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    granted_by       TEXT,
+    session_epoch    INTEGER NOT NULL DEFAULT 0,
+    break_glass_hash TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 
@@ -970,7 +983,7 @@ CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
 -- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).
 CREATE TABLE IF NOT EXISTS activity_feed (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created')),
+    event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created', 'dispute_resolved')),
     actor_pubkey  TEXT NOT NULL,
     target_pubkey TEXT,
     metadata      TEXT,
@@ -1106,7 +1119,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     execution_error      TEXT,
     execution_reason     TEXT,
     admin_halted_at      DATETIME,
-    admin_halted_by      TEXT REFERENCES members(public_key),
+    admin_halted_by      TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     admin_halt_reason    TEXT,
     updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1114,17 +1127,35 @@ CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
 CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
+CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     voter_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     support       INTEGER NOT NULL CHECK (support IN (0, 1)),
-    weight        REAL NOT NULL DEFAULT 1,
-    credits_used  REAL NOT NULL DEFAULT 1,
+    weight        REAL NOT NULL DEFAULT 1 CHECK (weight >= 0),
+    credits_used  REAL NOT NULL DEFAULT 1 CHECK (credits_used >= 0),
     signature     TEXT,
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (decision_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
-CREATE INDEX IF NOT EXISTS idx_decision_votes_decision ON decision_votes(decision_id);
+-- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix
+
+-- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
+-- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.
+-- Counted once across enterprises; locked if enterprise is in deficit.
+CREATE TABLE IF NOT EXISTS enterprise_pledges (
+    id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL REFERENCES members(public_key),
+    enterprise TEXT NOT NULL REFERENCES members(public_key),
+    amount REAL NOT NULL CHECK (amount > 0),
+    pledged_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    released_at DATETIME DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_enterprise ON enterprise_pledges(enterprise, released_at);
+CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_keeper ON enterprise_pledges(keeper, released_at);

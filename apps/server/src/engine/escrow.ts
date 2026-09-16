@@ -852,3 +852,250 @@ export function cancelPostTransaction(
 
     return tx;
 }
+
+export type EscrowDisputeAction = 'release_to_seller' | 'refund_to_buyer' | 'split';
+
+export function resolveEscrowDispute(
+    cb: EscrowCallbacks,
+    transactionId: string,
+    action: EscrowDisputeAction,
+    adminSigner: string,
+    opts?: { reason?: string }
+): MarketplaceTransaction {
+    if (!['release_to_seller', 'refund_to_buyer', 'split'].includes(action)) {
+        throw new Error("Invalid dispute resolution action. Must be 'release_to_seller', 'refund_to_buyer', or 'split'.");
+    }
+
+    if (!adminSigner || typeof adminSigner !== 'string' || !adminSigner.trim()) {
+        throw new Error('Missing admin authSigner for escrow dispute resolution');
+    }
+
+    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
+    if (!row) {
+        throw new Error('Transaction not found or not in pending escrow');
+    }
+
+    const post = db.prepare('SELECT * FROM posts WHERE id=?').get(row.post_id) as any;
+    const authSigner = adminSigner.trim();
+    const completedAt = new Date().toISOString();
+    const reasonText = opts?.reason ? ` (Reason: ${opts.reason})` : '';
+
+    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const sellerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.seller_pubkey) as any;
+
+    let buyerShare = 0;
+    let sellerShare = 0;
+
+    if (action === 'release_to_seller') {
+        sellerShare = row.credits;
+    } else if (action === 'refund_to_buyer') {
+        buyerShare = row.credits;
+    } else if (action === 'split') {
+        buyerShare = Math.round((row.credits / 2) * 100) / 100;
+        sellerShare = Math.round((row.credits - buyerShare) * 100) / 100;
+    }
+
+    cb.conservingTransaction(() => {
+        const updateStatus = action === 'refund_to_buyer' ? 'cancelled' : 'completed';
+        const updateRes = db.prepare(`
+            UPDATE marketplace_transactions
+            SET status = ?, completed_at = ?, dispute_resolution = ?, dispute_resolved_at = ?, dispute_resolved_by = ?
+            WHERE id = ? AND status = 'pending'
+        `).run(updateStatus, completedAt, action, completedAt, authSigner, transactionId);
+
+        if (updateRes.changes === 0) {
+            throw new Error('Transaction is no longer in pending state');
+        }
+
+        // Ledger transfers carrying auth_signer
+        if (action === 'release_to_seller') {
+            const releaseResult = cb.transfer(
+                `escrow_${row.id}`,
+                row.seller_pubkey,
+                sellerShare,
+                `Dispute arbitrated by admin (${authSigner}): released to seller for ${row.post_id}${reasonText}`,
+                'escrow',
+                false,
+                { signer: authSigner }
+            );
+            if (!releaseResult) throw new Error('Failed to release escrow funds to seller');
+
+            if (sellerMember?.is_treasury === 1) {
+                const isBuyerKeeper = Boolean(
+                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                        .get(row.seller_pubkey, row.buyer_pubkey)
+                );
+                if (!isBuyerKeeper) {
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        .run(sellerShare, row.seller_pubkey);
+                }
+            }
+
+            if (post && !post.repeatable) {
+                db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
+            } else if (post && post.repeatable) {
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            }
+        } else if (action === 'refund_to_buyer') {
+            const refundResult = cb.transfer(
+                `escrow_${row.id}`,
+                row.buyer_pubkey,
+                buyerShare,
+                `Dispute arbitrated by admin (${authSigner}): refunded to buyer for ${row.post_id}${reasonText}`,
+                'escrow',
+                true,
+                { signer: authSigner }
+            );
+            if (!refundResult) throw new Error('Failed to refund escrow funds to buyer');
+
+            if (buyerMember?.is_treasury === 1) {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'")
+                    .run(transactionId);
+                const isPayeeKeeper = Boolean(
+                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                        .get(row.buyer_pubkey, row.seller_pubkey)
+                );
+                if (isPayeeKeeper) {
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        .run(row.credits, row.buyer_pubkey);
+                }
+            }
+
+            if (post) {
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            }
+        } else if (action === 'split') {
+            // Buyer refund half (fee-exempt)
+            if (buyerShare > 0) {
+                const refundRes = cb.transfer(
+                    `escrow_${row.id}`,
+                    row.buyer_pubkey,
+                    buyerShare,
+                    `Dispute arbitrated by admin (${authSigner}): 50% split refund to buyer for ${row.post_id}${reasonText}`,
+                    'escrow',
+                    true,
+                    { signer: authSigner }
+                );
+                if (!refundRes) throw new Error('Failed to execute buyer refund half of split');
+            }
+
+            // Seller payout half (standard fee)
+            if (sellerShare > 0) {
+                const payoutRes = cb.transfer(
+                    `escrow_${row.id}`,
+                    row.seller_pubkey,
+                    sellerShare,
+                    `Dispute arbitrated by admin (${authSigner}): 50% split payout to seller for ${row.post_id}${reasonText}`,
+                    'escrow',
+                    false,
+                    { signer: authSigner }
+                );
+                if (!payoutRes) throw new Error('Failed to execute seller payout half of split');
+
+                if (sellerMember?.is_treasury === 1) {
+                    const isBuyerKeeper = Boolean(
+                        db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                            .get(row.seller_pubkey, row.buyer_pubkey)
+                    );
+                    if (!isBuyerKeeper) {
+                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                            .run(sellerShare, row.seller_pubkey);
+                    }
+                }
+            }
+
+            if (buyerMember?.is_treasury === 1) {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'")
+                    .run(transactionId);
+                const isPayeeKeeper = Boolean(
+                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                        .get(row.buyer_pubkey, row.seller_pubkey)
+                );
+                if (isPayeeKeeper) {
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        .run(buyerShare, row.buyer_pubkey);
+                }
+            }
+
+            if (post && !post.repeatable) {
+                db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
+            } else if (post && post.repeatable) {
+                db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ?`).run(completedAt, row.post_id);
+            }
+        }
+    });
+
+    // Wage claims and ceiling sweep executed outside conservingTransaction to prevent nested transactions
+    if (sellerMember?.is_treasury === 1 && (action === 'release_to_seller' || (action === 'split' && sellerShare > 0))) {
+        if (cb.processDeferredWageClaims) cb.processDeferredWageClaims(row.seller_pubkey);
+        if (cb.sweepEnterpriseCeiling) cb.sweepEnterpriseCeiling(row.seller_pubkey);
+    }
+
+    const tx = getMarketplaceTransaction(db, transactionId)!;
+    cb.broadcast({ type: 'dispute_resolved', transactionId, action, authSigner, transaction: tx });
+
+    // Public record on both parties' activity views
+    try {
+        recordActivity('dispute_resolved', authSigner, row.buyer_pubkey, {
+            postId: row.post_id,
+            postTitle: post?.title,
+            transactionId: row.id,
+            resolution: action,
+            credits: row.credits,
+            counterpartyPubkey: row.seller_pubkey,
+            counterpartyCallsign: sellerMember?.callsign || 'counterparty',
+            role: 'buyer',
+            authSigner,
+            reason: opts?.reason
+        });
+        recordActivity('dispute_resolved', authSigner, row.seller_pubkey, {
+            postId: row.post_id,
+            postTitle: post?.title,
+            transactionId: row.id,
+            resolution: action,
+            credits: row.credits,
+            counterpartyPubkey: row.buyer_pubkey,
+            counterpartyCallsign: buyerMember?.callsign || 'counterparty',
+            role: 'seller',
+            authSigner,
+            reason: opts?.reason
+        });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record dispute_resolved:', e);
+    }
+
+    // Chat context system message
+    try {
+        cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_DISPUTE_RESOLVED, {
+            postId: row.post_id,
+            transactionId: row.id,
+            resolution: action,
+            amount: row.credits,
+            actorPubkey: authSigner,
+            authSigner,
+            buyerPubkey: row.buyer_pubkey,
+            sellerPubkey: row.seller_pubkey,
+            reason: opts?.reason
+        }, row.buyer_pubkey, row.seller_pubkey);
+    } catch (e) {
+        console.warn('[Marketplace] ESCROW_DISPUTE_RESOLVED system message failed:', e);
+    }
+
+    // Push notification to both parties
+    const actionLabel = action === 'release_to_seller'
+        ? 'released to seller'
+        : action === 'refund_to_buyer'
+        ? 'refunded to buyer'
+        : 'split 50/50';
+
+    cb.dispatchPushNotification(
+        [row.buyer_pubkey, row.seller_pubkey],
+        authSigner,
+        '⚖️ Escrow Dispute Resolved',
+        `Dispute arbitrated by admin (${authSigner}): ${actionLabel} for "${post?.title || 'deal'}"`,
+        { screen: 'post', postId: row.post_id },
+        'escrow'
+    );
+
+    return tx;
+}

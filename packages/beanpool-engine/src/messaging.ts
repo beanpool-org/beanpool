@@ -15,7 +15,8 @@ export enum SystemMessageType {
     REVIEW_LEFT = 'REVIEW_LEFT',
     COMMONS_GRANT = 'COMMONS_GRANT',
     VOUCH_GRANTED = 'VOUCH_GRANTED',
-    VOUCH_REVOKED = 'VOUCH_REVOKED'
+    VOUCH_REVOKED = 'VOUCH_REVOKED',
+    ESCROW_DISPUTE_RESOLVED = 'ESCROW_DISPUTE_RESOLVED'
 }
 
 export type SystemMessageTypeVal = SystemMessageType | string;
@@ -31,6 +32,10 @@ export interface TypedMessagePayload {
     targetPubkey?: string;
     vouchLevel?: number;
     creditFloor?: number;
+    resolution?: string;
+    authSigner?: string;
+    reason?: string;
+    transactionId?: string;
 }
 
 export interface Message {

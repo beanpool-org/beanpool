@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
-import { getLocalConfig, updateLocalConfig, verifyPasswordAsync } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
+import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -11,13 +12,122 @@ let adminAuthFailures = 0;
 let adminFailWindowStart = Date.now();
 const ADMIN_FAIL_WINDOW_MS = 60_000;
 
+function getBearerToken(ctx: any): string | null {
+    const authHeader = (typeof ctx.get === 'function' ? ctx.get('authorization') : null) ||
+        ctx.request?.headers?.['authorization'] || ctx.headers?.['authorization'];
+    if (authHeader && typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+        return authHeader.slice(7).trim();
+    }
+    return null;
+}
+
 export async function checkAdminAuth(ctx: any): Promise<boolean> {
+    // 1. Key-Based Session Authentication (docs/admin-surface.md §2.1, §2.3)
+    const keySessionToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'] ||
+        getBearerToken(ctx);
+
+    if (keySessionToken) {
+        const sessionRes = validateAdminSession(keySessionToken);
+        if (sessionRes.valid && sessionRes.session) {
+            // Attribution: every admin action performed under a key session is attributed
+            // to that member (auth_signer = their pubkey), replacing 'owner:password'
+            if (!ctx.state) ctx.state = {};
+            ctx.state.actor = sessionRes.session.memberPubkey;
+            ctx.state.auth_signer = sessionRes.session.memberPubkey;
+            ctx.state.adminRole = sessionRes.session.role;
+            ctx.state.isKeySession = true;
+
+            // #133: CSRF validation for mutating requests with cookie session (or if header provided)
+            const reqPath = ctx.path || ctx.request?.path || '';
+            const isMutatingMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(ctx.method?.toUpperCase());
+            const hasCookieSession = Boolean(ctx.cookies && typeof ctx.cookies.get === 'function' && ctx.cookies.get('admin_session'));
+            const csrfHeader = (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
+                ctx.request?.headers?.['x-csrf-token'] || ctx.headers?.['x-csrf-token'];
+            if (hasCookieSession && isMutatingMethod && reqPath !== '/api/local/admin/csrf-token') {
+                if (!csrfHeader || !validateCsrfToken(ctx)) {
+                    ctx.status = 403;
+                    ctx.body = { error: 'Invalid or missing CSRF token' };
+                    return false;
+                }
+            } else if (csrfHeader && !validateCsrfToken(ctx)) {
+                ctx.status = 403;
+                ctx.body = { error: 'Invalid or expired CSRF token' };
+                return false;
+            }
+
+            return true;
+        } else {
+            const hasExplicitCreds =
+                (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
+                ctx.request?.headers?.['x-admin-password'] ||
+                ctx.headers?.['x-admin-password'] ||
+                ctx.request?.headers?.['x-break-glass-code'] ||
+                ctx.headers?.['x-break-glass-code'] ||
+                ctx.requestBody?.password ||
+                ctx.request?.body?.password ||
+                ctx.requestBody?.breakGlassCode ||
+                ctx.request?.body?.breakGlassCode;
+
+            if (hasExplicitCreds) {
+                if (ctx.cookies?.set) ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+            } else {
+                ctx.status = 401;
+                ctx.body = { error: sessionRes.error || 'Invalid or expired admin session', sessionExpired: true };
+                return false;
+            }
+        }
+    }
+
+    // 2. Break-glass mode enforcement (docs/admin-surface.md §2.2, §2.4)
+    // When breakGlassMode is enabled, password and break-glass credentials can ONLY reach key enrolment!
+    const isBreakGlass = isBreakGlassMode();
+    const reqPath = ctx.path || ctx.request?.path || '';
+    const isEnrolment = reqPath === '/api/local/admin/auth/enrol' ||
+                        reqPath === '/api/local/admin/auth/break-glass/enrol' ||
+                        reqPath === '/api/local/admin/auth/break-glass/status' ||
+                        reqPath === '/api/local/admin/auth/break-glass-status';
+
+    if (isBreakGlass && !isEnrolment) {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Break-glass mode active: password authentication restricted to key enrolment only',
+            breakGlassMode: true,
+        };
+        return false;
+    }
+
+    // 3. Password / Break-glass Code Authentication
     const config = getLocalConfig();
-    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) || ctx.request?.headers?.['x-admin-password'] || ctx.headers?.['x-admin-password'];
-    // #130: Password must travel in X-Admin-Password header or request body only, NEVER in URL query params.
-    const password = ctx.requestBody?.password || ctx.request?.body?.password || headerPass;
-    const ok = !!password && !!config.adminHash && !!config.salt
-        && await verifyPasswordAsync(password as string, config.adminHash, config.salt);
+    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-break-glass-code') : null) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+    // #130: Password must travel in headers or request body only, NEVER in URL query params.
+    const rawPass = ctx.requestBody?.password || ctx.request?.body?.password ||
+                    ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode || headerPass;
+    const password = rawPass ? String(rawPass).trim() : null;
+
+    let ok = false;
+    let breakGlassOwner: string | null = null;
+
+    if (password) {
+        if (config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
+            ok = true;
+        } else {
+            const ownerMatch = verifyBreakGlassCode(password);
+            if (ownerMatch) {
+                ok = true;
+                breakGlassOwner = ownerMatch.member_pubkey;
+            }
+        }
+    }
+
     if (!ok) {
         const now = Date.now();
         if (now - adminFailWindowStart > ADMIN_FAIL_WINDOW_MS) { adminAuthFailures = 0; adminFailWindowStart = now; }
@@ -27,6 +137,14 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return false;
+    }
+
+    if (!ctx.state) ctx.state = {};
+    if (!ctx.state.adminRole) ctx.state.adminRole = 'owner';
+    if (breakGlassOwner) {
+        ctx.state.actor = breakGlassOwner;
+        ctx.state.auth_signer = breakGlassOwner;
+        ctx.state.isBreakGlassAuth = true;
     }
     // #133: If a CSRF token is present, validate it as defence-in-depth BEFORE state mutations (like 2FA backup code consumption).
     const csrfHeader: string | undefined =

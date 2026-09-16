@@ -31,6 +31,8 @@ import {
     PulseThumbnailCache,
     PulseThumbnailDiskStore,
     MAX_THUMBNAIL_BYTES,
+    extractInstagramEmbedUrl,
+    extractThumbnailFromEmbedHtml,
     type ThumbnailResult,
 } from './engine/pulse-thumbnail.js';
 import {
@@ -131,14 +133,26 @@ function makeChannel(ownerPubkey: string, platform = 'youtube'): string {
 
 function makePulseItem(channelId: string, ownerPubkey: string, opts: {
     id?: string;
+    platform?: string;
+    url?: string | null;
+    externalId?: string | null;
     thumbnailUrl?: string | null;
     deletedAt?: string | null;
 } = {}): string {
     const id = opts.id || ('item_' + crypto.randomBytes(8).toString('hex'));
     db.prepare(
-        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, title, thumbnail_url, category, source, created_at, updated_at, deleted_at)
-         VALUES (?, ?, ?, 'youtube', 'https://youtube.com/watch?v=1', 'Test Item', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`
-    ).run(id, channelId, ownerPubkey, opts.thumbnailUrl ?? null, opts.deletedAt ?? null);
+        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, external_id, title, thumbnail_url, category, source, created_at, updated_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'Test Item', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`
+    ).run(
+        id,
+        channelId,
+        ownerPubkey,
+        opts.platform ?? 'youtube',
+        opts.url ?? 'https://youtube.com/watch?v=1',
+        opts.externalId ?? null,
+        opts.thumbnailUrl ?? null,
+        opts.deletedAt ?? null
+    );
     return id;
 }
 
@@ -153,6 +167,9 @@ async function main(): Promise<void> {
     // 1. Mock fetcher tracking call count
     let upstreamFetchCount = 0;
     const sampleJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+
+    let lastEmbedUserAgent: string | undefined;
+    let tombstoneMidRecoveryId = '';
 
     const mockFetchFn = async (url: string, opts?: any): Promise<SsrfSafeResponse> => {
         upstreamFetchCount++;
@@ -184,6 +201,71 @@ async function main(): Promise<void> {
                 url,
                 buffer: async () => Buffer.from('URL signature expired'),
                 text: async () => 'URL signature expired',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        // Simulate Instagram embed page recovery
+        if (url.includes('instagram.com/p/RECOVER123/embed/')) {
+            lastEmbedUserAgent = opts?.headers?.['User-Agent'];
+            const embedHtml = `
+                <!DOCTYPE html>
+                <html><body>
+                <div class="EmbeddedMedia">
+                    <img class="EmbeddedMediaImage" src="https://cdn.instagram.com/fresh-recovered.jpg" />
+                </div>
+                </body></html>
+            `;
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from(embedHtml),
+                text: async () => embedHtml,
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('instagram.com/p/UNRECOVERABLE/embed/')) {
+            return {
+                status: 404,
+                statusText: 'Not Found',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from('Not found'),
+                text: async () => 'Not found',
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('instagram.com/p/TOMBSTONE_MID/embed/')) {
+            const embedHtml = `
+                <div class="EmbeddedMedia">
+                    <img class="EmbeddedMediaImage" src="https://cdn.instagram.com/fresh-tombstone.jpg" />
+                </div>
+            `;
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'text/html' },
+                url,
+                buffer: async () => Buffer.from(embedHtml),
+                text: async () => embedHtml,
+                json: async <T = any>(): Promise<T> => ({} as T),
+            };
+        }
+
+        if (url.includes('fresh-tombstone.jpg')) {
+            // Simulate item deletion occurring while fresh image download is in flight
+            scrubPulseItems({ id: tombstoneMidRecoveryId }, new Date().toISOString());
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'image/jpeg' },
+                url,
+                buffer: async () => sampleJpeg,
+                text: async () => sampleJpeg.toString(),
                 json: async <T = any>(): Promise<T> => ({} as T),
             };
         }
@@ -274,6 +356,21 @@ async function main(): Promise<void> {
     });
     const resNoThumb = await callRouter(router, 'GET', `/api/pulse/items/${noThumbItemId}/thumbnail`);
     assert(resNoThumb.status === 404, 'Item with no thumbnail_url is refused with 404');
+    assert(thumbnailService.cache.getNegative(noThumbItemId)?.status === 404, 'Negative cache records 404 for item with no thumbnail_url');
+
+    // Concurrent requests for item without thumbnail are coalesced
+    const noThumbCoalesceId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/NO_THUMB_COALESCE/',
+        externalId: 'NO_THUMB_COALESCE',
+        thumbnailUrl: null,
+    });
+    const [coalesceRes1, coalesceRes2] = await Promise.all([
+        callRouter(router, 'GET', `/api/pulse/items/${noThumbCoalesceId}/thumbnail`),
+        callRouter(router, 'GET', `/api/pulse/items/${noThumbCoalesceId}/thumbnail`),
+    ]);
+    assert(coalesceRes1.status === 404 && coalesceRes2.status === 404, 'Concurrent requests for missing thumbnail coalesce and return 404');
+    assert(thumbnailService.cache.getNegative(noThumbCoalesceId)?.status === 404, 'Coalesced recovery sets negative cache 404');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Requirement 7.3: An over-size upstream is refused
@@ -314,6 +411,104 @@ async function main(): Promise<void> {
     const resExpiredRetry = await callRouter(router, 'GET', `/api/pulse/items/${expiredItemId}/thumbnail`);
     assert(resExpiredRetry.status >= 400, 'Retry of failed thumbnail returns failure');
     assert(upstreamFetchCount === fetchCountBefore, 'Negative cache prevented re-fetching dead upstream in tight loop');
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Automatic recovery of expired Instagram CDN thumbnails via embed page
+    // ──────────────────────────────────────────────────────────────────────────
+    const igRecoverItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/RECOVER123/',
+        externalId: 'RECOVER123',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+
+    const fetchesBeforeRecovery = upstreamFetchCount;
+    const resRecovered = await callRouter(router, 'GET', `/api/pulse/items/${igRecoverItemId}/thumbnail`);
+    assert(resRecovered.status === 200, 'Expired Instagram thumbnail automatically recovers with 200 OK');
+    assert(Buffer.isBuffer(resRecovered.body), 'Recovered response body is a binary Buffer');
+    assert(resRecovered.body.equals(sampleJpeg), 'Recovered buffer matches expected image bytes');
+    assert(resRecovered.type === 'image/jpeg', 'Recovered Content-Type header is image/jpeg');
+    assert(typeof resRecovered.headers['etag'] === 'string', 'Recovered ETag is populated');
+
+    // 1 fetch for dead CDN link + 1 fetch for embed HTML + 1 fetch for fresh image bytes = 3 fetches
+    assert(upstreamFetchCount - fetchesBeforeRecovery === 3, 'Recovery performed 1 initial fetch + 1 embed fetch + 1 fresh image fetch');
+    assert(Boolean(lastEmbedUserAgent && lastEmbedUserAgent.includes('Mozilla/5.0')), 'Embed recovery supplied standard browser User-Agent header');
+
+    // Verify pulse_items table was updated with the fresh CDN URL
+    const updatedRow = db.prepare(
+        'SELECT thumbnail_url FROM pulse_items WHERE id = ?'
+    ).get(igRecoverItemId) as { thumbnail_url: string };
+    assert(updatedRow.thumbnail_url === 'https://cdn.instagram.com/fresh-recovered.jpg', 'pulse_items.thumbnail_url was updated with recovered URL');
+
+    // Verify subsequent request is served from cache without any additional upstream fetches
+    const fetchesAfterRecovery = upstreamFetchCount;
+    const resRecoveredCached = await callRouter(router, 'GET', `/api/pulse/items/${igRecoverItemId}/thumbnail`);
+    assert(resRecoveredCached.status === 200, 'Subsequent request for recovered item returns 200 OK');
+    assert(resRecoveredCached.body.equals(sampleJpeg), 'Subsequent request matches cached image bytes');
+    assert(upstreamFetchCount === fetchesAfterRecovery, 'Subsequent request served from cache with ZERO upstream fetches');
+
+    // Recovery failure falls back cleanly to upstream status
+    const igUnrecoverableItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/UNRECOVERABLE/',
+        externalId: 'UNRECOVERABLE',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+    const resUnrecoverable = await callRouter(router, 'GET', `/api/pulse/items/${igUnrecoverableItemId}/thumbnail`);
+    assert(resUnrecoverable.status === 403, 'Unrecoverable Instagram item falls back to 403');
+    assert(resUnrecoverable.body?.error === 'Upstream refused: HTTP 403', 'Unrecoverable item reports upstream refusal');
+
+    // Tombstone guard: item deleted while recovery is in flight must NOT be resurrected
+    tombstoneMidRecoveryId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/TOMBSTONE_MID/',
+        externalId: 'TOMBSTONE_MID',
+        thumbnailUrl: 'https://cdn.instagram.com/expired-instagram.jpg',
+    });
+    const resTombstoneMid = await callRouter(router, 'GET', `/api/pulse/items/${tombstoneMidRecoveryId}/thumbnail`);
+    assert(resTombstoneMid.status >= 400, 'Item deleted while recovery was in flight is refused');
+    assert(thumbnailService.cache.get(tombstoneMidRecoveryId) === null, 'Tombstoned mid-recovery item is NOT cached in L1');
+    const midRow = db.prepare('SELECT thumbnail_url, deleted_at FROM pulse_items WHERE id = ?').get(tombstoneMidRecoveryId) as any;
+    assert(midRow.thumbnail_url === null, 'Tombstoned item thumbnail_url remains null and was not resurrected');
+    assert(midRow.deleted_at !== null, 'Tombstoned item deleted_at remains set');
+
+    // Unit tests for embed URL and HTML extraction functions
+    assert(
+        extractInstagramEmbedUrl('https://www.instagram.com/p/DB12345/') === 'https://www.instagram.com/p/DB12345/embed/',
+        'extractInstagramEmbedUrl extracts post embed URL'
+    );
+    assert(
+        extractInstagramEmbedUrl('https://instagram.com/reel/C_abc456/?utm_source=ig') === 'https://www.instagram.com/p/C_abc456/embed/',
+        'extractInstagramEmbedUrl extracts reel embed URL'
+    );
+    assert(
+        extractInstagramEmbedUrl(null, 'SHORT123') === 'https://www.instagram.com/p/SHORT123/embed/',
+        'extractInstagramEmbedUrl constructs embed URL from externalId'
+    );
+    assert(
+        extractInstagramEmbedUrl('https://youtube.com/watch?v=123') === null,
+        'extractInstagramEmbedUrl returns null for non-Instagram URL'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="https://cdn.instagram.com/pic.jpg?oe=1&amp;oh=2" />') === 'https://cdn.instagram.com/pic.jpg?oe=1&oh=2',
+        'extractThumbnailFromEmbedHtml extracts image src and decodes &amp;'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('{\"display_url\":\"https:\\/\\/cdn.instagram.com\\/pic2.jpg?oe=1\\u0026oh=2\"}') === 'https://cdn.instagram.com/pic2.jpg?oe=1&oh=2',
+        'extractThumbnailFromEmbedHtml extracts JSON display_url and unescapes slashes and unicode'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="javascript:alert(1)" />') === null,
+        'extractThumbnailFromEmbedHtml rejects javascript: scheme'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="/relative/path/image.jpg" />') === null,
+        'extractThumbnailFromEmbedHtml rejects relative URLs'
+    );
+    assert(
+        extractThumbnailFromEmbedHtml('<img class="EmbeddedMediaImage" src="data:image/jpeg;base64,123" />') === null,
+        'extractThumbnailFromEmbedHtml rejects data: scheme'
+    );
 
     // ──────────────────────────────────────────────────────────────────────────
     // Requirement 7.4: A private-IP upstream is refused
@@ -547,6 +742,47 @@ async function main(): Promise<void> {
     assert(resProxy.status === 200, 'Proxy serves pre-cached thumbnail with 200');
     assert(resProxy.body.equals(sampleJpeg), 'Proxy serves matching bytes from ingest cache');
     assert(ingestFetchCount === 1, 'Zero additional upstream fetches occurred when proxy served ingested thumbnail');
+
+    // Ingest recovery SSRF defense: SSRF error during recovery at ingest is caught and logged
+    const ingestSsrfItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/INGEST_SSRF/',
+        externalId: 'INGEST_SSRF',
+        thumbnailUrl: 'https://images.example.org/ingest-403.jpg',
+    });
+    const ingestSsrfService = new PulseThumbnailService({
+        fetchFn: (async (url: string) => {
+            if (url.includes('ingest-403.jpg')) {
+                return {
+                    status: 403,
+                    statusText: 'Forbidden',
+                    headers: { 'content-type': 'text/plain' },
+                    url,
+                    buffer: async () => Buffer.from('Forbidden'),
+                    text: async () => 'Forbidden',
+                    json: async () => ({}),
+                };
+            }
+            if (url.includes('INGEST_SSRF/embed/')) {
+                throw new SsrfSecurityError('SSRF_BLOCKED: Prohibited address');
+            }
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'image/jpeg' },
+                url,
+                buffer: async () => sampleJpeg,
+                text: async () => sampleJpeg.toString(),
+                json: async () => ({}),
+            };
+        }) as any,
+    });
+    const ssrfIngestRes = await ingestSsrfService.ingestThumbnail(
+        ingestSsrfItemId,
+        'https://images.example.org/ingest-403.jpg'
+    );
+    assert(ssrfIngestRes.status === 400, 'Ingest recovery SSRF rejection returns status 400');
+    assert(Boolean(ssrfIngestRes.error?.includes('SSRF_BLOCKED')), 'Ingest recovery SSRF error message preserved');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Tombstones beat the cache: an erased item must stop being served

@@ -56,7 +56,12 @@ import {
     normaliseChannelInput,
     SOUNDCLOUD_RESERVED_SEGMENTS,
 } from '../engine/creator-channels.js';
-import { getPulseThumbnailService, PulseThumbnailService } from '../engine/pulse-thumbnail.js';
+import {
+    getPulseThumbnailService,
+    PulseThumbnailService,
+    extractInstagramEmbedUrl,
+    extractThumbnailFromEmbedHtml,
+} from '../engine/pulse-thumbnail.js';
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
@@ -326,7 +331,9 @@ export async function resolveMetadata(
     } else if (platform === 'instagram') {
         title = 'Instagram Post';
         try {
-            const res = await ssrfSafeFetch(url, {
+            const embedUrl = extractInstagramEmbedUrl(url, externalId);
+            const targetUrl = embedUrl || url;
+            const res = await ssrfSafeFetch(targetUrl, {
                 timeoutMs: 5000,
                 maxBytes: 1024 * 1024,
                 headers: {
@@ -336,7 +343,7 @@ export async function resolveMetadata(
             if (res.status === 200) {
                 const html = await res.text();
                 const ogTitle = extractMetaProperty(html, 'og:title') || extractMetaProperty(html, 'twitter:title') || extractTagText(html, 'title');
-                const ogImage = extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
+                const ogImage = extractThumbnailFromEmbedHtml(html) || extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
                 if (ogTitle) title = cleanXmlText(ogTitle);
                 if (ogImage) thumbnailUrl = ogImage;
             }

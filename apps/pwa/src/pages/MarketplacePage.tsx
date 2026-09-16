@@ -701,7 +701,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     if (selectedPost) {
         if (selectedPost.type === 'poll') {
             return (
-                <div className="p-4 max-w-lg mx-auto pb-24">
+                <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                     <button
                         onClick={() => {
                             setSelectedPost(null);
@@ -772,7 +772,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             : (isOwnPost ? ((selectedPost as any).acceptedByCallsign || 'Peer') : selectedPost.authorCallsign);
 
         return (
-            <div className="p-4 max-w-lg mx-auto pb-24">
+            <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {/* Back Button */}
                 <button
                     onClick={() => {
@@ -2662,7 +2662,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {!selectedPost && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
-                    className="fixed bottom-[90px] right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
                     <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST
                 </button>

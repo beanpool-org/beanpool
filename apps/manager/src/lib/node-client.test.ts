@@ -10,6 +10,26 @@ import {
     getTfaSessionToken,
     setTfaSessionToken,
     clearAllTfaSessionTokens,
+    loginToNode,
+    fetchNodeTreasuries,
+    createNodeTreasury,
+    seedTreasuryOffer,
+    fetchTreasuryKeepers,
+    assignTreasuryKeeper,
+    revokeTreasuryKeeper,
+    fetchNodeRoles,
+    grantNodeRoleApi,
+    revokeNodeRoleApi,
+    fetchNodeSnapshots,
+    createNodeSnapshot,
+    deleteNodeSnapshot,
+    updateNodeReplicationCadence,
+    forceNodeResync,
+    normalizeNodeData,
+    normalizeKeepers,
+    normalizeKeeperPubkey,
+    pruneInviteBranch,
+    deleteNodePost,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -348,3 +368,427 @@ describe('2FA session token transmission in node client admin actions', () => {
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
     });
 });
+
+describe('node client login, treasury, snapshot, and replication helpers', () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    const lastCall = () => fetchMock.mock.calls[0];
+    const headersOf = (init: any) => (init?.headers ?? {}) as Record<string, string>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+    });
+
+    it('loginToNode posts password and totpCode and returns body on success', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ success: true, tfaSessionToken: 'sess-123' }),
+        });
+
+        const res = await loginToNode('https://node.example.com', 'pwd123', '654321');
+
+        expect(res).toEqual({ success: true, tfaSessionToken: 'sess-123' });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/admin/login');
+        expect(JSON.parse((init as any).body)).toEqual({ password: 'pwd123', totpCode: '654321' });
+    });
+
+    it('loginToNode throws custom error message on login failure', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Invalid TOTP code' }),
+        });
+
+        await expect(loginToNode('https://node.example.com', 'pwd123', '000000')).rejects.toThrow('Invalid TOTP code');
+    });
+
+    it('fetchNodeTreasuries returns treasuries array on success and empty array on failure', async () => {
+        const mockTreasuries = [{ publicKey: 'treasury1', name: 'Community Chest', balance: 100, creditLine: 50, liveOffers: 2 }];
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ treasuries: mockTreasuries }),
+        });
+
+        const treasuries = await fetchNodeTreasuries('https://node.example.com');
+        expect(treasuries).toEqual(mockTreasuries);
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+        const empty = await fetchNodeTreasuries('https://node.example.com');
+        expect(empty).toEqual([]);
+    });
+
+    it('createNodeTreasury sends POST to create a treasury', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, publicKey: 'new-treasury-pub' }),
+        });
+
+        const res = await createNodeTreasury(
+            'https://node.example.com',
+            { name: 'Reserve', avatar: 'sprout', creditLine: 1000 },
+            'adminpass',
+            'tfa123'
+        );
+
+        expect(res).toEqual({ success: true, publicKey: 'new-treasury-pub' });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/treasury');
+        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(JSON.parse((init as any).body)).toEqual({
+            name: 'Reserve',
+            avatar: 'sprout',
+            creditLine: 1000,
+            password: 'adminpass',
+        });
+    });
+
+    it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } }),
+        });
+
+        const res = await seedTreasuryOffer(
+            'https://node.example.com',
+            'treasury-pubkey-123',
+            { title: 'Farm Eggs', category: 'food', credits: 10, description: 'Fresh eggs', repeatable: true },
+            'adminpass',
+            'tfa123'
+        );
+
+        expect(res).toEqual({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } });
+        const [url, init] = lastCall();
+        expect(url).toContain('/api/local/admin/treasury/treasury-pubkey-123/offer');
+        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(JSON.parse((init as any).body)).toEqual({
+            title: 'Farm Eggs',
+            category: 'food',
+            credits: 10,
+            description: 'Fresh eggs',
+            repeatable: true,
+            password: 'adminpass',
+        });
+    });
+
+    it('fetchTreasuryKeepers, assignTreasuryKeeper, and revokeTreasuryKeeper send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1'] }),
+        });
+        await fetchTreasuryKeepers('https://node.example.com', 'treasury-1', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1', 'keeper-2'] }),
+        });
+        await assignTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ keepers: ['keeper-1'] }),
+        });
+        await revokeTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+    });
+
+    it('fetchNodeRoles, grantNodeRoleApi, and revokeNodeRoleApi send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ roles: [] }),
+        });
+        await fetchNodeRoles('https://node.example.com', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await grantNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await revokeNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+    });
+
+    it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {
+        const mockSnapshot = { name: 'snap-1.db', sizeBytes: 1024, createdAt: '2026-01-01' };
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ snapshots: [mockSnapshot] }),
+        });
+        const list = await fetchNodeSnapshots('https://node.example.com', 'pwd');
+        expect(list).toEqual([mockSnapshot]);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ snapshot: mockSnapshot }),
+        });
+        const created = await createNodeSnapshot('https://node.example.com', 'pwd');
+        expect(created).toEqual(mockSnapshot);
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        await expect(deleteNodeSnapshot('https://node.example.com', 'snap-1.db', 'pwd')).resolves.toBeUndefined();
+    });
+
+    it('updateNodeReplicationCadence and forceNodeResync trigger replication updates', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+
+        await updateNodeReplicationCadence('https://node.example.com', 30, 5, 'pwd');
+        expect(lastCall()[0]).toContain('/api/local/admin/backup-config');
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ pullSeconds: 30, reconcileMinutes: 5, password: 'pwd' });
+
+        fetchMock.mockClear();
+
+        await forceNodeResync('https://node.example.com', 'pwd');
+        expect(lastCall()[0]).toContain('/api/local/admin/replication-resync');
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ password: 'pwd' });
+    });
+});
+
+describe('normalizeKeeperPubkey and normalizeKeepers', () => {
+    it('normalizes string pubkeys directly', () => {
+        expect(normalizeKeeperPubkey('pubkey123')).toBe('pubkey123');
+        expect(normalizeKeepers(['pk1', 'pk2'])).toEqual(['pk1', 'pk2']);
+    });
+
+    it('extracts publicKey from keeper objects with various pubkey aliases', () => {
+        const obj1 = { publicKey: 'pubkey_alpha', callsign: 'alpha', avatarUrl: null, grantedAt: null };
+        const obj2 = { pubkey: 'pubkey_beta', callsign: 'beta' };
+        const obj3 = { member_pubkey: 'pubkey_gamma', callsign: 'gamma' };
+        const obj4 = { memberPubkey: 'pubkey_delta', callsign: 'delta' };
+        const obj5 = { public_key: 'pubkey_epsilon', callsign: 'epsilon' };
+        expect(normalizeKeeperPubkey(obj1)).toBe('pubkey_alpha');
+        expect(normalizeKeeperPubkey(obj2)).toBe('pubkey_beta');
+        expect(normalizeKeeperPubkey(obj3)).toBe('pubkey_gamma');
+        expect(normalizeKeeperPubkey(obj4)).toBe('pubkey_delta');
+        expect(normalizeKeeperPubkey(obj5)).toBe('pubkey_epsilon');
+        expect(normalizeKeepers([obj1, obj2, obj3, obj4, obj5])).toEqual([
+            'pubkey_alpha',
+            'pubkey_beta',
+            'pubkey_gamma',
+            'pubkey_delta',
+            'pubkey_epsilon',
+        ]);
+    });
+
+    it('skips empty or whitespace-only candidate keys to find populated alias', () => {
+        const obj = { publicKey: '', pubkey: '   ', member_pubkey: 'actual_pubkey' };
+        expect(normalizeKeeperPubkey(obj)).toBe('actual_pubkey');
+    });
+
+    it('filters out empty or malformed keeper entries', () => {
+        expect(normalizeKeeperPubkey(null)).toBe('');
+        expect(normalizeKeeperPubkey(undefined)).toBe('');
+        expect(normalizeKeeperPubkey(12345)).toBe('');
+        expect(normalizeKeeperPubkey({})).toBe('');
+        expect(normalizeKeepers([null, undefined, 42, {}, 'valid_pk'])).toEqual(['valid_pk']);
+        expect(normalizeKeepers(null)).toEqual([]);
+        expect(normalizeKeepers(undefined)).toEqual([]);
+        expect(normalizeKeepers('not-an-array' as any)).toEqual([]);
+    });
+});
+
+describe('normalizeNodeData boundary normalization', () => {
+    it('handles null, undefined, and non-object inputs gracefully', () => {
+        expect(normalizeNodeData(null)).toEqual({});
+        expect(normalizeNodeData(undefined)).toEqual({});
+        expect(normalizeNodeData('string' as any)).toEqual({});
+    });
+
+    it('normalizes snake_case report fields and keeper shapes', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 42,
+                    reporter_pubkey: 'reporter_pk_1',
+                    target_pubkey: 'target_pk_2',
+                    reason: 'Spam activity',
+                    status: 'pending',
+                },
+            ],
+            members: [
+                {
+                    pubkey: 'member_pk_1',
+                    displayName: 'Alice',
+                    standing: 'Steward',
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('target_pk_2');
+        expect(normalized.reports?.[0].target_pubkey).toBe('target_pk_2');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('reporter_pk_1');
+        expect(normalized.reports?.[0].reporter_pubkey).toBe('reporter_pk_1');
+        expect(normalized.reports?.[0].id).toBe('42');
+        expect(normalized.reportCount).toBe(1);
+
+        expect(normalized.members?.[0].publicKey).toBe('member_pk_1');
+        expect(normalized.members?.[0].pubkey).toBe('member_pk_1');
+        expect(normalized.members?.[0].name).toBe('Alice');
+        expect(normalized.members?.[0].tier).toBe('Steward');
+    });
+
+    it('guards against malformed report targetPubkeys (objects, numbers, nulls)', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 'rep-obj',
+                    targetPubkey: { publicKey: 'nested_target_pk' },
+                    reporterPubkey: { publicKey: 'nested_reporter_pk' },
+                },
+                {
+                    id: 'rep-num',
+                    targetPubkey: 12345,
+                    reporterPubkey: null,
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('nested_target_pk');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('nested_reporter_pk');
+        expect(normalized.reports?.[1].targetPubkey).toBe('');
+        expect(normalized.reports?.[1].reporterPubkey).toBe('');
+    });
+
+    it('normalizes member aliases (isVoucher, isOperator, can_operate, callsign)', () => {
+        const raw = {
+            members: [
+                {
+                    pubkey: 'pk_alias_1',
+                    callsign: 'Maverick',
+                    isVoucher: true,
+                    can_operate: true,
+                    standing: 'Steward',
+                },
+                {
+                    pubkey: 'pk_alias_2',
+                    displayName: 'Goose',
+                    callsign: 'Bradley',
+                    isOperator: true,
+                    canVouch: true,
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.members?.[0].name).toBe('Maverick');
+        expect(normalized.members?.[0].callsign).toBe('Maverick');
+        expect(normalized.members?.[0].canVouch).toBe(true);
+        expect(normalized.members?.[0].canOperate).toBe(true);
+        expect(normalized.members?.[0].tier).toBe('Steward');
+
+        expect(normalized.members?.[1].name).toBe('Goose');
+        expect(normalized.members?.[1].callsign).toBe('Bradley');
+        expect(normalized.members?.[1].canVouch).toBe(true);
+        expect(normalized.members?.[1].canOperate).toBe(true);
+    });
+
+    it('extracts report targetPubkey and reporterPubkey from objects with pubkey or nested keys', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 'rep-pubkey',
+                    target_pubkey: { pubkey: 'target_pubkey_val' },
+                    reporter_pubkey: { pubkey: 'reporter_pubkey_val' },
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('target_pubkey_val');
+        expect(normalized.reports?.[0].target_pubkey).toBe('target_pubkey_val');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('reporter_pubkey_val');
+        expect(normalized.reports?.[0].reporter_pubkey).toBe('reporter_pubkey_val');
+    });
+});
+
+describe('pruneInviteBranch', () => {
+    it('throws error when pubkey is missing or empty', async () => {
+        await expect(pruneInviteBranch('https://node.example.com', '')).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+        await expect(pruneInviteBranch('https://node.example.com', '   ')).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+        await expect(pruneInviteBranch('https://node.example.com', null as any)).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+    });
+
+    it('sends POST to prune branch with trimmed pubkey', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await pruneInviteBranch('https://node.example.com', '  pubkey123  ', 'pwd1', 'sess1');
+        expect(res).toEqual({ success: true });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/branches/pubkey123/prune');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('pwd1');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+    });
+});
+
+describe('deleteNodePost', () => {
+    it('throws error when postId is missing or empty', async () => {
+        await expect(deleteNodePost('https://node.example.com', '')).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+        await expect(deleteNodePost('https://node.example.com', '   ')).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+        await expect(deleteNodePost('https://node.example.com', undefined as any)).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+    });
+
+    it('sends POST to delete post with trimmed postId', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await deleteNodePost('https://node.example.com', '  post-456  ', 'pwd1', 'sess1');
+        expect(res).toEqual({ success: true });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/posts/post-456/delete');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('pwd1');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+    });
+});
+

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
     createDecision,
+    getBalance,
     type DecisionTouch,
     type DecisionEffect,
 } from '../lib/api';
@@ -66,6 +67,7 @@ export function ProposeDecisionModal({
     const [touches, setTouches] = useState<DecisionTouch>('member');
     const [effect, setEffect] = useState<DecisionEffect>('suspend_member');
     const [subject, setSubject] = useState('');
+    const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
     const [tier, setTier] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [ruleKey, setRuleKey] = useState('');
@@ -91,21 +93,52 @@ export function ProposeDecisionModal({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
+    const [fetchedBalance, setFetchedBalance] = useState<number | null>(null);
+
     // Lookup selected member details for removal preview
     const selectedMember = useMemo(() => {
         if (!subject) return null;
         return members.find(m => m.publicKey === subject || m.callsign?.toLowerCase() === subject.toLowerCase());
     }, [members, subject]);
 
+    useEffect(() => {
+        if (effect !== 'remove_member' || !subject) {
+            setFetchedBalance(null);
+            return;
+        }
+        const targetPubkey = selectedMember ? selectedMember.publicKey : (subject.trim().length >= 32 ? subject.trim() : null);
+        if (!targetPubkey) {
+            setFetchedBalance(null);
+            return;
+        }
+        if (selectedMember && typeof selectedMember.balance === 'number') {
+            setFetchedBalance(null);
+            return;
+        }
+        let cancelled = false;
+        getBalance(targetPubkey)
+            .then(bal => {
+                if (!cancelled && bal && typeof bal.balance === 'number') {
+                    setFetchedBalance(bal.balance);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [effect, subject, selectedMember]);
+
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? -180;
+    const targetBalance = selectedMember?.balance ?? fetchedBalance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance || 240);
+    const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
     // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+    const debtWriteOffLine = debtAmount > 0
+        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
 
     if (!isOpen) return null;
 
@@ -121,6 +154,13 @@ export function ProposeDecisionModal({
             return;
         }
 
+        const targetPubkey = selectedMember?.publicKey || (subject.trim().length === 64 ? subject.trim() : null);
+
+        if (touches === 'member' && !targetPubkey) {
+            setError('Please enter a valid member callsign or 64-character public key.');
+            return;
+        }
+
         let params: any = {};
         if (effect === 'grant_enterprise' || effect === 'grant_hardship') {
             const amount = Number(grantAmount);
@@ -132,7 +172,20 @@ export function ProposeDecisionModal({
         } else if (effect === 'grant_tier') {
             params = { tier };
         } else if (effect === 'remove_lead_keeper') {
-            params = { enterprisePubkey: subject, leadPubkey: subject };
+            if (!enterprisePubkey.trim()) {
+                setError('Please select or enter the enterprise public key.');
+                return;
+            }
+            if (!targetPubkey) {
+                setError('Please enter the lead keeper callsign or public key to remove.');
+                return;
+            }
+            params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
+        } else if (effect === 'write_off_deficit') {
+            if (!enterprisePubkey.trim()) {
+                setError('Please select or enter the enterprise public key.');
+                return;
+            }
         } else if (effect === 'set_rule') {
             params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
@@ -146,13 +199,14 @@ export function ProposeDecisionModal({
         setSubmitting(true);
         setError(null);
         try {
+            const resolvedSubject = (effect === 'write_off_deficit' ? enterprisePubkey.trim() : (touches === 'member' ? targetPubkey : (selectedMember ? selectedMember.publicKey : (subject.trim() || null)))) || null;
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
                 description: description.trim(),
                 touches,
                 effect,
-                subject: subject.trim() || null,
+                subject: resolvedSubject,
                 params,
             });
 
@@ -160,6 +214,7 @@ export function ProposeDecisionModal({
                 setTitle('');
                 setDescription('');
                 setSubject('');
+                setEnterprisePubkey('');
                 setGrantAmount('');
                 onCreated();
                 onClose();
@@ -265,16 +320,20 @@ export function ProposeDecisionModal({
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
                             Specific Action / Effect
                         </label>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" role="radiogroup" aria-label="Specific Action or Effect">
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
-                                <div
+                                <button
+                                    type="button"
                                     key={eff.id}
-                                    onClick={() => setEffect(eff.id)}
-                                    className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                                    role="radio"
+                                    aria-checked={effect === eff.id}
+                                    onClick={() => !submitting && setEffect(eff.id)}
+                                    disabled={submitting}
+                                    className={`w-full text-left p-2.5 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                                         effect === eff.id
                                             ? 'bg-emerald-500/15 border-emerald-500'
                                             : 'bg-nature-800/40 border-nature-700 hover:border-nature-600'
-                                    }`}
+                                    } ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <div className={`text-sm font-semibold ${effect === eff.id ? 'text-emerald-300' : 'text-white'}`}>
                                         {eff.label}
@@ -282,22 +341,57 @@ export function ProposeDecisionModal({
                                     <div className="text-xs text-nature-400 leading-tight mt-0.5">
                                         {eff.desc}
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>
+
+                    {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
+                    {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
+                        <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
+                                Target Enterprise / Treasury
+                            </label>
+                            {treasuries.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                    {treasuries.map(t => (
+                                        <button
+                                            key={t.publicKey}
+                                            type="button"
+                                            onClick={() => setEnterprisePubkey(t.publicKey)}
+                                            className={`px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                                                enterprisePubkey === t.publicKey
+                                                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                                    : 'bg-nature-800/60 border-nature-700 text-nature-300 hover:border-nature-600'
+                                            }`}
+                                        >
+                                            {t.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <input
+                                type="text"
+                                value={enterprisePubkey}
+                                onChange={(e) => setEnterprisePubkey(e.target.value)}
+                                placeholder="Enter enterprise pubkey..."
+                                className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
+                                required
+                            />
+                        </div>
+                    )}
 
                     {/* Subject Input */}
                     {touches === 'member' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Target Member Callsign or Public Key
+                                {effect === 'remove_lead_keeper' ? 'Lead Keeper Callsign or Public Key to Remove' : 'Target Member Callsign or Public Key'}
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder="Enter member callsign or pubkey..."
+                                placeholder={effect === 'remove_lead_keeper' ? 'Enter lead keeper callsign or pubkey...' : 'Enter member callsign or pubkey...'}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                         </div>

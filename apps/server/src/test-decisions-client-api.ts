@@ -150,6 +150,8 @@ function makeMember(callsign: string, opts?: {
         VALUES (?, ?, 0)
     `).run(pubkey, balance);
 
+    reconcileLedgerFromDb();
+
     return pubkey;
 }
 
@@ -193,6 +195,17 @@ async function runSuite() {
 
     console.log('--- 1. Propose Constraints & Standing Gate ---');
 
+    // 1a-0. Auth gating: unauthenticated proposal fails with 401
+    const resNoAuth = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        body: {
+            title: 'Unauthenticated proposal',
+            description: 'Should fail with 401',
+            touches: 'nothing',
+            effect: 'poll',
+        },
+    });
+    assert(resNoAuth.status === 401, 'Propose without actor fails with 401');
+    assert(resNoAuth.body.error.includes('Authentication required'), 'Error cites auth required');
     // 1a. Gating: earnedCredit > 0 required
     const resDave = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: daveZeroStanding,
@@ -248,7 +261,6 @@ async function runSuite() {
     });
     assert(resShortDesc.status === 400, 'Propose with description < 10 chars fails with 400');
     assert(resShortDesc.body.error.includes('description must be at least 10 characters'), 'Error cites description requirement');
-
     // 1d. Successful propose with no bond charged
     const aliceBalanceBefore = getBalance(alice).balance;
     const resAlice = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
@@ -328,6 +340,15 @@ async function runSuite() {
     });
     assert(vote1.status === 200 && vote1.body.creditsUsed === 1, '1m1v vote uses exactly 1 credit');
 
+    // Vote without signature auth fails with 401
+    const unauthVote = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionMember.id}/vote`, {
+        body: {
+            voterPubkey: bob,
+            support: true,
+            voteCount: 1,
+        },
+    });
+    assert(unauthVote.status === 401, 'Vote without cryptographic signature fails with 401');
     // Charlie votes on quadratic pool decision: 3 votes = 9 credits
     const voteQ = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionPool.id}/vote`, {
         actor: charlie,

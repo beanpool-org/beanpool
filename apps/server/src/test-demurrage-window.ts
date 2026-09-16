@@ -155,25 +155,27 @@ async function main() {
         `control: ${OPENING} beans held ${STALE_DAYS} days genuinely owes ${fairCharge.toFixed(4)} — a real, `
         + 'recordable decay, so every comparison below can actually fail');
 
-    // ── Path 1: crowdfund escrow sweep to the creator ──────────────────────────────────────────────
+    // ── Path 1: crowdfund escrow sweep to the enterprise account (Slice 3) ─────────────────────────
     const funded = id('proj');
-    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to the creator', [], PAYOUT, null);
+    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to the enterprise account', [], PAYOUT, null);
     pledgeToProject(crypto.randomUUID(), funded, backer, PAYOUT, 'pledge');
 
     const creatorRow = row(creator)!;
     assert(creatorRow.epoch === nowEpoch(),
         'path 1: the escrow sweep left the creator\'s demurrage window CLOSED in the row');
-    // Row-level, so this holds whatever a later read does — the durable pair is the thing that was wrong.
-    assert(Math.abs((OPENING + PAYOUT - creatorRow.balance) - fairCharge) < SAME_CHARGE,
-        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, not a charge against the payout`);
+    // Row-level, creator personal balance reflects only the fair charge (sweep lands in enterprise account per Slice 3)
+    assert(Math.abs((OPENING - creatorRow.balance) - fairCharge) < SAME_CHARGE,
+        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, with creator personal funds protected`);
+    const fundedRow = row(funded)!;
+    assert(Math.abs(fundedRow.balance - PAYOUT) < 1e-9,
+        `path 1: the enterprise account received the full ${PAYOUT} payout (demurrage-exempt)`);
 
     reconcileLedgerFromDb();   // what the balance-mutation hook, or any restart, does
-    const creatorCharge = OPENING + PAYOUT - getBalance(creator).balance;
+    const creatorCharge = OPENING - getBalance(creator).balance;
     assert(Math.abs(creatorCharge - fairCharge) < SAME_CHARGE,
-        `path 1: reading the creator after the payout costs ${creatorCharge.toFixed(4)}, matching the control `
-        + `(the open window charged the ${STALE_DAYS} days against all ${OPENING + PAYOUT})`);
+        `path 1: reading the creator after the payout costs ${creatorCharge.toFixed(4)}, matching the control`);
 
-    // ── Path 1b: the same sweep, to a creator inside the Green Zone ─────────────────────────────────
+    // ── Path 1b: the same sweep, with a creator inside the Green Zone ────────────────────────────────
     const quietProject = id('proj');
     createCrowdfundProject(quietProject, quiet, 'Quiet creator', 'owes nothing, must still be closed', [], PAYOUT, null);
     pledgeToProject(crypto.randomUUID(), quietProject, backer, PAYOUT, 'pledge');
@@ -183,12 +185,14 @@ async function main() {
         `path 1b: a creator holding ${GREEN_ZONE_HOLDING} owes nothing and queues no decay event, and the `
         + 'window is STILL closed in the row — persisting only when there is an event to persist would leave '
         + 'the commonest case broken');
-    assert(Math.abs(quietRow.balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
-        `path 1b: and nothing was collected on the way — ${GREEN_ZONE_HOLDING} + ${PAYOUT} arrives intact`);
+    assert(Math.abs(quietRow.balance - GREEN_ZONE_HOLDING) < 1e-9,
+        `path 1b: creator inside Green Zone untouched — holds ${GREEN_ZONE_HOLDING}`);
+    const quietProjectRow = row(quietProject)!;
+    assert(Math.abs(quietProjectRow.balance - PAYOUT) < 1e-9,
+        `path 1b: enterprise received ${PAYOUT} payout (demurrage-exempt)`);
     reconcileLedgerFromDb();
-    assert(Math.abs(getBalance(quiet).balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
-        'path 1b: and the next read charges nothing either — the payout pushed them out of the Green Zone, so '
-        + 'a carried window would have taxed a balance that had never owed a bean');
+    assert(Math.abs(getBalance(quiet).balance - GREEN_ZONE_HOLDING) < 1e-9,
+        'path 1b: and the next read charges nothing against creator');
 
     // ── Path 1c: the payer side — a pledge may not be afforded out of beans demurrage has taken ─────
     // The affordability check is a raw `SELECT balance`, so against an unsettled row it reads the PRE-decay
@@ -297,49 +301,38 @@ async function main() {
         `path 2b: NEITHER window was closed — settling ${settleOrder.length} backers is one transaction, so the `
         + 'first is rolled back with the second instead of being left settled beside an unsettled peer');
 
-    // ── Path 3: commons voting-round grant, proposer WITH an existing row ──────────────────────────
-    const grantCharge = await grantTo(proposer, admin, 'Existing row', OPENING);
-    assert(row(proposer)!.epoch === nowEpoch(),
+    // ── Path 3: commons voting-round grant, enterprise treasury WITH an existing row ──────────────
+    const grantedProject = await grantTo(proposer, admin, 'Existing row');
+    assert(row(grantedProject.id)!.epoch === nowEpoch(),
         'path 3: the grant carried the settled epoch into the row on the DO UPDATE arm');
-    assert(Math.abs(grantCharge - fairCharge) < SAME_CHARGE,
-        `path 3: the granted proposer is charged ${grantCharge.toFixed(4)}, not a share of the grant itself`);
+    assert(Math.abs(row(grantedProject.id)!.balance - PAYOUT) < 1e-9,
+        'path 3: the granted enterprise holds the full grant balance');
 
-    const decayRows = db.prepare(
-        `SELECT COUNT(*) AS n FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' AND id LIKE 'demurrage_%'`,
-    ).get(proposer) as { n: number };
-    assert(decayRows.n === 1,
-        'path 3: the decay the grant path collected has a `demurrage_` transaction row — it never persisted '
-        + 'its decay events, so the collection was unauditable even once conservation was safe');
-
-    // ── Path 3c: the same grant, proposer inside the Green Zone → nothing to persist ────────────────
-    // This is what actually holds the DO UPDATE arm honest. When the decay IS recordable, as for `proposer`
-    // above, persistDecayEvents() writes `last_demurrage_epoch` on its own — so path 3 passes even with the
-    // column omitted from the UPSERT, and reverting that fix looks harmless. A proposer who owes nothing
-    // queues no event, and the omission is then the only thing standing between the grant and a stale window.
-    await grantTo(quietProposer, admin, 'Quiet proposer', GREEN_ZONE_HOLDING);
-    const quietPropRow = row(quietProposer)!;
-    assert(quietPropRow.epoch === nowEpoch(),
-        'path 3c: a granted proposer who owes no demurrage still has the window closed in the row — the '
+    // ── Path 3c: the same grant, proposer inside the Green Zone ────────────────────────────────────
+    const quietGrantedProj = await grantTo(quietProposer, admin, 'Quiet proposer');
+    const quietProjRow = row(quietGrantedProj.id)!;
+    assert(quietProjRow.epoch === nowEpoch(),
+        'path 3c: a granted enterprise still has the window closed in the row — the '
         + 'UPSERT carries the epoch itself rather than relying on there being a decay event to persist');
-    assert(Math.abs(quietPropRow.balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
-        `path 3c: and the grant arrives whole — ${GREEN_ZONE_HOLDING} + ${PAYOUT}`);
+    assert(Math.abs(quietProjRow.balance - PAYOUT) < 1e-9,
+        `path 3c: and the grant arrives whole — ${PAYOUT}`);
     reconcileLedgerFromDb();
-    assert(Math.abs(getBalance(quietProposer).balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
+    assert(Math.abs(getBalance(quietGrantedProj.id).balance - PAYOUT) < 1e-9,
         'path 3c: and the next read charges nothing against it');
 
-    // ── Path 3b: the same grant, proposer with NO accounts row → the literal epoch 0 ────────────────
+    // ── Path 3b: the same grant, target enterprise with NO accounts row → the literal epoch 0 ──────
     const rowlessProject = createProject(rowless, 'No row yet', 'tests the INSERT arm', PAYOUT);
     if (!rowlessProject) throw new Error('setup: createProject failed for the rowless proposer');
-    // Drop the row (and the in-memory account with it) so the UPSERT takes its INSERT arm.
-    db.prepare(`DELETE FROM accounts WHERE public_key=?`).run(rowless);
+    // Drop the enterprise's row (and the in-memory account with it) so the UPSERT takes its INSERT arm.
+    db.prepare(`DELETE FROM accounts WHERE public_key=?`).run(rowlessProject.id);
     reconcileLedgerFromDb();
     await closeRoundFor(rowlessProject.id, admin);
 
-    const rowlessRow = row(rowless)!;
+    const rowlessRow = row(rowlessProject.id)!;
     assert(rowlessRow.epoch === nowEpoch(),
         'path 3b: inserting a granted account stamps the CURRENT epoch, not the literal 0');
     reconcileLedgerFromDb();
-    const rowlessBalance = getBalance(rowless).balance;
+    const rowlessBalance = getBalance(rowlessProject.id).balance;
     assert(Math.abs(rowlessBalance - PAYOUT) < 1e-6,
         `path 3b: the grant survives the next read intact (${rowlessBalance}) — epoch 0 is 1970, and ~56 years `
         + `of compound decay would have left roughly the 200-bean Green Zone of a ${PAYOUT} grant`);
@@ -397,13 +390,13 @@ async function main() {
     console.log('⭐️ #138 demurrage-window checks PASSED — no path raises a balance on an open window.');
 }
 
-/** Run a full propose → vote → close cycle and return what demurrage cost the proposer. */
-async function grantTo(proposerPubkey: string, adminPubkey: string, title: string, opening: number): Promise<number> {
+/** Run a full propose → vote → close cycle and return the funded project. */
+async function grantTo(proposerPubkey: string, adminPubkey: string, title: string): Promise<any> {
     const project = createProject(proposerPubkey, title, 'granted by the commons', PAYOUT);
     if (!project) throw new Error(`setup: createProject failed for ${title}`);
     await closeRoundFor(project.id, adminPubkey);
     reconcileLedgerFromDb();
-    return opening + PAYOUT - getBalance(proposerPubkey).balance;
+    return project;
 }
 
 /** Give a project the only vote in a round, then close it — so it wins and is funded. */

@@ -80,7 +80,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         targetDb.prepare(`
                             UPDATE members SET
                                 is_treasury = 1,
-                                lifecycle = 'bounded',
+                                lifecycle = COALESCE(lifecycle, 'bounded'),
                                 purpose = COALESCE(purpose, ?),
                                 goal_amount = COALESCE(goal_amount, ?),
                                 deadline_at = COALESCE(deadline_at, ?),
@@ -95,17 +95,19 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                         "INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)"
                     ).run(enterprisePubkey);
 
-                    // Ensure creator is registered as lead keeper
                     if (p.creator_pubkey) {
-                        targetDb.prepare(`
-                            INSERT OR IGNORE INTO treasury_operators (
-                                treasury_pubkey, member_pubkey, role, granted_at, granted_by
-                            ) VALUES (?, ?, 'lead', ?, 'migration:projects')
-                        `).run(enterprisePubkey, p.creator_pubkey, createdAt);
+                        const creatorExists = targetDb.prepare("SELECT 1 FROM members WHERE public_key = ?").get(p.creator_pubkey);
+                        if (creatorExists) {
+                            targetDb.prepare(`
+                                INSERT OR IGNORE INTO treasury_operators (
+                                    treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                                ) VALUES (?, ?, 'lead', ?, 'migration:projects')
+                            `).run(enterprisePubkey, p.creator_pubkey, createdAt);
 
-                        targetDb.prepare(
-                            "UPDATE members SET can_operate = 1 WHERE public_key = ?"
-                        ).run(p.creator_pubkey);
+                            targetDb.prepare(
+                                "UPDATE members SET can_operate = 1 WHERE public_key = ?"
+                            ).run(p.creator_pubkey);
+                        }
                     }
 
                     // Mark project as migrated in source table
@@ -141,7 +143,6 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                 }
 
                 if (Array.isArray(proposals) && proposals.length > 0) {
-                    let modified = false;
                     for (const prop of proposals) {
                         if (prop.migrated) continue;
 
@@ -173,7 +174,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                                 targetDb.prepare(`
                                     UPDATE members SET
                                         is_treasury = 1,
-                                        lifecycle = 'bounded',
+                                        lifecycle = COALESCE(lifecycle, 'bounded'),
                                         purpose = COALESCE(purpose, ?),
                                         goal_amount = COALESCE(goal_amount, ?),
                                         status = COALESCE(status, ?),
@@ -187,29 +188,30 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                             ).run(enterprisePubkey);
 
                             if (prop.proposerPubkey) {
-                                targetDb.prepare(`
-                                    INSERT OR IGNORE INTO treasury_operators (
-                                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
-                                    ) VALUES (?, ?, 'lead', ?, 'migration:commons_projects')
-                                `).run(enterprisePubkey, prop.proposerPubkey, createdAt);
+                                const proposerExists = targetDb.prepare("SELECT 1 FROM members WHERE public_key = ?").get(prop.proposerPubkey);
+                                if (proposerExists) {
+                                    targetDb.prepare(`
+                                        INSERT OR IGNORE INTO treasury_operators (
+                                            treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                                        ) VALUES (?, ?, 'lead', ?, 'migration:commons_projects')
+                                    `).run(enterprisePubkey, prop.proposerPubkey, createdAt);
 
-                                targetDb.prepare(
-                                    "UPDATE members SET can_operate = 1 WHERE public_key = ?"
-                                ).run(prop.proposerPubkey);
+                                    targetDb.prepare(
+                                        "UPDATE members SET can_operate = 1 WHERE public_key = ?"
+                                    ).run(prop.proposerPubkey);
+                                }
                             }
+
+                            prop.migrated = true;
+                            prop.migratedAt = new Date().toISOString();
+                            prop.enterprisePubkey = enterprisePubkey;
+
+                            targetDb.prepare(
+                                "UPDATE node_config SET value = ? WHERE key = 'commons_projects'"
+                            ).run(JSON.stringify(proposals));
                         })();
 
-                        prop.migrated = true;
-                        prop.migratedAt = new Date().toISOString();
-                        prop.enterprisePubkey = enterprisePubkey;
-                        modified = true;
                         migratedCommonsProposals++;
-                    }
-
-                    if (modified) {
-                        targetDb.prepare(
-                            "UPDATE node_config SET value = ? WHERE key = 'commons_projects'"
-                        ).run(JSON.stringify(proposals));
                     }
                 }
             }

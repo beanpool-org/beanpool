@@ -25,6 +25,7 @@ import {
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
     runLedgerAudit,
+    getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -39,6 +40,18 @@ import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
 import { resolveChannel } from '../engine/pulse-resolver.js';
+import {
+    createAdminChallenge,
+    getAdminChallenge,
+    verifyAndSolveChallenge,
+    consumeHandshakeToken,
+    validateAdminSession,
+    revokeAllMemberSessions,
+    revokeAdminSession,
+    enrolAdminOwnerKey,
+    verifyEd25519Signature,
+} from '../admin-key-auth.js';
+import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -63,6 +76,368 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
     const token = issueCsrfToken();
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
+});
+
+// ===================== KEY-BASED ADMIN AUTH & BREAK-GLASS ENDPOINTS =====================
+// Implements docs/admin-surface.md §2 (all):
+// Signed challenge auth for phone & desktop QR flow, single-use 60s handshake tokens,
+// browser sessions (2h idle / 12h hard), instant revocation via session_epoch,
+// break-glass mode gating, and per-owner break-glass enrolment.
+
+/**
+ * POST /api/local/admin/auth/challenge
+ * Requests a fresh 60-second challenge for signed authentication (desktop QR or phone).
+ */
+router.post('/api/local/admin/auth/challenge', async (ctx) => {
+    const c = createAdminChallenge();
+    ctx.body = {
+        success: true,
+        challengeId: c.challengeId,
+        challenge: c.challenge,
+        expiresAt: c.expiresAt,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/verify-challenge
+ * Mobile app submits the signed challenge to mint a 60-second single-use handshake token.
+ */
+router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const { challengeId, memberPubkey, signature, totpCode } = body;
+    if (!challengeId || !memberPubkey || !signature) {
+        ctx.status = 400;
+        ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
+        return;
+    }
+
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode });
+    if (!res.ok) {
+        let status = 400;
+        if (res.totpRequired) {
+            status = 401;
+        } else if (res.error?.includes('Challenge not found')) {
+            status = 404;
+        } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
+            status = 403;
+        }
+        ctx.status = status;
+        ctx.body = { error: res.error, totpRequired: res.totpRequired };
+        return;
+    }
+
+    ctx.body = {
+        success: true,
+        handshakeToken: res.handshakeToken,
+        expiresAt: res.expiresAt,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/challenge/:challengeId
+ * Polled by desktop browser waiting for mobile app challenge signature.
+ */
+router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
+    const c = getAdminChallenge(ctx.params.challengeId);
+    if (!c || c.status === 'expired') {
+        ctx.status = 404;
+        ctx.body = { error: 'Challenge not found or expired', status: 'expired' };
+        return;
+    }
+    if (c.status === 'pending') {
+        ctx.body = { status: 'pending', expiresAt: c.expiresAt };
+        return;
+    }
+    ctx.body = {
+        status: 'resolved',
+        handshakeToken: c.handshakeToken,
+        memberPubkey: c.memberPubkey,
+        role: c.role,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/exchange
+ * Exchanges single-use 60s handshake token for a browser session (2h idle / 12h hard).
+ * Single-use: burned immediately, replays rejected.
+ */
+router.post('/api/local/admin/auth/exchange', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const token = body.token || (ctx.query?.token as string);
+    if (!token) {
+        ctx.status = 400;
+        ctx.body = { error: 'token is required' };
+        return;
+    }
+
+    const res = consumeHandshakeToken(token);
+    if (!res.ok) {
+        ctx.status = 401;
+        ctx.body = {
+            error: res.error,
+            replay: res.replay,
+            expired: res.expired,
+            revoked: res.revoked,
+        };
+        return;
+    }
+
+    ctx.cookies.set('admin_session', res.sessionId, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 12 * 3600 * 1000,
+        path: '/',
+    });
+    if (res.csrfToken) {
+        ctx.set('X-CSRF-Token', res.csrfToken);
+    }
+    ctx.body = {
+        success: true,
+        sessionId: res.sessionId,
+        csrfToken: res.csrfToken,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+        hardExpiresAt: res.hardExpiresAt,
+        idleExpiresAt: res.idleExpiresAt,
+    };
+});
+
+const seenRevocationNonces = new Map<string, number>();
+function consumeRevocationNonce(nonce: string, now: number): boolean {
+    if (seenRevocationNonces.size > 10_000) {
+        for (const [n, exp] of seenRevocationNonces) if (exp <= now) seenRevocationNonces.delete(n);
+    }
+    const exp = seenRevocationNonces.get(nonce);
+    if (exp !== undefined && exp > now) return false;
+    seenRevocationNonces.set(nonce, now + 60_000);
+    return true;
+}
+
+/**
+ * POST /api/local/admin/auth/revoke-all
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite.
+ * Gated by checkAdminAuth or signature header.
+ */
+router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let targetPubkey = body.memberPubkey || body.pubkey;
+
+    // Check if called with an active admin session or password auth
+    const isAuthed = await checkAdminAuth(ctx as any);
+    if (isAuthed) {
+        const callerPubkey = (ctx.state as any)?.actor;
+        const callerRole = (ctx.state as any)?.adminRole;
+        if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
+            ctx.status = 403;
+            ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
+    } else {
+        // Allow mobile app with signed headers (X-Public-Key, X-Signature)
+        const pubKeyHex = ctx.get('X-Public-Key');
+        const signatureBase64 = ctx.get('X-Signature');
+        if (pubKeyHex && signatureBase64 && isNodeAdmin(pubKeyHex)) {
+            const timestampHeader = ctx.get('X-Timestamp');
+            const nonce = ctx.get('X-Nonce');
+            const ts = Number(timestampHeader);
+            const now = Date.now();
+            if (!Number.isFinite(ts) || Math.abs(now - ts) > 60_000 || !nonce) {
+                ctx.status = 401;
+                ctx.body = { error: 'Missing or stale timestamp / nonce headers' };
+                return;
+            }
+            if (!consumeRevocationNonce(nonce, now)) {
+                ctx.status = 401;
+                ctx.body = { error: 'Replay detected: nonce already used' };
+                return;
+            }
+            const rawBody = (ctx as any).rawBody ?? '';
+            const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
+            if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {
+                targetPubkey = pubKeyHex;
+            } else {
+                ctx.status = 401;
+                ctx.body = { error: 'Invalid cryptographic signature' };
+                return;
+            }
+        } else {
+            ctx.status = 401;
+            ctx.body = { error: 'Unauthorized: valid admin session or signature required' };
+            return;
+        }
+    }
+
+    if (!targetPubkey || !isNodeAdmin(targetPubkey)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized or target member is not an admin' };
+        return;
+    }
+
+    const newEpoch = revokeAllMemberSessions(targetPubkey);
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.status = 200;
+    ctx.body = {
+        success: true,
+        memberPubkey: targetPubkey,
+        sessionEpoch: newEpoch,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/session
+ * Returns authentication status and active member details.
+ */
+router.get('/api/local/admin/auth/session', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+
+    if (sessionToken) {
+        const res = validateAdminSession(sessionToken);
+        if (res.valid && res.session) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: true,
+                memberPubkey: res.session.memberPubkey,
+                role: res.session.role,
+                sessionEpoch: res.session.sessionEpoch,
+                hardExpiresAt: res.session.hardExpiresAt,
+                idleExpiresAt: res.session.idleExpiresAt,
+            };
+            return;
+        }
+    }
+
+    // Check if authenticated via password
+    const hasPasswordCreds =
+        (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+
+    if (hasPasswordCreds) {
+        const ok = await checkAdminAuth(ctx as any);
+        if (ok) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: !!(ctx.state as any)?.isKeySession,
+                memberPubkey: (ctx.state as any)?.actor || null,
+                role: (ctx.state as any)?.adminRole || 'owner',
+            };
+            return;
+        }
+    }
+
+    ctx.status = 200;
+    ctx.body = { authenticated: false };
+});
+
+/**
+ * POST /api/local/admin/auth/logout
+ * Destroys current session and clears cookie.
+ */
+router.post('/api/local/admin/auth/logout', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+    if (sessionToken) {
+        revokeAdminSession(sessionToken);
+    }
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.body = { success: true };
+});
+
+/**
+ * POST /api/local/admin/auth/enrol
+ * POST /api/local/admin/auth/break-glass/enrol
+ * Enrols a member key and generates a unique per-owner break-glass code.
+ * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
+ */
+const handleEnrol = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
+    if (!targetPubkey) {
+        ctx.status = 400;
+        ctx.body = { error: 'memberPubkey is required' };
+        return;
+    }
+
+    const callerRole = (ctx.state as any)?.adminRole;
+    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
+    const requestedRole = body.role || 'owner';
+
+    if (requestedRole === 'owner' && !isBreakGlass && callerRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
+        return;
+    }
+
+    try {
+        const res = enrolAdminOwnerKey({
+            targetPubkey,
+            actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
+            isBreakGlass,
+            role: requestedRole,
+        });
+        ctx.body = {
+            success: true,
+            memberPubkey: res.memberPubkey,
+            role: res.role,
+            ...(res.breakGlassCode ? {
+                breakGlassCode: res.breakGlassCode,
+                message: 'Store this break-glass code securely. It will only be shown once.',
+            } : {}),
+            alertEmitted: res.alertEmitted,
+        };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to enrol admin key' };
+    }
+};
+
+router.post('/api/local/admin/auth/enrol', handleEnrol);
+router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
+
+/**
+ * POST /api/local/admin/auth/break-glass-mode
+ * Toggles break-glass mode on or off.
+ */
+router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if ((ctx.state as any)?.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only node owners can toggle break-glass mode' };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (typeof body.enabled !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'enabled (boolean) is required' };
+        return;
+    }
+    setBreakGlassMode(body.enabled);
+    ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
+});
+
+/**
+ * GET /api/local/admin/auth/break-glass-status
+ */
+router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
+});
+router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================
@@ -177,6 +552,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         }
     }
 
+    const rolesList = listNodeRoles();
+    const rolesByPubkey = new Map<string, MemberNodeRole>();
+    for (const r of rolesList) {
+        rolesByPubkey.set(r.member_pubkey, r.role);
+    }
+
     ctx.body = {
         members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
             const isVoucher = canVouch(m.publicKey);
@@ -190,6 +571,7 @@ router.post('/api/local/admin/data', async (ctx) => {
                 tier,
                 standing: tier,
                 canVouch: isVoucher,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
                 platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
             };
         }),
@@ -198,6 +580,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
+        escrowDisputesCount: (db.prepare(`
+            SELECT COUNT(*)
+            FROM marketplace_transactions
+            WHERE status = 'pending'
+              AND (julianday('now') - julianday(created_at)) >= 7
+        `).pluck().get() as number) || 0,
         memberStats: getMemberStats(),
     };
 });
@@ -383,7 +771,12 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        adminDeletePost(ctx.params.id);
+        const ok = adminDeletePost(ctx.params.id);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Post not found' };
+            return;
+        }
         ctx.body = { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
@@ -582,7 +975,7 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         return;
     }
     const deleted = adminBulkDeletePosts(postIds);
-    ctx.body = { success: true, deleted };
+    ctx.body = { success: true, deleted, deletedCount: deleted };
 });
 
 
@@ -695,7 +1088,12 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { adminPubkey, reason } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    const signedActor = (ctx.state as any)?.actor || adminPubkey;
+    if (!signedActor || !isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
     if (!reason) {
         ctx.status = 400;
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
@@ -704,7 +1102,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = 400;
-        ctx.body = { error: result.error };
+        ctx.body = { error: result.error || 'Failed to halt decision' };
         return;
     }
     ctx.body = { success: true };
@@ -714,7 +1112,12 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
 router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { adminPubkey } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    const signedActor = (ctx.state as any)?.actor || adminPubkey;
+    if (!signedActor || !isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = 400;
@@ -822,14 +1225,15 @@ router.get('/api/local/admin/pulse/channels', async (ctx) => {
 
 router.post('/api/local/admin/pulse/channels', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { url, category, platform } = (ctx as any).requestBody || {};
-    if (!url || typeof url !== 'string' || !url.trim()) {
+    const { url, feedUrl, category, platform } = (ctx as any).requestBody || {};
+    const rawUrl = url || feedUrl;
+    if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'url is required' };
         return;
     }
 
-    const trimmedUrl = url.trim();
+    const trimmedUrl = rawUrl.trim();
     const cat = (category && typeof category === 'string' && category.trim()) ? category.trim() : 'learn';
     const plat = (platform && typeof platform === 'string' && platform.trim())
         ? platform.trim()
@@ -882,14 +1286,15 @@ router.post('/api/local/admin/pulse/channels', async (ctx) => {
 
 router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { id } = (ctx as any).requestBody || {};
-    if (!id || typeof id !== 'string') {
+    const { id, channelId } = (ctx as any).requestBody || {};
+    const targetId = id || channelId;
+    if (!targetId || typeof targetId !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'id is required' };
         return;
     }
 
-    if (id === BEANPOOL_LEARN_CHANNEL_ID) {
+    if (targetId === BEANPOOL_LEARN_CHANNEL_ID) {
         ctx.status = 400;
         ctx.body = { error: 'The seeded BeanPool learn channel cannot be removed (it is recreated on boot).' };
         return;
@@ -897,7 +1302,7 @@ router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
 
     const owner = ensureBeanPoolIdentity();
     try {
-        const deleted = deleteChannel(owner, id);
+        const deleted = deleteChannel(owner, targetId);
         if (!deleted) {
             ctx.status = 404;
             ctx.body = { error: 'Channel not found or already removed' };
@@ -942,9 +1347,9 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: 'pubkey and role are required' };
         return;
     }
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 
@@ -964,9 +1369,9 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     const signedActor = (ctx.state as any)?.actor;
     const effectiveActor = signedActor || 'owner:password';
 
-    if (role !== 'owner' && role !== 'admin') {
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         ctx.status = 400;
-        ctx.body = { error: "role must be 'owner' or 'admin'" };
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
 
@@ -982,6 +1387,83 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     } catch (e: any) {
         const msg = e?.message || 'Failed to revoke node role';
         ctx.status = msg.includes('Only an owner') ? 403 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+// ===================== ESCROW DISPUTE RESOLUTION =====================
+// docs/settings-ia.md §5 item 2 & §6 correction 2
+
+router.get('/api/local/admin/disputes', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const minDays = !isNaN(Number(ctx.query.minDays)) ? Number(ctx.query.minDays) : 7;
+    const limit = !isNaN(Number(ctx.query.limit)) ? Math.max(1, Math.min(200, Number(ctx.query.limit))) : 50;
+    const offset = !isNaN(Number(ctx.query.offset)) ? Math.max(0, Number(ctx.query.offset)) : 0;
+    const status = (typeof ctx.query.status === 'string' && ['all', 'pending', 'resolved'].includes(ctx.query.status))
+        ? (ctx.query.status as 'all' | 'pending' | 'resolved')
+        : 'all';
+
+    const total = (db.prepare(`
+        SELECT COUNT(*) FROM marketplace_transactions mt
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+          AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).pluck().get(status, status, status, minDays, minDays) as number) || 0;
+
+    const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    ctx.body = {
+        disputes,
+        total,
+        count: disputes.length,
+        minDays,
+        limit,
+        offset
+    };
+});
+
+router.get('/api/local/admin/disputes/:id', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const dispute = getEscrowDispute(id);
+    if (!dispute) {
+        ctx.status = 404;
+        ctx.body = { error: 'Dispute not found' };
+        return;
+    }
+    ctx.body = { dispute };
+});
+
+router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const action = body.action as EscrowDisputeAction;
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : undefined;
+
+    if (!action || !['release_to_seller', 'refund_to_buyer', 'split'].includes(action)) {
+        ctx.status = 400;
+        ctx.body = { error: "action must be 'release_to_seller', 'refund_to_buyer', or 'split'" };
+        return;
+    }
+
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const tx = resolveEscrowDispute(id, action, effectiveActor, { reason });
+        ctx.body = {
+            success: true,
+            transactionId: id,
+            resolution: action,
+            authSigner: effectiveActor,
+            transaction: tx
+        };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to resolve escrow dispute';
+        ctx.status = msg.includes('not found') ? 404 : 400;
         ctx.body = { error: msg };
     }
 });

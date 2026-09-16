@@ -270,15 +270,11 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
 
     const effectiveCommunityName = diag?.communityName || publicCommunityName || '';
 
-    // Document title and favicon branding
+    // Document title and branding
     useEffect(() => {
-        const favicon = typeof document !== 'undefined' ? document.querySelector<HTMLLinkElement>("link[rel~='icon']") : null;
         if (isFleetMode) {
             if (typeof document !== 'undefined') {
                 document.title = 'BeanPool Fleet Manager — Control Plane';
-            }
-            if (favicon) {
-                favicon.setAttribute('aria-label', 'BeanPool Fleet Manager');
             }
         } else {
             const title = effectiveCommunityName
@@ -286,9 +282,6 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                 : 'BeanPool — Node Settings';
             if (typeof document !== 'undefined') {
                 document.title = title;
-            }
-            if (favicon) {
-                favicon.setAttribute('aria-label', title);
             }
         }
     }, [isFleetMode, effectiveCommunityName]);

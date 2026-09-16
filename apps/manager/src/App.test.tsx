@@ -37,6 +37,10 @@ describe('App Component', () => {
             expect(screen.getAllByRole('button', { name: /fleet telemetry/i }).length).toBeGreaterThanOrEqual(1);
             expect(document.title).toBe('BeanPool Fleet Manager — Control Plane');
             expect(document.title).toContain('Fleet');
+            const favicon = document.querySelector("link[rel~='icon']");
+            if (favicon) {
+                expect(favicon.getAttribute('aria-label')).toBeNull();
+            }
         });
 
         it('switches tabs when tab navigation buttons are clicked', async () => {

@@ -217,7 +217,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 <View style={styles.sheet}>
                     <View style={styles.header}>
                         <Text style={styles.title}>Create a Group</Text>
-                        <Pressable style={styles.closeBtn} onPress={onClose}>
+                        <Pressable
+                            style={styles.closeBtn}
+                            onPress={onClose}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close create group modal"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
                             <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
                         </Pressable>
                     </View>
@@ -259,6 +265,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                     <Pressable
                                         key={cat.key}
                                         style={[styles.optionCard, selected && styles.optionCardActive]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`${cat.label}, ${cat.desc}`}
+                                        accessibilityState={{ selected }}
                                         onPress={() => {
                                             hapticTick();
                                             setCategory(cat.key);
@@ -291,6 +300,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                                     <Pressable
                                         key={pol.key}
                                         style={[styles.optionCard, selected && styles.optionCardActive]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`${pol.label}, ${pol.desc}`}
+                                        accessibilityState={{ selected }}
                                         onPress={() => {
                                             hapticTick();
                                             setJoinPolicy(pol.key);
@@ -319,6 +331,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                             style={[styles.createBtn, (!name.trim() || submitting) && styles.createBtnDisabled]}
                             onPress={handleSubmit}
                             disabled={!name.trim() || submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? "Creating group..." : "Create Group (You become Convenor)"}
+                            accessibilityState={{ disabled: !name.trim() || submitting, busy: submitting }}
                         >
                             {submitting ? (
                                 <ActivityIndicator size="small" color={colors.text.inverse} />

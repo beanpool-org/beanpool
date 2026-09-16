@@ -1263,6 +1263,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Admin spending an enterprise's money | **no** — split the permission; admins may administer, not spend (§2.3, `admin-surface.md` §6) |
 | Approving your own payment | **no** — two-person rule; a different keeper approves |
 | Credit floor while paused | snapshot on pause (`paused_floor_snapshot`, `paused_at`); usable floor is `max(snapshot, derived)` — cannot pull below pause-day floor, earned growth counts, not recomputed downward; expires at **90 days paused** (warn visibly before); clear on resume; keeper exits during pause still release backing per §2.6 (Marty, 2026-09-16, §2.2) |
+| Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
 
 ---
 

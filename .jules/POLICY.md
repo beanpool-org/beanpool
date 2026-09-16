@@ -365,3 +365,24 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** Missing test coverage for `POST /api/commons/projects/update` and `POST /api/commons/projects/delete` routes in `apps/server/src/routes/commons.ts`.
 - **Why not to re-file:** Landed in merge commit `365a909c`. Added integration test suite `apps/server/src/test-commons-projects-update-delete.ts` covering owner updates/deletions, non-owner rejections (400), field validation, and duplicate deletion guards, registered in `scripts/test-all.sh`. Commons project update/delete routes survive the #792 unification; only a suite-list conflict occurred.
 
+
+### 2026-09-17 — Sentinel: sanitize nodeSlug in fleet harvester (#836) — LANDED, SECURITY CLAIM STILL WRONG
+- **Category:** PHANTOM VULNERABILITY, RECURRING — this is the second filing of the same wrong claim
+- **Claim:** `nodeSlug` allows path traversal via an unsanitised `id`.
+- **Why not to re-file:** Already registered on 2026-09-14 against #747 and still wrong. `nodeSlug()`
+  returned a sanitised value on **every** branch: the allowlist arm is an exact match against known
+  node names (`'../../test'` never equals `'test'`), and the fallback already ran
+  `id.replace(/[^a-zA-Z0-9_-]/g, '_')`. There was no traversal to close, then or now.
+- **Why it was merged anyway:** the diff carries real robustness that has nothing to do with the
+  stated claim — `target?.id || ''` stops `undefined.replace()` throwing when an object target has
+  no id, and `cleanId || 'unknown'` stops an all-special-character id collapsing to an empty slug.
+  Judge the diff, not the headline.
+- **Standing rule:** a traversal finding against anything flowing through `nodeSlug` needs proof that
+  `nodeSlug` itself passes the character through. Twice now it has not.
+
+### 2026-09-17 — Vault: cleanup legacy admin secret header (#834) — LANDED, GENUINELY USEFUL
+- **Category:** REAL (small)
+- **Claim:** the manager sends a redundant legacy `x-admin-secret` header alongside `X-Admin-Password`.
+- **Verified:** the server reads `x-admin-secret` **nowhere**, and `buildAdminHeaders` already sends
+  `X-Admin-Password` plus `X-Admin-2FA-Session`. Removing it stops the admin password being
+  transmitted twice in two different headers — less credential surface for no behaviour change.

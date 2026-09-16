@@ -52,6 +52,16 @@ import {
     verifyEd25519Signature,
 } from '../admin-key-auth.js';
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import {
+    issueRekeyCode,
+    completeRekey,
+    getRekeyStatus,
+    getOffboardPreview,
+    executeOffboard,
+    type OffboardOptions,
+} from '../engine/member-wizards.js';
+import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
+import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -656,6 +666,19 @@ function getProcessCpuLoad(): number {
     return Math.min(100, Math.max(0, pct));
 }
 
+let cachedDiskHealth: DiskHealth | null = null;
+let lastDiskHealthCheck = 0;
+const DISK_HEALTH_CACHE_TTL_MS = 60_000;
+
+function getCachedDiskHealth(): DiskHealth {
+    const now = Date.now();
+    if (!cachedDiskHealth || now - lastDiskHealthCheck > DISK_HEALTH_CACHE_TTL_MS) {
+        cachedDiskHealth = getDiskHealth();
+        lastDiskHealthCheck = now;
+    }
+    return cachedDiskHealth;
+}
+
 const getDiagnosticsHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
 
@@ -710,6 +733,8 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
+            shutdownStatus: getShutdownStatus(),
+            diskHealth: getCachedDiskHealth(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -737,6 +762,51 @@ const getDiagnosticsHandler = async (ctx: any) => {
 
 router.get('/api/local/admin/diagnostics', getDiagnosticsHandler);
 router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
+
+// ===================== UNCLEAN SHUTDOWN DIAGNOSTICS =====================
+const getShutdownStatusHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, shutdownStatus: getShutdownStatus() };
+};
+
+const acknowledgeShutdownHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const updated = acknowledgeShutdownRecovery();
+    ctx.body = { success: true, shutdownStatus: updated };
+};
+
+router.get('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status/acknowledge', acknowledgeShutdownHandler);
+
+// ===================== STORAGE & DISK HEALTH =====================
+router.get('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.post('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.get('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const result = cleanStorageAndCompressLogs();
+    cachedDiskHealth = null;
+    ctx.body = result;
+});
+
 
 /**
  * Onboarding funnel: how many people tried to join, and where they stopped.
@@ -1465,6 +1535,126 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
         const msg = e?.message || 'Failed to resolve escrow dispute';
         ctx.status = msg.includes('not found') ? 404 : 400;
         ctx.body = { error: msg };
+    }
+});
+
+// ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
+
+router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const { pubkey } = ctx.params;
+        const status = getRekeyStatus(pubkey);
+        ctx.body = status;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to fetch re-key status' };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = issueRekeyCode(pubkey, effectiveActor);
+        ctx.body = {
+            success: true,
+            ...result,
+            operator: effectiveActor,
+        };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to issue re-enrolment code' };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { code, newPubkey } = body;
+
+    if (!code || typeof code !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Re-enrolment code is required' };
+        return;
+    }
+    if (!newPubkey || typeof newPubkey !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'New public key is required' };
+        return;
+    }
+
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to complete re-keying' };
+    }
+});
+
+router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const { pubkey } = ctx.params;
+        const preview = getOffboardPreview(pubkey);
+
+        // Security / Privacy: Only return active members roster to key-authenticated sessions.
+        // Password-only sessions cannot execute gift_to_member, so withholding the list
+        // prevents leaking the member roster.
+        const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+        if (!signedActor || signedActor === 'owner:password') {
+            preview.activeMembers = [];
+        }
+
+        ctx.body = preview;
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to get offboard preview';
+        ctx.status = msg.includes('not found') ? 404 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { resolution, giftRecipientPubkey } = body;
+
+    if (!resolution || !['donate_to_commons', 'gift_to_member', 'write_off_commons', 'prune_zero_balance'].includes(resolution)) {
+        ctx.status = 400;
+        ctx.body = { error: "resolution must be 'donate_to_commons', 'gift_to_member', 'write_off_commons', or 'prune_zero_balance'" };
+        return;
+    }
+
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    if (resolution === 'gift_to_member' && (!signedActor || signedActor === 'owner:password')) {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Two-person rule requires signed key-based admin authentication to gift offboarding funds to a member.',
+            code: 'KEY_AUTH_REQUIRED',
+        };
+        return;
+    }
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = executeOffboard(
+            pubkey,
+            { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
+            effectiveActor
+        );
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = e?.statusCode || e?.status || 400;
+        ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };
     }
 });
 

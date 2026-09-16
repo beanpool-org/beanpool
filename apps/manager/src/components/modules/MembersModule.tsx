@@ -1010,6 +1010,17 @@ export function MembersModule({
                     nodeRole={selectedMember.nodeRole}
                     members={members}
                     accounts={nodeData?.accounts}
+                    nodeUrl={activeNodeUrl}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    onRekeySuccess={() => {
+                        // Refresh data in background without unmounting modal while user reviews confirmation
+                        onRefresh?.();
+                    }}
+                    onOffboardSuccess={() => {
+                        setSelectedMember(null);
+                        onRefresh?.();
+                    }}
                     onPrune={(pk) => handlePruneMember(pk)}
                     onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}

@@ -295,6 +295,7 @@ export function initSchema() {
 
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN project_id TEXT REFERENCES projects(id)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE)`).run(); } catch { }
 
     // ---------------------------------------------------------------------------------
     // EVERY `ALTER TABLE ... ADD COLUMN` LIVES ABOVE THE schema.sql EXEC. DO NOT ADD ONE BELOW IT.

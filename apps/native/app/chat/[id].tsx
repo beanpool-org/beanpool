@@ -4,7 +4,9 @@ import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKey
 import { withJitter } from '../../utils/jitter';
 import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, useFocusEffect, Stack } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';

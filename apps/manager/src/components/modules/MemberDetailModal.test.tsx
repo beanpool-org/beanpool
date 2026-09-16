@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { MemberDetailModal, MemberModalItem, MemberFlag } from './MemberDetailModal';
+import * as nodeClient from '../../lib/node-client';
 
 describe('MemberDetailModal', () => {
     const mockMember: MemberModalItem = {
@@ -195,5 +196,56 @@ describe('MemberDetailModal', () => {
         expect(document.getElementById('prune-debt-written-off')?.textContent).toContain('150 🫘 bad debt');
         expect(document.getElementById('prune-credit-confiscated')?.textContent).toContain('350 🫘 credit');
         expect(document.getElementById('prune-net-impact')?.textContent).toContain('+200 🫘');
+    });
+
+    it('opens RekeyMemberWizard when Re-Key button is clicked', async () => {
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const rekeyBtn = screen.getByText('🔑 Re-Key');
+        expect(rekeyBtn).toBeInTheDocument();
+        await userEvent.click(rekeyBtn);
+
+        expect(screen.getByText('Re-Key Member (Lost Phone)')).toBeInTheDocument();
+        expect(screen.getByText(/In-person identity confirmed/)).toBeInTheDocument();
+    });
+
+    it('opens OffboardMemberWizard when Offboard button is clicked', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: {
+                publicKey: mockMember.publicKey || 'pubkey-1234567890-abcdef',
+                callsign: 'alice',
+                status: 'active',
+                joinedAt: '2026-01-01',
+            },
+            balance: 50,
+            commonsBalance: 200,
+            costToCommunity: 0,
+            projectedCommonsBalance: 250,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [],
+        });
+
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const offboardBtn = screen.getByText('🚪 Offboard');
+        expect(offboardBtn).toBeInTheDocument();
+        await userEvent.click(offboardBtn);
+
+        expect(screen.getByText('Offboard Member')).toBeInTheDocument();
     });
 });

@@ -125,6 +125,9 @@ async function main() {
         });
         assert(strangerRes.status === 403, `Stranger setting location rejected with 403 (got ${strangerRes.status})`);
 
+        // Seed updated_at in past to verify location update touches updated_at for delta sync
+        db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(shed);
+
         // Alice (keeper) sets location on shed -> succeeds 200
         const keeperRes = await signedFetch('POST', `/api/enterprise/${shed}/location`, aliceKeeper, {
             lat: -28.5495,
@@ -137,11 +140,18 @@ async function main() {
         assert(keeperData.lng === 153.5005, `Response lng matches 153.5005 (got ${keeperData.lng})`);
 
         // Check database row for auth_signer and coordinates
-        const shedRow = db.prepare('SELECT lat, lng, auth_signer, location_auth_signer FROM members WHERE public_key = ?').get(shed) as any;
+        const shedRow = db.prepare('SELECT lat, lng, auth_signer, location_auth_signer, updated_at FROM members WHERE public_key = ?').get(shed) as any;
         assert(shedRow.lat === -28.5495, 'Database lat recorded correctly');
         assert(shedRow.lng === 153.5005, 'Database lng recorded correctly');
         assert(shedRow.location_auth_signer === aliceKeeper.pubKeyHex, `Database location_auth_signer records Alice (got ${shedRow.location_auth_signer})`);
         assert(shedRow.auth_signer === aliceKeeper.pubKeyHex, `Database auth_signer records Alice (got ${shedRow.auth_signer})`);
+        assert(shedRow.updated_at > '2020-01-01T00:00:00.000Z', 'setEnterpriseLocation updates updated_at for delta sync');
+
+        // Verify members_touch_updated_at trigger fires on direct column updates (lat, lng, location_updated_at)
+        db.prepare("UPDATE members SET updated_at = '2020-01-01T00:00:00.000Z' WHERE public_key = ?").run(shed);
+        db.prepare("UPDATE members SET lat = -28.5490 WHERE public_key = ?").run(shed);
+        const triggerTouchRow = db.prepare("SELECT updated_at FROM members WHERE public_key = ?").get(shed) as any;
+        assert(triggerTouchRow.updated_at > '2020-01-01T00:00:00.000Z', 'Direct UPDATE of lat fires members_touch_updated_at trigger');
 
         // Admin can also set location via signed ed25519 member role
         const adminRes = await signedFetch('POST', `/api/enterprise/${flock}/location`, adminId, {

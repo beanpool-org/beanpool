@@ -592,7 +592,8 @@ AFTER UPDATE OF
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
     legacy_credit_floor,
     purpose, goal_amount, deadline_at, lifecycle, paused,
-    paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at
+    paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
+    lat, lng, location_auth_signer, auth_signer, location_updated_at
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

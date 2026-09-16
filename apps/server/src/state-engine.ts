@@ -2741,9 +2741,9 @@ export function setEnterpriseLocation(
     const now = new Date().toISOString();
     db.prepare(`
         UPDATE members
-        SET lat = ?, lng = ?, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?
+        SET lat = ?, lng = ?, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?, updated_at = ?
         WHERE public_key = ?
-    `).run(latVal, lngVal, actorPubkey, actorPubkey, now, enterprisePubkey);
+    `).run(latVal, lngVal, actorPubkey, actorPubkey, now, now, enterprisePubkey);
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: latVal, lng: lngVal, authSigner: actorPubkey, updatedAt: now });

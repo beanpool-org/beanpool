@@ -44,7 +44,7 @@ import {
     adminAssignTreasuryOperator, initiateWindUp, cancelWindUp,
     finaliseWindUp, getEnterpriseLedger, pauseEnterprise, resumeEnterprise,
     reconcileLedgerFromDb, getCommonsBalance, getCommonsBalanceExact,
-    getEnterpriseUnderlyingFloor,
+    getEnterpriseUnderlyingFloor, getPosts,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -212,6 +212,15 @@ async function main() {
         assert(e.message.includes('Enterprise is winding up — cannot accept new orders'), `acceptPost with winding-up buyer rejected: "${e.message}"`);
     }
     assert(acceptBuyerWindingUpThrew, 'acceptPost blocked when buyer is winding up');
+
+    // Marketplace query excludes winding-up enterprise posts
+    const publicPostsWindingUp = getPosts();
+    const farmPublicPost = publicPostsWindingUp.find((p: any) => p.authorPublicKey === farm);
+    assert(!farmPublicPost, 'getPosts excludes listings from winding-up enterprises');
+
+    // Self-view can still see listings
+    const selfPostsWindingUp = getPosts({ authorPubkey: farm, viewerPubkey: farm });
+    assert(selfPostsWindingUp.length >= 1, 'Self-view can still see own listings while winding up');
 
     // ─────────────────────────────────────────────────────────────────────────
     // 2. CANCEL WIND-UP DURING GRACE PERIOD

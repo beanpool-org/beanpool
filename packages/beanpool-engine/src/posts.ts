@@ -278,9 +278,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         }
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
-            query += " AND (m.paused IS NULL OR m.paused = 0)";
+            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         } else if (!selfView && !filter?.includeInactive) {
-            query += " AND (m.paused IS NULL OR m.paused = 0)";
+            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync

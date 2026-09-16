@@ -28,6 +28,8 @@ import {
     normalizeNodeData,
     normalizeKeepers,
     normalizeKeeperPubkey,
+    pruneInviteBranch,
+    deleteNodePost,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -577,12 +579,29 @@ describe('normalizeKeeperPubkey and normalizeKeepers', () => {
         expect(normalizeKeepers(['pk1', 'pk2'])).toEqual(['pk1', 'pk2']);
     });
 
-    it('extracts publicKey from keeper objects', () => {
+    it('extracts publicKey from keeper objects with various pubkey aliases', () => {
         const obj1 = { publicKey: 'pubkey_alpha', callsign: 'alpha', avatarUrl: null, grantedAt: null };
         const obj2 = { pubkey: 'pubkey_beta', callsign: 'beta' };
+        const obj3 = { member_pubkey: 'pubkey_gamma', callsign: 'gamma' };
+        const obj4 = { memberPubkey: 'pubkey_delta', callsign: 'delta' };
+        const obj5 = { public_key: 'pubkey_epsilon', callsign: 'epsilon' };
         expect(normalizeKeeperPubkey(obj1)).toBe('pubkey_alpha');
         expect(normalizeKeeperPubkey(obj2)).toBe('pubkey_beta');
-        expect(normalizeKeepers([obj1, obj2])).toEqual(['pubkey_alpha', 'pubkey_beta']);
+        expect(normalizeKeeperPubkey(obj3)).toBe('pubkey_gamma');
+        expect(normalizeKeeperPubkey(obj4)).toBe('pubkey_delta');
+        expect(normalizeKeeperPubkey(obj5)).toBe('pubkey_epsilon');
+        expect(normalizeKeepers([obj1, obj2, obj3, obj4, obj5])).toEqual([
+            'pubkey_alpha',
+            'pubkey_beta',
+            'pubkey_gamma',
+            'pubkey_delta',
+            'pubkey_epsilon',
+        ]);
+    });
+
+    it('skips empty or whitespace-only candidate keys to find populated alias', () => {
+        const obj = { publicKey: '', pubkey: '   ', member_pubkey: 'actual_pubkey' };
+        expect(normalizeKeeperPubkey(obj)).toBe('actual_pubkey');
     });
 
     it('filters out empty or malformed keeper entries', () => {
@@ -710,6 +729,66 @@ describe('normalizeNodeData boundary normalization', () => {
         expect(normalized.reports?.[0].target_pubkey).toBe('target_pubkey_val');
         expect(normalized.reports?.[0].reporterPubkey).toBe('reporter_pubkey_val');
         expect(normalized.reports?.[0].reporter_pubkey).toBe('reporter_pubkey_val');
+    });
+});
+
+describe('pruneInviteBranch', () => {
+    it('throws error when pubkey is missing or empty', async () => {
+        await expect(pruneInviteBranch('https://node.example.com', '')).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+        await expect(pruneInviteBranch('https://node.example.com', '   ')).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+        await expect(pruneInviteBranch('https://node.example.com', null as any)).rejects.toThrow(
+            'Valid public key is required to prune an invite branch'
+        );
+    });
+
+    it('sends POST to prune branch with trimmed pubkey', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await pruneInviteBranch('https://node.example.com', '  pubkey123  ', 'pwd1', 'sess1');
+        expect(res).toEqual({ success: true });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/branches/pubkey123/prune');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('pwd1');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+    });
+});
+
+describe('deleteNodePost', () => {
+    it('throws error when postId is missing or empty', async () => {
+        await expect(deleteNodePost('https://node.example.com', '')).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+        await expect(deleteNodePost('https://node.example.com', '   ')).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+        await expect(deleteNodePost('https://node.example.com', undefined as any)).rejects.toThrow(
+            'Valid post ID is required to delete a post'
+        );
+    });
+
+    it('sends POST to delete post with trimmed postId', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await deleteNodePost('https://node.example.com', '  post-456  ', 'pwd1', 'sess1');
+        expect(res).toEqual({ success: true });
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/posts/post-456/delete');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('pwd1');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
     });
 });
 

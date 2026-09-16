@@ -3,6 +3,7 @@ import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
+import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
 
 export interface MemberItem {
@@ -62,6 +63,7 @@ export interface UserReportItem {
 export interface NodeDataPayload {
     members?: MemberItem[];
     profiles?: ProfileItem[];
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     posts?: unknown[];
     flags?: SecurityFlagItem[];
     reports?: UserReportItem[];
@@ -89,6 +91,7 @@ interface MembersModuleProps {
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
@@ -96,12 +99,16 @@ interface MembersModuleProps {
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
 }
 
-export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
+export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
     const profile = profiles instanceof Map
         ? profiles.get(pub)
         : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    const raw = profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+    return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+}
+
+export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
+    const raw = getMemberRawAvatar(m, profiles);
     return resolveAvatarUrl(raw);
 }
 
@@ -125,23 +132,44 @@ export function fmtLastActive(iso?: string | null): string {
 }
 
 export function getMemberDisplayName(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string {
-    const rawPub = m?.publicKey || m?.pubkey;
-    const pub = typeof rawPub === 'string' ? rawPub : '';
+    const rawPub = m?.publicKey || m?.pubkey || (m as any)?.public_key || (m as any)?.member_pubkey || (m as any)?.memberPubkey;
+    const pub = typeof rawPub === 'string' ? rawPub.trim() : '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
     // Look up in profiles Map or array
-    const profile = profiles instanceof Map
-        ? profiles.get(pub)
-        : (Array.isArray(profiles) ? profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub)) : undefined);
+    let profile: ProfileItem | undefined;
+    if (profiles instanceof Map) {
+        profile = profiles.get(pub);
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            for (const [k, v] of profiles.entries()) {
+                if (k.toLowerCase() === lower) {
+                    profile = v;
+                    break;
+                }
+            }
+        }
+    } else if (Array.isArray(profiles) && pub) {
+        profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            profile = profiles.find((p) => {
+                if (!p) return false;
+                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey || (p as any).memberPubkey;
+                return typeof pk === 'string' && pk.trim().toLowerCase() === lower;
+            });
+        }
+    }
+
     if (typeof profile?.name === 'string' && profile.name.trim()) return profile.name.trim();
     if (typeof profile?.displayName === 'string' && profile.displayName.trim()) return profile.displayName.trim();
     if (typeof profile?.callsign === 'string' && profile.callsign.trim()) return profile.callsign.trim();
     if (typeof profile?.handle === 'string' && profile.handle.trim()) return `@${profile.handle.trim()}`;
 
     // Direct properties on member object
+    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
     if (typeof m?.name === 'string' && m.name.trim()) return m.name.trim();
     if (typeof m?.displayName === 'string' && m.displayName.trim()) return m.displayName.trim();
-    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
     if (typeof m?.handle === 'string' && m.handle.trim()) return `@${m.handle.trim()}`;
 
     if (pub && pub.includes('-')) {
@@ -186,6 +214,7 @@ export function MembersModule({
     onRefresh,
     onFreezeUser,
     onPruneUser,
+    onPruneBranch,
     onUpdateTier,
     onToggleVoucher,
     onToggleOperator,
@@ -548,13 +577,12 @@ export function MembersModule({
                         {treasuries.map((t) => (
                             <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    {t.avatar ? (
-                                        <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shrink-0" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-lg shrink-0">
-                                            🏛️
-                                        </div>
-                                    )}
+                                    <Avatar
+                                        src={t.avatar}
+                                        alt={t.name}
+                                        className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden"
+                                        fallbackGlyph="🏛️"
+                                    />
                                     <div className="min-w-0">
                                         <div className="font-bold text-white text-xs truncate">{t.name}</div>
                                         <div className="text-[11px] text-nature-400 font-mono">
@@ -748,27 +776,16 @@ export function MembersModule({
                                                 }`}
                                             >
                                                 <div className="col-span-4 flex items-center gap-2.5">
-                                                    {(() => {
-                                                        const avatar = getMemberAvatar(m, profilesMap);
-                                                        if (avatar) {
-                                                            return (
-                                                                <img
-                                                                    src={avatar}
-                                                                    alt={displayName}
-                                                                    className="w-7 h-7 rounded-full object-cover shrink-0 border border-terra-500/40 shadow-sm"
-                                                                />
-                                                            );
-                                                        }
-                                                        return (
-                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                                                                isMemberFrozen
-                                                                    ? 'bg-red-950 text-red-400 border-red-800'
-                                                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
-                                                            }`}>
-                                                                {initial}
-                                                            </div>
-                                                        );
-                                                    })()}
+                                                    <Avatar
+                                                        src={getMemberRawAvatar(m, profilesMap)}
+                                                        alt={displayName}
+                                                        className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border overflow-hidden ${
+                                                            isMemberFrozen
+                                                                ? 'bg-red-950 text-red-400 border-red-800'
+                                                                : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
+                                                        }`}
+                                                        fallbackGlyph={initial}
+                                                    />
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>
@@ -991,7 +1008,10 @@ export function MembersModule({
                     onGrantNodeRole={onGrantNodeRole}
                     onRevokeNodeRole={onRevokeNodeRole}
                     nodeRole={selectedMember.nodeRole}
+                    members={members}
+                    accounts={nodeData?.accounts}
                     onPrune={(pk) => handlePruneMember(pk)}
+                    onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}
                 />
             )}

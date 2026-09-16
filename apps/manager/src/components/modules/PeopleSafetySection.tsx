@@ -3,8 +3,11 @@ import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersM
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
+import { PostModerationPanel } from './PostModerationPanel';
+import { AncestryTreePanel } from './AncestryTreePanel';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch } from '../../lib/node-client';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -13,6 +16,7 @@ interface PeopleSafetySectionProps {
     onRefresh: () => void;
     onFreezeUser: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
@@ -28,6 +32,7 @@ export function PeopleSafetySection({
     onRefresh,
     onFreezeUser,
     onPruneUser,
+    onPruneBranch,
     onUpdateTier,
     onToggleVoucher,
     onToggleOperator,
@@ -36,8 +41,14 @@ export function PeopleSafetySection({
     initialSubTab = 'directory',
 }: PeopleSafetySectionProps) {
     const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation'>(initialSubTab);
+    const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
+
+    const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
+        await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+        onRefresh();
+    });
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
 
@@ -137,21 +148,67 @@ export function PeopleSafetySection({
 
             {/* Sub-tab content */}
             {subTab === 'directory' && (
-                <MembersModule
-                    nodeData={nodeData}
-                    nodeDataLoading={nodeDataLoading}
-                    activeNodeUrl={activeNode.url}
-                    adminPassword={activeNode.adminPassword}
-                    tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
-                    onRefresh={onRefresh}
-                    onFreezeUser={onFreezeUser}
-                    onPruneUser={onPruneUser}
-                    onUpdateTier={onUpdateTier}
-                    onToggleVoucher={onToggleVoucher}
-                    onToggleOperator={onToggleOperator}
-                    onGrantNodeRole={onGrantNodeRole}
-                    onRevokeNodeRole={onRevokeNodeRole}
-                />
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 bg-nature-950/70 p-2 rounded-xl border border-nature-800">
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                id="view-roster-btn"
+                                onClick={() => setDirectoryView('roster')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    directoryView === 'roster'
+                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        : 'text-nature-400 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <span>📋</span>
+                                <span>Member Roster</span>
+                            </button>
+                            <button
+                                type="button"
+                                id="view-tree-btn"
+                                onClick={() => setDirectoryView('tree')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    directoryView === 'tree'
+                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        : 'text-nature-400 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <span>🌳</span>
+                                <span>Ancestry Tree</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {directoryView === 'roster' ? (
+                        <MembersModule
+                            nodeData={nodeData}
+                            nodeDataLoading={nodeDataLoading}
+                            activeNodeUrl={activeNode.url}
+                            adminPassword={activeNode.adminPassword}
+                            tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                            onRefresh={onRefresh}
+                            onFreezeUser={onFreezeUser}
+                            onPruneUser={onPruneUser}
+                            onPruneBranch={handlePruneBranch}
+                            onUpdateTier={onUpdateTier}
+                            onToggleVoucher={onToggleVoucher}
+                            onToggleOperator={onToggleOperator}
+                            onGrantNodeRole={onGrantNodeRole}
+                            onRevokeNodeRole={onRevokeNodeRole}
+                        />
+                    ) : (
+                        <SectionErrorBoundary sectionName="Ancestry Tree" resetKey={activeNode.id}>
+                            <AncestryTreePanel
+                                nodeData={nodeData}
+                                nodeDataLoading={nodeDataLoading}
+                                activeNode={activeNode}
+                                onRefresh={onRefresh}
+                                onPruneBranch={handlePruneBranch}
+                            />
+                        </SectionErrorBoundary>
+                    )}
+                </div>
             )}
 
             {subTab === 'invites' && (
@@ -268,6 +325,15 @@ export function PeopleSafetySection({
                             )}
                         </div>
                     </div>
+
+                    {/* Individual Post Search, Filtering & Deletion Panel */}
+                    <SectionErrorBoundary sectionName="Post Moderation" resetKey={activeNode.id}>
+                        <PostModerationPanel
+                            posts={nodeData?.posts as any}
+                            activeNode={activeNode}
+                            onRefresh={onRefresh}
+                        />
+                    </SectionErrorBoundary>
                 </div>
             )}
 

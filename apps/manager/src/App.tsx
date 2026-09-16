@@ -17,6 +17,7 @@ import {
     fetchNodeLogs,
     freezeNodeUser,
     pruneNodeUser,
+    pruneInviteBranch,
     updateNodeUserTier,
     updateNodeUserVoucher,
     updateNodeUserOperator,
@@ -1010,6 +1011,12 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                                 await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                                             }
                                         }}
+                                        onPruneBranch={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
                                         onUpdateTier={async (pubkey, tier) => {
                                             if (activeNode) {
                                                 await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
@@ -1159,6 +1166,12 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                         onPruneUser={async (pubkey) => {
                                             if (activeNode) {
                                                 await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneBranch={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
                                             }
                                         }}
                                         onUpdateTier={async (pubkey, tier) => {

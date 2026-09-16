@@ -16,6 +16,8 @@ import {
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
+import { StandbyReplicationPanel } from './StandbyReplicationPanel';
+import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -36,6 +38,7 @@ interface ApplianceSectionProps {
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
     initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
+    isStandby?: boolean;
 }
 
 export function ApplianceSection({
@@ -54,8 +57,38 @@ export function ApplianceSection({
     onRunLedgerAudit,
     auditState,
     initialSubTab = 'diagnostics',
+    isStandby: propIsStandby,
 }: ApplianceSectionProps) {
     const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab);
+    const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        async function fetchBackupRole() {
+            try {
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                }).catch(() => null);
+                if (res && res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    if (active && data.role) {
+                        setBackupRole(data.role.toLowerCase() === 'backup' ? 'backup' : 'primary');
+                    }
+                }
+            } catch {
+                // Ignore background fetch error
+            }
+        }
+        fetchBackupRole();
+        return () => { active = false; };
+    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+
+    const isStandby = propIsStandby !== undefined
+        ? propIsStandby
+        : (backupRole ? backupRole === 'backup' : activeNode.isPrimary === false);
 
     // Snapshots & Backups state
     const [snapshots, setSnapshots] = useState<SnapshotItem[]>([]);
@@ -898,6 +931,23 @@ export function ApplianceSection({
                             </div>
                         )}
                     </div>
+
+                    {/* Standby Live Backup / Replication Configuration (Standby) vs Replication Access (Primary) */}
+                    {isStandby ? (
+                        <SectionErrorBoundary sectionName="Standby Live Backup" resetKey={activeNode.id}>
+                            <StandbyReplicationPanel
+                                activeNode={activeNode}
+                                onRefreshDiag={onRefreshDiag}
+                            />
+                        </SectionErrorBoundary>
+                    ) : (
+                        <SectionErrorBoundary sectionName="Replication Access" resetKey={activeNode.id}>
+                            <ReplicationAccessPanel
+                                activeNode={activeNode}
+                                onRefreshDiag={onRefreshDiag}
+                            />
+                        </SectionErrorBoundary>
+                    )}
                 </div>
             )}
 
@@ -940,12 +990,14 @@ export function ApplianceSection({
 
             {/* Subtab: Node Identity */}
             {subTab === 'identity' && (
-                <NodeIdentityPanel
-                    key={activeNode.id}
-                    activeNode={activeNode}
-                    diag={diag}
-                    onRefreshDiag={onRefreshDiag}
-                />
+                <SectionErrorBoundary sectionName="Node Identity" resetKey={activeNode.id}>
+                    <NodeIdentityPanel
+                        key={activeNode.id}
+                        activeNode={activeNode}
+                        diag={diag}
+                        onRefreshDiag={onRefreshDiag}
+                    />
+                </SectionErrorBoundary>
             )}
 
             {/* Subtab: Access & Security */}

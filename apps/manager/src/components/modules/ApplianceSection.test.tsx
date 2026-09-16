@@ -678,5 +678,61 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByTestId('public-address-panel')).toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 3, name: /Public Address & DNS Tunnel/i })).toBeInTheDocument();
     });
+
+    it('renders ReplicationAccessPanel and hides StandbyReplicationPanel on primary nodes', async () => {
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                    isStandby={false}
+                />
+            );
+        });
+
+        expect(screen.getByRole('heading', { name: /Replication Access/i })).toBeInTheDocument();
+        expect(screen.queryByText('Live Backup Server & Hot-Standby Replication')).not.toBeInTheDocument();
+    });
+
+    it('renders StandbyReplicationPanel and hides ReplicationAccessPanel on standby replicas', async () => {
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                    isStandby={true}
+                />
+            );
+        });
+
+        expect(screen.getByText('Live Backup Server & Hot-Standby Replication')).toBeInTheDocument();
+        expect(screen.queryByText('Replication Access & Read-Only Snapshots')).not.toBeInTheDocument();
+    });
 });
 

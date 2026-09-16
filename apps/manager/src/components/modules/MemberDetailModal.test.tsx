@@ -162,4 +162,38 @@ describe('MemberDetailModal', () => {
         expect(handleRevokeRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
         expect(await screen.findByText(/Cannot remove the last owner/)).toBeInTheDocument();
     });
+
+    it('forwards accounts to PruneBranchModal and surfaces calculated financial impact', async () => {
+        const childMember = {
+            publicKey: 'child-pubkey-789',
+            callsign: 'ChildMember',
+            invitedBy: 'pubkey-1234567890-abcdef',
+        };
+        const mockAccounts = [
+            { publicKey: 'pubkey-1234567890-abcdef', balance: -150 },
+            { publicKey: 'child-pubkey-789', balance: 350 },
+        ];
+
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                members={[mockMember, childMember]}
+                accounts={mockAccounts}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onPruneBranch={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const pruneBranchBtn = screen.getByText('🗑️ Prune Branch');
+        expect(pruneBranchBtn).toBeInTheDocument();
+        await userEvent.click(pruneBranchBtn);
+
+        // Verify PruneBranchModal opened with accounts passed through
+        expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toContain('150 🫘 bad debt');
+        expect(document.getElementById('prune-credit-confiscated')?.textContent).toContain('350 🫘 credit');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('+200 🫘');
+    });
 });

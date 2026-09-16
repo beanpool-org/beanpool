@@ -73,6 +73,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
             onClick={onClose}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="create-group-title"
         >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <div
@@ -81,12 +82,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
             >
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
-                    <h2 className="text-lg font-black text-nature-950 dark:text-white">
-                        👥 Create a Group
+                    <h2 id="create-group-title" className="text-lg font-black text-nature-950 dark:text-white flex items-center gap-1.5">
+                        <span aria-hidden="true">👥</span> Create a Group
                     </h2>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors"
+                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         aria-label="Close"
                     >
                         ✕
@@ -96,7 +98,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Plain Language Framing Banner */}
                     <div className="p-3 bg-nature-200/60 dark:bg-nature-900/60 border border-nature-300 dark:border-nature-800 rounded-xl text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
-                        ℹ️ <strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust or voting standing.
+                        <span aria-hidden="true">ℹ️</span> <strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust or voting standing.
                     </div>
 
                     {error && (
@@ -147,13 +149,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                                         type="button"
                                         aria-pressed={active}
                                         onClick={() => setCategory(cat.key)}
-                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                             active
                                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-500'
                                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-800 hover:border-nature-300'
                                         }`}
                                     >
-                                        <span className="text-2xl">{cat.icon}</span>
+                                        <span className="text-2xl" aria-hidden="true">{cat.icon}</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{cat.label}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{cat.desc}</div>
@@ -178,13 +180,13 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                                         type="button"
                                         aria-pressed={active}
                                         onClick={() => setJoinPolicy(pol.key)}
-                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                                        className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                             active
                                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 dark:border-emerald-500'
                                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-800 hover:border-nature-300'
                                         }`}
                                     >
-                                        <span className="text-2xl">{pol.icon}</span>
+                                        <span className="text-2xl" aria-hidden="true">{pol.icon}</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{pol.label}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{pol.desc}</div>

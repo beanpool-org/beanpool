@@ -147,7 +147,7 @@ export function ColdStartWizard({
             }
         };
         enrollTotp();
-    }, [activeNode?.id, activeNode?.url]);
+    }, [activeNode?.id, activeNode?.url, activeNode?.adminPassword, effectiveTfaToken]);
 
     // Step 3: First Enterprise & First Offer
     const [selectedPresetId, setSelectedPresetId] = useState<'food' | 'tools' | 'machinery'>('food');

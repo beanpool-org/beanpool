@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColdStartWizard } from './ColdStartWizard';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
@@ -27,6 +27,7 @@ const mockDiag = {
 
 describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
     beforeEach(() => {
+        sessionStorage.clear();
         vi.clearAllMocks();
         localStorage.clear();
         vi.spyOn(nodeClient, 'createNodeTreasury').mockResolvedValue({
@@ -48,6 +49,10 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             status: 200,
             json: () => Promise.resolve({ success: true }),
         }));
+    });
+
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     it('navigates through all 5 steps of the cold-start wizard and enforces invariants', async () => {
@@ -289,6 +294,52 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             mockProfile.adminPassword,
             'trusted',
             'tfa-wizard-token'
+        );
+    });
+
+    it('re-runs enrollTotp and forwards updated effectiveTfaToken to 2fa setup endpoint', async () => {
+        const { rerender } = render(
+            <ColdStartWizard
+                activeNode={mockProfile}
+                diag={mockDiag}
+                nodeData={{ members: [] }}
+                tfaToken="tfa-initial"
+                onComplete={vi.fn()}
+            />
+        );
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/2fa/setup'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-password',
+                    'X-Admin-2FA-Session': 'tfa-initial',
+                }),
+            })
+        );
+
+        await act(async () => {
+            rerender(
+                <ColdStartWizard
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    nodeData={{ members: [] }}
+                    tfaToken="tfa-updated"
+                    onComplete={vi.fn()}
+                />
+            );
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/2fa/setup'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-password',
+                    'X-Admin-2FA-Session': 'tfa-updated',
+                }),
+            })
         );
     });
 });

@@ -59,11 +59,10 @@ function checkWorkspace(relPath, { enforceTypes = [] } = {}) {
   const files = walk(srcDir);
   const errors = [];
 
-  const importRegex = /^\s*(?:import\s+(?:(?:type\s+)?[\s\S]*?from\s+)?['"]([^'"]+)['"]|export\s+(?:type\s+)?[\s\S]*?from\s+['"]([^'"]+)['"]|import\s*\(['"]([^'"]+)['"]\))/gm;
+  const importRegex = /(?:^\s*import\s+['"]([^'"]+)['"]|^\s*(?:import|export)\s+(?:type\s+)?[\s\S]*?\sfrom\s+['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\))/gm;
 
   for (const file of files) {
     const isTest = file.includes('.test.') || file.includes('__tests__') || file.endsWith('setupTests.ts');
-    const allowed = isTest ? allDeps : prodDeps;
     const rawContent = fs.readFileSync(file, 'utf8');
     const content = stripComments(rawContent);
 
@@ -81,6 +80,9 @@ function checkWorkspace(relPath, { enforceTypes = [] } = {}) {
       }
 
       if (NODE_BUILTINS.has(basePkg)) continue;
+
+      const isTypeOnly = /^\s*(?:import\s+type|export\s+type)/.test(match[0]);
+      const allowed = (isTest || isTypeOnly) ? allDeps : prodDeps;
 
       if (!allowed.has(basePkg)) {
         errors.push({

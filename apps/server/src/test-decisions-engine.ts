@@ -576,6 +576,73 @@ async function runDecisionsSuite() {
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
 
+    // ── 9b. Robustness & Preflight Invariants ─────────────────────────────────
+    console.log('\n--- 9b. Robustness & Preflight Invariants ---');
+
+    // NaN vote count rejected
+    const decForVoteCheck = createDecision({
+        authorPubkey: admin,
+        title: 'Vote check decision',
+        description: 'Testing vote validation',
+        touches: 'member',
+        effect: 'poll',
+    });
+    const nanVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, NaN);
+    testAssert(!nanVoteRes.success && nanVoteRes.error?.includes('positive finite integer'), 'NaN vote count rejected');
+
+    const negVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, -5);
+    testAssert(!negVoteRes.success && negVoteRes.error?.includes('positive finite integer'), 'Negative vote count rejected');
+
+    // grant_hardship without valid member fails preflight with void
+    const fakeRecipient = 'nonexistent_pubkey_' + Date.now();
+    const hardshipDec = createDecision({
+        authorPubkey: voterA,
+        title: 'Hardship grant to ghost member',
+        description: 'Testing preflight',
+        touches: 'pool',
+        effect: 'grant_hardship',
+        subject: fakeRecipient,
+        params: { amount: 50 },
+    });
+    const execHardshipRes = executeDecision(hardshipDec.id);
+    testAssert(execHardshipRes.status === 'execution_void', 'Hardship to nonexistent recipient halts at execution_void');
+
+    // Head-of-line blocking resilience in tickDecisions:
+    // Create an expired decision with broken params that throws, plus a normal valid expired decision
+    const brokenExpiredDec = createDecision({
+        authorPubkey: voterB,
+        title: 'Broken expired decision',
+        description: 'Throws on execution',
+        touches: 'member',
+        effect: 'grant_tier',
+        subject: m1,
+        params: { tier: 'CorruptTier' as any },
+        closesAt: new Date(Date.now() - 5000).toISOString(),
+    });
+    castDecisionVote(brokenExpiredDec.id, voterA, true, 1);
+    castDecisionVote(brokenExpiredDec.id, voterC, true, 1);
+    castDecisionVote(brokenExpiredDec.id, admin, true, 1);
+
+    const targetGoodMember = 'good_target_' + Date.now();
+    seedTestMember(targetGoodMember, 'GoodTarget', { earnedCredit: 50 });
+    const goodExpiredDec = createDecision({
+        authorPubkey: voterC,
+        title: 'Good expired decision following broken one',
+        description: 'Should still execute',
+        touches: 'member',
+        effect: 'grant_voucher',
+        subject: targetGoodMember,
+        params: {},
+        closesAt: new Date(Date.now() - 4000).toISOString(),
+    });
+    castDecisionVote(goodExpiredDec.id, voterA, true, 1);
+    castDecisionVote(goodExpiredDec.id, voterB, true, 1);
+    castDecisionVote(goodExpiredDec.id, admin, true, 1);
+
+    tickDecisions();
+    testAssert(getDecision(brokenExpiredDec.id)!.status === 'execution_blocked', 'Failing expired decision isolated as execution_blocked');
+    testAssert(getDecision(goodExpiredDec.id)!.status === 'executed', 'Subsequent expired decision executed successfully without HOL blocking');
+
     // ── 10. Backward Compatibility: Legacy Voting Rounds ─────────────────────
     console.log('\n--- 10. Backward Compatibility ---');
 

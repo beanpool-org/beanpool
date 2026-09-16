@@ -422,7 +422,11 @@ export function castDecisionVote(
     const elig = checkVoterEligibility(voterPubkey);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
 
-    const count = Math.max(1, Math.floor(voteCount));
+    const num = Number(voteCount);
+    if (!Number.isFinite(num) || num < 1) {
+        return { success: false, creditsUsed: 0, error: 'voteCount must be a positive finite integer' };
+    }
+    const count = Math.floor(num);
     let weight = 1;
     let creditCost = 1;
 
@@ -566,6 +570,11 @@ export function preflightAssert(decision: Decision): {
     }
 
     if (decision.effect === 'grant_hardship') {
+        if (!decision.subject) return { status: 'blocked', reason: 'Missing hardship recipient subject' };
+        const member = getMember(decision.subject);
+        if (!member || member.status === 'pruned') {
+            return { status: 'void', reason: 'Hardship recipient member does not exist or was pruned' };
+        }
         const amount = Number(decision.params?.amount);
         if (!amount || amount <= 0 || !Number.isFinite(amount)) {
             return { status: 'blocked', reason: 'Invalid hardship grant amount' };
@@ -649,7 +658,15 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
     // Reversible state flips and money movements: single atomic commit
     try {
+        let alreadyExecuted = false;
         conservingTransaction(() => {
+            // Re-verify status under write lock to guard against concurrent execution
+            const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
+            if (!current || current.status === 'executed' || current.status === 'execution_void') {
+                alreadyExecuted = true;
+                return;
+            }
+
             const authSigner = `system:decision:${decision.id}`;
 
             switch (decision.effect) {
@@ -790,6 +807,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             `).run(now, now, decisionId);
         });
 
+        if (alreadyExecuted) {
+            const current = getDecision(decisionId);
+            return { success: true, status: current?.status || 'executed' };
+        }
+
         if (decision.subject) {
             broadcast({ type: 'profile_updated', publicKey: decision.subject });
         }
@@ -910,42 +932,55 @@ export function tickDecisions(asOfTime?: number): {
 
     for (const r of openExpired) {
         evaluated++;
-        const tally = tallyDecision(r.id, asOfTime);
-        const now = new Date().toISOString();
+        try {
+            const tally = tallyDecision(r.id, asOfTime);
+            const now = new Date().toISOString();
 
-        if (!tally.quorumMet) {
+            if (!tally.quorumMet) {
+                db.prepare(`
+                    UPDATE decisions SET
+                        status = 'unresolved',
+                        execution_reason = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
+                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                continue;
+            }
+
+            if (!tally.passed) {
+                db.prepare(`
+                    UPDATE decisions SET
+                        status = 'failed',
+                        execution_reason = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                `).run(
+                    `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
+                    now,
+                    r.id
+                );
+                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                continue;
+            }
+
+            // Passed! Mark passed and execute
+            db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
+            const res = executeDecision(r.id);
+            if (res.success && res.status === 'executed') {
+                executed++;
+            }
+        } catch (err: any) {
+            const now = new Date().toISOString();
+            console.error(`[Decisions] Failed to evaluate decision ${r.id}:`, err);
             db.prepare(`
                 UPDATE decisions SET
-                    status = 'unresolved',
-                    execution_reason = ?,
+                    status = 'execution_blocked',
+                    execution_error = ?,
                     updated_at = ?
                 WHERE id = ?
-            `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
+            `).run(err?.message || String(err), now, r.id);
             broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
-            continue;
-        }
-
-        if (!tally.passed) {
-            db.prepare(`
-                UPDATE decisions SET
-                    status = 'failed',
-                    execution_reason = ?,
-                    updated_at = ?
-                WHERE id = ?
-            `).run(
-                `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
-                now,
-                r.id
-            );
-            broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
-            continue;
-        }
-
-        // Passed! Mark passed and execute
-        db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
-        const res = executeDecision(r.id);
-        if (res.success && res.status === 'executed') {
-            executed++;
         }
     }
 

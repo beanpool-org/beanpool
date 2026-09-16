@@ -1,0 +1,688 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    Modal,
+    Pressable,
+    ScrollView,
+    ActivityIndicator,
+    Alert
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme, useStyles } from '../app/ThemeContext';
+import {
+    fetchGroupDetails,
+    joinGroupApi,
+    leaveGroupApi,
+    approveGroupMemberApi,
+    setGroupMemberRoleApi,
+    updateGroupApi,
+    type GroupItem,
+    type GroupMemberItem,
+    type GroupRole,
+    type JoinPolicy
+} from '../utils/db';
+import { MemberAvatar } from './MemberAvatar';
+import { hapticSuccess, hapticTick } from '../utils/haptics';
+
+interface GroupDetailModalProps {
+    group: GroupItem | null;
+    isOpen: boolean;
+    onClose: () => void;
+    myPubkey?: string;
+    onMembershipChanged?: () => void;
+    onPostToGroup?: (group: GroupItem) => void;
+}
+
+export function GroupDetailModal({
+    group,
+    isOpen,
+    onClose,
+    myPubkey,
+    onMembershipChanged,
+    onPostToGroup
+}: GroupDetailModalProps) {
+    const { colors } = useTheme();
+    const [loading, setLoading] = useState(false);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [members, setMembers] = useState<GroupMemberItem[]>([]);
+    const [groupData, setGroupData] = useState<GroupItem | null>(group);
+    const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+
+    const loadDetails = useCallback(async () => {
+        if (!group?.id) return;
+        setLoading(true);
+        try {
+            const data = await fetchGroupDetails(group.id);
+            if (data) {
+                setGroupData(data.group);
+                setMembers(data.members);
+            }
+        } catch (e) {
+            console.warn('[GroupDetail] Failed to load:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, [group?.id]);
+
+    useEffect(() => {
+        if (isOpen && group?.id) {
+            setGroupData(group);
+            loadDetails();
+        }
+    }, [isOpen, group, loadDetails]);
+
+    const styles = useStyles(({ colors }) => StyleSheet.create({
+        backdrop: {
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'flex-end',
+        },
+        sheet: {
+            backgroundColor: colors.surface.card,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            maxHeight: '90%',
+            paddingBottom: 32,
+        },
+        header: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 20,
+            paddingVertical: 16,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border.default,
+        },
+        title: {
+            fontSize: 18,
+            fontWeight: '800',
+            color: colors.text.heading,
+            flex: 1,
+            marginRight: 8,
+        },
+        closeBtn: {
+            padding: 4,
+        },
+        content: {
+            padding: 20,
+        },
+        badgeRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 12,
+        },
+        pill: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 12,
+            backgroundColor: colors.surface.subtle,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        pillText: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.text.secondary,
+        },
+        infoNotice: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 8,
+            backgroundColor: colors.surface.subtle,
+            borderRadius: 10,
+            padding: 10,
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        infoNoticeText: {
+            flex: 1,
+            fontSize: 12,
+            color: colors.text.secondary,
+            lineHeight: 17,
+        },
+        description: {
+            fontSize: 14,
+            color: colors.text.secondary,
+            lineHeight: 20,
+            marginBottom: 20,
+        },
+        sectionTitle: {
+            fontSize: 12,
+            fontWeight: '800',
+            color: colors.text.secondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 10,
+            marginTop: 16,
+        },
+        memberRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border.default,
+        },
+        memberInfo: {
+            flex: 1,
+            marginLeft: 12,
+        },
+        memberCallsign: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text.heading,
+        },
+        memberRoleText: {
+            fontSize: 12,
+            color: colors.text.muted,
+            marginTop: 2,
+            textTransform: 'capitalize',
+        },
+        roleBadge: {
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 8,
+            backgroundColor: colors.surface.subtle,
+        },
+        roleBadgeConvenor: {
+            backgroundColor: colors.brand.tint,
+            borderWidth: 1,
+            borderColor: colors.brand.primary,
+        },
+        roleBadgeConvenorText: {
+            color: colors.brand.primary,
+            fontSize: 11,
+            fontWeight: '800',
+        },
+        roleBadgeText: {
+            color: colors.text.secondary,
+            fontSize: 11,
+            fontWeight: '700',
+        },
+        convenorCard: {
+            backgroundColor: colors.surface.subtle,
+            borderRadius: 14,
+            padding: 14,
+            marginTop: 12,
+            marginBottom: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        convenorTitle: {
+            fontSize: 13,
+            fontWeight: '800',
+            color: colors.brand.primary,
+            marginBottom: 10,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+        },
+        pendingItem: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 8,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border.default,
+        },
+        approveBtn: {
+            backgroundColor: colors.brand.primary,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 8,
+        },
+        approveBtnText: {
+            color: colors.text.inverse,
+            fontSize: 12,
+            fontWeight: '800',
+        },
+        declineBtn: {
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.feedback.danger.solid,
+            marginLeft: 6,
+        },
+        declineBtnText: {
+            color: colors.feedback.danger.solid,
+            fontSize: 12,
+            fontWeight: '700',
+        },
+        actionArea: {
+            marginTop: 20,
+            paddingTop: 16,
+            borderTopWidth: 1,
+            borderTopColor: colors.border.default,
+            gap: 10,
+        },
+        postBtn: {
+            backgroundColor: colors.brand.primary,
+            borderRadius: 14,
+            paddingVertical: 13,
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'row',
+            gap: 6,
+        },
+        postBtnText: {
+            color: colors.text.inverse,
+            fontSize: 15,
+            fontWeight: '800',
+        },
+        joinBtn: {
+            backgroundColor: colors.brand.primary,
+            borderRadius: 14,
+            paddingVertical: 13,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        joinBtnDisabled: {
+            opacity: 0.6,
+        },
+        joinBtnText: {
+            color: colors.text.inverse,
+            fontSize: 15,
+            fontWeight: '800',
+        },
+        leaveBtn: {
+            backgroundColor: colors.surface.subtle,
+            borderRadius: 14,
+            paddingVertical: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: colors.border.default,
+        },
+        leaveBtnText: {
+            color: colors.feedback.danger.solid,
+            fontSize: 14,
+            fontWeight: '700',
+        },
+        manageBtn: {
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            marginLeft: 6,
+        },
+        manageBtnText: {
+            fontSize: 11,
+            color: colors.text.secondary,
+            fontWeight: '600',
+        },
+    }));
+
+    if (!groupData) return null;
+
+    const myMembership = members.find(m => m.memberPubkey === myPubkey);
+    const isConvenor = groupData.viewerRole === 'convenor' || (myMembership?.role === 'convenor' && myMembership?.status === 'active');
+    const isMember = (myMembership && myMembership.status === 'active') || groupData.viewerStatus === 'active';
+    const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';
+
+    const pendingMembers = members.filter(m => m.status === 'pending_approval');
+    const activeMembers = members.filter(m => m.status === 'active');
+
+    const handleJoin = async () => {
+        setActionLoading(true);
+        try {
+            await joinGroupApi(groupData.id);
+            hapticSuccess();
+            await loadDetails();
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (e: any) {
+            Alert.alert('Join Failed', e.message || 'Failed to join group');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleLeave = async () => {
+        if (!myPubkey) return;
+        Alert.alert(
+            'Leave Group',
+            `Are you sure you want to leave ${groupData.name}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Leave',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            await leaveGroupApi(groupData.id, myPubkey);
+                            hapticSuccess();
+                            await loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Leave Failed', e.message || 'Failed to leave group');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleApprove = async (memberPubkey: string) => {
+        setActionLoading(true);
+        try {
+            await approveGroupMemberApi(groupData.id, memberPubkey);
+            hapticSuccess();
+            await loadDetails();
+            if (onMembershipChanged) onMembershipChanged();
+        } catch (e: any) {
+            Alert.alert('Approval Failed', e.message || 'Failed to approve request');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleRemoveMember = async (memberPubkey: string, callsign?: string) => {
+        Alert.alert(
+            'Remove Member',
+            `Remove ${callsign || 'this member'} from ${groupData.name}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setActionLoading(true);
+                        try {
+                            await leaveGroupApi(groupData.id, memberPubkey);
+                            hapticSuccess();
+                            await loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Removal Failed', e.message || 'Failed to remove member');
+                        } finally {
+                            setActionLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleChangeRole = (memberPubkey: string, currentRole: GroupRole, callsign?: string) => {
+        Alert.alert(
+            'Change Role',
+            `Select a role for ${callsign || 'this member'}:`,
+            [
+                {
+                    text: 'Convenor',
+                    onPress: async () => {
+                        try {
+                            await setGroupMemberRoleApi(groupData.id, memberPubkey, 'convenor');
+                            hapticSuccess();
+                            loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to set role');
+                        }
+                    }
+                },
+                {
+                    text: 'Member',
+                    onPress: async () => {
+                        try {
+                            await setGroupMemberRoleApi(groupData.id, memberPubkey, 'member');
+                            hapticSuccess();
+                            loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to set role');
+                        }
+                    }
+                },
+                {
+                    text: 'Observer',
+                    onPress: async () => {
+                        try {
+                            await setGroupMemberRoleApi(groupData.id, memberPubkey, 'observer');
+                            hapticSuccess();
+                            loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to set role');
+                        }
+                    }
+                },
+                { text: 'Cancel', style: 'cancel' }
+            ]
+        );
+    };
+
+    const handleSetPolicy = (policy: JoinPolicy) => {
+        Alert.alert(
+            'Change Join Policy',
+            `Set join policy to ${policy.replace(/_/g, ' ')}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Confirm',
+                    onPress: async () => {
+                        try {
+                            await updateGroupApi(groupData.id, { joinPolicy: policy });
+                            hapticSuccess();
+                            setShowPolicyPicker(false);
+                            loadDetails();
+                            if (onMembershipChanged) onMembershipChanged();
+                        } catch (e: any) {
+                            Alert.alert('Error', e.message || 'Failed to update policy');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    return (
+        <Modal
+            visible={isOpen}
+            animationType="slide"
+            transparent
+            onRequestClose={onClose}
+        >
+            <View style={styles.backdrop}>
+                <View style={styles.sheet}>
+                    <View style={styles.header}>
+                        <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>
+                        <Pressable style={styles.closeBtn} onPress={onClose}>
+                            <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
+                        </Pressable>
+                    </View>
+
+                    <ScrollView style={styles.content}>
+                        <View style={styles.badgeRow}>
+                            <View style={styles.pill}>
+                                <MaterialCommunityIcons name="tag-outline" size={14} color={colors.text.secondary} />
+                                <Text style={styles.pillText}>{groupData.category.replace(/_/g, ' ')}</Text>
+                            </View>
+                            <View style={styles.pill}>
+                                <MaterialCommunityIcons name="door-open" size={14} color={colors.text.secondary} />
+                                <Text style={styles.pillText}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text>
+                            </View>
+                            {isConvenor && (
+                                <View style={[styles.pill, { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary }]}>
+                                    <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                    <Text style={[styles.pillText, { color: colors.brand.primary }]}>Convenor</Text>
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={styles.infoNotice}>
+                            <MaterialCommunityIcons name="information-outline" size={16} color={colors.text.secondary} />
+                            <Text style={styles.infoNoticeText}>
+                                A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust.
+                            </Text>
+                        </View>
+
+                        {groupData.description ? (
+                            <Text style={styles.description}>{groupData.description}</Text>
+                        ) : null}
+
+                        {/* Convenor Tools Section */}
+                        {isConvenor && (
+                            <View style={styles.convenorCard}>
+                                <Text style={styles.convenorTitle}>Convenor Tools</Text>
+                                
+                                {/* Join Policy Setter */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                    <Text style={{ fontSize: 13, color: colors.text.secondary }}>Join Policy: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text></Text>
+                                    <Pressable
+                                        style={styles.manageBtn}
+                                        onPress={() => {
+                                            Alert.alert(
+                                                'Set Join Policy',
+                                                'Choose who can join this group:',
+                                                [
+                                                    { text: 'Open (immediate)', onPress: () => handleSetPolicy('open') },
+                                                    { text: 'Request to Join (approval required)', onPress: () => handleSetPolicy('request_to_join') },
+                                                    { text: 'Invite Only', onPress: () => handleSetPolicy('invite_only') },
+                                                    { text: 'Cancel', style: 'cancel' }
+                                                ]
+                                            );
+                                        }}
+                                    >
+                                        <Text style={styles.manageBtnText}>Change</Text>
+                                    </Pressable>
+                                </View>
+
+                                {/* Pending requests */}
+                                {pendingMembers.length > 0 && (
+                                    <View style={{ marginTop: 8 }}>
+                                        <Text style={{ fontSize: 12, fontWeight: '800', color: colors.text.secondary, marginBottom: 6 }}>
+                                            Pending Requests ({pendingMembers.length})
+                                        </Text>
+                                        {pendingMembers.map(p => (
+                                            <View key={p.memberPubkey} style={styles.pendingItem}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                                    <MemberAvatar avatarUrl={p.avatarUrl} pubkey={p.memberPubkey} callsign={p.callsign || '?'} size={28} />
+                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.heading, marginLeft: 8 }}>
+                                                        {p.callsign || p.memberPubkey.slice(0, 10)}
+                                                    </Text>
+                                                </View>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                    <Pressable
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        disabled={actionLoading}
+                                                        style={[styles.approveBtn, actionLoading && { opacity: 0.6 }]}
+                                                        onPress={() => handleApprove(p.memberPubkey)}
+                                                    >
+                                                        <Text style={styles.approveBtnText}>Approve</Text>
+                                                    </Pressable>
+                                                    <Pressable
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        disabled={actionLoading}
+                                                        style={[styles.declineBtn, actionLoading && { opacity: 0.6 }]}
+                                                        onPress={() => handleRemoveMember(p.memberPubkey, p.callsign)}
+                                                    >
+                                                        <Text style={styles.declineBtnText}>Decline</Text>
+                                                    </Pressable>
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+                            </View>
+                        )}
+
+                        <Text style={styles.sectionTitle}>
+                            Roster ({activeMembers.length || groupData.memberCount || 0})
+                        </Text>
+
+                        {loading ? (
+                            <ActivityIndicator size="small" color={colors.brand.primary} style={{ marginVertical: 20 }} />
+                        ) : (
+                            activeMembers.map(m => {
+                                const isUserConvenor = m.role === 'convenor';
+                                return (
+                                    <View key={m.memberPubkey} style={styles.memberRow}>
+                                        <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
+                                        <View style={styles.memberInfo}>
+                                            <Text style={styles.memberCallsign}>
+                                                {m.callsign || m.memberPubkey.slice(0, 10)} {m.memberPubkey === myPubkey && '(You)'}
+                                            </Text>
+                                            <Text style={styles.memberRoleText}>
+                                                {m.role}
+                                            </Text>
+                                        </View>
+                                        <View style={[styles.roleBadge, isUserConvenor && styles.roleBadgeConvenor]}>
+                                            <Text style={[styles.roleBadgeText, isUserConvenor && styles.roleBadgeConvenorText]}>
+                                                {m.role.toUpperCase()}
+                                            </Text>
+                                        </View>
+                                        {isConvenor && m.memberPubkey !== myPubkey && (
+                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <Pressable
+                                                    style={styles.manageBtn}
+                                                    onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
+                                                >
+                                                    <Text style={styles.manageBtnText}>Role</Text>
+                                                </Pressable>
+                                                <Pressable
+                                                    style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
+                                                    onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
+                                                >
+                                                    <MaterialCommunityIcons name="close" size={12} color={colors.feedback.danger.solid} />
+                                                </Pressable>
+                                            </View>
+                                        )}
+                                    </View>
+                                );
+                            })
+                        )}
+
+                        <View style={styles.actionArea}>
+                            {isMember && onPostToGroup && (
+                                <Pressable
+                                    style={styles.postBtn}
+                                    onPress={() => {
+                                        onClose();
+                                        onPostToGroup(groupData);
+                                    }}
+                                >
+                                    <MaterialCommunityIcons name="pencil" size={18} color={colors.text.inverse} />
+                                    <Text style={styles.postBtnText}>Post to {groupData.name}</Text>
+                                </Pressable>
+                            )}
+
+                            {actionLoading ? (
+                                <ActivityIndicator size="small" color={colors.brand.primary} />
+                            ) : isMember ? (
+                                <Pressable style={styles.leaveBtn} onPress={handleLeave}>
+                                    <Text style={styles.leaveBtnText}>Leave Group</Text>
+                                </Pressable>
+                            ) : isPending ? (
+                                <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
+                                    <Text style={styles.joinBtnText}>Request Pending Approval</Text>
+                                </View>
+                            ) : groupData.joinPolicy === 'invite_only' ? (
+                                <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
+                                    <Text style={styles.joinBtnText}>Invite Only</Text>
+                                </View>
+                            ) : (
+                                <Pressable style={styles.joinBtn} onPress={handleJoin}>
+                                    <Text style={styles.joinBtnText}>
+                                        {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
+                                    </Text>
+                                </Pressable>
+                            )}
+                        </View>
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
+    );
+}

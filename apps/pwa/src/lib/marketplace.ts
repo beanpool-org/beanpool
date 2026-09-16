@@ -77,6 +77,9 @@ export interface MarketplacePost {
     totalVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
+    audienceScope?: 'public' | 'group' | 'direct';
+    targetGroupId?: string;
+    targetGroupName?: string;
 }
 
 /**

@@ -327,6 +327,28 @@ async function runTests() {
         assert(!receivedCarol.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7k. Non-member Carol DID NOT receive closePoll post_updated broadcast');
         assert(!receivedAnon.some(e => e.type === 'post_updated' && e.post.id === grpPoll!.id), '7l. Anonymous socket DID NOT receive closePoll post_updated broadcast');
 
+        // 4. Broadcast group_member_invited scoped to convenor and invitee only
+        const receivedAlice: any[] = [];
+        const receivedDave: any[] = [];
+        const wsAlice: any = { _memberPubkey: alice.pubKeyHex, send: (m: string) => receivedAlice.push(JSON.parse(m)) };
+        const wsDave: any = { _memberPubkey: dave.pubKeyHex, send: (m: string) => receivedDave.push(JSON.parse(m)) };
+        addWsClient(wsAlice);
+        addWsClient(wsDave);
+
+        receivedAlice.length = 0;
+        receivedDave.length = 0;
+        receivedBob.length = 0;
+        receivedAnon.length = 0;
+
+        // Alice (convenor) invites Dave
+        const inviteRes = inviteGroupMember(gardenGroup.id, alice.pubKeyHex, dave.pubKeyHex, 'member');
+        assert(receivedAlice.some(e => e.type === 'group_member_invited' && e.member.memberPubkey === dave.pubKeyHex), '7m. Convenor Alice received group_member_invited broadcast');
+        assert(receivedDave.some(e => e.type === 'group_member_invited' && e.member.memberPubkey === dave.pubKeyHex), '7n. Invitee Dave received group_member_invited broadcast');
+        assert(!receivedBob.some(e => e.type === 'group_member_invited'), '7o. Regular member Bob DID NOT receive group_member_invited broadcast');
+        assert(!receivedAnon.some(e => e.type === 'group_member_invited'), '7p. Anonymous socket DID NOT receive group_member_invited broadcast');
+
+        removeWsClient(wsAlice);
+        removeWsClient(wsDave);
         removeWsClient(wsBob);
         removeWsClient(wsCarol);
         removeWsClient(wsAnon);

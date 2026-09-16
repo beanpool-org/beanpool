@@ -4716,7 +4716,9 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
 export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
     const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
     bumpGroupsVersion();
-    broadcast({ type: 'group_member_invited', groupId, member: res });
+    const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
+    const recipients = Array.from(new Set([...convenors.map(r => r.member_pubkey), targetPubkey]));
+    broadcast({ type: 'group_member_invited', groupId, member: res }, recipients);
     return res;
 }
 

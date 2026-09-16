@@ -2,6 +2,86 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+export interface ShutdownStatus {
+    uncleanShutdown: boolean;
+    recovered?: boolean;
+    ok?: boolean;
+    powerLossAt?: string;
+    powerLossTimestamp?: string;
+    message?: string;
+    error?: string;
+    checkedAt?: string;
+    acknowledged?: boolean;
+}
+
+export interface DiskBreakdownItem {
+    dbSizeBytes: number;
+    walSizeBytes: number;
+    shmSizeBytes?: number;
+    snapshotsSizeBytes?: number;
+    totalBytes: number;
+}
+
+export interface MediaBreakdownItem {
+    postPhotosBytes: number;
+    postPhotosCount: number;
+    pulseThumbnailsBytes: number;
+    pulseThumbnailsCount: number;
+    totalBytes: number;
+}
+
+export interface LogsBreakdownItem {
+    systemLogsBytes: number;
+    systemLogsCount: number;
+    logFilesBytes?: number;
+    totalBytes: number;
+}
+
+export interface DiskHealth {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    usedPercent: number;
+    warning: boolean; // true if usedPercent >= 80
+    databaseBytes: number;
+    mediaBytes: number;
+    logsBytes: number;
+    breakdown: {
+        database: DiskBreakdownItem;
+        media: MediaBreakdownItem;
+        logs: LogsBreakdownItem;
+    };
+}
+
+export interface StorageCleanPreview {
+    orphanedPostPhotos: {
+        count: number;
+        totalBytes: number;
+    };
+    orphanedThumbnails: {
+        count: number;
+        totalBytes: number;
+    };
+    compressibleLogs: {
+        count: number;
+        totalBytes: number;
+        oldestTimestamp?: string;
+        newestTimestamp?: string;
+    };
+    totalReclaimableBytes: number;
+}
+
+export interface StorageCleanResult {
+    success: boolean;
+    removedPhotosCount: number;
+    removedPhotosBytes: number;
+    removedThumbnailsCount: number;
+    removedThumbnailsBytes: number;
+    compressedLogsCount: number;
+    compressedLogsBytes: number;
+    totalReclaimedBytes: number;
+}
+
 export interface DiagnosticsResponse {
     status: string;
     uptimeSeconds: number;
@@ -15,6 +95,8 @@ export interface DiagnosticsResponse {
     userCount?: number;
     communityName: string;
     callsign: string;
+    shutdownStatus?: ShutdownStatus;
+    diskHealth?: DiskHealth;
 }
 
 export interface GatewayConfig {
@@ -347,6 +429,73 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, 
     }
     return res.json();
 }
+
+export async function acknowledgeShutdownStatus(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; shutdownStatus: ShutdownStatus }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/shutdown-status/acknowledge');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchDiskHealth(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; diskHealth: DiskHealth }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/disk-health');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchStorageCleanPreview(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; preview: StorageCleanPreview }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/clean-preview');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function cleanStorageAndCompressLogs(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<StorageCleanResult> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/clean');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 
 export interface FunnelRow {
     day: string;

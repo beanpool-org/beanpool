@@ -44,6 +44,7 @@ const mockSnapshots = [
 describe('ApplianceSection Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        sessionStorage.clear();
         vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue(mockSnapshots);
         vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({
             enabled: true,
@@ -733,6 +734,159 @@ describe('ApplianceSection Component', () => {
 
         expect(screen.getByText('Live Backup Server & Hot-Standby Replication')).toBeInTheDocument();
         expect(screen.queryByText('Replication Access & Read-Only Snapshots')).not.toBeInTheDocument();
+    });
+
+    it('renders disk health breakdown and 80% warning banner when disk capacity is high', async () => {
+        const mockDiskHealthDiag: DiagnosticsResponse = {
+            ...mockDiag,
+            diskHealth: {
+                totalBytes: 64 * 1024 * 1024 * 1024,
+                freeBytes: 10 * 1024 * 1024 * 1024,
+                usedBytes: 54 * 1024 * 1024 * 1024,
+                usedPercent: 84,
+                warning: true,
+                databaseBytes: 15 * 1024 * 1024,
+                mediaBytes: 40 * 1024 * 1024 * 1024,
+                logsBytes: 200 * 1024 * 1024,
+                breakdown: {
+                    database: {
+                        dbSizeBytes: 10 * 1024 * 1024,
+                        walSizeBytes: 2 * 1024 * 1024,
+                        shmSizeBytes: 0,
+                        snapshotsSizeBytes: 3 * 1024 * 1024,
+                        totalBytes: 15 * 1024 * 1024,
+                    },
+                    media: {
+                        postPhotosBytes: 38 * 1024 * 1024 * 1024,
+                        postPhotosCount: 142,
+                        pulseThumbnailsBytes: 2 * 1024 * 1024 * 1024,
+                        pulseThumbnailsCount: 56,
+                        totalBytes: 40 * 1024 * 1024 * 1024,
+                    },
+                    logs: {
+                        systemLogsBytes: 150 * 1024 * 1024,
+                        systemLogsCount: 4200,
+                        logFilesBytes: 50 * 1024 * 1024,
+                        totalBytes: 200 * 1024 * 1024,
+                    },
+                },
+            },
+        };
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiskHealthDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="diagnostics"
+                />
+            );
+        });
+
+        // Disk Health card header
+        expect(screen.getByText('Disk Health & Storage Breakdown')).toBeInTheDocument();
+        // 80% Warning Banner
+        expect(screen.getByText(/High Disk Usage Warning:/i)).toBeInTheDocument();
+        expect(screen.getByText(/Disk utilization is at 84% \(exceeds 80% safety threshold\)/i)).toBeInTheDocument();
+        // Breakdown sections
+        expect(screen.getByText('Database')).toBeInTheDocument();
+        expect(screen.getByText('Media')).toBeInTheDocument();
+        expect(screen.getByText('Logs')).toBeInTheDocument();
+        expect(screen.getByText(/Post photos \(142\):/i)).toBeInTheDocument();
+        expect(screen.getByText(/Thumbnails \(56\):/i)).toBeInTheDocument();
+        expect(screen.getByText(/System events \(4200\):/i)).toBeInTheDocument();
+    });
+
+    it('opens clean preview modal and executes cleanup with details', async () => {
+        vi.spyOn(nodeClient, 'fetchStorageCleanPreview').mockResolvedValue({
+            success: true,
+            preview: {
+                orphanedPostPhotos: { count: 3, totalBytes: 15 * 1024 * 1024 },
+                orphanedThumbnails: { count: 7, totalBytes: 2 * 1024 * 1024 },
+                compressibleLogs: { count: 850, totalBytes: 25 * 1024 * 1024 },
+                totalReclaimableBytes: 42 * 1024 * 1024,
+            },
+        });
+
+        vi.spyOn(nodeClient, 'cleanStorageAndCompressLogs').mockResolvedValue({
+            success: true,
+            removedPhotosCount: 3,
+            removedPhotosBytes: 15 * 1024 * 1024,
+            removedThumbnailsCount: 7,
+            removedThumbnailsBytes: 2 * 1024 * 1024,
+            compressedLogsCount: 850,
+            compressedLogsBytes: 25 * 1024 * 1024,
+            totalReclaimedBytes: 42 * 1024 * 1024,
+        });
+
+        const onRefreshDiagMock = vi.fn();
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={onRefreshDiagMock}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="diagnostics"
+                />
+            );
+        });
+
+        // Click Clean button to open preview modal
+        const cleanBtn = screen.getByRole('button', { name: /Clean Orphaned Media & Compress Logs/i });
+        await act(async () => {
+            fireEvent.click(cleanBtn);
+        });
+
+        expect(nodeClient.fetchStorageCleanPreview).toHaveBeenCalledWith(
+            mockProfile.url,
+            mockProfile.adminPassword,
+            undefined
+        );
+
+        // Preview should show item counts and sizes
+        expect(screen.getByText('3 items')).toBeInTheDocument();
+        expect(screen.getByText('7 items')).toBeInTheDocument();
+        expect(screen.getByText('850 rows')).toBeInTheDocument();
+        expect(screen.getByText('42.0 MB')).toBeInTheDocument();
+
+        // Confirm & Clean Now
+        const confirmBtn = screen.getByRole('button', { name: /Confirm & Clean Now/i });
+        await act(async () => {
+            fireEvent.click(confirmBtn);
+        });
+
+        expect(nodeClient.cleanStorageAndCompressLogs).toHaveBeenCalledWith(
+            mockProfile.url,
+            mockProfile.adminPassword,
+            undefined
+        );
+        expect(screen.getByText(/Cleanup Complete!/i)).toBeInTheDocument();
+        expect(screen.getByText(/Successfully reclaimed/i)).toBeInTheDocument();
+        expect(onRefreshDiagMock).toHaveBeenCalled();
     });
 });
 

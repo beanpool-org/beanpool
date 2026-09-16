@@ -87,6 +87,18 @@ export function PeerConnectorsPanel({
         loadConnectors();
     }, [loadConnectors]);
 
+    // Close confirmation modal on Escape key
+    useEffect(() => {
+        if (!confirmModal.isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setConfirmModal({ isOpen: false, address: '', callsign: '' });
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [confirmModal.isOpen]);
+
     // Handle Add Connector / Peer
     const handleAddConnector = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -171,9 +183,9 @@ export function PeerConnectorsPanel({
                     address,
                 }),
             });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.error || 'Connection failed');
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.success === false) {
+                throw new Error(data.error || 'Connection failed — peer unreachable');
             }
             setStatusMsg({ text: `Connected to ${address}`, isError: false });
             await loadConnectors();
@@ -230,7 +242,11 @@ export function PeerConnectorsPanel({
 
     // Toggle active / passive mode
     const handleToggleMode = async (connector: PeerConnector) => {
-        const address = connector.address || '';
+        const address = connector.address || connector.url || '';
+        if (!address) {
+            setStatusMsg({ text: 'Unable to toggle mode: connector address is missing', isError: true });
+            return;
+        }
         const makeActive = connector.enabled === false; // Currently passive -> make active
         setActionInProgress((prev) => ({ ...prev, [address]: 'toggling-mode' }));
         setStatusMsg(null);
@@ -276,9 +292,10 @@ export function PeerConnectorsPanel({
 
     // Prompt remove confirmation
     const requestRemoveConfirmation = (connector: PeerConnector) => {
+        const address = connector.address || connector.url || '';
         setConfirmModal({
             isOpen: true,
-            address: connector.address || '',
+            address,
             callsign: connector.callsign || '',
         });
     };
@@ -399,7 +416,7 @@ export function PeerConnectorsPanel({
 
                         // Collision & Deadlock detection (audit Bucket 1 #4)
                         const isCollision = c?.enabled !== false && c?.remoteActive === true;
-                        const isDeadlock = c?.enabled === false && c?.remoteActive === false && isConnected;
+                        const isDeadlock = c?.enabled === false && c?.remoteActive === false;
 
                         // Latency formatting
                         let latency = '—';
@@ -714,6 +731,11 @@ export function PeerConnectorsPanel({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="remove-peer-modal-title"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setConfirmModal({ isOpen: false, address: '', callsign: '' });
+                        }
+                    }}
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
                     <div className="w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -727,7 +749,7 @@ export function PeerConnectorsPanel({
                         </div>
 
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
-                            Are you sure you want to remove connector <strong className="text-white font-mono">{confirmModal.address}</strong>
+                            Are you sure you want to remove connector <strong className="text-white font-mono break-all">{confirmModal.address}</strong>
                             {confirmModal.callsign ? ` (${confirmModal.callsign})` : ''}? Active mesh federation and ledger synchronization with this peer will cease.
                         </p>
 
@@ -735,14 +757,14 @@ export function PeerConnectorsPanel({
                             <button
                                 type="button"
                                 onClick={() => setConfirmModal({ isOpen: false, address: '', callsign: '' })}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-300 hover:text-white transition-all min-h-[40px]"
+                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-300 hover:text-white transition-all min-h-[44px]"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="button"
                                 onClick={handleConfirmRemove}
-                                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-all min-h-[40px]"
+                                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-all min-h-[44px]"
                             >
                                 Remove Connector
                             </button>

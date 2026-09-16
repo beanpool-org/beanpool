@@ -480,4 +480,194 @@ describe('PeerConnectorsPanel Component', () => {
             expect(addBody.password).toBe('test-password');
         });
     });
+
+    it('surfaces connection error when dialing peer returns HTTP 200 with success: false', async () => {
+        const testConnectors = [
+            {
+                address: 'wss://unreachable.beanpool.org:8443',
+                callsign: 'Unreachable Peer',
+                connected: false,
+                enabled: true,
+            },
+        ];
+
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors/connect') && opts?.method === 'POST') {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: false, error: 'Peer connection refused' }),
+                } as Response);
+            }
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(testConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+
+        await waitFor(() => {
+            expect(screen.getByText(/Peer connection refused/i)).toBeInTheDocument();
+        });
+    });
+
+    it('handles legacy url-keyed connectors in handleToggleMode and remove confirmation', async () => {
+        const testConnectors = [
+            {
+                url: 'wss://legacy.beanpool.org:8443',
+                callsign: 'Legacy Node',
+                enabled: false, // Passive
+                connected: false,
+            },
+        ];
+
+        let toggleBody: any = null;
+
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.endsWith('/api/local/connectors') && opts?.method === 'POST') {
+                toggleBody = JSON.parse(String(opts?.body));
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ success: true }),
+                } as Response);
+            }
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(testConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Legacy Node')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /⚡ Make Active/i })).toBeInTheDocument();
+        });
+
+        // Toggle mode on url-keyed connector
+        fireEvent.click(screen.getByRole('button', { name: /⚡ Make Active/i }));
+
+        await waitFor(() => {
+            expect(toggleBody).not.toBeNull();
+            expect(toggleBody.address).toBe('wss://legacy.beanpool.org:8443');
+        });
+
+        // Request remove confirmation on url-keyed connector
+        const removeBtn = screen.getByRole('button', { name: 'Remove' });
+        fireEvent.click(removeBtn);
+
+        expect(screen.getByRole('heading', { name: /Remove Peer Connector/i })).toBeInTheDocument();
+        expect(screen.getAllByText(/wss:\/\/legacy\.beanpool\.org:8443/i).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('detects deadlock when both nodes are passive even when disconnected', async () => {
+        const deadlockConnectors = [
+            {
+                address: 'wss://deadlock.beanpool.org:8443',
+                callsign: 'Deadlock Peer',
+                enabled: false, // Local is passive
+                remoteActive: false, // Remote is passive
+                connected: false, // Disconnected!
+            },
+        ];
+
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(deadlockConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Deadlock')).toBeInTheDocument();
+            expect(screen.getByText(/Dual Passive Deadlock!/i)).toBeInTheDocument();
+        });
+    });
+
+    it('dismisses remove confirmation modal on Escape key press and backdrop click', async () => {
+        const testConnectors = [
+            {
+                address: 'wss://escape.beanpool.org:8443',
+                callsign: 'Escape Peer',
+                connected: true,
+                enabled: true,
+            },
+        ];
+
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/connectors')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve(testConnectors),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+        });
+
+        // Open modal
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        // Dismiss via Escape key
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Open modal again
+        fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+
+        // Dismiss via backdrop click
+        fireEvent.click(dialog);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
 });

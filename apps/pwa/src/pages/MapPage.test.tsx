@@ -8,7 +8,7 @@ import L from 'leaflet';
 
 vi.mock('leaflet.markercluster', () => ({}));
 
-const mockCreatedMarkers: Array<{ coords: [number, number]; opts: any; listeners: Record<string, Function> }> = [];
+const mockCreatedMarkers: Array<{ coords: [number, number]; opts: any; listeners: Record<string, (...args: any[]) => any> }> = [];
 
 vi.mock('leaflet', () => {
     const layerGroup = {
@@ -35,7 +35,7 @@ vi.mock('leaflet', () => {
             },
             divIcon: vi.fn((opts) => opts),
             marker: vi.fn((coords: [number, number], opts: any) => {
-                const listeners: Record<string, Function> = {};
+                const listeners: Record<string, (...args: any[]) => any> = {};
                 const m = {
                     coords,
                     opts: {
@@ -44,7 +44,7 @@ vi.mock('leaflet', () => {
                     },
                     listeners,
                     addTo: vi.fn().mockReturnThis(),
-                    on: vi.fn((event: string, handler: Function) => {
+                    on: vi.fn((event: string, handler: (...args: any[]) => any) => {
                         listeners[event] = handler;
                     }),
                 };
@@ -78,6 +78,7 @@ const mockIdentity: BeanPoolIdentity = {
     publicKey: 'user-alice-pubkey',
     privateKey: 'user-alice-privkey',
     callsign: 'Alice',
+    createdAt: '2026-09-17T00:00:00.000Z',
 };
 
 describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)', () => {

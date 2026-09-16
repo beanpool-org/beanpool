@@ -903,7 +903,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         let actor = ctx.state?.actor;
         let authSigner = (ctx.state as any)?.auth_signer || actor;
-        if (ctx.path.startsWith('/api/local/admin/')) {
+        if (ctx.path?.startsWith('/api/local/admin/')) {
             if (!(await checkAdminAuth(ctx))) return;
             authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
             actor = ctx.state?.actor || authSigner;
@@ -943,7 +943,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { treasury } = ctx.params;
         let actor = ctx.state?.actor;
         let authSigner = (ctx.state as any)?.auth_signer || actor;
-        if (ctx.path.startsWith('/api/local/admin/')) {
+        if (ctx.path?.startsWith('/api/local/admin/')) {
             if (!(await checkAdminAuth(ctx))) return;
             authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
             actor = ctx.state?.actor || authSigner;

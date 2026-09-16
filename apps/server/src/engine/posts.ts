@@ -27,6 +27,7 @@ function assertMemberActive(publicKey: string): void {
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
 function assertProfileComplete(publicKey: string): void {
@@ -47,6 +48,15 @@ function isOnHoliday(publicKey: string): boolean {
 
 function assertNotOnHoliday(publicKey: string): void {
     if (isOnHoliday(publicKey)) throw new Error(HOLIDAY_MODE_ERROR);
+}
+
+function assertEnterpriseCanPost(publicKey: string): void {
+    const member = db.prepare("SELECT is_treasury, paused, status FROM members WHERE public_key = ?").get(publicKey) as any;
+    if (member?.is_treasury) {
+        if (member.paused === 1) throw new Error('Enterprise is paused — cannot post offers or needs while paused');
+        if (member.status === 'winding_up') throw new Error('Enterprise is winding up — no new listings allowed');
+        if (member.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
 }
 
 /**
@@ -112,6 +122,7 @@ export function createPost(
     }
     assertProfileComplete(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
+    assertEnterpriseCanPost(authorPublicKey);
 
     let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
     let pollClosesAt: string | null = null;

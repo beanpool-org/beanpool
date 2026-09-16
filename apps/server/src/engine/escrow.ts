@@ -67,6 +67,7 @@ function assertMemberActive(publicKey: string): void {
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
 function assertProfileComplete(publicKey: string): void {
@@ -210,6 +211,16 @@ export function approvePostRequest(
     assertNotOnHoliday(authorPublicKey);
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
         throw new Error('Trading is paused while a member is in holiday mode.');
+    }
+
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(authorPublicKey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    if (buyerMember?.is_treasury) {
+        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
     }
 
     // #102: the approver is the post author, but the money moves from the BUYER on this row.
@@ -615,6 +626,18 @@ export function completePostTransaction(
             err.status = 403;
             err.statusCode = 403;
             err.code = 'TWO_PERSON_RULE';
+            throw err;
+        }
+
+        const isPayeeKeeper = Boolean(
+            db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                .get(row.buyer_pubkey, row.seller_pubkey)
+        );
+        const trow = db.prepare('SELECT paused FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+        if (trow?.paused === 1 && isPayeeKeeper) {
+            const err: any = new Error('Enterprise is paused — wage payments to keepers cannot be made while paused.');
+            err.status = 403;
+            err.statusCode = 403;
             throw err;
         }
     }

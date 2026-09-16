@@ -1056,6 +1056,12 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) throw new Error("Project not found");
     if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
+    const entPub = (project as any).enterprise_pubkey || project.id;
+    const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
+    if (ent?.is_treasury) {
+        if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
+        if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");
+    }
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow
     // into their balance. Settled unconditionally rather than only inside the FUNDED branch, because the

@@ -463,6 +463,18 @@ async function main() {
         assert(e.code === 'TWO_PERSON_RULE' || e.status === 403, 'Two-person rule correctly rejected self-gifting by operator');
     }
 
+    // Test: Engine directly rejects password-auth caller for gift_to_member (KEY_AUTH_REQUIRED)
+    try {
+        executeOffboard(
+            daveKey,
+            { resolution: 'gift_to_member', giftRecipientPubkey: bobKey },
+            'owner:password'
+        );
+        assert(false, 'Should have thrown KEY_AUTH_REQUIRED error when calling executeOffboard with password auth');
+    } catch (e: any) {
+        assert(e.code === 'KEY_AUTH_REQUIRED' && (e.status === 403 || e.statusCode === 403), 'Engine directly enforces KEY_AUTH_REQUIRED for gift_to_member');
+    }
+
     // Assert an ordinary admin-signed transfer (without offboardOverride) is STILL subject to the trust gate
     const ordinaryAdminTx = transfer(
         daveKey,

@@ -576,6 +576,13 @@ export function executeOffboard(
                     allowMemberDebit: true,
                 });
             } else if (resolution === 'gift_to_member') {
+                if (!cleanOperator || cleanOperator === 'owner:password') {
+                    const err: any = new Error('Two-person rule requires signed key-based admin authentication to gift offboarding funds.');
+                    err.status = 403;
+                    err.statusCode = 403;
+                    err.code = 'KEY_AUTH_REQUIRED';
+                    throw err;
+                }
                 const recipientPub = options.giftRecipientPubkey?.trim().toLowerCase();
                 if (!recipientPub) {
                     throw new Error('Recipient member must be specified for gifting offboarding balance');

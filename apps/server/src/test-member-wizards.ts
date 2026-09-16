@@ -817,6 +817,17 @@ async function main() {
         assert(previewData.balance === 90, 'Preview shows 90 beans balance');
         assert(previewData.costToCommunity === 0, 'costToCommunity is 0');
         assert(Array.isArray(previewData.activeMembers), 'activeMembers list returned');
+        assert(previewData.activeMembers.length === 0, 'Password-only admin receives empty activeMembers list (privacy leak prevented)');
+
+        // Offboard preview with key auth returns non-empty active members list
+        const keyAuthPreviewRes = await fetch(`${baseUrl}/api/local/admin/members/${graceNewKey}/offboard/preview`, {
+            headers: {
+                'x-admin-session': 'valid-operator-session',
+            },
+        });
+        assert(keyAuthPreviewRes.status === 200, 'GET offboard preview with key auth returns 200');
+        const keyAuthPreviewData = await keyAuthPreviewRes.json();
+        assert(Array.isArray(keyAuthPreviewData.activeMembers) && keyAuthPreviewData.activeMembers.length > 0, 'Key-authenticated admin receives activeMembers list for gift resolution');
 
         // 6a. Password auth attempting gift_to_member rejected with KEY_AUTH_REQUIRED
         const pwGiftRes = await fetch(`${baseUrl}/api/local/admin/members/${graceNewKey}/offboard`, {

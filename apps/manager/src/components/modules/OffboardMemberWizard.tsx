@@ -266,7 +266,7 @@ export function OffboardMemberWizard({
                                         </span>
                                         {!hasKeyAuth && (
                                             <span className="block mt-1 text-[11px] text-amber-400">
-                                                ⚠️ Requires signed key-based admin authentication. Password-authenticated sessions must donate departing balances to the Commons Pool.
+                                                ⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; password-only sessions must donate departing balances to the Commons Pool.
                                             </span>
                                         )}
                                     </div>

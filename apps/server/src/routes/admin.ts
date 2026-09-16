@@ -1543,6 +1543,15 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     try {
         const { pubkey } = ctx.params;
         const preview = getOffboardPreview(pubkey);
+
+        // Security / Privacy: Only return active members roster to key-authenticated sessions.
+        // Password-only sessions cannot execute gift_to_member, so withholding the list
+        // prevents leaking the member roster.
+        const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+        if (!signedActor || signedActor === 'owner:password') {
+            preview.activeMembers = [];
+        }
+
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';

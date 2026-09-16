@@ -95,7 +95,10 @@ describe('EscrowDisputesPanel Component', () => {
         });
         vi.spyOn(nodeClient, 'resolveEscrowDisputeApi').mockResolvedValue({
             success: true,
-            dispute: {
+            transactionId: 'tx-1',
+            resolution: 'release_to_seller',
+            authSigner: 'admin-signer-pk',
+            transaction: {
                 ...mockDisputes[0],
                 status: 'completed',
                 resolution: 'release_to_seller',

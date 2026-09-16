@@ -1261,6 +1261,14 @@ export async function fetchEscrowDisputes(
     return res.json();
 }
 
+export interface ResolveEscrowDisputeResponse {
+    success: boolean;
+    transactionId: string;
+    resolution: 'release_to_seller' | 'refund_to_buyer' | 'split';
+    authSigner: string;
+    transaction: any;
+}
+
 export async function resolveEscrowDisputeApi(
     nodeUrl: string,
     disputeId: string,
@@ -1268,7 +1276,7 @@ export async function resolveEscrowDisputeApi(
     reason?: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<{ success: boolean; dispute: EscrowDisputeItem }> {
+): Promise<ResolveEscrowDisputeResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/disputes/${encodeURIComponent(disputeId)}/resolve`);
     const headers = buildAdminHeaders(adminPassword, tfaToken);
     if (adminPassword) {

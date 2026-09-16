@@ -580,6 +580,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
+        escrowDisputesCount: getEscrowDisputes(7).length,
         memberStats: getMemberStats(),
     };
 });
@@ -1398,6 +1399,7 @@ router.get('/api/local/admin/disputes', async (ctx) => {
     const disputes = getEscrowDisputes(isNaN(minDays) ? 7 : minDays, limit, offset);
     ctx.body = {
         disputes,
+        total: disputes.length,
         count: disputes.length,
         minDays: isNaN(minDays) ? 7 : minDays
     };

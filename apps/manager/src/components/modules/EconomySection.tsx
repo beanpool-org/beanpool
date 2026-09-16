@@ -16,12 +16,14 @@ import {
     buildAdminHeaders,
     getTfaSessionToken,
 } from '../../lib/node-client';
+import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
     nodeData?: NodeDataPayload | null;
     tfaToken?: string;
     onRefresh: () => void;
+    initialSubTab?: 'enterprises' | 'decisions' | 'pool' | 'disputes';
 }
 
 interface VotingRound {
@@ -65,9 +67,21 @@ const ENTERPRISE_PRESETS = [
     },
 ];
 
-export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: EconomySectionProps) {
+export function EconomySection({
+    activeNode,
+    nodeData,
+    tfaToken,
+    onRefresh,
+    initialSubTab = 'enterprises',
+}: EconomySectionProps) {
     const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
-    const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool'>('enterprises');
+    const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab);
+
+    useEffect(() => {
+        if (initialSubTab) {
+            setSubTab(initialSubTab);
+        }
+    }, [initialSubTab]);
 
     // Enterprises state
     const [treasuries, setTreasuries] = useState<NodeTreasury[]>([]);
@@ -513,6 +527,16 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                         }`}
                     >
                         Commons Pool
+                    </button>
+                    <button
+                        onClick={() => setSubTab('disputes')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            subTab === 'disputes'
+                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                : 'text-nature-400 hover:text-white border border-transparent'
+                        }`}
+                    >
+                        ⚖️ Escrow Disputes{typeof nodeData?.escrowDisputesCount === 'number' && nodeData.escrowDisputesCount > 0 ? ` (${nodeData.escrowDisputesCount})` : ''}
                     </button>
                 </div>
             </div>
@@ -1178,6 +1202,15 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Subtab: Escrow Disputes */}
+            {subTab === 'disputes' && (
+                <EscrowDisputesPanel
+                    activeNode={activeNode}
+                    tfaToken={effectiveTfaToken}
+                    onRefresh={onRefresh}
+                />
             )}
         </div>
     );

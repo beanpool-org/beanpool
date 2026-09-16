@@ -16,6 +16,7 @@ export interface OffboardMemberWizardProps {
     adminPassword?: string;
     tfaToken?: string;
     currentAdminPubkey?: string;
+    hasKeyAuth?: boolean;
     onSuccess?: () => void;
     onClose: () => void;
 }
@@ -26,6 +27,7 @@ export function OffboardMemberWizard({
     adminPassword,
     tfaToken,
     currentAdminPubkey,
+    hasKeyAuth = false,
     onSuccess,
     onClose,
 }: OffboardMemberWizardProps) {
@@ -72,6 +74,7 @@ export function OffboardMemberWizard({
 
     // Two-person rule check: Actor cannot gift to themselves
     const isSelfDealing = Boolean(
+        hasKeyAuth &&
         preview &&
         preview.balance > 0 &&
         resolutionChoice === 'gift_to_member' &&
@@ -91,7 +94,7 @@ export function OffboardMemberWizard({
 
         let resolution: 'donate_to_commons' | 'gift_to_member' | 'write_off_commons' | 'prune_zero_balance';
         if (preview.balance > 0) {
-            resolution = resolutionChoice;
+            resolution = hasKeyAuth ? resolutionChoice : 'donate_to_commons';
         } else if (preview.balance < 0) {
             resolution = 'write_off_commons';
         } else {
@@ -235,20 +238,32 @@ export function OffboardMemberWizard({
                                     </div>
                                 </label>
 
-                                <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-nature-800/40 cursor-pointer">
+                                <label className={`flex items-start gap-2.5 p-2 rounded-xl transition-all ${
+                                    !hasKeyAuth ? 'opacity-60 cursor-not-allowed bg-nature-950/40' : 'hover:bg-nature-800/40 cursor-pointer'
+                                }`}>
                                     <input
                                         type="radio"
                                         name="resolution"
                                         value="gift_to_member"
-                                        checked={resolutionChoice === 'gift_to_member'}
-                                        onChange={() => setResolutionChoice('gift_to_member')}
-                                        className="mt-0.5 text-emerald-500 focus:ring-0"
+                                        disabled={!hasKeyAuth}
+                                        checked={hasKeyAuth && resolutionChoice === 'gift_to_member'}
+                                        onChange={() => {
+                                            if (hasKeyAuth) {
+                                                setResolutionChoice('gift_to_member');
+                                            }
+                                        }}
+                                        className="mt-0.5 text-emerald-500 focus:ring-0 disabled:opacity-50"
                                     />
                                     <div>
                                         <span className="font-bold text-white block">Gift to another community member</span>
                                         <span className="text-[11px] text-nature-300">
                                             Transfer the departing balance directly to another active member.
                                         </span>
+                                        {!hasKeyAuth && (
+                                            <span className="block mt-1 text-[11px] text-amber-400">
+                                                ⚠️ Requires signed key-based admin authentication. Password-authenticated sessions must donate departing balances to the Commons Pool.
+                                            </span>
+                                        )}
                                     </div>
                                 </label>
 

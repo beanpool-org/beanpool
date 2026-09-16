@@ -51,6 +51,7 @@ interface MemberDetailModalProps {
     adminPassword?: string;
     tfaToken?: string;
     currentAdminPubkey?: string;
+    hasKeyAuth?: boolean;
     onRekeySuccess?: (newPubkey: string) => void;
     onOffboardSuccess?: () => void;
     onClose: () => void;
@@ -77,6 +78,7 @@ export function MemberDetailModal({
     adminPassword,
     tfaToken,
     currentAdminPubkey,
+    hasKeyAuth,
     onRekeySuccess,
     onOffboardSuccess,
     onClose
@@ -589,6 +591,7 @@ export function MemberDetailModal({
                     nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
                     adminPassword={adminPassword}
                     tfaToken={tfaToken}
+                    hasKeyAuth={hasKeyAuth}
                     currentAdminPubkey={currentAdminPubkey}
                     onSuccess={() => {
                         setShowOffboardWizard(false);

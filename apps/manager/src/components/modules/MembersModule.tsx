@@ -1013,10 +1013,6 @@ export function MembersModule({
                     nodeUrl={activeNodeUrl}
                     adminPassword={adminPassword}
                     tfaToken={tfaToken}
-                    currentAdminPubkey={
-                        nodeData?.members?.find((m: any) => m.nodeRole === 'owner' || m.nodeRole === 'admin')?.publicKey ||
-                        members?.find((m: any) => m.nodeRole === 'owner' || m.nodeRole === 'admin')?.publicKey
-                    }
                     onRekeySuccess={() => {
                         // Refresh data in background without unmounting modal while user reviews confirmation
                         onRefresh?.();

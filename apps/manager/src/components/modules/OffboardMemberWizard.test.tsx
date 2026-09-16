@@ -74,6 +74,7 @@ describe('OffboardMemberWizard', () => {
             <OffboardMemberWizard
                 member={mockMember}
                 nodeUrl="http://localhost:3000"
+                hasKeyAuth={true}
                 currentAdminPubkey={adminPk}
                 onClose={() => {}}
             />
@@ -90,6 +91,42 @@ describe('OffboardMemberWizard', () => {
             expect(screen.getByText(/Two-Person Rule Violation/)).toBeDefined();
             const submitBtn = screen.getByRole('button', { name: /Confirm & Prune Member/ });
             expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
+        });
+    });
+
+    it('disables gifting to member under password-only authentication', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: {
+                publicKey: mockMember.publicKey,
+                callsign: 'dave',
+                status: 'active',
+                joinedAt: '2026-01-01',
+            },
+            balance: 100,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 600,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [
+                { publicKey: 'b'.repeat(64), callsign: 'bob' },
+            ],
+        });
+
+        render(
+            <OffboardMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                hasKeyAuth={false}
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('+100.00 Beans')).toBeDefined();
+            const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
+            expect(giftRadio.disabled).toBe(true);
+            expect(screen.getByText(/Requires signed key-based admin authentication/)).toBeDefined();
         });
     });
 

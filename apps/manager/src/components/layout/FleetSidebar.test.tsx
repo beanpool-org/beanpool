@@ -158,5 +158,12 @@ describe('FleetSidebar Component', () => {
             expect(screen.getByText('Alpha Node')).toBeInTheDocument();
             expect(screen.getByText('Legacy Settings')).toHaveAttribute('href', '/settings-legacy');
         });
+
+        it('renders community name in header brand and logo aria-label when provided', () => {
+            render(<FleetSidebar {...singleNodeProps} communityName="Mullumbimby Commons" />);
+
+            expect(screen.getAllByText('Mullumbimby Commons').length).toBe(2);
+            expect(screen.getByRole('img', { name: 'Mullumbimby Commons — Node Settings' })).toBeInTheDocument();
+        });
     });
 });

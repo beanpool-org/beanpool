@@ -13,7 +13,22 @@ export default defineConfig({
     define: {
         __FLEET_MODE__: JSON.stringify(isFleetMode),
     },
-    plugins: [react()],
+    plugins: [
+        react(),
+        {
+            name: 'html-branding-transform',
+            transformIndexHtml(html) {
+                if (isFleetMode) {
+                    return html
+                        .replace(/<title>(.*?)<\/title>/, '<title>BeanPool Fleet Manager — Control Plane</title>')
+                        .replace(/aria-label="[^"]*"/, 'aria-label="BeanPool Fleet Manager"');
+                }
+                return html
+                    .replace(/<title>(.*?)<\/title>/, '<title>BeanPool — Node Settings</title>')
+                    .replace(/aria-label="[^"]*"/, 'aria-label="BeanPool — Node Settings"');
+            },
+        },
+    ],
     resolve: {
         alias: {
             '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),

@@ -251,6 +251,48 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
     const [nodeLogs, setNodeLogs] = useState<LogEntry[]>([]);
 
+    const [publicCommunityName, setPublicCommunityName] = useState<string | null>(null);
+
+    // In single-node mode, load public community info for immediate branding even before admin login
+    useEffect(() => {
+        if (!isFleetMode) {
+            const url = resolveNodeApiUrl(singleNodeOrigin, '/api/local/community-info');
+            fetch(url)
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => {
+                    if (d?.communityName) {
+                        setPublicCommunityName(d.communityName);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [isFleetMode, singleNodeOrigin]);
+
+    const effectiveCommunityName = diag?.communityName || publicCommunityName || '';
+
+    // Document title and favicon branding
+    useEffect(() => {
+        const favicon = typeof document !== 'undefined' ? document.querySelector<HTMLLinkElement>("link[rel~='icon']") : null;
+        if (isFleetMode) {
+            if (typeof document !== 'undefined') {
+                document.title = 'BeanPool Fleet Manager — Control Plane';
+            }
+            if (favicon) {
+                favicon.setAttribute('aria-label', 'BeanPool Fleet Manager');
+            }
+        } else {
+            const title = effectiveCommunityName
+                ? `${effectiveCommunityName} — Node Settings`
+                : 'BeanPool — Node Settings';
+            if (typeof document !== 'undefined') {
+                document.title = title;
+            }
+            if (favicon) {
+                favicon.setAttribute('aria-label', title);
+            }
+        }
+    }, [isFleetMode, effectiveCommunityName]);
+
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
     const [showColdStart, setShowColdStart] = useState<boolean | null>(null);
@@ -874,6 +916,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                 nodeHealthMap={nodeHealthMap}
                 tabAlertCounts={tabAlertCounts}
                 isFleetMode={isFleetMode}
+                communityName={effectiveCommunityName}
                 onLogout={handleLogout}
             />
 

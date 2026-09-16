@@ -155,23 +155,25 @@ async function main() {
         `control: ${OPENING} beans held ${STALE_DAYS} days genuinely owes ${fairCharge.toFixed(4)} — a real, `
         + 'recordable decay, so every comparison below can actually fail');
 
-    // ── Path 1: crowdfund escrow sweep to the creator ──────────────────────────────────────────────
+    // ── Path 1: crowdfund escrow sweep to the enterprise account ───────────────────────────────────
     const funded = id('proj');
-    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to the creator', [], PAYOUT, null);
+    createCrowdfundProject(funded, creator, 'Fully funded', 'sweeps to the enterprise account', [], PAYOUT, null);
     pledgeToProject(crypto.randomUUID(), funded, backer, PAYOUT, 'pledge');
 
     const creatorRow = row(creator)!;
     assert(creatorRow.epoch === nowEpoch(),
         'path 1: the escrow sweep left the creator\'s demurrage window CLOSED in the row');
-    // Row-level, so this holds whatever a later read does — the durable pair is the thing that was wrong.
-    assert(Math.abs((OPENING + PAYOUT - creatorRow.balance) - fairCharge) < SAME_CHARGE,
-        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, not a charge against the payout`);
+    // Row-level, creator personal balance reflects only the fair charge (sweep lands in enterprise account per Slice 3)
+    assert(Math.abs((OPENING - creatorRow.balance) - fairCharge) < SAME_CHARGE,
+        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, with creator personal funds protected`);
+    const fundedRow = row(funded)!;
+    assert(fundedRow.balance === PAYOUT,
+        `path 1: the enterprise account received the full ${PAYOUT} payout (demurrage-exempt)`);
 
     reconcileLedgerFromDb();   // what the balance-mutation hook, or any restart, does
-    const creatorCharge = OPENING + PAYOUT - getBalance(creator).balance;
+    const creatorCharge = OPENING - getBalance(creator).balance;
     assert(Math.abs(creatorCharge - fairCharge) < SAME_CHARGE,
-        `path 1: reading the creator after the payout costs ${creatorCharge.toFixed(4)}, matching the control `
-        + `(the open window charged the ${STALE_DAYS} days against all ${OPENING + PAYOUT})`);
+        `path 1: reading the creator after the payout costs ${creatorCharge.toFixed(4)}, matching the control`);
 
     // ── Path 1b: the same sweep, to a creator inside the Green Zone ─────────────────────────────────
     const quietProject = id('proj');
@@ -183,12 +185,14 @@ async function main() {
         `path 1b: a creator holding ${GREEN_ZONE_HOLDING} owes nothing and queues no decay event, and the `
         + 'window is STILL closed in the row — persisting only when there is an event to persist would leave '
         + 'the commonest case broken');
-    assert(Math.abs(quietRow.balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
-        `path 1b: and nothing was collected on the way — ${GREEN_ZONE_HOLDING} + ${PAYOUT} arrives intact`);
+    assert(Math.abs(quietRow.balance - GREEN_ZONE_HOLDING) < 1e-9,
+        `path 1b: creator inside Green Zone untouched — holds ${GREEN_ZONE_HOLDING}`);
+    const quietProjectRow = row(quietProject)!;
+    assert(quietProjectRow.balance === PAYOUT,
+        `path 1b: enterprise received ${PAYOUT} payout (demurrage-exempt)`);
     reconcileLedgerFromDb();
-    assert(Math.abs(getBalance(quiet).balance - (GREEN_ZONE_HOLDING + PAYOUT)) < 1e-9,
-        'path 1b: and the next read charges nothing either — the payout pushed them out of the Green Zone, so '
-        + 'a carried window would have taxed a balance that had never owed a bean');
+    assert(Math.abs(getBalance(quiet).balance - GREEN_ZONE_HOLDING) < 1e-9,
+        'path 1b: and the next read charges nothing against creator');
 
     // ── Path 1c: the payer side — a pledge may not be afforded out of beans demurrage has taken ─────
     // The affordability check is a raw `SELECT balance`, so against an unsettled row it reads the PRE-decay

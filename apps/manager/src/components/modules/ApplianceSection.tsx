@@ -13,6 +13,7 @@ import {
     getTfaSessionToken,
     setTfaSessionToken,
 } from '../../lib/node-client';
+import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 
@@ -75,12 +76,6 @@ export function ApplianceSection({
     const [verifyTarget, setVerifyTarget] = useState<string | null>(null);
     const [verifyResult, setVerifyResult] = useState<BackupVerificationResult | null>(null);
     const [verifyError, setVerifyError] = useState<string | null>(null);
-
-    // Identity state
-    const [identityName, setIdentityName] = useState(diag?.callsign || '');
-    const [communityName, setCommunityName] = useState(diag?.communityName || '');
-    const [savingIdentity, setSavingIdentity] = useState(false);
-    const [identitySuccess, setIdentitySuccess] = useState<string | null>(null);
 
     // Access & Password change state
     const [currentPassword, setCurrentPassword] = useState('');
@@ -268,34 +263,6 @@ export function ApplianceSection({
             setRestoreStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setRestoring(false);
-        }
-    };
-
-    const handleSaveIdentity = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setSavingIdentity(true);
-        setIdentitySuccess(null);
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({
-                    password: activeNode.adminPassword,
-                    callsign: identityName.trim(),
-                    communityName: communityName.trim(),
-                }),
-            });
-            if (res.ok) {
-                setIdentitySuccess('Node identity updated successfully!');
-                onRefreshDiag();
-            } else {
-                alert('Failed to update node identity');
-            }
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        } finally {
-            setSavingIdentity(false);
         }
     };
 
@@ -1029,54 +996,11 @@ export function ApplianceSection({
 
             {/* Subtab: Node Identity */}
             {subTab === 'identity' && (
-                <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-6 max-w-2xl">
-                    <div>
-                        <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                            <span>📡</span>
-                            <span>Node Identity &amp; Branding</span>
-                        </h3>
-                        <p className="text-xs text-nature-400 m-0 mt-0.5">
-                            Community label, callsign, and public network configuration
-                        </p>
-                    </div>
-
-                    {identitySuccess && (
-                        <div className="p-3 rounded-xl bg-emerald-950 border border-emerald-800 text-emerald-300 text-xs font-semibold">
-                            ✓ {identitySuccess}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSaveIdentity} className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-nature-300 mb-1">Community Name</label>
-                            <input
-                                type="text"
-                                value={communityName}
-                                onChange={(e) => setCommunityName(e.target.value)}
-                                placeholder="e.g. Mullumbimby Food Commons"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-nature-300 mb-1">Operator Callsign</label>
-                            <input
-                                type="text"
-                                value={identityName}
-                                onChange={(e) => setIdentityName(e.target.value)}
-                                placeholder="e.g. mullum-node-1"
-                                className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={savingIdentity}
-                            className="px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
-                        >
-                            {savingIdentity ? 'Saving...' : 'Save Identity'}
-                        </button>
-                    </form>
-                </div>
+                <NodeIdentityPanel
+                    activeNode={activeNode}
+                    diag={diag}
+                    onRefreshDiag={onRefreshDiag}
+                />
             )}
 
             {/* Subtab: Access & Security */}

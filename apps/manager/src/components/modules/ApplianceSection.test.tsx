@@ -247,7 +247,27 @@ describe('ApplianceSection Component', () => {
                 body: JSON.stringify({
                     password: mockProfile.adminPassword,
                     callsign: mockDiag.callsign,
+                    lat: null,
+                    lng: null,
                     communityName: mockDiag.communityName,
+                    contactEmail: '',
+                    contactPhone: '',
+                }),
+            })
+        );
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/node/config'),
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({
+                    password: mockProfile.adminPassword,
+                    publishLocation: true,
+                    publishMembers: true,
+                    publishContacts: true,
+                    publishHealth: true,
+                    directoryPushIntervalHours: 12,
+                    serviceRadius: null,
                 }),
             })
         );

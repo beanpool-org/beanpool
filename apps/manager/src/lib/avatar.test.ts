@@ -29,8 +29,16 @@ describe('resolveAvatarUrl', () => {
             expect(resolveAvatarUrl('bundled://rocket?v=123')).toBe('/avatars/avatar_rocket.jpg');
         });
 
-        it('returns null for unknown bundled keys', () => {
+        it('returns null for unknown bundled keys or prototype properties', () => {
             expect(resolveAvatarUrl('bundled://unknown-key')).toBeNull();
+            expect(resolveAvatarUrl('bundled://toString')).toBeNull();
+            expect(resolveAvatarUrl('bundled://valueOf')).toBeNull();
+            expect(resolveAvatarUrl('bundled://constructor')).toBeNull();
+            expect(resolveAvatarUrl('bundled://hasOwnProperty')).toBeNull();
+            expect(resolveAvatarUrl('toString')).toBeNull();
+            expect(resolveAvatarUrl('valueOf')).toBeNull();
+            expect(resolveAvatarUrl('constructor')).toBeNull();
+            expect(resolveAvatarUrl('hasOwnProperty')).toBeNull();
         });
     });
 
@@ -97,6 +105,12 @@ describe('isShortEmoji', () => {
         expect(isShortEmoji('🏛️')).toBe(true);
         expect(isShortEmoji('⚡')).toBe(true);
         expect(isShortEmoji('🎫')).toBe(true);
+    });
+
+    it('returns true for compound, modifier, and ZWJ sequence emojis', () => {
+        expect(isShortEmoji('👩🏽‍🌾')).toBe(true);
+        expect(isShortEmoji('👨‍👩‍👧‍👦')).toBe(true);
+        expect(isShortEmoji('🫱🏼‍🫲🏿')).toBe(true);
     });
 
     it('returns false for URLs and bundled protocols', () => {

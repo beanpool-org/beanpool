@@ -787,6 +787,17 @@ async function main() {
             },
         });
         assert(expiredCookieWithPass.status === 200, 'Expired session cookie falls through to password auth (got 200)');
+
+        // 12.14 Cookie session can acquire CSRF token via POST /api/local/admin/csrf-token without CSRF header (Comment 4021421356)
+        const cookieCsrfFetch = await fetch(`${base}/api/local/admin/csrf-token`, {
+            method: 'POST',
+            headers: {
+                'Cookie': `admin_session=${freshAliceSessionId}`,
+            },
+        });
+        assert(cookieCsrfFetch.status === 200, 'Cookie session POST /api/local/admin/csrf-token succeeds without CSRF header');
+        const cookieCsrfBody: any = await cookieCsrfFetch.json();
+        assert(typeof cookieCsrfBody.csrfToken === 'string' && cookieCsrfBody.csrfToken.length > 0, 'Returns minted CSRF token');
     } finally {
         server.close();
     }

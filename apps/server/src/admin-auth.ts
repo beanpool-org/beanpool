@@ -42,11 +42,12 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.state.isKeySession = true;
 
             // #133: CSRF validation for mutating requests with cookie session (or if header provided)
+            const reqPath = ctx.path || ctx.request?.path || '';
             const isMutatingMethod = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(ctx.method?.toUpperCase());
             const hasCookieSession = Boolean(ctx.cookies && typeof ctx.cookies.get === 'function' && ctx.cookies.get('admin_session'));
             const csrfHeader = (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
                 ctx.request?.headers?.['x-csrf-token'] || ctx.headers?.['x-csrf-token'];
-            if (hasCookieSession && isMutatingMethod) {
+            if (hasCookieSession && isMutatingMethod && reqPath !== '/api/local/admin/csrf-token') {
                 if (!csrfHeader || !validateCsrfToken(ctx)) {
                     ctx.status = 403;
                     ctx.body = { error: 'Invalid or missing CSRF token' };

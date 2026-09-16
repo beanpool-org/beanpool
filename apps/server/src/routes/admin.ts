@@ -203,6 +203,17 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
     };
 });
 
+const seenRevocationNonces = new Map<string, number>();
+function consumeRevocationNonce(nonce: string, now: number): boolean {
+    if (seenRevocationNonces.size > 10_000) {
+        for (const [n, exp] of seenRevocationNonces) if (exp <= now) seenRevocationNonces.delete(n);
+    }
+    const exp = seenRevocationNonces.get(nonce);
+    if (exp !== undefined && exp > now) return false;
+    seenRevocationNonces.set(nonce, now + 60_000);
+    return true;
+}
+
 /**
  * POST /api/local/admin/auth/revoke-all
  * Revoke all web sessions for a member by bumping session_epoch in SQLite.
@@ -230,6 +241,18 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         if (pubKeyHex && signatureBase64 && isNodeAdmin(pubKeyHex)) {
             const timestampHeader = ctx.get('X-Timestamp');
             const nonce = ctx.get('X-Nonce');
+            const ts = Number(timestampHeader);
+            const now = Date.now();
+            if (!Number.isFinite(ts) || Math.abs(now - ts) > 60_000 || !nonce) {
+                ctx.status = 401;
+                ctx.body = { error: 'Missing or stale timestamp / nonce headers' };
+                return;
+            }
+            if (!consumeRevocationNonce(nonce, now)) {
+                ctx.status = 401;
+                ctx.body = { error: 'Replay detected: nonce already used' };
+                return;
+            }
             const rawBody = (ctx as any).rawBody ?? '';
             const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
             if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {

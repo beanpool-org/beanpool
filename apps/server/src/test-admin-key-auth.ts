@@ -673,6 +673,38 @@ async function main() {
         });
         assert(signedRevoke.status === 200, 'Signed mobile POST /api/local/admin/auth/revoke-all returns 200');
 
+        // 12.3b Replayed signed mobile revoke-all request fails (Comment 4021421368)
+        const replayedRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Public-Key': aliceKeys.pub,
+                'X-Signature': revSig,
+                'X-Timestamp': revTimestamp,
+                'X-Nonce': revNonce,
+            },
+            body: revRawBody,
+        });
+        assert(replayedRevoke.status === 401, 'Replayed signed mobile revoke-all returns 401');
+
+        // 12.3c Stale timestamp on signed revoke-all fails (Comment 4021421368)
+        const staleTs = String(Date.now() - 120_000);
+        const freshNonce = randomBytes(16).toString('hex');
+        const staleMsg = `POST\n/api/local/admin/auth/revoke-all\n${staleTs}\n${freshNonce}\n${revRawBody}`;
+        const staleSig = Buffer.from(ed25519.sign(Buffer.from(staleMsg, 'utf-8'), aliceKeys.priv)).toString('base64');
+        const staleRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Public-Key': aliceKeys.pub,
+                'X-Signature': staleSig,
+                'X-Timestamp': staleTs,
+                'X-Nonce': freshNonce,
+            },
+            body: revRawBody,
+        });
+        assert(staleRevoke.status === 401, 'Stale timestamp on signed revoke-all returns 401');
+
         // 12.4 Passive GET session without credentials returns 200 unauthenticated (Comment 3)
         const passiveSession = await fetch(`${base}/api/local/admin/auth/session`);
         assert(passiveSession.status === 200, 'Passive GET /api/local/admin/auth/session returns 200');

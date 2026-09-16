@@ -163,4 +163,61 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(handleClose).toHaveBeenCalledTimes(2);
     });
+
+    it('enforces exact case sensitivity in type-to-confirm safeguard', async () => {
+        render(
+            <PruneBranchModal
+                rootMember={mockRootMember}
+                members={mockDownstreamMembers}
+                onConfirm={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        const input = screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i);
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+
+        // Lowercase should NOT enable the button (case mismatch)
+        await userEvent.type(input, 'badrootleader');
+        expect(pruneBtn).toBeDisabled();
+
+        // Exact match should enable the button
+        await userEvent.clear(input);
+        await userEvent.type(input, 'BadRootLeader');
+        expect(pruneBtn).toBeEnabled();
+    });
+
+    it('merges accounts balances and separates bad debt write-off from credit confiscation', () => {
+        const root: MemberItem = {
+            publicKey: 'pk-debtor-root',
+            callsign: 'DebtorRoot',
+        };
+        const child: MemberItem = {
+            publicKey: 'pk-credit-child',
+            callsign: 'CreditChild',
+            invitedBy: 'pk-debtor-root',
+        };
+        const mockAccounts = [
+            { publicKey: 'pk-debtor-root', balance: -250 },
+            { publicKey: 'pk-credit-child', balance: 400 },
+        ];
+
+        render(
+            <PruneBranchModal
+                rootMember={root}
+                members={[root, child]}
+                accounts={mockAccounts}
+                onConfirm={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        // Debt written off: 250 beans
+        const debtEl = document.getElementById('prune-debt-written-off');
+        expect(debtEl?.textContent).toBe('250 🫘 bad debt');
+
+        // Surplus credit confiscated: 400 beans
+        const creditEl = document.getElementById('prune-credit-confiscated');
+        expect(creditEl?.textContent).toBe('400 🫘 credit');
+    });
 });

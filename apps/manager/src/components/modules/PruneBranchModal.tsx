@@ -4,6 +4,7 @@ import type { MemberItem } from './MembersModule';
 export interface PruneBranchModalProps {
     rootMember: MemberItem | null | undefined;
     members?: MemberItem[] | null;
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     onConfirm: (pubkey: string) => Promise<void>;
     onClose: () => void;
 }
@@ -11,6 +12,7 @@ export interface PruneBranchModalProps {
 export function PruneBranchModal({
     rootMember,
     members,
+    accounts,
     onConfirm,
     onClose,
 }: PruneBranchModalProps) {
@@ -28,10 +30,34 @@ export function PruneBranchModal({
             ? rootMember.name.trim()
             : (rootPubkey ? rootPubkey.slice(0, 8) : 'Unknown Root');
 
+    const accountsMap = useMemo(() => {
+        const map = new Map<string, number>();
+        if (Array.isArray(accounts)) {
+            for (const acc of accounts) {
+                if (!acc) continue;
+                const pk = typeof acc.publicKey === 'string' ? acc.publicKey : (typeof acc.pubkey === 'string' ? acc.pubkey : '');
+                if (pk && acc.balance !== undefined) {
+                    const num = Number(acc.balance);
+                    if (!isNaN(num)) map.set(pk, num);
+                }
+            }
+        } else if (accounts && typeof accounts === 'object') {
+            for (const [pk, val] of Object.entries(accounts)) {
+                if (val && typeof val === 'object' && 'balance' in val) {
+                    const num = Number((val as any).balance);
+                    if (!isNaN(num)) map.set(pk, num);
+                } else if (typeof val === 'number') {
+                    map.set(pk, val);
+                }
+            }
+        }
+        return map;
+    }, [accounts]);
+
     // Compute the subtree of members invited by this branch root
-    const { branchMembers, totalBalance } = useMemo(() => {
+    const { branchMembers, totalBalance, totalDebtWriteOff, totalCreditConfiscated } = useMemo(() => {
         if (!rootMember && !rootPubkey) {
-            return { branchMembers: [], totalBalance: 0 };
+            return { branchMembers: [], totalBalance: 0, totalDebtWriteOff: 0, totalCreditConfiscated: 0 };
         }
 
         const safeMembers = Array.isArray(members) ? members : [];
@@ -77,25 +103,32 @@ export function PruneBranchModal({
             walk(rootPubkey);
         }
 
+        let totalDebtWriteOff = 0;
+        let totalCreditConfiscated = 0;
         let sumBalance = 0;
+
         collected.forEach((m) => {
             if (!m || typeof m !== 'object') return;
-            const b = m.balance;
-            if (typeof b === 'number' && !isNaN(b)) {
-                sumBalance += b;
-            } else if (typeof b === 'string') {
-                const parsed = parseFloat(b);
-                if (!isNaN(parsed)) sumBalance += parsed;
+            const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof (m as any).pubkey === 'string' ? (m as any).pubkey : '');
+            let b = pk && accountsMap.has(pk) ? accountsMap.get(pk)! : (m.balance !== undefined ? Number(m.balance) : 0);
+            if (isNaN(b)) b = 0;
+            sumBalance += b;
+            if (b < 0) {
+                totalDebtWriteOff += Math.abs(b);
+            } else if (b > 0) {
+                totalCreditConfiscated += b;
             }
         });
 
         return {
             branchMembers: collected,
             totalBalance: Math.round(sumBalance * 100) / 100,
+            totalDebtWriteOff: Math.round(totalDebtWriteOff * 100) / 100,
+            totalCreditConfiscated: Math.round(totalCreditConfiscated * 100) / 100,
         };
-    }, [rootMember, rootPubkey, members]);
+    }, [rootMember, rootPubkey, members, accountsMap]);
 
-    const isMatch = confirmText.trim().toLowerCase() === rootName.trim().toLowerCase() && rootName.trim().length > 0;
+    const isMatch = confirmText.trim() === rootName.trim() && rootName.trim().length > 0;
 
     // Keyboard accessibility: Escape closes modal
     useEffect(() => {
@@ -188,13 +221,31 @@ export function PruneBranchModal({
                             {branchMembers.length}
                         </span>
                     </div>
-                    <div className="col-span-2 pt-2 border-t border-nature-800/60 flex items-center justify-between">
-                        <span className="text-xs text-nature-300 font-medium">
-                            Total Balance Written Off:
-                        </span>
-                        <span className="text-sm font-black text-red-400 font-mono">
-                            {totalBalance} beans
-                        </span>
+                    <div className="col-span-2 pt-2 border-t border-nature-800/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-nature-300 font-medium">
+                                Bad Debt to Settle:
+                            </span>
+                            <span className="font-bold text-red-400 font-mono" id="prune-debt-written-off">
+                                {totalDebtWriteOff} 🫘 bad debt
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-nature-300 font-medium">
+                                Surplus Credit to Reclaim:
+                            </span>
+                            <span className="font-bold text-amber-400 font-mono" id="prune-credit-confiscated">
+                                {totalCreditConfiscated} 🫘 credit
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-nature-800/40">
+                            <span className="text-nature-400 font-medium">
+                                Total Balance Written Off:
+                            </span>
+                            <span className="text-sm font-black text-red-400 font-mono" id="prune-total-balance">
+                                {totalBalance} beans
+                            </span>
+                        </div>
                     </div>
                 </div>
 

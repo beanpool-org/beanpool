@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, SYNONYM_MAP } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
@@ -187,7 +187,32 @@ import {
     type SyncRecoveryApproval,
     type SyncMarketplaceTransaction,
     type SyncPollVote,
-    type SyncPayload
+    type SyncPayload,
+    createGroup as createGroupEngine,
+    getGroup as getGroupEngine,
+    listGroups as listGroupsEngine,
+    getGroupMembers as getGroupMembersEngine,
+    getGroupMember as getGroupMemberEngine,
+    isGroupConvenor as isGroupConvenorEngine,
+    isGroupMember as isGroupMemberEngine,
+    getMemberGroupIds as getMemberGroupIdsEngine,
+    joinGroup as joinGroupEngine,
+    setMemberRole as setMemberRoleEngine,
+    removeGroupMember as removeGroupMemberEngine,
+    updateGroupPolicy as updateGroupPolicyEngine,
+    updateGroup as updateGroupEngine,
+    approveGroupMember as approveGroupMemberEngine,
+    inviteGroupMember as inviteGroupMemberEngine,
+    deleteGroupPost as deleteGroupPostEngine,
+    type Group,
+    type GroupMember,
+    type GroupRole,
+    type JoinPolicy,
+    type GroupCategory,
+    type GroupMemberStatus,
+    type CreateGroupParams,
+    type UpdateGroupParams,
+    type ListGroupsFilter
 } from '@beanpool/engine';
 import {
     addRating,
@@ -834,7 +859,9 @@ export function broadcast(event: any, recipients?: string[]): void {
         switch (event.type) {
             case 'new_post':
                 bumpPostsVersion();
-                bumpActivityVersion();
+                if (!recipients) {
+                    bumpActivityVersion();
+                }
                 break;
             case 'post_updated':
             case 'post_removed':
@@ -870,7 +897,7 @@ export function broadcast(event: any, recipients?: string[]): void {
     }
     const msg = JSON.stringify(event);
     for (const ws of wsClients) {
-        if (recipients && ws._memberPubkey && !recipients.includes(ws._memberPubkey)) continue;
+        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) continue;
         try { ws.send(msg); } catch { wsClients.delete(ws); }
     }
 }
@@ -2307,7 +2334,18 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 export function createPost(
     type: 'offer' | 'need' | 'poll', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string; pollOptions?: Array<{ id: string; text: string }>; durationDays?: number }
+    options?: {
+        reach?: unknown;
+        reachPeers?: unknown;
+        createdBy?: string;
+        pollOptions?: Array<{ id: string; text: string }>;
+        durationDays?: number;
+        audienceScope?: AudienceScope;
+        targetGroupId?: string;
+        targetPubkey?: string;
+        assignedTo?: string;
+        targetArchetypes?: string;
+    }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }
@@ -4580,4 +4618,107 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         notification.data,
         'escrow'
     );
+}
+
+// ===================== GROUPS & CONVENOR MODERATION (§9) =====================
+
+let _groupsVersion = 1;
+export function getGroupsVersion(): number { return _groupsVersion; }
+export function bumpGroupsVersion(): void { _groupsVersion++; }
+
+export function createGroup(params: CreateGroupParams): Group {
+    const res = createGroupEngine(db, params);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_created', group: res });
+    return res;
+}
+
+export function getGroup(idOrSlug: string, viewerPubkey?: string): Group | null {
+    return getGroupEngine(db, idOrSlug, viewerPubkey);
+}
+
+export function listGroups(filter?: ListGroupsFilter, viewerPubkey?: string): Group[] {
+    return listGroupsEngine(db, filter, viewerPubkey);
+}
+
+export function getGroupMembers(groupId: string, filter?: { status?: GroupMemberStatus; role?: GroupRole }): GroupMember[] {
+    return getGroupMembersEngine(db, groupId, filter);
+}
+
+export function getGroupMember(groupId: string, memberPubkey: string): GroupMember | null {
+    return getGroupMemberEngine(db, groupId, memberPubkey);
+}
+
+export function isGroupConvenor(groupId: string, memberPubkey: string): boolean {
+    return isGroupConvenorEngine(db, groupId, memberPubkey);
+}
+
+export function isGroupMember(groupId: string, memberPubkey: string): boolean {
+    return isGroupMemberEngine(db, groupId, memberPubkey);
+}
+
+export function getMemberGroupIds(memberPubkey: string): string[] {
+    return getMemberGroupIdsEngine(db, memberPubkey);
+}
+
+export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+    const res = joinGroupEngine(db, groupId, memberPubkey);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_updated', groupId, member: res });
+    return res;
+}
+
+export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
+    const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_updated', groupId, member: res });
+    return res;
+}
+
+export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+    const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+    if (res) {
+        bumpGroupsVersion();
+        broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey });
+    }
+    return res;
+}
+
+export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
+    const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_updated', group: res });
+    return res;
+}
+
+export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
+    const res = updateGroupEngine(db, groupId, convenorPubkey, updates);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_updated', group: res });
+    return res;
+}
+
+export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+    const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_updated', groupId, member: res });
+    return res;
+}
+
+export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+    const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_invited', groupId, member: res });
+    return res;
+}
+
+export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {
+    const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
+    if (res) {
+        bumpPostsVersion();
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as any[];
+        const recipients = rows.map(r => r.member_pubkey);
+        broadcast({ type: 'post_removed', id: postId }, recipients);
+    }
+    return res;
 }

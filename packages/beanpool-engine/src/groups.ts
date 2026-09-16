@@ -20,6 +20,15 @@ import {
     isGroupMemberStatus
 } from '@beanpool/core';
 
+export type {
+    Group,
+    GroupMember,
+    GroupRole,
+    JoinPolicy,
+    GroupCategory,
+    GroupMemberStatus
+};
+
 type Db = Database.Database;
 
 export interface CreateGroupParams {

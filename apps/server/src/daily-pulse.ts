@@ -39,7 +39,7 @@ let _stmtActiveCountAll: any = null;
 function getStmtActiveMemberCount() {
     if (!_stmtActiveMemberCount) {
         _stmtActiveMemberCount = db.prepare(
-            "SELECT COUNT(*) as c FROM posts WHERE author_pubkey != ? AND active = 1 AND status = 'active' AND type != 'poll'"
+            "SELECT COUNT(*) as c FROM posts WHERE author_pubkey != ? AND active = 1 AND status = 'active' AND type != 'poll' AND (audience_scope IS NULL OR audience_scope = 'public')"
         );
     }
     return _stmtActiveMemberCount;
@@ -48,7 +48,7 @@ function getStmtActiveMemberCount() {
 function getStmtActiveCountAll() {
     if (!_stmtActiveCountAll) {
         _stmtActiveCountAll = db.prepare(
-            "SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND type != 'poll'"
+            "SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND type != 'poll' AND (audience_scope IS NULL OR audience_scope = 'public')"
         );
     }
     return _stmtActiveCountAll;

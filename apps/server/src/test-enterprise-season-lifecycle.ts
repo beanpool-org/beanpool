@@ -265,20 +265,48 @@ async function main() {
 
     // Fast-forward wind_up_initiated_at to 8 days ago
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare("UPDATE members SET wind_up_initiated_at = ? WHERE public_key = ?").run(eightDaysAgo, farm);
-
-    // Create an open transaction (Charlie requests kale offer created before wind-up)
+    // Charlie requests kale offer while farm is active (or verify rejection while winding up)
     const existingOffer = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND status = 'active'").get(farm) as any;
     // Give Charlie an active offer so he can trade
     createPost('offer', 'tools', 'Wrench', 'Steel wrench', 10, 'fixed', ordinaryMember);
-    const txDeal = requestPost(existingOffer.id, ordinaryMember);
-    assert(txDeal !== null, 'Charlie requested kale offer');
+
+    // Verify requestPost is blocked while winding up
+    let reqWindingUpThrew = false;
+    try {
+        requestPost(existingOffer.id, ordinaryMember);
+    } catch (e: any) {
+        reqWindingUpThrew = true;
+        assert(e.message.includes('Enterprise is winding up — cannot accept new requests'), `requestPost on winding-up author rejected: "${e.message}"`);
+    }
+    assert(reqWindingUpThrew, 'requestPost blocked when author is winding up');
 
     // Test: cancelWindUp is allowed even after 7-day grace period if not finalised
     const cancelAfterGrace = cancelWindUp(farm, regKeeper);
     assert(cancelAfterGrace.ok === true && cancelAfterGrace.status === 'active', 'Keeper can cancel wind-up after 7 days if not finalised');
+
+    // While active again, Charlie requests kale offer and farm approves it
+    const txDeal = requestPost(existingOffer.id, ordinaryMember);
+    assert(txDeal !== null, 'Charlie requested kale offer');
+    approvePostRequest(txDeal.id, farm, { authSigner: leadKeeper });
+
+    // Now re-initiate wind-up with an open pending escrow to verify finalise is blocked
     initiateWindUp(farm, leadKeeper);
     db.prepare("UPDATE members SET wind_up_initiated_at = ? WHERE public_key = ?").run(eightDaysAgo, farm);
+
+    // Verify approvePostRequest is blocked while winding up
+    let approveWindingUpThrew = false;
+    try {
+        const dummyReqId = 'tx-dummy-req-1';
+        db.prepare(`
+            INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status, credits, created_at)
+            VALUES (?, ?, ?, ?, 'requested', 5, ?)
+        `).run(dummyReqId, existingOffer.id, ordinaryMember, farm, eightDaysAgo);
+        approvePostRequest(dummyReqId, farm, { authSigner: leadKeeper });
+    } catch (e: any) {
+        approveWindingUpThrew = true;
+        assert(e.message.includes('Enterprise is winding up — cannot accept new orders'), `approvePostRequest on winding up rejected: "${e.message}"`);
+    }
+    assert(approveWindingUpThrew, 'approvePostRequest blocked when author is winding up');
 
     // Create an active backing pledge to verify release upon finalise
     db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)").run('p-farm-1', leadKeeper, farm, 50, eightDaysAgo);
@@ -293,8 +321,8 @@ async function main() {
     }
     assert(openEscrowFinaliseThrew, 'finaliseWindUp blocked while transactions are open');
 
-    // Settle open transaction: farm approves and completes
-    approvePostRequest(txDeal.id, farm, { authSigner: leadKeeper });
+    // Settle open transactions: complete the legitimate txDeal, and cancel the dummy requested one
+    db.prepare("DELETE FROM marketplace_transactions WHERE id = 'tx-dummy-req-1'").run();
     completePostTransaction(txDeal.id, ordinaryMember, undefined);
 
     // Record pre-sweep Commons pool balance

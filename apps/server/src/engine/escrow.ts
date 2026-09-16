@@ -103,6 +103,18 @@ export function requestPost(
     if (!post) throw new Error('Post not found');
     if (post.status !== 'active') throw new Error('Post is not active');
     assertMemberActive(post.author_pubkey);
+    const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
+    if (authorMember?.is_treasury) {
+        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new requests');
+        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+    const requesterMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(requesterPublicKey) as any;
+    if (requesterMember?.is_treasury) {
+        if (requesterMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
+        if (requesterMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot place new requests');
+        if (requesterMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
@@ -197,7 +209,7 @@ export function approvePostRequest(
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
     // must NOT be the counterparty being paid (self-dealing prevention).
-    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+    const buyerMember = db.prepare('SELECT is_treasury, paused, status, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
     const isEnterpriseNeed = !isOffer && Boolean(buyerMember?.is_treasury);
     if (isEnterpriseNeed && opts?.authSigner && opts.authSigner === row.seller_pubkey) {
         const name = buyerMember?.callsign?.trim() || 'this enterprise';
@@ -217,10 +229,12 @@ export function approvePostRequest(
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(authorPublicKey) as any;
     if (authorMember?.is_treasury) {
         if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
         if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
     }
     if (buyerMember?.is_treasury) {
         if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
+        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
         if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
     }
 

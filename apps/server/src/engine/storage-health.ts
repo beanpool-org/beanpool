@@ -344,7 +344,6 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 1. Delete orphaned post photos
     let removedPhotosCount = 0;
-    const removedPhotosBytes = preview.orphanedPostPhotos.totalBytes;
     try {
         const delRes = db.prepare(`
             DELETE FROM post_photos
@@ -355,7 +354,6 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 2. Delete orphaned pulse thumbnails
     let removedThumbnailsCount = 0;
-    const removedThumbnailsBytes = preview.orphanedThumbnails.totalBytes;
     const thumbDir = path.join(dataDir, 'cache', 'pulse-thumbnails');
     if (fs.existsSync(thumbDir)) {
         try {
@@ -391,7 +389,6 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 3. Compress / prune old logs
     let compressedLogsCount = 0;
-    const compressedLogsBytes = preview.compressibleLogs.totalBytes;
 
     try {
         const countRow = db.prepare('SELECT COUNT(*) as count FROM system_logs').get() as any;
@@ -431,25 +428,31 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
             }
         }
 
-        // Reclaim SQLite pages if incremental vacuum is configured
+        // Checkpoint WAL and truncate to immediately reclaim filesystem space
         try {
+            db.pragma('wal_checkpoint(TRUNCATE)');
             const autoVacuumMode = db.pragma('auto_vacuum', { simple: true });
             if (autoVacuumMode === 2) {
                 db.pragma('incremental_vacuum');
             }
-        } catch {}
+        } catch (err) {
+            console.error('[StorageHealth] WAL checkpoint / vacuum failed:', err);
+        }
     } catch {}
 
-    const totalReclaimedBytes = removedPhotosBytes + removedThumbnailsBytes + compressedLogsBytes;
+    const effectiveRemovedPhotosBytes = removedPhotosCount > 0 ? preview.orphanedPostPhotos.totalBytes : 0;
+    const effectiveRemovedThumbnailsBytes = removedThumbnailsCount > 0 ? preview.orphanedThumbnails.totalBytes : 0;
+    const effectiveCompressedLogsBytes = compressedLogsCount > 0 ? preview.compressibleLogs.totalBytes : 0;
+    const totalReclaimedBytes = effectiveRemovedPhotosBytes + effectiveRemovedThumbnailsBytes + effectiveCompressedLogsBytes;
 
     return {
         success: true,
         removedPhotosCount,
-        removedPhotosBytes,
+        removedPhotosBytes: effectiveRemovedPhotosBytes,
         removedThumbnailsCount,
-        removedThumbnailsBytes,
+        removedThumbnailsBytes: effectiveRemovedThumbnailsBytes,
         compressedLogsCount,
-        compressedLogsBytes,
+        compressedLogsBytes: effectiveCompressedLogsBytes,
         totalReclaimedBytes,
     };
 }

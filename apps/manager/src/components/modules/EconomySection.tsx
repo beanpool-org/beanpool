@@ -174,7 +174,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             setKeepersMap(initialMap);
 
             // Fetch live keepers for any treasury missing keepers in initial list
-            const missing = (list || []).filter((t) => t.publicKey && (!t.keepers || t.keepers.length === 0));
+            const missing = (list || []).filter((t) => t.publicKey && !Array.isArray(t.keepers));
             if (missing.length > 0) {
                 const results = await Promise.all(
                     missing.map(async (t) => {

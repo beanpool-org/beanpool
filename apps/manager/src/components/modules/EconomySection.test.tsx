@@ -985,5 +985,48 @@ describe('EconomySection Component', () => {
             expect(options).toContain('Member (66667777...)');
             expect(options).not.toContain('@6666777788 (66667777...)');
         });
+
+        it('does not refetch keepers when treasury returns an empty keepers array', async () => {
+            const emptyKeepersTreasury: nodeClient.NodeTreasury[] = [
+                {
+                    publicKey: 'treasury_empty_keepers',
+                    name: 'Empty Keepers Co-op',
+                    avatar: '🌾',
+                    balance: 0,
+                    creditLine: 0,
+                    liveOffers: 0,
+                    keepers: [],
+                },
+                {
+                    publicKey: 'treasury_missing_keepers_prop',
+                    name: 'Missing Keepers Prop Co-op',
+                    avatar: '🌾',
+                    balance: 0,
+                    creditLine: 0,
+                    liveOffers: 0,
+                } as any,
+            ];
+
+            vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(emptyKeepersTreasury);
+            const fetchKeepersSpy = vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue([]);
+
+            await act(async () => {
+                render(
+                    <EconomySection
+                        activeNode={mockProfile}
+                        nodeData={{ members: [] }}
+                        onRefresh={vi.fn()}
+                    />
+                );
+            });
+
+            expect(fetchKeepersSpy).toHaveBeenCalledTimes(1);
+            expect(fetchKeepersSpy).toHaveBeenCalledWith(
+                mockProfile.url,
+                'treasury_missing_keepers_prop',
+                mockProfile.adminPassword,
+                undefined
+            );
+        });
     });
 });

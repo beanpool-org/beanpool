@@ -390,7 +390,8 @@ export function AncestryTreePanel({
         const dimStyle = isFilterActive && !isDirectMatch ? 'opacity-40' : '';
 
         const defaultOpen = depth < 2 || hasFlags || memberReportCount > 0;
-        const isOpen = isFilterActive ? true : (expandedBranches[pk] !== undefined ? expandedBranches[pk] : defaultOpen);
+        const effectiveDefaultOpen = isFilterActive || defaultOpen;
+        const isOpen = expandedBranches[pk] !== undefined ? expandedBranches[pk] : effectiveDefaultOpen;
 
         return (
             <div
@@ -411,7 +412,7 @@ export function AncestryTreePanel({
                     {hasChildren ? (
                         <button
                             type="button"
-                            onClick={() => toggleBranch(pk, defaultOpen)}
+                            onClick={() => toggleBranch(pk, effectiveDefaultOpen)}
                             aria-expanded={isOpen}
                             aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${callsign} branch`}
                             className="flex items-center gap-2 flex-wrap min-w-0 text-left flex-1 bg-transparent border-none p-0 cursor-pointer text-inherit hover:opacity-90 focus:outline-none"
@@ -526,6 +527,9 @@ export function AncestryTreePanel({
                         <button
                             type="button"
                             onClick={(e) => toggleStats(pk, e)}
+                            aria-expanded={isStatsOpen}
+                            aria-controls={`stats-${pk.slice(0, 12)}`}
+                            aria-label={`${isStatsOpen ? 'Hide' : 'Show'} activity stats for ${callsign}`}
                             className="min-h-[36px] px-2 py-1 rounded-lg bg-nature-900 hover:bg-nature-800 text-xs text-nature-300 border border-nature-700 transition-all"
                             title="Toggle branch activity stats"
                         >

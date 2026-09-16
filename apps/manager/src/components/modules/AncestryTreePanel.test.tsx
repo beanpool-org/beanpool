@@ -122,7 +122,12 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         // Toggle Stats on Bob
         const statsButtons = screen.getAllByTitle(/Toggle branch activity stats/i);
         expect(statsButtons.length).toBeGreaterThan(0);
+        expect(statsButtons[1]).toHaveAttribute('aria-expanded', 'false');
+        expect(statsButtons[1]).toHaveAttribute('aria-controls', 'stats-pk_bob_level');
+        expect(statsButtons[1]).toHaveAttribute('aria-label', 'Show activity stats for Bob');
         await userEvent.click(statsButtons[1]); // Bob's stats button
+        expect(statsButtons[1]).toHaveAttribute('aria-expanded', 'true');
+        expect(statsButtons[1]).toHaveAttribute('aria-label', 'Hide activity stats for Bob');
 
         // Verify Branch stats card opened
         expect(screen.getByText(/Branch \(2 members\)/i)).toBeInTheDocument();
@@ -391,5 +396,32 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         await waitFor(() => {
             expect(handleRefresh).toHaveBeenCalledTimes(1);
         });
+    });
+
+    it('allows collapsing and expanding branches when filter or search is active', async () => {
+        render(
+            <AncestryTreePanel
+                nodeData={realPayload}
+                activeNode={mockNode}
+            />
+        );
+
+        // Turn on a filter
+        const voucherFilterBtn = screen.getByRole('button', { name: /🤝 Vouchers/i });
+        await userEvent.click(voucherFilterBtn);
+
+        // Find disclosure button for Alice (has children)
+        const aliceBtn = screen.getByRole('button', { name: /Collapse Alice branch/i });
+        expect(aliceBtn).toHaveAttribute('aria-expanded', 'true');
+
+        // Operator collapses branch
+        await userEvent.click(aliceBtn);
+        expect(aliceBtn).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByRole('button', { name: /Expand Alice branch/i })).toBeInTheDocument();
+
+        // Operator expands branch again
+        await userEvent.click(aliceBtn);
+        expect(aliceBtn).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('button', { name: /Collapse Alice branch/i })).toBeInTheDocument();
     });
 });

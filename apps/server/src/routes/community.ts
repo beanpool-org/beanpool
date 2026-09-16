@@ -31,6 +31,7 @@ import {
     purgeMemberSelf,
     getMembersVersion,
 } from '../state-engine.js';
+import { completeRekey } from '../engine/member-wizards.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
     validatePasswordStrength,
@@ -919,6 +920,38 @@ router.post('/api/member/purge', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to purge account' };
+    }
+});
+
+router.post('/api/member/re-enroll', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { code, newPublicKey } = body;
+
+    if (!code || typeof code !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Re-enrolment code is required' };
+        return;
+    }
+    if (!newPublicKey || typeof newPublicKey !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'New public key is required' };
+        return;
+    }
+
+    try {
+        const cleanCode = code.trim().toUpperCase();
+        const req = db.prepare("SELECT * FROM rekey_requests WHERE code = ?").get(cleanCode) as any;
+        if (!req) {
+            ctx.status = 404;
+            ctx.body = { error: 'Invalid re-enrolment code' };
+            return;
+        }
+
+        const result = completeRekey(req.old_pubkey, newPublicKey, cleanCode, req.operator_pubkey);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to complete re-enrolment' };
     }
 });
 

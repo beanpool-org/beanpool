@@ -881,6 +881,15 @@ export function broadcast(event: any, recipients?: string[]): void {
 
 export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
+    try {
+        const invalidated = db.prepare("SELECT reason FROM invalidated_keys WHERE public_key = ?").get(publicKey) as any;
+        if (invalidated) {
+            throw new Error(`Device key has been invalidated (${invalidated.reason}). Please re-enrol using your replacement device.`);
+        }
+    } catch (e: any) {
+        if (e?.message?.includes('Device key has been invalidated')) throw e;
+        // If table does not exist during early boot or mock, ignore
+    }
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');

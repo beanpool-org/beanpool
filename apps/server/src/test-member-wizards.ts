@@ -662,8 +662,22 @@ async function main() {
         assert(statusData.isInvalidated === true, 'statusData shows isInvalidated: true');
         assert(statusData.pendingRequest?.code === graceRekeyCode, 'statusData pendingRequest matches issued code');
 
-        // 4a. Public re-enroll with invalid Proof of Possession signature rejected
         const graceKeyPair = generateKeyPair();
+
+        // 4a0. Public re-enroll with missing Proof of Possession signature rejected with 400
+        const missingSigRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                code: graceRekeyCode,
+                newPublicKey: graceKeyPair.pubHex,
+            }),
+        });
+        assert(missingSigRes.status === 400, 'POST /api/member/re-enroll without signature returns 400');
+        const missingSigData = await missingSigRes.json();
+        assert(missingSigData.error?.includes('Signature is required'), 'Error indicates signature is required');
+
+        // 4a. Public re-enroll with invalid Proof of Possession signature rejected
         const invalidSigRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

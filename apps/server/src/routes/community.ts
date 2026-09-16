@@ -943,13 +943,16 @@ router.post('/api/member/re-enroll', async (ctx) => {
     const cleanCode = code.trim().toUpperCase();
     const cleanNew = newPublicKey.trim().toLowerCase();
 
-    // Verify Proof of Possession if signature provided
-    if (signature) {
-        if (!verifyEd25519Signature(cleanCode, signature, cleanNew)) {
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid signature: proof of possession failed for new public key' };
-            return;
-        }
+    // Verify Proof of Possession signature (mandatory to prevent unauthenticated takeover)
+    if (!signature || typeof signature !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Signature is required: proof of possession of new private key must be provided' };
+        return;
+    }
+    if (!verifyEd25519Signature(cleanCode, signature, cleanNew)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid signature: proof of possession failed for new public key' };
+        return;
     }
 
     try {

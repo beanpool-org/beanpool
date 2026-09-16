@@ -145,6 +145,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                                     <button
                                         key={cat.key}
                                         type="button"
+                                        aria-pressed={active}
                                         onClick={() => setCategory(cat.key)}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                                             active
@@ -175,6 +176,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                                     <button
                                         key={pol.key}
                                         type="button"
+                                        aria-pressed={active}
                                         onClick={() => setJoinPolicy(pol.key)}
                                         className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
                                             active

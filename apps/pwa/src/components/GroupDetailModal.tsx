@@ -280,14 +280,16 @@ export function GroupDetailModal({
                                                         <button
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
-                                                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors"
+                                                            aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
                                                         >
                                                             Approve
                                                         </button>
                                                         <button
                                                             onClick={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                             disabled={actionLoading}
-                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                                            aria-label={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                         >
                                                             Decline
                                                         </button>
@@ -358,7 +360,8 @@ export function GroupDetailModal({
                                                         <button
                                                             onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                             disabled={actionLoading}
-                                                            className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                                                            aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
+                                                            className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                             title="Remove member"
                                                         >
                                                             ✕

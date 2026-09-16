@@ -160,8 +160,18 @@ CREATE TABLE IF NOT EXISTS posts (
     -- Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
     poll_options TEXT,
     poll_closes_at DATETIME,
+    -- Audience scoping on posts (docs/the-commons.md §9, Item 10)
+    audience_scope TEXT NOT NULL DEFAULT 'public' CHECK (audience_scope IN ('public', 'group', 'direct')),
+    target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
+    target_pubkey TEXT REFERENCES members(public_key),
+    assigned_to TEXT REFERENCES members(public_key),
+    target_archetypes TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);
+CREATE INDEX IF NOT EXISTS idx_posts_target_group ON posts(target_group_id) WHERE target_group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_target_pubkey ON posts(target_pubkey) WHERE target_pubkey IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_assigned_to ON posts(assigned_to) WHERE assigned_to IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS poll_votes (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -1152,3 +1162,65 @@ CREATE TABLE IF NOT EXISTS enterprise_pledges (
 );
 CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_enterprise ON enterprise_pledges(enterprise, released_at);
 CREATE INDEX IF NOT EXISTS idx_enterprise_pledges_keeper ON enterprise_pledges(keeper, released_at);
+
+-- 25. Groups, Convenor Moderation & Audience Scoping (docs/the-commons.md §9, Item 10)
+-- A group is an audience scope and NOTHING else:
+-- - It holds no money, grants no trust, confers no node role, and is never linked to an enterprise.
+-- - Separate role table: group_members (convenor | member | observer).
+-- - Join policies: open | request_to_join | invite_only.
+CREATE TABLE IF NOT EXISTS groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    avatar_url TEXT,
+    category TEXT DEFAULT 'general' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
+    created_by TEXT NOT NULL REFERENCES members(public_key),
+    join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
+    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
+CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
+CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('convenor', 'member', 'observer')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited')),
+    joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    invited_by TEXT REFERENCES members(public_key),
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (group_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
+CREATE INDEX IF NOT EXISTS idx_group_members_updated_at ON group_members(updated_at);
+CREATE INDEX IF NOT EXISTS idx_group_members_status_role ON group_members(group_id, status, role);
+
+CREATE TRIGGER IF NOT EXISTS groups_touch_updated_at
+AFTER UPDATE ON groups
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE groups SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS group_members_touch_updated_at
+AFTER UPDATE ON group_members
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE group_members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE group_id = NEW.group_id AND member_pubkey = NEW.member_pubkey;
+END;
+
+CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
+AFTER DELETE ON groups
+FOR EACH ROW
+BEGIN
+    UPDATE posts SET target_group_id = NULL,
+           active = 0, status = 'cancelled',
+           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE target_group_id = OLD.id;
+END;

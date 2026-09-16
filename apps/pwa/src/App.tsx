@@ -104,6 +104,7 @@ export function App() {
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
+    const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
@@ -169,6 +170,15 @@ export function App() {
         if (tab === 'map-post') {
             setActiveTab('map');
             setOpenNewPost(true);
+            setOpenNewPostGroupId(contextId);
+            return;
+        }
+        if (tab === 'map') {
+            setActiveTab('map');
+            if (contextId) {
+                setOpenNewPost(true);
+                setOpenNewPostGroupId(contextId);
+            }
             return;
         }
         setActiveTab(tab as Tab);
@@ -671,7 +681,8 @@ export function App() {
                                     <MapPage
                                         identity={identity}
                                         openNewPost={openNewPost}
-                                        onOpenNewPostHandled={() => setOpenNewPost(false)}
+                                        initialGroupId={openNewPostGroupId}
+                                        onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     />
                                 </Suspense>
@@ -701,6 +712,7 @@ export function App() {
                                 <ProjectsPage
                                     identity={identity}
                                     onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                 />
                             )}
                         </>

@@ -99,6 +99,11 @@ async function testMarketplaceActorAuth() {
         await dispatch(router, 'POST', '/api/marketplace/posts', ctx);
         check(ctx.status === 401, 'Unauthenticated /posts returns 401');
     }
+    {
+        const ctx: any = { requestBody: { id: offer.id, authorPublicKey: alice }, state: {} };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
+        check(ctx.status === 401, 'Unauthenticated /posts/remove returns 401');
+    }
 
     // ── 2. Authenticated attacker spoofing another member receives 403 ──
     {
@@ -138,6 +143,24 @@ async function testMarketplaceActorAuth() {
         };
         await dispatch(router, 'POST', '/api/marketplace/posts/pause', ctx);
         check(ctx.status === 403, 'Attacker cannot pause post for another member (403)');
+    }
+    {
+        // Eve tries to remove Alice's post
+        const ctx: any = {
+            requestBody: { id: offer.id, authorPublicKey: alice },
+            state: { actor: eve }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
+        check(ctx.status === 403, 'Attacker cannot remove post for another member (403)');
+    }
+    {
+        // Eve tries to remove Alice's post by claiming authorPublicKey is Eve (spoofed author pubkey in body)
+        const ctx: any = {
+            requestBody: { id: offer.id, authorPublicKey: eve },
+            state: { actor: eve }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
+        check(ctx.status === 403, 'Attacker cannot remove post by claiming own pubkey on another member post (403)');
     }
 
     // ── 3. Authenticated attacker spoofing an enterprise without keepership receives 403 ──
@@ -183,6 +206,28 @@ async function testMarketplaceActorAuth() {
         };
         await dispatch(router, 'POST', '/api/marketplace/transactions/complete', ctx);
         check(ctx.body?.success === true, 'Bob can complete his own deal');
+    }
+
+    // ── 7. Legitimate author and keeper can remove their own posts ──
+    {
+        // Alice removes her own post
+        const alicePostToRemove = createPost('offer', 'food', 'Extra Carrots', 'More carrots', 10, 'fixed', alice)!;
+        const ctx: any = {
+            requestBody: { id: alicePostToRemove.id, authorPublicKey: alice },
+            state: { actor: alice }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
+        check(ctx.body?.success === true, 'Alice can remove her own post');
+    }
+    {
+        // Bob is keeper of CommunityFarm and removes the enterprise post
+        const farmPost = createPost('offer', 'food', 'Farm Basil', 'Organic herbs', 5, 'fixed', treasury)!;
+        const ctx: any = {
+            requestBody: { id: farmPost.id, authorPublicKey: treasury },
+            state: { actor: bob }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
+        check(ctx.body?.success === true, 'Authorized keeper Bob can remove post for CommunityFarm');
     }
 
     console.log(`\nAll ${passed}/${run} checks passed.`);

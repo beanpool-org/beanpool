@@ -238,6 +238,8 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/commons/rounds',           // community transparency
     '/api/crowdfund/projects',       // public crowdfund list
     '/api/treasuries',               // community transparency: list of treasuries
+    '/api/enterprises',              // community transparency: list of enterprises
+    '/api/commons/decisions',        // governance transparency: list of decisions
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
     '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
@@ -259,6 +261,8 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
+    /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
+    /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>

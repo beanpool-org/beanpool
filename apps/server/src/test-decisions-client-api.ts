@@ -193,6 +193,17 @@ async function runSuite() {
 
     console.log('--- 1. Propose Constraints & Standing Gate ---');
 
+    // 1a-auth. Gating: Authentication required on propose
+    const resUnauth = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        body: {
+            title: 'Unauth decision',
+            description: 'Should fail with 401',
+            touches: 'nothing',
+            effect: 'poll',
+        },
+    });
+    assert(resUnauth.status === 401, 'Propose without cryptographic signature fails with 401');
+
     // 1a. Gating: earnedCredit > 0 required
     const resDave = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: daveZeroStanding,
@@ -311,6 +322,16 @@ async function runSuite() {
         },
     });
     assert(vote1.status === 200 && vote1.body.creditsUsed === 1, '1m1v vote uses exactly 1 credit');
+
+    // Vote without signature auth fails with 401
+    const unauthVote = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionMember.id}/vote`, {
+        body: {
+            voterPubkey: bob,
+            support: true,
+            voteCount: 1,
+        },
+    });
+    assert(unauthVote.status === 401, 'Vote without cryptographic signature fails with 401');
 
     // Charlie votes on quadratic pool decision: 3 votes = 9 credits
     const voteQ = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionPool.id}/vote`, {

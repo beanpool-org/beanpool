@@ -133,11 +133,16 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
-    const { authorPubkey, title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || authorPubkey;
-    if (!actor || !title || !touches || !effect) {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Cryptographic signature authentication required' };
+        return;
+    }
+    const { title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
+    if (!title || !touches || !effect) {
         ctx.status = 400;
-        ctx.body = { error: 'authorPubkey, title, touches, and effect are required' };
+        ctx.body = { error: 'title, touches, and effect are required' };
         return;
     }
     try {
@@ -159,11 +164,16 @@ router.post('/api/commons/decisions', async (ctx) => {
 });
 
 router.post('/api/commons/decisions/:id/vote', async (ctx) => {
-    const { voterPubkey, support, voteCount, signature } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || voterPubkey;
-    if (!actor || support === undefined) {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Cryptographic signature authentication required to vote' };
+        return;
+    }
+    const { support, voteCount, signature } = (ctx as any).requestBody || {};
+    if (support === undefined) {
         ctx.status = 400;
-        ctx.body = { error: 'voterPubkey and support (boolean) are required' };
+        ctx.body = { error: 'support (boolean) is required' };
         return;
     }
     const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);

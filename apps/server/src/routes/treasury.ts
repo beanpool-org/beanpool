@@ -225,13 +225,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // ---- Authenticated Enterprise Creation (docs/the-commons.md §2.1) -------------------
     const createEnterpriseHandler = async (ctx: any) => {
         const body = (ctx as any).requestBody || {};
-        const actor = (ctx.state?.actor as string) || body.creatorPubkey || body.creator_pubkey || body.proposerPubkey;
+        const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
             ctx.body = { error: 'Authentication required' };
             return;
         }
-        const { name, title, avatar, photos, creditLine, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
+        const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
         const enterpriseName = String(name || title || '').trim();
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
@@ -246,10 +246,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
 
         try {
+            // Enforce zero creditLine for self-serve creation;
+            // credit lines may only be allocated via admin routes or community decisions
             const res = createTreasury(
                 enterpriseName,
                 photoUrl || '',
-                Number(creditLine) || 0,
+                0,
                 {
                     systemCreated: !photoUrl,
                     workingCapitalCeiling: workingCapitalCeiling != null ? Number(workingCapitalCeiling) : null,

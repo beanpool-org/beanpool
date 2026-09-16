@@ -355,21 +355,19 @@ describe('NodeIdentityPanel Component', () => {
         });
 
         // Check update-identity call
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/update-identity'),
-            expect.objectContaining({
-                method: 'POST',
-                body: JSON.stringify({
-                    password: mockProfile.adminPassword,
-                    callsign: 'mullum-prime',
-                    lat: -28.55,
-                    lng: 153.5,
-                    communityName: 'Mullumbimby Food Exchange',
-                    contactEmail: 'admin@mullum.org',
-                    contactPhone: '+61 411 222 333',
-                }),
-            })
+        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+            call[0].includes('/api/local/update-identity')
         );
+        expect(updateCall).toBeDefined();
+        expect(JSON.parse(updateCall[1].body)).toEqual({
+            password: mockProfile.adminPassword,
+            callsign: 'mullum-prime',
+            lat: -28.55,
+            lng: 153.5,
+            communityName: 'Mullumbimby Food Exchange',
+            contactEmail: 'admin@mullum.org',
+            contactPhone: '+61 411 222 333',
+        });
 
         // Check node/config call
         expect(global.fetch).toHaveBeenCalledWith(
@@ -391,6 +389,126 @@ describe('NodeIdentityPanel Component', () => {
         await waitFor(() => {
             expect(screen.getByText(/Saved!/i)).toBeInTheDocument();
             expect(onRefreshDiag).toHaveBeenCalled();
+        });
+    });
+
+    it('omits lat and lng from update-identity payload when coordinates are unset', async () => {
+        // Mock node config without coordinates
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/community-info')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        communityName: 'Unlocated Node',
+                        callsign: 'unlocated',
+                    }),
+                });
+            }
+            if (url.includes('/api/node/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({
+                        publishLocation: true,
+                        directoryPushIntervalHours: 12,
+                        serviceRadius: null,
+                    }),
+                });
+            }
+            if (url.includes('/api/local/update-identity')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true }),
+                });
+            }
+            if (url.includes('/api/local/admin/node/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        }));
+
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={null}
+                    onRefreshDiag={vi.fn()}
+                />
+            );
+        });
+
+        const saveBtn = screen.getByRole('button', { name: /save identity/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+            call[0].includes('/api/local/update-identity')
+        );
+        expect(updateCall).toBeDefined();
+        const payload = JSON.parse(updateCall[1].body);
+        expect(payload).toEqual({
+            password: mockProfile.adminPassword,
+            callsign: 'unlocated',
+            communityName: 'Unlocated Node',
+            contactEmail: '',
+            contactPhone: '',
+        });
+        expect('lat' in payload).toBe(false);
+        expect('lng' in payload).toBe(false);
+    });
+
+    it('displays 2FA session expired error when identity succeeds but config fails with totpRequired', async () => {
+        const onRefreshDiag = vi.fn();
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/community-info')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ communityName: 'Test' }),
+                });
+            }
+            if (url.includes('/api/node/config')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({}),
+                });
+            }
+            if (url.includes('/api/local/update-identity')) {
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve({ success: true }),
+                });
+            }
+            if (url.includes('/api/local/admin/node/config')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 403,
+                    json: () => Promise.resolve({ error: '2FA required', totpRequired: true }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        }));
+
+        await act(async () => {
+            render(
+                <NodeIdentityPanel
+                    activeNode={mockProfile}
+                    diag={null}
+                    onRefreshDiag={onRefreshDiag}
+                />
+            );
+        });
+
+        const saveBtn = screen.getByRole('button', { name: /save identity/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText(/2FA session expired. Please re-authenticate./i)).toBeInTheDocument();
+            expect(onRefreshDiag).not.toHaveBeenCalled();
         });
     });
 });

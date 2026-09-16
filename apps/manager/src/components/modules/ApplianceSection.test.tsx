@@ -240,21 +240,20 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(saveIdentityBtn);
         });
 
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/update-identity'),
-            expect.objectContaining({
-                method: 'POST',
-                body: JSON.stringify({
-                    password: mockProfile.adminPassword,
-                    callsign: mockDiag.callsign,
-                    lat: null,
-                    lng: null,
-                    communityName: mockDiag.communityName,
-                    contactEmail: '',
-                    contactPhone: '',
-                }),
-            })
+        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+            call[0].includes('/api/local/update-identity')
         );
+        expect(updateCall).toBeDefined();
+        const payload = JSON.parse(updateCall[1].body);
+        expect(payload).toEqual({
+            password: mockProfile.adminPassword,
+            callsign: mockDiag.callsign,
+            communityName: mockDiag.communityName,
+            contactEmail: '',
+            contactPhone: '',
+        });
+        expect('lat' in payload).toBe(false);
+        expect('lng' in payload).toBe(false);
 
         expect(global.fetch).toHaveBeenCalledWith(
             expect.stringContaining('/api/local/admin/node/config'),

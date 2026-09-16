@@ -321,19 +321,23 @@ export function NodeIdentityPanel({
 
         try {
             // 1. Save identity info (/api/local/update-identity)
+            const identityPayload: Record<string, unknown> = {
+                password: activeNode.adminPassword,
+                callsign: callsign.trim(),
+                communityName: communityName.trim(),
+                contactEmail: contactEmail.trim(),
+                contactPhone: contactPhone.trim(),
+            };
+            if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+                identityPayload.lat = lat;
+                identityPayload.lng = lng;
+            }
+
             const identityUrl = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const identityRes = await fetch(identityUrl, {
                 method: 'POST',
                 headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({
-                    password: activeNode.adminPassword,
-                    callsign: callsign.trim(),
-                    lat: lat !== null && !isNaN(lat) ? lat : null,
-                    lng: lng !== null && !isNaN(lng) ? lng : null,
-                    communityName: communityName.trim(),
-                    contactEmail: contactEmail.trim(),
-                    contactPhone: contactPhone.trim(),
-                }),
+                body: JSON.stringify(identityPayload),
             });
 
             // 2. Save node config (/api/local/admin/node/config)
@@ -358,8 +362,14 @@ export function NodeIdentityPanel({
                 setSaveStatus({ text: 'Saved!', isError: false });
                 onRefreshDiag();
             } else {
-                const errData = await identityRes.json().catch(() => ({}));
-                setSaveStatus({ text: errData.error || 'Save failed', isError: true });
+                const failingRes = !identityRes.ok ? identityRes : configRes;
+                const errData = await failingRes.json().catch(() => ({}));
+                setSaveStatus({
+                    text: errData.totpRequired
+                        ? '2FA session expired. Please re-authenticate.'
+                        : (errData.error || 'Save failed'),
+                    isError: true,
+                });
             }
         } catch (err: unknown) {
             setSaveStatus({ text: err instanceof Error ? err.message : 'Save failed', isError: true });

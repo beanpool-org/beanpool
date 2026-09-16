@@ -571,6 +571,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setSelectedPostEnterprise(null);
             return;
         }
+        let cancelled = false;
+        setSelectedPostEnterprise(null);
         setLoadingProfile(true);
         setAuthorProfile(null);
         setAuthorAvgRating({ average: 0, count: 0 });
@@ -587,6 +589,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } else {
             getTreasury(selectedPost.authorPublicKey)
                 .then((t: any) => {
+                    if (cancelled) return;
                     if (t && (t.paused || t.status === 'winding_up' || t.status === 'completed')) {
                         const ent = { paused: !!t.paused, status: t.status || 'active', name: t.name };
                         setSelectedPostEnterprise(ent);
@@ -595,7 +598,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         setSelectedPostEnterprise(null);
                     }
                 })
-                .catch(() => setSelectedPostEnterprise(null));
+                .catch(() => {
+                    if (!cancelled) setSelectedPostEnterprise(null);
+                });
         }
 
         getMemberProfile(selectedPost.authorPublicKey, identity?.publicKey)
@@ -655,6 +660,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } else {
             setRequests([]);
         }
+        return () => {
+            cancelled = true;
+        };
     }, [selectedPost?.id, identity?.publicKey, openNeedBidIds]);
 
     async function handleMessageAuthor() {
@@ -808,7 +816,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {/* Content */}
                     <div className="p-5">
                         {/* Enterprise Season State Banners */}
-                        {authorEnterpriseInactive?.paused && (
+                        {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
                             <div
                                 role="alert"
                                 aria-live="polite"

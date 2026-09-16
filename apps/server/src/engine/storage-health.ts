@@ -331,7 +331,7 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 1. Delete orphaned post photos
     let removedPhotosCount = 0;
-    let removedPhotosBytes = preview.orphanedPostPhotos.totalBytes;
+    const removedPhotosBytes = preview.orphanedPostPhotos.totalBytes;
     try {
         const delRes = db.prepare(`
             DELETE FROM post_photos
@@ -342,7 +342,7 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 2. Delete orphaned pulse thumbnails
     let removedThumbnailsCount = 0;
-    let removedThumbnailsBytes = preview.orphanedThumbnails.totalBytes;
+    const removedThumbnailsBytes = preview.orphanedThumbnails.totalBytes;
     const thumbDir = path.join(dataDir, 'cache', 'pulse-thumbnails');
     if (fs.existsSync(thumbDir)) {
         try {
@@ -365,7 +365,7 @@ export function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?: stri
 
     // 3. Compress / prune old logs
     let compressedLogsCount = 0;
-    let compressedLogsBytes = preview.compressibleLogs.totalBytes;
+    const compressedLogsBytes = preview.compressibleLogs.totalBytes;
 
     try {
         const countRow = db.prepare('SELECT COUNT(*) as count FROM system_logs').get() as any;

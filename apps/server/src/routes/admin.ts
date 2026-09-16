@@ -584,7 +584,7 @@ router.post('/api/local/admin/data', async (ctx) => {
             SELECT COUNT(*)
             FROM marketplace_transactions
             WHERE status = 'pending'
-              AND created_at <= datetime('now', '-7 days')
+              AND (julianday('now') - julianday(created_at)) >= 7
         `).pluck().get() as number) || 0,
         memberStats: getMemberStats(),
     };

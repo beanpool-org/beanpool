@@ -10,7 +10,7 @@
  * - Author "Close Poll" action for early closure.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
 import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -54,6 +54,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
+
+    // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
+    const optionsById = useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
 
     const handleVote = async (optionId: string) => {
         if (isClosed) {
@@ -285,7 +288,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                         Public Village Ballot
                     </p>
                     {votesList.map((vote, idx) => {
-                        const opt = options.find(o => o.id === vote.optionId);
+                        const opt = optionsById.get(vote.optionId);
                         const voterName = vote.voterCallsign || vote.voterPubkey.slice(0, 8);
                         return (
                             <div

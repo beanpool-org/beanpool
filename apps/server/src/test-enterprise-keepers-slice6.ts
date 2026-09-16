@@ -268,6 +268,49 @@ async function main() {
     assert(soleApproveRes.ok === true, 'Sole keeper successfully approved join request');
     assert(soleApproveRes.backing === 20, 'Backing recorded');
 
+    // 1.9 Suspended or frozen applicant cannot request to join or be approved
+    const suspendedApplicant = makeIdentity('SuspendedApplicant', 50);
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspendedApplicant.pubKeyHex);
+    let suspendedReqThrew = false;
+    try {
+        requestToJoinEnterprise(ent1, suspendedApplicant.pubKeyHex, 0);
+    } catch (e: any) {
+        suspendedReqThrew = true;
+        assert(e.message.includes('not active'), 'Suspended member join request rejected');
+    }
+    assert(suspendedReqThrew, 'Suspended member join request threw');
+
+    const frozenApplicant = makeIdentity('FrozenApplicant', 50);
+    db.prepare("UPDATE members SET credit_frozen = 1 WHERE public_key = ?").run(frozenApplicant.pubKeyHex);
+    let frozenReqThrew = false;
+    try {
+        requestToJoinEnterprise(ent1, frozenApplicant.pubKeyHex, 0);
+    } catch (e: any) {
+        frozenReqThrew = true;
+        assert(e.message.includes('credit is frozen'), 'Frozen member join request rejected');
+    }
+    assert(frozenReqThrew, 'Frozen member join request threw');
+
+    const toSuspendApplicant = makeIdentity('ToSuspendApplicant', 50);
+    const suspendReq = requestToJoinEnterprise(ent1, toSuspendApplicant.pubKeyHex, 10);
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(toSuspendApplicant.pubKeyHex);
+    let approveSuspendedThrew = false;
+    try {
+        approveKeeperRequest(suspendReq.id, lead1.pubKeyHex);
+    } catch (e: any) {
+        approveSuspendedThrew = true;
+        assert(e.message.includes('not active'), 'Approving suspended applicant rejected');
+    }
+    assert(approveSuspendedThrew, 'Approving suspended applicant threw');
+
+    // 1.10 Suspended lead/sole keeper loses isLeadOrSoleKeeperOrAdmin authority
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(lead1.pubKeyHex);
+    assert(isLeadOrSoleKeeperOrAdmin(ent1, lead1.pubKeyHex) === false, 'Suspended lead keeper loses authority predicate');
+    db.prepare("UPDATE members SET status = 'active', can_operate = 0 WHERE public_key = ?").run(lead1.pubKeyHex);
+    assert(isLeadOrSoleKeeperOrAdmin(ent1, lead1.pubKeyHex) === false, 'Lead keeper with can_operate=0 loses authority predicate');
+    db.prepare("UPDATE members SET status = 'active', can_operate = 1 WHERE public_key = ?").run(lead1.pubKeyHex);
+    assert(isLeadOrSoleKeeperOrAdmin(ent1, lead1.pubKeyHex) === true, 'Active lead keeper with can_operate=1 retains authority');
+
     // =========================================================================
     // FEATURE 2: LEAD SUCCESSION WITHOUT AN ADMIN (§2.3)
     // =========================================================================
@@ -419,6 +462,33 @@ async function main() {
         assert(e.message.includes('cancelled') || e.message.includes('no longer active'), 'Voting on cancelled proposal rejected');
     }
     assert(voteCancelledThrew, 'Vote on cancelled proposal threw');
+
+    // 2.6 Candidate invalidated before passing vote cancels proposal
+    const { publicKey: candRevokeEnt } = createTreasury('CandRevokeEnterprise', 'avatarRevoke', 0);
+    const crLead = makeIdentity('CRLead', 50);
+    adminAssignTreasuryOperator(candRevokeEnt, crLead.pubKeyHex, 'admin', 0);
+    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(candRevokeEnt, crLead.pubKeyHex);
+    db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyOneDaysAgo, crLead.pubKeyHex);
+    const crK1 = makeIdentity('CRK1', 50);
+    const crK2 = makeIdentity('CRK2', 50);
+    const crCand = makeIdentity('CRCand', 50);
+    adminAssignTreasuryOperator(candRevokeEnt, crK1.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(candRevokeEnt, crK2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(candRevokeEnt, crCand.pubKeyHex, 'admin', 0);
+    const crProp = proposeLeadSuccession(candRevokeEnt, crK1.pubKeyHex, crCand.pubKeyHex);
+    assert(crProp.proposal.status === 'active', 'Candidate proposal active');
+    // Now candidate is suspended
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(crCand.pubKeyHex);
+    let crVoteThrew = false;
+    try {
+        voteLeadSuccession(crProp.proposal.id, crK2.pubKeyHex);
+    } catch (e: any) {
+        crVoteThrew = true;
+        assert(e.message.includes('no longer an active keeper'), 'Voting on proposal with suspended candidate rejected');
+    }
+    assert(crVoteThrew, 'Vote threw when candidate suspended');
+    const crPropCancelled = db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(crProp.proposal.id) as any;
+    assert(crPropCancelled.status === 'cancelled', 'Proposal cancelled when candidate not active operator');
 
     // =========================================================================
     // HTTP ROUTE LEVEL VERIFICATION

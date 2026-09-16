@@ -19,13 +19,9 @@ export default defineConfig({
             name: 'html-branding-transform',
             transformIndexHtml(html) {
                 if (isFleetMode) {
-                    return html
-                        .replace(/<title>(.*?)<\/title>/, '<title>BeanPool Fleet Manager — Control Plane</title>')
-                        .replace(/aria-label="[^"]*"/, 'aria-label="BeanPool Fleet Manager"');
+                    return html.replace(/<title>(.*?)<\/title>/, '<title>BeanPool Fleet Manager — Control Plane</title>');
                 }
-                return html
-                    .replace(/<title>(.*?)<\/title>/, '<title>BeanPool — Node Settings</title>')
-                    .replace(/aria-label="[^"]*"/, 'aria-label="BeanPool — Node Settings"');
+                return html.replace(/<title>(.*?)<\/title>/, '<title>BeanPool — Node Settings</title>');
             },
         },
     ],

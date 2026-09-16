@@ -494,11 +494,16 @@ export function verifyBreakGlassCode(code: string, ownerPubkey?: string): { memb
     const candidateHash = Buffer.from(hashBreakGlassCode(code));
 
     if (ownerPubkey) {
-        const storedHashStr = getNodeRoleBreakGlassHash(ownerPubkey);
-        if (!storedHashStr) return null;
-        const storedBuf = Buffer.from(storedHashStr);
+        const row = db.prepare(
+            `SELECT nr.member_pubkey, nr.role, nr.break_glass_hash
+             FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.member_pubkey = ? AND nr.role = 'owner' AND nr.break_glass_hash IS NOT NULL AND m.status = 'active'`
+        ).get(ownerPubkey) as { member_pubkey: string; role: string; break_glass_hash: string } | undefined;
+        if (!row?.break_glass_hash) return null;
+        const storedBuf = Buffer.from(row.break_glass_hash);
         if (candidateHash.length === storedBuf.length && crypto.timingSafeEqual(candidateHash, storedBuf)) {
-            return { member_pubkey: ownerPubkey, role: 'owner' };
+            return { member_pubkey: row.member_pubkey, role: row.role };
         }
         return null;
     }

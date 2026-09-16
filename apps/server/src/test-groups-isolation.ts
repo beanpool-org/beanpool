@@ -556,6 +556,24 @@ async function runTests() {
         assert(aliceDeleteValid, '10z. Convenor Alice successfully deletes valid group-scoped post via removePost');
         const validCheck = getPosts({ id: validGroupPost.id, viewerPubkey: alice.pubKeyHex, includeInactive: true })[0];
         assert(validCheck?.status === 'cancelled' && validCheck?.active === false, '10z-post. Group post cancelled');
+
+        // 12. Deleting a group cleans up posts (no orphaned dangling target_group_id)
+        const tempGroup = createGroup({
+            name: 'Temp Cleanup Group',
+            description: 'Temporary group for cleanup test',
+            category: 'working_group',
+            joinPolicy: 'open',
+            createdBy: alice.pubKeyHex
+        })!;
+        const tempPost = createPost('offer', 'tools', 'Temp Tool', 'In temp group', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
+            audienceScope: 'group',
+            targetGroupId: tempGroup.id
+        })!;
+        // Delete the group from DB
+        db.prepare("DELETE FROM groups WHERE id = ?").run(tempGroup.id);
+        const cleanedPostRow = db.prepare("SELECT target_group_id, audience_scope FROM posts WHERE id = ?").get(tempPost.id) as any;
+        assert(cleanedPostRow.target_group_id === null && cleanedPostRow.audience_scope === 'public',
+            '10aa. posts_cleanup_on_group_delete resets target_group_id to NULL and audience_scope to public');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

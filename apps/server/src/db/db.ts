@@ -279,6 +279,13 @@ export function initSchema() {
 
     // Audience scoping on posts (docs/the-commons.md §9, Item 10)
     // Additive and idempotent migration: every existing post defaults to 'public'.
+    //
+    // ORPHANED ROWS NOTE: SQLite does NOT enforce REFERENCES ... ON DELETE CASCADE added via
+    // ALTER TABLE ADD COLUMN on upgraded nodes (the clause is parsed by SQLite but ignored).
+    // If a group is deleted on an upgraded node without compensation, group-scoped posts would
+    // retain a dangling target_group_id, rendering them orphaned and invisible to everyone.
+    // We enforce this cascade explicitly via the posts_cleanup_on_group_delete trigger defined
+    // in schema.sql and ensured below.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN audience_scope TEXT NOT NULL DEFAULT 'public'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
@@ -570,6 +577,17 @@ export function initSchema() {
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
+    try {
+        db.exec(`
+            CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
+            AFTER DELETE ON groups
+            FOR EACH ROW
+            BEGIN
+                UPDATE posts SET target_group_id = NULL, audience_scope = 'public'
+                WHERE target_group_id = OLD.id;
+            END;
+        `);
+    } catch { }
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();

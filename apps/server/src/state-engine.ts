@@ -2343,6 +2343,11 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error('Only the lead keeper may initiate wind-up');
     }
 
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
     if (member.status === 'winding_up') {
         const graceEndsAt = new Date(new Date(member.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         return {
@@ -2452,9 +2457,14 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error('Cannot finalise wind-up before 7-day grace period has elapsed');
     }
 
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
     const openEscrows = db.prepare(`
         SELECT COUNT(*) as c FROM marketplace_transactions
-        WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending')
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending', 'disputed')
     `).get(enterprisePubkey, enterprisePubkey) as any;
     if ((openEscrows?.c ?? 0) > 0) {
         throw new Error(`Cannot finalise wind-up: ${openEscrows.c} open transaction(s) pending settlement`);
@@ -2486,6 +2496,12 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
             SET status = 'completed', wind_up_finalised_at = ?
             WHERE public_key = ?
         `).run(now, enterprisePubkey);
+
+        db.prepare(`
+            UPDATE posts
+            SET status = 'cancelled', active = 0
+            WHERE author_pubkey = ? AND status IN ('active', 'pending')
+        `).run(enterprisePubkey);
     });
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
@@ -2588,6 +2604,8 @@ export function getEnterpriseLedger(
         return resolved;
     };
 
+    let periodEndingBalance = 0;
+
     for (const tx of allTxns) {
         const txTime = new Date(tx.timestamp).getTime();
         const isIncoming = tx.to_pubkey === enterprisePubkey;
@@ -2609,6 +2627,7 @@ export function getEnterpriseLedger(
             } else {
                 periodSpend += gross;
             }
+            periodEndingBalance = running;
 
             const counterparty = isIncoming ? tx.from_pubkey : tx.to_pubkey;
             filteredEntries.push({
@@ -2625,6 +2644,10 @@ export function getEnterpriseLedger(
                 authSigner: tx.auth_signer ?? null,
             });
         }
+    }
+
+    if (filteredEntries.length === 0) {
+        periodEndingBalance = startingBalance;
     }
 
     const currentBal = getBalance(enterprisePubkey).balance;
@@ -2648,7 +2671,7 @@ export function getEnterpriseLedger(
             totalSpend: Math.round(periodSpend * 100) / 100,
             netChange: Math.round((periodIncome - periodSpend) * 100) / 100,
             startingBalance: Math.round(startingBalance * 100) / 100,
-            endingBalance: running,
+            endingBalance: Math.round(periodEndingBalance * 100) / 100,
             transactionCount: filteredEntries.length,
         },
         entries,

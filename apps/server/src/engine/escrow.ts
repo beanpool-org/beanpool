@@ -102,6 +102,7 @@ export function requestPost(
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
     if (!post) throw new Error('Post not found');
     if (post.status !== 'active') throw new Error('Post is not active');
+    assertMemberActive(post.author_pubkey);
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
@@ -425,6 +426,11 @@ export function acceptPost(
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active' })[0];
     if (!post) throw new Error('Post not found or not active');
+    assertMemberActive(post.authorPublicKey);
+    const authorMember = db.prepare('SELECT is_treasury, paused FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
+    if (authorMember?.is_treasury && authorMember.paused === 1) {
+        throw new Error('Enterprise is paused — cannot transact while paused');
+    }
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 

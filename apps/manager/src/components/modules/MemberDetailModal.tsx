@@ -32,6 +32,7 @@ interface MemberDetailModalProps {
     profiles?: Record<string, unknown>[];
     flags?: MemberFlag[];
     members?: any[];
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     isFrozen: boolean;
     isVoucher?: boolean;
     isOperator?: boolean;
@@ -51,6 +52,7 @@ export function MemberDetailModal({
     profiles = [],
     flags = [],
     members = [],
+    accounts,
     isFrozen,
     isVoucher,
     isOperator,
@@ -522,6 +524,7 @@ export function MemberDetailModal({
                 <PruneBranchModal
                     rootMember={member as any}
                     members={members}
+                    accounts={accounts}
                     onConfirm={async (pk) => {
                         await onPruneBranch?.(pk);
                         onClose();

@@ -157,6 +157,7 @@ async function main() {
             }
             try {
                 const bodyStr = Buffer.concat(chunks).toString('utf-8');
+                (ctx as any).rawBody = bodyStr;
                 if (bodyStr) {
                     (ctx as any).requestBody = JSON.parse(bodyStr);
                     (ctx.request as any).body = (ctx as any).requestBody;
@@ -630,6 +631,162 @@ async function main() {
         // Clean up TOTP
         updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
 
+        // ── 12. Review Comment Fix Verification (#810) ──
+        console.log('Testing review comment fixes (#810)...');
+
+        // 12.1 Verify challenge 404 on missing/expired challenge (Comment 7)
+        const missingChal = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                challengeId: 'non-existent-challenge-id',
+                memberPubkey: aliceKeys.pub,
+                signature: aliceKeys.sign('dummy'),
+            }),
+        });
+        assert(missingChal.status === 404, 'Verify challenge with unknown ID returns 404 Not Found');
+
+        // 12.2 Revoke-all unauthenticated returns 401 (Comment 1)
+        const unauthRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ memberPubkey: aliceKeys.pub }),
+        });
+        assert(unauthRevoke.status === 401, 'Unauthenticated POST /api/local/admin/auth/revoke-all returns 401');
+
+        // 12.3 Revoke-all signed mobile returns 200 (Comment 2)
+        const revTimestamp = String(Date.now());
+        const revNonce = randomBytes(16).toString('hex');
+        const revRawBody = JSON.stringify({ memberPubkey: aliceKeys.pub });
+        const revMsg = `POST\n/api/local/admin/auth/revoke-all\n${revTimestamp}\n${revNonce}\n${revRawBody}`;
+        const revSig = Buffer.from(ed25519.sign(Buffer.from(revMsg, 'utf-8'), aliceKeys.priv)).toString('base64');
+        const signedRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Public-Key': aliceKeys.pub,
+                'X-Signature': revSig,
+                'X-Timestamp': revTimestamp,
+                'X-Nonce': revNonce,
+            },
+            body: revRawBody,
+        });
+        assert(signedRevoke.status === 200, 'Signed mobile POST /api/local/admin/auth/revoke-all returns 200');
+
+        // 12.4 Passive GET session without credentials returns 200 unauthenticated (Comment 3)
+        const passiveSession = await fetch(`${base}/api/local/admin/auth/session`);
+        assert(passiveSession.status === 200, 'Passive GET /api/local/admin/auth/session returns 200');
+        const passiveBody: any = await passiveSession.json();
+        assert(passiveBody.authenticated === false, 'Passive session returns authenticated: false');
+
+        // 12.5 Enrol non-owner admin cannot enrol owner (Comment 4)
+        const daveChal = createAdminChallenge();
+        const daveSolve = verifyAndSolveChallenge({
+            challengeId: daveChal.challengeId,
+            memberPubkey: daveKeys.pub,
+            signature: daveKeys.sign(daveChal.challenge),
+        });
+        assert(daveSolve.ok === true, 'Dave challenge solved');
+        const daveExch = consumeHandshakeToken(daveSolve.handshakeToken!);
+        assert(daveExch.ok === true && daveExch.role === 'admin', 'Dave exchanged session as admin');
+
+        const frankKeys = createKeyPair();
+        seedMember(frankKeys.pub, 'FrankMember');
+        const daveEnrolOwner = await fetch(`${base}/api/local/admin/auth/enrol`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-session': daveExch.sessionId!,
+            },
+            body: JSON.stringify({ memberPubkey: frankKeys.pub, role: 'owner' }),
+        });
+        assert(daveEnrolOwner.status === 403, 'Non-owner admin cannot enrol owner key (got 403)');
+
+        // 12.6 Non-owner admin cannot toggle break-glass mode (Comment 6)
+        const daveToggleBg = await fetch(`${base}/api/local/admin/auth/break-glass-mode`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-session': daveExch.sessionId!,
+            },
+            body: JSON.stringify({ enabled: true }),
+        });
+        assert(daveToggleBg.status === 403, 'Non-owner admin cannot toggle break-glass mode (got 403)');
+
+        // 12.7 Routine password enrolment when breakGlassMode=false does NOT emit alert (Comment 5)
+        const graceKeys = createKeyPair();
+        seedMember(graceKeys.pub, 'GraceMember');
+        const routineEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': testPassword,
+            },
+            body: JSON.stringify({ memberPubkey: graceKeys.pub, role: 'owner' }),
+        });
+        assert(routineEnrol.status === 200, 'Routine password enrolment succeeds');
+        const routineBody: any = await routineEnrol.json();
+        assert(routineBody.alertEmitted === false, 'Routine password enrolment does not emit false emergency alert');
+
+        // 12.8 Role demotion bumps session_epoch and clears break_glass_hash (Comment 11)
+        const graceEpochBefore = getNodeRoleSessionEpoch(graceKeys.pub);
+        const graceHashBefore = getNodeRoleBreakGlassHash(graceKeys.pub);
+        assert(!!graceHashBefore, 'Grace has break_glass_hash as owner');
+        grantNodeRole(graceKeys.pub, 'admin', aliceKeys.pub);
+        const graceEpochAfter = getNodeRoleSessionEpoch(graceKeys.pub);
+        const graceHashAfter = getNodeRoleBreakGlassHash(graceKeys.pub);
+        assert(graceEpochAfter > graceEpochBefore, 'Demoting Grace to admin incremented session_epoch');
+        assert(graceHashAfter === null, 'Demoting Grace to admin cleared break_glass_hash');
+
+        // 12.9 verifyBreakGlassCode ownerPubkey branch requires owner role and active member (Comment 10)
+        const graceCodeCheck = verifyBreakGlassCode('any-code', graceKeys.pub);
+        assert(graceCodeCheck === null, 'verifyBreakGlassCode for non-owner Grace returns null');
+
+        // 12.10 Settings failed token exchange returns accessible HTML (Comment 13)
+        const failTokenRes = await fetch(`${base}/settings?token=invalid_handshake_token`);
+        assert(failTokenRes.status === 400, 'Failed token exchange on /settings returns 400');
+        const failTokenHtml = await failTokenRes.text();
+        assert(failTokenHtml.includes('Sign-In Failed'), 'Failed token exchange serves accessible error HTML');
+        assert(failTokenHtml.includes('name="viewport"'), 'Error HTML contains viewport meta tag');
+
+        // 12.11 Settings break-glass screen is accessible (Comment 14)
+        setBreakGlassMode(true);
+        const bgSettingsRes = await fetch(`${base}/settings`);
+        assert(bgSettingsRes.status === 403, 'Break-glass /settings returns 403');
+        const bgHtml = await bgSettingsRes.text();
+        assert(bgHtml.includes('lang="en"'), 'Break-glass HTML includes lang="en"');
+        assert(bgHtml.includes('name="viewport"'), 'Break-glass HTML includes viewport meta tag');
+        assert(bgHtml.includes('Break-Glass Mode Active'), 'Break-glass HTML has accessible header text');
+        setBreakGlassMode(false);
+
+        // 12.12 Ambient cookie session requires CSRF on mutating request (Comment 8)
+        const chalCsrf = createAdminChallenge();
+        const solveCsrf = verifyAndSolveChallenge({
+            challengeId: chalCsrf.challengeId,
+            memberPubkey: aliceKeys.pub,
+            signature: aliceKeys.sign(chalCsrf.challenge),
+        });
+        const exchCsrf = consumeHandshakeToken(solveCsrf.handshakeToken!);
+        const freshAliceSessionId = exchCsrf.sessionId!;
+
+        const cookieMutateNoCsrf = await fetch(`${base}/api/local/admin/auth/break-glass-mode`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Cookie': `admin_session=${freshAliceSessionId}`,
+            },
+            body: JSON.stringify({ enabled: false }),
+        });
+        assert(cookieMutateNoCsrf.status === 403, 'Cookie session mutating POST without CSRF token returns 403');
+
+        // 12.13 Expired session cookie falls through to explicit password (Comment 9)
+        const expiredCookieWithPass = await fetch(`${base}/api/local/admin/node-roles`, {
+            headers: {
+                'Cookie': `admin_session=non_existent_or_expired_session_token`,
+                'x-admin-password': testPassword,
+            },
+        });
+        assert(expiredCookieWithPass.status === 200, 'Expired session cookie falls through to password auth (got 200)');
     } finally {
         server.close();
     }

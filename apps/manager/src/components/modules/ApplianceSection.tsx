@@ -997,6 +997,7 @@ export function ApplianceSection({
             {/* Subtab: Node Identity */}
             {subTab === 'identity' && (
                 <NodeIdentityPanel
+                    key={activeNode.id}
                     activeNode={activeNode}
                     diag={diag}
                     onRefreshDiag={onRefreshDiag}

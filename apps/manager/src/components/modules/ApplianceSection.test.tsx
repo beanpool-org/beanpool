@@ -572,4 +572,60 @@ describe('ApplianceSection Component', () => {
         expect(setTokenSpy).toHaveBeenCalledWith(mockProfile.id, 'mock-tfa-session-token-12345');
         expect(sessionStorage.getItem('bp-2fa-session')).toBe('mock-tfa-session-token-12345');
     });
+
+    it('remounts NodeIdentityPanel when activeNode changes in identity subtab', async () => {
+        const otherNode: NodeProfile = {
+            id: 'node-2',
+            name: 'Second Node',
+            url: 'https://node-2.local',
+            adminPassword: 'node-2-password',
+        };
+
+        const { rerender } = render(
+            <ApplianceSection
+                activeNode={mockProfile}
+                diag={mockDiag}
+                gateway={mockGateway}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                gatewaySaving={false}
+                nodeLogs={[]}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onRefreshDiag={vi.fn()}
+                onRefreshLogs={vi.fn()}
+                onDownloadBackup={vi.fn()}
+                onRunLedgerAudit={vi.fn()}
+                auditState={{ running: false, result: null }}
+                initialSubTab="identity"
+            />
+        );
+
+        expect(screen.getByRole('heading', { level: 3, name: /Node Identity/i })).toBeInTheDocument();
+
+        // Rerender with second node profile
+        await act(async () => {
+            rerender(
+                <ApplianceSection
+                    activeNode={otherNode}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="identity"
+                />
+            );
+        });
+
+        expect(screen.getByRole('heading', { level: 3, name: /Node Identity/i })).toBeInTheDocument();
+    });
 });

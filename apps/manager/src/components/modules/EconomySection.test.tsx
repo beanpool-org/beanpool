@@ -272,6 +272,54 @@ describe('EconomySection Component', () => {
         );
     });
 
+    it('supports typing negative coordinate sign and renders error banner with ARIA alert role', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Open picker
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        const latInput = document.getElementById('lat-input-treasury_pk_1234567890') as HTMLInputElement;
+        // User starts typing negative coordinate: '-' alone
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-' } });
+        });
+        expect(latInput.value).toBe('-');
+
+        // User continues typing: '-28.55'
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-28.55' } });
+        });
+        expect(latInput.value).toBe('-28.55');
+
+        // Enter valid longitude but out-of-range latitude to trigger validation error banner
+        const lngInput = document.getElementById('lng-input-treasury_pk_1234567890') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(lngInput, { target: { value: '153.501' } });
+            fireEvent.change(latInput, { target: { value: '-95' } });
+        });
+
+        const saveBtn = screen.getByRole('button', { name: /save location/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        const alertEl = screen.getByRole('alert');
+        expect(alertEl).toBeInTheDocument();
+        expect(alertEl).toHaveAttribute('aria-live', 'assertive');
+        expect(alertEl).toHaveTextContent(/Latitude must be between -90 and 90/i);
+    });
+
     it('revokes a keeper with confirmation', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 

@@ -22,6 +22,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
 }) => {
     const [lat, setLat] = useState<number | null>(treasury.lat ?? null);
     const [lng, setLng] = useState<number | null>(treasury.lng ?? null);
+    const [latInput, setLatInput] = useState<string>(treasury.lat != null ? String(treasury.lat) : '');
+    const [lngInput, setLngInput] = useState<string>(treasury.lng != null ? String(treasury.lng) : '');
     const [saving, setSaving] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 const newLng = parseFloat(e.latlng.lng.toFixed(6));
                 setLat(newLat);
                 setLng(newLng);
+                setLatInput(String(newLat));
+                setLngInput(String(newLng));
                 setIsApproximate(false);
                 setError(null);
             });
@@ -95,8 +99,12 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     const m = L.marker(pos, { icon: enterpriseIcon, draggable: true }).addTo(map);
                     m.on('dragend', (e: any) => {
                         const next = e.target.getLatLng();
-                        setLat(parseFloat(next.lat.toFixed(6)));
-                        setLng(parseFloat(next.lng.toFixed(6)));
+                        const nextLat = parseFloat(next.lat.toFixed(6));
+                        const nextLng = parseFloat(next.lng.toFixed(6));
+                        setLat(nextLat);
+                        setLng(nextLng);
+                        setLatInput(String(nextLat));
+                        setLngInput(String(nextLng));
                         setIsApproximate(false);
                         setError(null);
                     });
@@ -116,6 +124,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             const approx = approximateLocation(lat, lng);
             setLat(approx.lat);
             setLng(approx.lng);
+            setLatInput(String(approx.lat));
+            setLngInput(String(approx.lng));
             setIsApproximate(true);
         }
     };
@@ -161,6 +171,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             );
             setLat(null);
             setLng(null);
+            setLatInput('');
+            setLngInput('');
             onLocationSaved(null, null);
             onClose();
         } catch (err: any) {
@@ -234,13 +246,19 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         </label>
                         <input
                             id={`lat-input-${treasury.publicKey}`}
-                            type="number"
-                            step="any"
-                            value={lat ?? ''}
+                            type="text"
+                            inputMode="decimal"
+                            value={latInput}
                             onChange={(e) => {
-                                const val = e.target.value === '' ? null : parseFloat(e.target.value);
-                                setLat(val);
+                                const str = e.target.value;
+                                setLatInput(str);
                                 setIsApproximate(false);
+                                const val = parseFloat(str);
+                                if (!isNaN(val) && str.trim() !== '' && str !== '-') {
+                                    setLat(val);
+                                } else if (str.trim() === '') {
+                                    setLat(null);
+                                }
                             }}
                             placeholder="-28.549"
                             className="w-full px-2 py-1 rounded bg-nature-900 border border-nature-700 text-white font-mono text-xs focus:outline-none focus:border-terra-500"
@@ -252,13 +270,19 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         </label>
                         <input
                             id={`lng-input-${treasury.publicKey}`}
-                            type="number"
-                            step="any"
-                            value={lng ?? ''}
+                            type="text"
+                            inputMode="decimal"
+                            value={lngInput}
                             onChange={(e) => {
-                                const val = e.target.value === '' ? null : parseFloat(e.target.value);
-                                setLng(val);
+                                const str = e.target.value;
+                                setLngInput(str);
                                 setIsApproximate(false);
+                                const val = parseFloat(str);
+                                if (!isNaN(val) && str.trim() !== '' && str !== '-') {
+                                    setLng(val);
+                                } else if (str.trim() === '') {
+                                    setLng(null);
+                                }
                             }}
                             placeholder="153.501"
                             className="w-full px-2 py-1 rounded bg-nature-900 border border-nature-700 text-white font-mono text-xs focus:outline-none focus:border-terra-500"
@@ -268,7 +292,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             </div>
 
             {error && (
-                <div className="text-xs text-rose-400 bg-rose-950/40 border border-rose-900/50 p-2 rounded-lg">
+                <div role="alert" aria-live="assertive" className="text-xs text-rose-400 bg-rose-950/40 border border-rose-900/50 p-2 rounded-lg">
                     {error}
                 </div>
             )}

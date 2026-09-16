@@ -347,6 +347,66 @@ async function runTests() {
         assert(!receivedBob.some(e => e.type === 'group_member_invited'), '7o. Regular member Bob DID NOT receive group_member_invited broadcast');
         assert(!receivedAnon.some(e => e.type === 'group_member_invited'), '7p. Anonymous socket DID NOT receive group_member_invited broadcast');
 
+        // 5. Broadcast scoping for private group membership changes (§9)
+        // Set up a private group with request_to_join policy
+        const privateGroup = createGroup({
+            name: 'Secret Society',
+            description: 'Private discussions',
+            category: 'working_group',
+            joinPolicy: 'request_to_join',
+            createdBy: alice.pubKeyHex
+        })!;
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        // Bob requests to join private group
+        joinGroup(privateGroup.id, bob.pubKeyHex);
+        assert(receivedBob.some(e => e.type === 'group_member_updated' && e.groupId === privateGroup.id), '7q. Applicant Bob received group_member_updated broadcast');
+        assert(!receivedCarol.some(e => e.groupId === privateGroup.id), '7r. Non-member Carol DID NOT receive joinGroup broadcast for private group');
+        assert(!receivedAnon.some(e => e.groupId === privateGroup.id), '7s. Anonymous socket DID NOT receive joinGroup broadcast for private group');
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        // Alice approves Bob
+        approveGroupMember(privateGroup.id, alice.pubKeyHex, bob.pubKeyHex);
+        assert(receivedBob.some(e => e.type === 'group_member_updated' && e.groupId === privateGroup.id), '7t. Approved Bob received group_member_updated broadcast');
+        assert(!receivedCarol.some(e => e.groupId === privateGroup.id), '7u. Non-member Carol DID NOT receive approveGroupMember broadcast for private group');
+        assert(!receivedAnon.some(e => e.groupId === privateGroup.id), '7v. Anonymous socket DID NOT receive approveGroupMember broadcast for private group');
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        // Alice changes Bob role
+        setMemberRole(privateGroup.id, alice.pubKeyHex, bob.pubKeyHex, 'convenor');
+        assert(receivedBob.some(e => e.type === 'group_member_updated' && e.groupId === privateGroup.id), '7w. Member Bob received setMemberRole broadcast');
+        assert(!receivedCarol.some(e => e.groupId === privateGroup.id), '7x. Non-member Carol DID NOT receive setMemberRole broadcast');
+        assert(!receivedAnon.some(e => e.groupId === privateGroup.id), '7y. Anonymous socket DID NOT receive setMemberRole broadcast');
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        // Alice updates group policy to invite_only
+        updateGroupPolicy(privateGroup.id, alice.pubKeyHex, 'invite_only');
+        assert(receivedBob.some(e => e.type === 'group_updated' && e.group?.id === privateGroup.id), '7z. Member Bob received updateGroupPolicy broadcast');
+        assert(!receivedCarol.some(e => e.group?.id === privateGroup.id), '7aa. Non-member Carol DID NOT receive updateGroupPolicy broadcast');
+        assert(!receivedAnon.some(e => e.group?.id === privateGroup.id), '7bb. Anonymous socket DID NOT receive updateGroupPolicy broadcast');
+
+        receivedBob.length = 0;
+        receivedCarol.length = 0;
+        receivedAnon.length = 0;
+
+        // Alice removes Bob
+        removeGroupMember(privateGroup.id, alice.pubKeyHex, bob.pubKeyHex);
+        assert(receivedBob.some(e => e.type === 'group_member_removed' && e.groupId === privateGroup.id), '7cc. Removed Bob received group_member_removed broadcast');
+        assert(!receivedCarol.some(e => e.groupId === privateGroup.id), '7dd. Non-member Carol DID NOT receive removeGroupMember broadcast');
+        assert(!receivedAnon.some(e => e.groupId === privateGroup.id), '7ee. Anonymous socket DID NOT receive removeGroupMember broadcast');
+
         removeWsClient(wsAlice);
         removeWsClient(wsDave);
         removeWsClient(wsBob);

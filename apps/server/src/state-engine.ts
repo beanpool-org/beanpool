@@ -4855,10 +4855,20 @@ let _groupsVersion = 1;
 export function getGroupsVersion(): number { return _groupsVersion; }
 export function bumpGroupsVersion(): void { _groupsVersion++; }
 
+function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] = []): string[] {
+    const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as any[];
+    return Array.from(new Set([...rows.map(r => r.member_pubkey), ...extraPubkeys.filter(Boolean)]));
+}
+
 export function createGroup(params: CreateGroupParams): Group {
     const res = createGroupEngine(db, params);
     bumpGroupsVersion();
-    broadcast({ type: 'group_created', group: res });
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_created', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
+        broadcast({ type: 'group_created', group: res }, recipients);
+    }
     return res;
 }
 
@@ -4893,14 +4903,16 @@ export function getMemberGroupIds(memberPubkey: string): string[] {
 export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
     const res = joinGroupEngine(db, groupId, memberPubkey);
     bumpGroupsVersion();
-    broadcast({ type: 'group_member_updated', groupId, member: res });
+    const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     return res;
 }
 
 export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
     const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
     bumpGroupsVersion();
-    broadcast({ type: 'group_member_updated', groupId, member: res });
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     return res;
 }
 
@@ -4908,7 +4920,8 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
     const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
     if (res) {
         bumpGroupsVersion();
-        broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey });
+        const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+        broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, recipients);
     }
     return res;
 }
@@ -4916,21 +4929,32 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
 export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
-    broadcast({ type: 'group_updated', group: res });
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_updated', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(groupId);
+        broadcast({ type: 'group_updated', group: res }, recipients);
+    }
     return res;
 }
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
     const res = updateGroupEngine(db, groupId, convenorPubkey, updates);
     bumpGroupsVersion();
-    broadcast({ type: 'group_updated', group: res });
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_updated', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(groupId);
+        broadcast({ type: 'group_updated', group: res }, recipients);
+    }
     return res;
 }
 
 export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
     const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
     bumpGroupsVersion();
-    broadcast({ type: 'group_member_updated', groupId, member: res });
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     return res;
 }
 
@@ -4947,8 +4971,7 @@ export function deleteGroupPost(groupId: string, convenorPubkey: string, postId:
     const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
     if (res) {
         bumpPostsVersion();
-        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as any[];
-        const recipients = rows.map(r => r.member_pubkey);
+        const recipients = getGroupActiveMemberRecipients(groupId);
         broadcast({ type: 'post_removed', id: postId }, recipients);
     }
     return res;

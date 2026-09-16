@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import type { NodeProfile } from '../../lib/profiles';
@@ -220,7 +220,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         expect(screen.queryByRole('button', { name: /Force Full Resync/i })).not.toBeInTheDocument();
     });
 
-    it('sends empty string primaryToken when token field is cleared to revoke token', async () => {
+    it('preserves existing token when left blank on save, and sends empty string primaryToken only when explicitly cleared', async () => {
         const fetchMock = vi.fn().mockImplementation(async (url: string) => {
             if (url.includes('/api/local/admin/backup-status')) {
                 return {
@@ -258,10 +258,27 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
             expect(screen.getByText('Standby Replica')).toBeInTheDocument();
         });
 
-        // Token field is left blank while hasToken is true -> saving should explicitly send primaryToken: ""
+        // Token field is left blank while hasToken is true -> saving should NOT wipe the token
         const saveBtn = screen.getByRole('button', { name: /Save Connection/i });
         await userEvent.click(saveBtn);
 
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/api/local/admin/replication-config/save'),
+                expect.objectContaining({
+                    method: 'POST',
+                    body: expect.not.stringContaining('"primaryToken"'),
+                })
+            );
+        });
+
+        // Now explicitly check the "Clear existing replication token" checkbox
+        const clearCheckbox = screen.getByRole('checkbox', { name: /Clear existing replication token/i });
+        await userEvent.click(clearCheckbox);
+        expect(clearCheckbox).toBeChecked();
+
+        // Saving now should explicitly send primaryToken: "" to revoke
+        await userEvent.click(saveBtn);
         await waitFor(() => {
             expect(fetchMock).toHaveBeenCalledWith(
                 expect.stringContaining('/api/local/admin/replication-config/save'),
@@ -271,5 +288,81 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
                 })
             );
         });
+    });
+
+    it('supports Escape dismissal on resync modal, guards during in-flight, and surfaces errors inside modal', async () => {
+        let resolveResync: () => void = () => {};
+        const pendingResync = new Promise<{ ok: boolean; json: () => Promise<any> }>((resolve) => {
+            resolveResync = () => resolve({
+                ok: false,
+                json: async () => ({ error: 'Primary node refused resync: 401 Unauthorized' }),
+            });
+        });
+
+        const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+            if (url.includes('/api/local/admin/backup-status')) {
+                return {
+                    ok: true,
+                    json: async () => ({ role: 'backup', primaryUrl: 'https://primary.example.com' }),
+                };
+            }
+            if (url.includes('/api/local/admin/replication-config/get')) {
+                return {
+                    ok: true,
+                    json: async () => ({ primaryUrl: 'https://primary.example.com' }),
+                };
+            }
+            if (url.includes('/api/local/admin/replication-resync')) {
+                return pendingResync;
+            }
+            return { ok: true, json: async () => ({}) };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        render(<StandbyReplicationPanel activeNode={mockNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Standby Replica')).toBeInTheDocument();
+        });
+
+        // Open modal
+        const resyncTriggerBtn = screen.getByRole('button', { name: /Force Full Resync/i });
+        await userEvent.click(resyncTriggerBtn);
+        expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
+
+        // 1. Escape key dismisses when not in-flight
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByText('Confirm Full Replication Resync')).not.toBeInTheDocument();
+
+        // Reopen modal and trigger resync
+        await userEvent.click(resyncTriggerBtn);
+        const confirmBtn = screen.getByRole('button', { name: /Force Resync/i });
+        await userEvent.click(confirmBtn);
+
+        // While in-flight:
+        // 2. Escape key does NOT dismiss
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
+
+        // 3. Header close button is disabled
+        const closeBtn = screen.getByLabelText(/Close resync confirmation/i);
+        expect(closeBtn).toBeDisabled();
+        await userEvent.click(closeBtn);
+        expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
+
+        // 4. Backdrop click does NOT dismiss
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(dialog);
+        expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
+
+        // Complete with error
+        resolveResync();
+
+        // 5. Error message surfaces inside the modal dialog
+        await waitFor(() => {
+            expect(within(dialog).getByText(/Primary node refused resync: 401 Unauthorized/i)).toBeInTheDocument();
+        });
+        // Modal remains open so operator can read error
+        expect(screen.getByText('Confirm Full Replication Resync')).toBeInTheDocument();
     });
 });

@@ -35,6 +35,7 @@ export function StandbyReplicationPanel({
     const [primaryToken, setPrimaryToken] = useState('');
     const [hasExistingPassword, setHasExistingPassword] = useState(false);
     const [hasExistingToken, setHasExistingToken] = useState(false);
+    const [clearExistingToken, setClearExistingToken] = useState(false);
     const [savingConfig, setSavingConfig] = useState(false);
     const [configMsg, setConfigMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -42,6 +43,19 @@ export function StandbyReplicationPanel({
     const [showResyncConfirm, setShowResyncConfirm] = useState(false);
     const [resyncing, setResyncing] = useState(false);
     const [resyncMsg, setResyncMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+    // Keyboard accessibility: Escape closes resync modal when not in-flight
+    useEffect(() => {
+        if (!showResyncConfirm) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !resyncing) {
+                e.preventDefault();
+                setShowResyncConfirm(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showResyncConfirm, resyncing]);
 
     const loadData = useCallback(async () => {
         setLoadingStatus(true);
@@ -104,9 +118,9 @@ export function StandbyReplicationPanel({
             if (primaryPassword) {
                 body.primaryPassword = primaryPassword;
             }
-            if (primaryToken !== undefined && primaryToken !== '') {
+            if (primaryToken.trim()) {
                 body.primaryToken = primaryToken.trim();
-            } else if (hasExistingToken && primaryToken === '') {
+            } else if (clearExistingToken) {
                 body.primaryToken = '';
             }
 
@@ -120,6 +134,7 @@ export function StandbyReplicationPanel({
                 setConfigMsg({ text: 'Replication configuration saved successfully.', isError: false });
                 setPrimaryPassword('');
                 setPrimaryToken('');
+                setClearExistingToken(false);
                 setHasExistingPassword(true);
                 if (body.primaryToken === '') {
                     setHasExistingToken(false);
@@ -324,11 +339,32 @@ export function StandbyReplicationPanel({
                             id="rep-primary-token"
                             type="password"
                             value={primaryToken}
-                            onChange={(e) => setPrimaryToken(e.target.value)}
+                            onChange={(e) => {
+                                setPrimaryToken(e.target.value);
+                                if (e.target.value) setClearExistingToken(false);
+                            }}
                             placeholder={hasExistingToken ? '•••••••• (Leave blank to keep current)' : 'Paste scoped replication token'}
                             autoComplete="off"
-                            className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px]"
+                            disabled={clearExistingToken}
+                            className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-terra-500 min-h-[44px] disabled:opacity-50"
                         />
+                        {hasExistingToken && (
+                            <div className="mt-1.5 flex items-center gap-2">
+                                <label className="text-[11px] text-nature-400 flex items-center gap-1.5 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        id="rep-clear-token-checkbox"
+                                        checked={clearExistingToken}
+                                        onChange={(e) => {
+                                            setClearExistingToken(e.target.checked);
+                                            if (e.target.checked) setPrimaryToken('');
+                                        }}
+                                        className="rounded border-nature-700 bg-nature-900 text-terra-600 focus:ring-terra-500"
+                                    />
+                                    <span>Clear existing replication token (revert to master password auth)</span>
+                                </label>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -347,7 +383,10 @@ export function StandbyReplicationPanel({
                         <button
                             type="button"
                             id="backup-resync-btn"
-                            onClick={() => setShowResyncConfirm(true)}
+                            onClick={() => {
+                                setResyncMsg(null);
+                                setShowResyncConfirm(true);
+                            }}
                             className="min-h-[44px] px-4 py-2 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-800 text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                         >
                             <span>🔄</span>
@@ -365,7 +404,7 @@ export function StandbyReplicationPanel({
                     aria-labelledby="resync-dialog-title"
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                     onClick={(e) => {
-                        if (e.target === e.currentTarget) setShowResyncConfirm(false);
+                        if (e.target === e.currentTarget && !resyncing) setShowResyncConfirm(false);
                     }}
                 >
                     <div className="bg-nature-900 border border-amber-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
@@ -376,13 +415,20 @@ export function StandbyReplicationPanel({
                             </h3>
                             <button
                                 type="button"
-                                onClick={() => setShowResyncConfirm(false)}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                onClick={() => { if (!resyncing) setShowResyncConfirm(false); }}
+                                disabled={resyncing}
+                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close resync confirmation"
                             >
                                 ✕
                             </button>
                         </div>
+
+                        {resyncMsg?.isError && (
+                            <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-200">
+                                ❌ {resyncMsg.text}
+                            </div>
+                        )}
 
                         <div className="p-3 bg-amber-950/60 border border-amber-900/60 rounded-xl space-y-1 text-xs text-amber-200">
                             <p className="font-bold text-amber-300 m-0">
@@ -396,7 +442,7 @@ export function StandbyReplicationPanel({
                         <div className="flex items-center justify-end gap-3 pt-2">
                             <button
                                 type="button"
-                                onClick={() => setShowResyncConfirm(false)}
+                                onClick={() => { if (!resyncing) setShowResyncConfirm(false); }}
                                 disabled={resyncing}
                                 className="min-h-[44px] px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all disabled:opacity-50"
                             >

@@ -628,4 +628,55 @@ describe('ApplianceSection Component', () => {
 
         expect(screen.getByRole('heading', { level: 3, name: /Node Identity/i })).toBeInTheDocument();
     });
+
+    it('renders Public Address panel when navigating to network subtab', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ status: 'none' }),
+                } as Response);
+            }
+            if (strUrl.includes('/api/local/admin/public-address/logs')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ logs: [] }),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+            } as Response);
+        });
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="network"
+                />
+            );
+        });
+
+        expect(screen.getByTestId('public-address-panel')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 3, name: /Public Address & DNS Tunnel/i })).toBeInTheDocument();
+    });
 });
+

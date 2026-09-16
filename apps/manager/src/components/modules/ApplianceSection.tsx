@@ -14,6 +14,8 @@ import {
     setTfaSessionToken,
 } from '../../lib/node-client';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { PublicAddressPanel } from './PublicAddressPanel';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 
@@ -32,7 +34,7 @@ interface ApplianceSectionProps {
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
-    initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'identity' | 'access';
+    initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
 }
 
 export function ApplianceSection({
@@ -52,7 +54,7 @@ export function ApplianceSection({
     auditState,
     initialSubTab = 'diagnostics',
 }: ApplianceSectionProps) {
-    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'identity' | 'access'>(initialSubTab);
+    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab);
 
     // Snapshots & Backups state
     const [snapshots, setSnapshots] = useState<SnapshotItem[]>([]);
@@ -499,6 +501,16 @@ export function ApplianceSection({
                         }`}
                     >
                         Gateway &amp; Peers
+                    </button>
+                    <button
+                        onClick={() => setSubTab('network')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            subTab === 'network'
+                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                : 'text-nature-400 hover:text-white border border-transparent'
+                        }`}
+                    >
+                        Public Address
                     </button>
                     <button
                         onClick={() => setSubTab('identity')}
@@ -992,6 +1004,17 @@ export function ApplianceSection({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Subtab: Public Address & Tunnel */}
+            {subTab === 'network' && (
+                <SectionErrorBoundary sectionName="Public Address" resetKey={activeNode.id}>
+                    <PublicAddressPanel
+                        key={activeNode.id}
+                        activeNode={activeNode}
+                        onRefreshDiag={onRefreshDiag}
+                    />
+                </SectionErrorBoundary>
             )}
 
             {/* Subtab: Node Identity */}

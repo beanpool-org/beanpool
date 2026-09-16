@@ -17,8 +17,8 @@ export function NodeIdentityPanel({
     onRefreshDiag,
 }: NodeIdentityPanelProps) {
     // Identity fields
-    const [callsign, setCallsign] = useState(diag?.callsign || '');
-    const [communityName, setCommunityName] = useState(diag?.communityName || '');
+    const [callsign, setCallsign] = useState(typeof diag?.callsign === 'string' ? diag.callsign : '');
+    const [communityName, setCommunityName] = useState(typeof diag?.communityName === 'string' ? diag.communityName : '');
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
 
@@ -77,10 +77,18 @@ export function NodeIdentityPanel({
                 const infoRes = await fetch(infoUrl).catch(() => null);
                 if (infoRes && infoRes.ok && mounted) {
                     const data = await infoRes.json().catch(() => ({}));
-                    if (data.communityName !== undefined) setCommunityName(data.communityName || '');
-                    if (data.contactEmail !== undefined) setContactEmail(data.contactEmail || '');
-                    if (data.contactPhone !== undefined) setContactPhone(data.contactPhone || '');
-                    if (data.callsign !== undefined) setCallsign(data.callsign || '');
+                    if (data.communityName !== undefined) {
+                        setCommunityName(typeof data.communityName === 'string' ? data.communityName : String(data.communityName ?? ''));
+                    }
+                    if (data.contactEmail !== undefined) {
+                        setContactEmail(typeof data.contactEmail === 'string' ? data.contactEmail : String(data.contactEmail ?? ''));
+                    }
+                    if (data.contactPhone !== undefined) {
+                        setContactPhone(typeof data.contactPhone === 'string' ? data.contactPhone : String(data.contactPhone ?? ''));
+                    }
+                    if (data.callsign !== undefined) {
+                        setCallsign(typeof data.callsign === 'string' ? data.callsign : String(data.callsign ?? ''));
+                    }
                 }
 
                 // 2. Node Config (service radius, directory settings)
@@ -88,18 +96,25 @@ export function NodeIdentityPanel({
                 const configRes = await fetch(configUrl).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
                     const cfg = await configRes.json().catch(() => ({}));
-                    if (cfg.serviceRadius) {
-                        const km = Number(cfg.serviceRadius.radiusKm) || 0;
-                        setRadiusKm(km);
-                        if (cfg.serviceRadius.lat != null) setLat(Number(cfg.serviceRadius.lat));
-                        if (cfg.serviceRadius.lng != null) setLng(Number(cfg.serviceRadius.lng));
+                    if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
+                        const km = Number(cfg.serviceRadius.radiusKm);
+                        setRadiusKm(!isNaN(km) && km >= 0 ? km : 0);
+                        if (cfg.serviceRadius.lat != null) {
+                            const parsedLat = Number(cfg.serviceRadius.lat);
+                            if (!isNaN(parsedLat)) setLat(parsedLat);
+                        }
+                        if (cfg.serviceRadius.lng != null) {
+                            const parsedLng = Number(cfg.serviceRadius.lng);
+                            if (!isNaN(parsedLng)) setLng(parsedLng);
+                        }
                     }
                     if (cfg.publishLocation !== undefined) setPublishLocation(Boolean(cfg.publishLocation));
                     if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
                     if (cfg.publishContacts !== undefined) setPublishContacts(Boolean(cfg.publishContacts));
                     if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
                     if (cfg.directoryPushIntervalHours !== undefined) {
-                        setDirectoryPushIntervalHours(Number(cfg.directoryPushIntervalHours));
+                        const parsedHours = Number(cfg.directoryPushIntervalHours);
+                        setDirectoryPushIntervalHours(!isNaN(parsedHours) ? parsedHours : 12);
                     }
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);

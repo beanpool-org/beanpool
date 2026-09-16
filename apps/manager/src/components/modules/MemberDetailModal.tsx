@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getMemberDisplayName, getMemberAvatar, fmtDate, fmtLastActive } from './MembersModule';
+import { PruneBranchModal } from './PruneBranchModal';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
@@ -23,12 +24,15 @@ export interface MemberFlag {
     type?: string;
     description?: string;
     severity?: string;
+    [key: string]: unknown;
 }
 
 interface MemberDetailModalProps {
     member: MemberModalItem | null;
     profiles?: Record<string, unknown>[];
     flags?: MemberFlag[];
+    members?: any[];
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     isFrozen: boolean;
     isVoucher?: boolean;
     isOperator?: boolean;
@@ -39,6 +43,7 @@ interface MemberDetailModalProps {
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onPrune?: (pubkey: string) => void;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onClose: () => void;
 }
 
@@ -46,6 +51,8 @@ export function MemberDetailModal({
     member,
     profiles = [],
     flags = [],
+    members = [],
+    accounts,
     isFrozen,
     isVoucher,
     isOperator,
@@ -56,11 +63,13 @@ export function MemberDetailModal({
     onGrantNodeRole,
     onRevokeNodeRole,
     onPrune,
+    onPruneBranch,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
     const [revokedVouch, setRevokedVouch] = useState(false);
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
+    const [showPruneBranch, setShowPruneBranch] = useState(false);
     const [roleLoading, setRoleLoading] = useState(false);
     const [roleError, setRoleError] = useState<string | null>(null);
     const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
@@ -69,6 +78,11 @@ export function MemberDetailModal({
     const [localRole, setLocalRole] = useState<MemberNodeRole | null>(
         () => (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null
     );
+
+    const hasChildren = useMemo(() => {
+        if (!Array.isArray(members) || !pubkey) return false;
+        return members.some((m) => m && (m.invitedBy === pubkey || (m as any).invited_by === pubkey));
+    }, [members, pubkey]);
 
     useEffect(() => {
         setLocalRole((nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null);
@@ -490,11 +504,35 @@ export function MemberDetailModal({
                                     <span>🗑️ Prune Account</span>
                                 </button>
                             )}
+
+                            {onPruneBranch && hasChildren && (
+                                <button
+                                    onClick={() => setShowPruneBranch(true)}
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-200 border-red-700 text-[11px]"
+                                    title="Prune this member and all invitees in their subtree"
+                                >
+                                    <span>🗑️ Prune Branch</span>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
 
             </div>
+
+            {showPruneBranch && (
+                <PruneBranchModal
+                    rootMember={member as any}
+                    members={members}
+                    accounts={accounts}
+                    onConfirm={async (pk) => {
+                        await onPruneBranch?.(pk);
+                        onClose();
+                    }}
+                    onClose={() => setShowPruneBranch(false)}
+                />
+            )}
         </div>
     );
 }
+

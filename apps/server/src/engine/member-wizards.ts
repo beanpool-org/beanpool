@@ -450,9 +450,14 @@ export function getRekeyStatus(publicKey: string): {
     const isInvalidated = isKeyInvalidated(cleanPub);
     const invalidatedInfo = getInvalidatedKeyInfo(cleanPub);
 
-    const pendingRequest = (db.prepare(
+    let pendingRequest: RekeyRequestRow | null = (db.prepare(
         "SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
-    ).get(cleanPub) as RekeyRequestRow) || null;
+    ).get(cleanPub) as RekeyRequestRow | undefined) || null;
+
+    if (pendingRequest && new Date(pendingRequest.expires_at).getTime() < Date.now()) {
+        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
+        pendingRequest = null;
+    }
 
     const history = (db.prepare(
         'SELECT * FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC'

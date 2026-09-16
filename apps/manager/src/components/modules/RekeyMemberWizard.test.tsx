@@ -151,4 +151,74 @@ describe('RekeyMemberWizard', () => {
             expect(onSuccess).toHaveBeenCalledWith(newPk);
         });
     });
+
+    it('does not auto-advance to step 2 if pending request is expired', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true,
+            invalidatedInfo: null,
+            pendingRequest: {
+                id: 1,
+                code: 'RK-OLD-CODE',
+                old_pubkey: mockMember.publicKey,
+                new_pubkey: null,
+                operator_pubkey: 'b'.repeat(64),
+                expires_at: new Date(Date.now() - 3600000).toISOString(),
+                status: 'pending',
+                created_at: new Date(Date.now() - 90000000).toISOString(),
+            },
+            history: [],
+        });
+
+        render(
+            <RekeyMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                onClose={() => {}}
+            />
+        );
+
+        // Stays on step 1
+        await waitFor(() => {
+            expect(screen.getByText(/Operator-Assisted Identity Verification/)).toBeDefined();
+            expect(screen.queryByText('RK-OLD-CODE')).toBeNull();
+        });
+    });
+
+    it('allows returning to step 1 via Issue New Code button', async () => {
+        vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+            isInvalidated: true,
+            invalidatedInfo: null,
+            pendingRequest: {
+                id: 2,
+                code: 'RK-ACTIVE-CODE',
+                old_pubkey: mockMember.publicKey,
+                new_pubkey: null,
+                operator_pubkey: 'b'.repeat(64),
+                expires_at: new Date(Date.now() + 3600000).toISOString(),
+                status: 'pending',
+                created_at: new Date().toISOString(),
+            },
+            history: [],
+        });
+
+        render(
+            <RekeyMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('RK-ACTIVE-CODE')).toBeDefined();
+        });
+
+        const issueNewBtn = screen.getByRole('button', { name: /Issue New Code/ });
+        fireEvent.click(issueNewBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Operator-Assisted Identity Verification/)).toBeDefined();
+            expect(screen.queryByText('RK-ACTIVE-CODE')).toBeNull();
+        });
+    });
 });

@@ -57,9 +57,12 @@ export function RekeyMemberWizard({
                 if (mounted && status) {
                     setRekeyStatus(status);
                     if (status.pendingRequest) {
-                        setIssuedCode(status.pendingRequest.code);
-                        setExpiresAt(status.pendingRequest.expires_at);
-                        setStep(2);
+                        const isExpired = new Date(status.pendingRequest.expires_at).getTime() < Date.now();
+                        if (!isExpired) {
+                            setIssuedCode(status.pendingRequest.code);
+                            setExpiresAt(status.pendingRequest.expires_at);
+                            setStep(2);
+                        }
                     }
                 }
             } catch {
@@ -266,8 +269,12 @@ export function RekeyMemberWizard({
                                 </button>
                             </div>
                             {expiresAt && (
-                                <p className="text-[10px] text-nature-400 m-0">
-                                    Expires in 24 hours ({new Date(expiresAt).toLocaleTimeString()})
+                                <p className={`text-[10px] m-0 ${
+                                    new Date(expiresAt).getTime() < Date.now() ? 'text-amber-400 font-bold' : 'text-nature-400'
+                                }`}>
+                                    {new Date(expiresAt).getTime() < Date.now()
+                                        ? '⚠️ Code has expired'
+                                        : `Expires in 24 hours (${new Date(expiresAt).toLocaleTimeString()})`}
                                 </p>
                             )}
                         </div>
@@ -289,26 +296,39 @@ export function RekeyMemberWizard({
                             </p>
                         </div>
 
-                        <div className="flex items-center justify-end gap-2 pt-2">
+                        <div className="flex items-center justify-between gap-2 pt-2">
                             <button
                                 type="button"
-                                onClick={onClose}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
+                                onClick={() => {
+                                    setIssuedCode(null);
+                                    setExpiresAt(null);
+                                    setStep(1);
+                                }}
+                                className="px-3 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-nature-300 text-xs font-semibold"
                             >
-                                Close (Complete Later)
+                                ← Issue New Code
                             </button>
-                            <button
-                                type="button"
-                                disabled={completing || !newPubkey.trim()}
-                                onClick={handleCompleteRekey}
-                                className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
-                                    !completing && newPubkey.trim()
-                                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                                        : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
-                                }`}
-                            >
-                                {completing ? 'Transferring Records...' : 'Complete Re-Keying →'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
+                                >
+                                    Close
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={completing || !newPubkey.trim() || Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now())}
+                                    onClick={handleCompleteRekey}
+                                    className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
+                                        !completing && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
+                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                            : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
+                                    }`}
+                                >
+                                    {completing ? 'Transferring Records...' : 'Complete Re-Keying →'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

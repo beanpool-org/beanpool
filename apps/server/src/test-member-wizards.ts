@@ -280,6 +280,16 @@ async function main() {
     assert(statusBefore.pendingRequest !== null, 'getRekeyStatus includes pendingRequest');
     assert(statusBefore.pendingRequest?.code === rekeyIssue.code, 'getRekeyStatus code matches');
 
+    // Test that expired pending requests are lazily marked expired and pendingRequest is null
+    const expMemberKey = generateValidPubkey();
+    makeMember('exp_member', expMemberKey);
+    const expCode = issueRekeyCode(expMemberKey, operatorPubkey).code;
+    db.prepare("UPDATE rekey_requests SET expires_at = datetime('now', '-1 hour') WHERE code = ?").run(expCode);
+    const expStatus = getRekeyStatus(expMemberKey);
+    assert(expStatus.pendingRequest === null, 'getRekeyStatus returns null for expired pendingRequest');
+    const expRow = db.prepare("SELECT status FROM rekey_requests WHERE code = ?").get(expCode) as any;
+    assert(expRow.status === 'expired', 'Expired request was lazily updated to expired in db');
+
     // Step B: Validation rejects on rekey completion
     const newAliceKey = generateValidPubkey();
 

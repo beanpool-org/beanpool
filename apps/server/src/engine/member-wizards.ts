@@ -560,12 +560,16 @@ export function executeOffboard(
         throw new Error('Cannot offboard member with active deals in escrow or open trade requests. Resolve or cancel pending trades first.');
     }
 
-    const balanceInfo = getBalance(cleanPub);
-    const balance = balanceInfo.balance;
     const resolution = options.resolution;
+    let balanceSettled = 0;
 
     // Execute in conservingTransaction to guarantee SUM(balances) + COMMONS_POOL = 0
     conservingTransaction(() => {
+        // Read balance INSIDE conservingTransaction so that any concurrent mutations are captured
+        const balanceInfo = getBalance(cleanPub);
+        const balance = balanceInfo.balance;
+        balanceSettled = balance;
+
         if (balance > 0) {
             if (resolution === 'donate_to_commons') {
                 moveToCommons(cleanPub, balance, `Donation to Commons on member offboarding: ${member.callsign.trim()}`, {
@@ -655,6 +659,6 @@ export function executeOffboard(
         memberPubkey: cleanPub,
         callsign: member.callsign,
         resolution,
-        balanceSettled: balance,
+        balanceSettled,
     };
 }

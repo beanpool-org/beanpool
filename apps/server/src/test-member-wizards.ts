@@ -588,6 +588,31 @@ async function main() {
     executeOffboard(pushMemberKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
     assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 0, 'Push token purged on offboard');
 
+    // Member 7: Concurrent Balance Race Condition Guard
+    // Verifies that getBalance is read inside conservingTransaction under the transaction lock.
+    // If getBalance were read outside the transaction, an interleaved balance change would result
+    // in transferring the stale amount and stranding residual beans on the pruned member account.
+    const concurrentMemberKey = generateValidPubkey();
+    makeMember('concurrent_user', concurrentMemberKey);
+    transfer('genesis', concurrentMemberKey, 50, 'initial seed', 'direct', true);
+    assert(getBalance(concurrentMemberKey).balance === 50, 'Concurrent member initial balance is 50 beans');
+
+    // Interleaved credit arrives before transaction executes
+    transfer('genesis', concurrentMemberKey, 30, 'concurrent credit', 'direct', true);
+    assert(getBalance(concurrentMemberKey).balance === 80, 'Concurrent member balance is updated to 80 beans');
+
+    const offboardConcurrentRes = executeOffboard(
+        concurrentMemberKey,
+        { resolution: 'donate_to_commons' },
+        operatorPubkey
+    );
+    assert(offboardConcurrentRes.balanceSettled === 80, 'executeOffboard settled the live 80 beans (not stale 50)');
+    assert(getBalance(concurrentMemberKey).balance === 0, 'Departing member account balance is 0 after offboard');
+    assert(getMember(concurrentMemberKey)?.status === 'pruned', 'Departing member status set to pruned');
+    assert(nodeTotal() === 0, 'Zero-sum ledger conservation holds after live balance settlement');
+    const auditConcurrent = runLedgerAudit();
+    assert(auditConcurrent.ok === true && Math.abs(auditConcurrent.drift) < 0.0001, 'runLedgerAudit passes with 0 drift after concurrent settlement');
+
     // =========================================================================
     // PART 3: HTTP API ENDPOINTS (ADMIN & COMMUNITY)
     // =========================================================================

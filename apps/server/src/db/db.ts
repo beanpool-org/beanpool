@@ -995,6 +995,7 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         const txSum = (db.prepare(`
             SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
             WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
+              AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%'
         `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
         const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
         currentAmount = Math.max(currentAmount, txSum, accBal);

@@ -480,6 +480,22 @@ async function main() {
         assert(Array.isArray(disputesData.disputes), 'Response contains disputes array');
         assert(typeof disputesData.total === 'number', 'Response contains total count');
 
+        // D2. Authenticated request to POST /api/local/admin/data returns escrowDisputesCount with ISO date
+        const iso7DaysAgo = new Date(Date.now() - 7.5 * 86400000).toISOString();
+        db.prepare('UPDATE marketplace_transactions SET created_at = ? WHERE id = ?').run(iso7DaysAgo, tx4.id);
+
+        const adminDataRes = await fetch(`${baseUrl}/api/local/admin/data`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': 'test-admin-secret-password',
+            },
+        });
+        assert(adminDataRes.status === 200, 'POST /api/local/admin/data with admin password returns 200');
+        const adminData = await adminDataRes.json();
+        assert(typeof adminData.escrowDisputesCount === 'number' && adminData.escrowDisputesCount >= 1,
+            'escrowDisputesCount correctly includes ISO-8601 timestamps 7.5 days old');
+
         // E. Authenticated POST under signed admin session attributes acting admin
         const sessionResolve = await fetch(`${baseUrl}/api/local/admin/disputes/${tx4.id}/resolve`, {
             method: 'POST',
@@ -675,7 +691,9 @@ async function main() {
     console.log(`========================================\n`);
 }
 
-main().catch(err => {
+main().then(() => {
+    process.exit(0);
+}).catch(err => {
     console.error('Test execution failed:', err);
     process.exit(1);
 });

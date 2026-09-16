@@ -128,7 +128,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(radiusKmInput).toHaveAttribute('aria-label', 'Service radius in kilometers');
 
         // Directory publishing & preview link
-        expect(screen.getByText('Directory Publishing')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 4, name: 'Directory Publishing' })).toBeInTheDocument();
         const previewLink = screen.getByRole('link', { name: /preview public output/i });
         expect(previewLink).toHaveAttribute('href', expect.stringContaining('/api/directory/info'));
         expect(previewLink).toHaveAttribute('target', '_blank');
@@ -144,6 +144,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(document.getElementById('publish-health')).toBeInTheDocument();
 
         // Community contacts
+        expect(screen.getByRole('heading', { level: 4, name: 'Community Contacts' })).toBeInTheDocument();
         expect(screen.getByLabelText(/Contact Email/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/Contact Phone/i)).toBeInTheDocument();
 

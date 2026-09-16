@@ -575,7 +575,7 @@ export function NodeIdentityPanel({
                 {/* Directory Publishing */}
                 <div className="pt-6 border-t border-nature-800/80 space-y-4">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-bold text-white m-0">Directory Publishing</label>
+                        <h4 className="text-sm font-bold text-white m-0">Directory Publishing</h4>
                         <a
                             href={resolveNodeApiUrl(activeNode.url, '/api/directory/info')}
                             target="_blank"
@@ -704,7 +704,7 @@ export function NodeIdentityPanel({
                 {/* Community Contacts */}
                 <div className="pt-6 border-t border-nature-800/80 space-y-4">
                     <div>
-                        <label className="text-sm font-bold text-white m-0">Community Contacts</label>
+                        <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
                             Public details displayed on your landing page. Helps new members find your community.
                         </p>

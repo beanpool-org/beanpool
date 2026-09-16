@@ -374,9 +374,12 @@ print(f"  [restarted] beanpool-node container recreated successfully")
 REMOTE_PYTHON
 )
 
+  # Base64 encode updater script to eliminate remote shell quoting/escaping hazards
+  UPDATE_SCRIPT_B64=$(printf '%s' "$UPDATE_SCRIPT" | base64 | tr -d '\r\n')
+
   # Pass KEY=VALUE pairs over SSH standard input
   set +e
-  printf '%s\n' "${KEY_VALUE_PAIRS[@]}" | ssh $SSH_OPTS "$N_USER@$N_HOST" "python3 -c '$UPDATE_SCRIPT' '$DRY_RUN' '$PROJECT_DIR' '$PROJ_NAME'"
+  printf '%s\n' "${KEY_VALUE_PAIRS[@]}" | ssh $SSH_OPTS "$N_USER@$N_HOST" "python3 -c \"import base64; exec(base64.b64decode('$UPDATE_SCRIPT_B64'))\" '$DRY_RUN' '$PROJECT_DIR' '$PROJ_NAME'"
   RC=$?
   set -e
 

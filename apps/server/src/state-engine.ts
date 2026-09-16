@@ -1864,12 +1864,9 @@ export function usableFloor(publicKey: string): number {
             // - Earned growth still counts (if earned credit raises the floor, use the higher value).
             // - Keeper exits still release backing (if backing is removed, floor drops accordingly).
             // Formula: max(snapshot, derived) where snapshot expires at 90 days. Keeper backing release overrides snapshot floor.
-            let effectiveAllowance = snapshotAllowance;
-            if (underlyingAllowance < snapshotAllowance) {
-                effectiveAllowance = underlyingAllowance;
-            } else if (underlyingAllowance > snapshotAllowance) {
-                effectiveAllowance = underlyingAllowance;
-            }
+            let effectiveAllowance = underlyingAllowance < snapshotAllowance
+                ? underlyingAllowance  // backing withdrawn — override snapshot
+                : Math.max(snapshotAllowance, underlyingAllowance);  // earned growth raises it
             return -Math.max(effectiveAllowance, normalDerivedAllowance);
         }
     }
@@ -2472,7 +2469,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     const now = new Date().toISOString();
 
     conservingTransaction(() => {
-        const bal = getBalance(enterprisePubkey).balance;
+        const bal = ledger.getAccount(enterprisePubkey).balance;
         if (bal > 0) {
             const swept = moveToCommons(enterprisePubkey, bal, `Final wind-up sweep from ${enterprisePubkey.slice(0, 8)}`, { authSigner: actorPubkey });
             if (!swept) throw new Error('Failed to sweep remaining balance to Commons');

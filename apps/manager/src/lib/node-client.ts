@@ -605,6 +605,26 @@ export async function pruneInviteBranch(
     return res.json();
 }
 
+export async function deleteNodePost(
+    nodeUrl: string,
+    postId: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/posts/${encodeURIComponent(postId)}/delete`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 
 export async function generateNodeInvite(
     nodeUrl: string,

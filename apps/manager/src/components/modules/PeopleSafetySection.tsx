@@ -3,6 +3,8 @@ import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersM
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
+import { PostModerationPanel } from './PostModerationPanel';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch } from '../../lib/node-client';
 
@@ -276,6 +278,15 @@ export function PeopleSafetySection({
                             )}
                         </div>
                     </div>
+
+                    {/* Individual Post Search, Filtering & Deletion Panel */}
+                    <SectionErrorBoundary sectionName="Post Moderation" resetKey={activeNode.id}>
+                        <PostModerationPanel
+                            posts={nodeData?.posts as any}
+                            activeNode={activeNode}
+                            onRefresh={onRefresh}
+                        />
+                    </SectionErrorBoundary>
                 </div>
             )}
 

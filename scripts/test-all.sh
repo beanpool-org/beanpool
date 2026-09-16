@@ -107,6 +107,10 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 
+# Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
+# is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
+run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the

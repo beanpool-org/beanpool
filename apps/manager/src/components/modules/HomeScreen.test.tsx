@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { HomeScreen } from './HomeScreen';
 
@@ -113,6 +113,34 @@ describe('HomeScreen Component', () => {
         render(<HomeScreen {...defaultProps} diag={mockDiag} />);
 
         expect(screen.getByText(/Storage 82%/i)).toBeInTheDocument();
+    });
+
+    it('resets shutdownDismissed state when active node communityName or diagnostic status changes', async () => {
+        const mockDiag1: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: true,
+                ok: true,
+                powerLossAt: '04:12',
+                powerLossTimestamp: '2026-09-17T04:12:00.000Z',
+                checkedAt: '2026-09-17T04:15:00.000Z',
+                message: 'Recovered from power loss at 04:12.',
+                acknowledged: false,
+            },
+        };
+
+        const { rerender } = render(<HomeScreen {...defaultProps} communityName="Node Alpha" diag={mockDiag1} />);
+        expect(screen.getByTestId('unclean-shutdown-reassurance')).toBeInTheDocument();
+
+        // Dismiss on Node Alpha
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }));
+        });
+        expect(screen.queryByTestId('unclean-shutdown-reassurance')).not.toBeInTheDocument();
+
+        // Switch to Node Beta
+        rerender(<HomeScreen {...defaultProps} communityName="Node Beta" diag={mockDiag1} />);
+        expect(screen.getByTestId('unclean-shutdown-reassurance')).toBeInTheDocument();
     });
 });
 

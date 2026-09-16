@@ -34,6 +34,10 @@ export function HomeScreen({
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
 
+    useEffect(() => {
+        setShutdownDismissed(false);
+    }, [diag?.shutdownStatus?.powerLossTimestamp, diag?.shutdownStatus?.checkedAt, communityName]);
+
     // Action required counts
     const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];

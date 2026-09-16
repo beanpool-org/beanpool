@@ -234,6 +234,7 @@ describe('NodeIdentityPanel Component', () => {
             expect(screen.getByText('Byron Bay, NSW, Australia')).toBeInTheDocument();
         });
         expect(searchInput).toHaveAttribute('aria-expanded', 'true');
+        expect(document.getElementById('location-result-0')).toHaveAttribute('tabindex', '-1');
 
         const resultItem = screen.getByText('Byron Bay, NSW, Australia');
         await act(async () => {

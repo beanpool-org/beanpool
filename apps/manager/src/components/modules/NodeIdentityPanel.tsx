@@ -494,7 +494,7 @@ export function NodeIdentityPanel({
                                         id={`location-result-${idx}`}
                                         role="option"
                                         aria-selected={selectedIndex === idx}
-                                        tabIndex={0}
+                                        tabIndex={-1}
                                         onClick={() => handleSelectLocation(item)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' || e.key === ' ') {

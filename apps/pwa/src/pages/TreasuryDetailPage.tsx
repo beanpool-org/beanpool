@@ -3,6 +3,8 @@ import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
     treasuryPostOffer, treasuryPostNeed,
+    pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp,
+    getEnterpriseLedger, type EnterpriseLedgerResponse,
     type BalanceInfo
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -27,6 +29,20 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [sweeping, setSweeping] = useState(false);
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
     const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+    // Lifecycle Action States
+    const [confirmingPause, setConfirmingPause] = useState(false);
+    const [confirmingResume, setConfirmingResume] = useState(false);
+    const [confirmingWindUp, setConfirmingWindUp] = useState(false);
+    const [confirmingCancelWindUp, setConfirmingCancelWindUp] = useState(false);
+    const [confirmingFinaliseWindUp, setConfirmingFinaliseWindUp] = useState(false);
+    const [lifecycleActionLoading, setLifecycleActionLoading] = useState(false);
+
+    // P&L Accountability Ledger State
+    const [ledgerData, setLedgerData] = useState<EnterpriseLedgerResponse | null>(null);
+    const [ledgerLoading, setLedgerLoading] = useState(false);
+    const [ledgerError, setLedgerError] = useState<string | null>(null);
+    const [ledgerPeriod, setLedgerPeriod] = useState<'all' | '30d' | '90d' | '365d'>('all');
 
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
@@ -63,6 +79,114 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     useEffect(() => {
         load();
     }, [load]);
+
+    const loadLedger = useCallback(async (period: 'all' | '30d' | '90d' | '365d' = ledgerPeriod) => {
+        try {
+            setLedgerLoading(true);
+            setLedgerError(null);
+            let since: string | undefined;
+            if (period === '30d') {
+                since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            } else if (period === '90d') {
+                since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+            } else if (period === '365d') {
+                since = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+            }
+            const data = await getEnterpriseLedger(pubkey, { since });
+            setLedgerData(data);
+        } catch (e: any) {
+            setLedgerError(e?.message || 'Could not load enterprise ledger');
+        } finally {
+            setLedgerLoading(false);
+        }
+    }, [pubkey, ledgerPeriod]);
+
+    useEffect(() => {
+        loadLedger(ledgerPeriod);
+    }, [loadLedger, ledgerPeriod]);
+
+    const handlePause = async () => {
+        try {
+            setLifecycleActionLoading(true);
+            setActionFeedback(null);
+            await pauseEnterprise(pubkey);
+            setConfirmingPause(false);
+            setActionFeedback({ type: 'success', message: 'Enterprise paused for the season. Credit held at snapshot.' });
+            await load();
+            await loadLedger(ledgerPeriod);
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e?.message || 'Failed to pause enterprise' });
+        } finally {
+            setLifecycleActionLoading(false);
+        }
+    };
+
+    const handleResume = async () => {
+        try {
+            setLifecycleActionLoading(true);
+            setActionFeedback(null);
+            await resumeEnterprise(pubkey);
+            setConfirmingResume(false);
+            setActionFeedback({ type: 'success', message: 'Enterprise resumed! Active listings are now buyable again.' });
+            await load();
+            await loadLedger(ledgerPeriod);
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e?.message || 'Failed to resume enterprise' });
+        } finally {
+            setLifecycleActionLoading(false);
+        }
+    };
+
+    const handleInitiateWindUp = async () => {
+        try {
+            setLifecycleActionLoading(true);
+            setActionFeedback(null);
+            await initiateWindUp(pubkey);
+            setConfirmingWindUp(false);
+            setActionFeedback({ type: 'success', message: 'Wind-up initiated. 7-day grace period has begun.' });
+            await load();
+            await loadLedger(ledgerPeriod);
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e?.message || 'Failed to initiate wind-up' });
+        } finally {
+            setLifecycleActionLoading(false);
+        }
+    };
+
+    const handleCancelWindUp = async () => {
+        try {
+            setLifecycleActionLoading(true);
+            setActionFeedback(null);
+            await cancelWindUp(pubkey);
+            setConfirmingCancelWindUp(false);
+            setActionFeedback({ type: 'success', message: 'Wind-up cancelled. Enterprise restored to active status.' });
+            await load();
+            await loadLedger(ledgerPeriod);
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e?.message || 'Failed to cancel wind-up' });
+        } finally {
+            setLifecycleActionLoading(false);
+        }
+    };
+
+    const handleFinaliseWindUp = async () => {
+        try {
+            setLifecycleActionLoading(true);
+            setActionFeedback(null);
+            const res = await finaliseWindUp(pubkey);
+            setConfirmingFinaliseWindUp(false);
+            setActionFeedback({
+                type: 'success',
+                message: `Wind-up finalised. Swept ${res.sweptAmount ?? 0} 🫘 to Commons and released keepers.`,
+            });
+            await load();
+            await loadLedger(ledgerPeriod);
+        } catch (e: any) {
+            setActionFeedback({ type: 'error', message: e?.message || 'Failed to finalise wind-up' });
+        } finally {
+            setLifecycleActionLoading(false);
+        }
+    };
 
     // Keyboard ESC listener to close modal or go back
     useEffect(() => {
@@ -224,6 +348,29 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         }
     };
 
+    const formatPauseDate = (iso: string | null | undefined): string => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+        } catch {
+            return '';
+        }
+    };
+
+    const formatShortDate = (iso: string | null | undefined): string => {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+                d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return '';
+        }
+    };
+
     const balance = detail?.balance ?? 0;
     const name = detail?.name || 'Community Treasury';
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
@@ -232,6 +379,19 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const posts: any[] = detail?.posts || [];
     const flow: any[] = detail?.flow || [];
     const keepers: any[] = detail?.keepers || [];
+
+    const heldCredit = detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0;
+    const pauseExpiresAt = detail?.pauseExpiresAt || (detail?.pausedAt ? new Date(new Date(detail.pausedAt).getTime() + 90 * 24 * 60 * 60 * 1000).toISOString() : null);
+    const pauseDateFormatted = formatPauseDate(pauseExpiresAt);
+
+    const windUpGraceEndsAt = detail?.windUpGraceEndsAt || (detail?.windUpInitiatedAt ? new Date(new Date(detail.windUpInitiatedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : null);
+    const windUpDaysLeft = windUpGraceEndsAt
+        ? Math.max(0, Math.ceil((new Date(windUpGraceEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+        : 0;
+    const windUpGraceEnded = windUpGraceEndsAt ? Date.now() >= new Date(windUpGraceEndsAt).getTime() : false;
+    const initiatorKeeper = detail?.keepers?.find((k: any) => k.publicKey === detail?.windUpInitiatedBy);
+    const initiatorName = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : 'a keeper');
+    const keeperCount = detail?.keepers?.length || 1;
 
     return (
         <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
@@ -293,6 +453,81 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </p>
                             </div>
                         </div>
+
+                        {/* State banners everyone can see */}
+                        {detail.paused && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 shadow-sm space-y-2.5"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">❄️</span>
+                                    <span className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                                        Paused for the season
+                                    </span>
+                                </div>
+                                <p className="text-sm sm:text-base font-bold text-amber-900 dark:text-amber-100 leading-snug">
+                                    Paused for the season. Credit held at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}.` : '.'}
+                                </p>
+                                <p className="text-xs text-amber-800 dark:text-amber-300">
+                                    Listings are paused and cannot be bought right now.
+                                </p>
+                                {(detail.pauseWarning || (detail.pauseDaysRemaining !== null && detail.pauseDaysRemaining !== undefined && detail.pauseDaysRemaining <= 14)) && (
+                                    <div className="pt-2 border-t border-amber-300/60 dark:border-amber-700/60 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                                        <span>⚠️</span>
+                                        <span>{detail.pauseWarning || (detail.pauseDaysRemaining === 0 ? 'Pause credit floor snapshot has expired' : `Pause credit floor snapshot expires in ${detail.pauseDaysRemaining} day${detail.pauseDaysRemaining === 1 ? '' : 's'}`)}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {detail.status === 'winding_up' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-600 text-rose-950 dark:text-rose-100 shadow-sm space-y-2.5"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">⏳</span>
+                                    <span className="text-xs font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                                        Winding Up
+                                    </span>
+                                </div>
+                                <p className="text-sm sm:text-base font-bold text-rose-900 dark:text-rose-100 leading-snug">
+                                    Winding up ({windUpDaysLeft} day{windUpDaysLeft === 1 ? '' : 's'} left · started by {initiatorName})
+                                </p>
+                                <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed font-medium">
+                                    This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.
+                                </p>
+                                {windUpGraceEnded && (
+                                    <p className="text-xs font-bold text-rose-700 dark:text-rose-400 pt-1">
+                                        The 7-day grace period has elapsed. Ready to be finalised.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {detail.status === 'completed' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="p-5 rounded-2xl bg-stone-100 dark:bg-stone-900 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 shadow-sm space-y-2.5"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl" aria-hidden="true">🏁</span>
+                                    <span className="text-xs font-black uppercase tracking-wider text-stone-600 dark:text-stone-400">
+                                        Completed
+                                    </span>
+                                </div>
+                                <p className="text-sm sm:text-base font-bold leading-snug">
+                                    Completed · Wound up
+                                </p>
+                                <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed font-medium">
+                                    This enterprise has completed its purpose and wound up permanently. Surplus was returned to the Commons, keepers were released, and listings are closed.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Balance Card */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
@@ -379,26 +614,43 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
                                         type="button"
+                                        disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
                                         onClick={() => {
                                             setPostModalMode('offer');
                                             setPostRepeatable(true);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🏷️</span> Post Offer
                                     </button>
                                     <button
                                         type="button"
+                                        disabled={detail.paused || detail.status === 'winding_up' || detail.status === 'completed'}
                                         onClick={() => {
                                             setPostModalMode('need');
                                             setPostRepeatable(false);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🤝</span> Post Need
                                     </button>
+                                    {detail.paused && (
+                                        <div className="col-span-2 text-center text-xs font-semibold text-amber-800 dark:text-amber-300 bg-amber-100/60 dark:bg-amber-950/40 p-2 rounded-lg">
+                                            Paused for the season — posting new listings is disabled.
+                                        </div>
+                                    )}
+                                    {detail.status === 'winding_up' && (
+                                        <div className="col-span-2 text-center text-xs font-semibold text-rose-800 dark:text-rose-300 bg-rose-100/60 dark:bg-rose-950/40 p-2 rounded-lg">
+                                            Winding up — posting new listings is disabled.
+                                        </div>
+                                    )}
+                                    {detail.status === 'completed' && (
+                                        <div className="col-span-2 text-center text-xs font-semibold text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 p-2 rounded-lg">
+                                            Enterprise closed permanently.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Sweep Surplus */}
@@ -521,6 +773,221 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Enterprise Season & Lifecycle (Keeper Controls) */}
+                                {detail.status !== 'completed' && (
+                                    <div className="pt-4 border-t border-emerald-500/20 space-y-3">
+                                        <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                                            <span>🌿</span>
+                                            <span>Season & Lifecycle Controls</span>
+                                        </div>
+
+                                        {/* Action Confirmation Cards with Plain Words BEFORE the Tap */}
+                                        {confirmingPause && (
+                                            <div className="p-4 rounded-xl border-2 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/50 space-y-3">
+                                                <div className="font-bold text-sm text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                                                    <span>❄️</span>
+                                                    <span>Confirm Pause for Season</span>
+                                                </div>
+                                                <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
+                                                    Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any keeper can resume at any time.
+                                                </p>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={lifecycleActionLoading}
+                                                        onClick={handlePause}
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                    >
+                                                        {lifecycleActionLoading ? 'Pausing…' : 'Confirm Season Pause'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingPause(false)}
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {confirmingResume && (
+                                            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
+                                                <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                                                    <span>▶️</span>
+                                                    <span>Confirm Resume Enterprise</span>
+                                                </div>
+                                                <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
+                                                    Resuming reactivates all listings and restores the credit floor to normal daily calculation.
+                                                </p>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={lifecycleActionLoading}
+                                                        onClick={handleResume}
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                    >
+                                                        {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingResume(false)}
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {confirmingWindUp && (
+                                            <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
+                                                <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
+                                                    <span>⚠️</span>
+                                                    <span>Start Enterprise Wind-Up</span>
+                                                </div>
+                                                <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
+                                                    Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} keeper{keeperCount === 1 ? '' : 's'}, and closes {name} for good. Any keeper can stop this for the next 7 days.
+                                                </p>
+                                                {balance < 0 && (
+                                                    <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
+                                                        ⚠️ Cannot wind up an enterprise in deficit ({balance} 🫘). Debt must be resolved or written off first.
+                                                    </p>
+                                                )}
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={lifecycleActionLoading || balance < 0}
+                                                        onClick={handleInitiateWindUp}
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                    >
+                                                        {lifecycleActionLoading ? 'Starting Wind-Up…' : 'Confirm Start Wind-Up'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingWindUp(false)}
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {confirmingCancelWindUp && (
+                                            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
+                                                <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                                                    <span>🛑</span>
+                                                    <span>Stop Enterprise Wind-Up</span>
+                                                </div>
+                                                <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
+                                                    Cancelling wind-up restores {name} to active status immediately. Keepers remain appointed and listings can resume.
+                                                </p>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={lifecycleActionLoading}
+                                                        onClick={handleCancelWindUp}
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                    >
+                                                        {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingCancelWindUp(false)}
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                    >
+                                                        Keep Winding Up
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {confirmingFinaliseWindUp && (
+                                            <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
+                                                <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
+                                                    <span>🏁</span>
+                                                    <span>Finalise Enterprise Wind-Up</span>
+                                                </div>
+                                                <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
+                                                    The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all keepers, and closes {name} for good.
+                                                </p>
+                                                <div className="flex gap-2 pt-1">
+                                                    <button
+                                                        type="button"
+                                                        disabled={lifecycleActionLoading}
+                                                        onClick={handleFinaliseWindUp}
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                    >
+                                                        {lifecycleActionLoading ? 'Finalising…' : 'Finalise Wind-Up'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingFinaliseWindUp(false)}
+                                                        className="py-2 px-3 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Buttons (when not confirming) */}
+                                        {!confirmingPause && !confirmingResume && !confirmingWindUp && !confirmingCancelWindUp && !confirmingFinaliseWindUp && (
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {detail.status !== 'winding_up' && (
+                                                    detail.paused ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConfirmingResume(true)}
+                                                            className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                        >
+                                                            <span>▶️</span> Resume Enterprise
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConfirmingPause(true)}
+                                                            className="py-2.5 px-3 rounded-xl border border-amber-500 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-xs shadow-xs hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                        >
+                                                            <span>❄️</span> Pause for Season
+                                                        </button>
+                                                    )
+                                                )}
+
+                                                {detail.status === 'winding_up' ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConfirmingCancelWindUp(true)}
+                                                            className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
+                                                        >
+                                                            <span>🛑</span> Stop Wind-Up
+                                                        </button>
+                                                        {windUpGraceEnded && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setConfirmingFinaliseWindUp(true)}
+                                                                className="py-2.5 px-3 rounded-xl border border-red-600 bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                            >
+                                                                <span>🏁</span> Finalise Wind-Up
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setConfirmingWindUp(true)}
+                                                        className="py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 font-bold text-xs shadow-xs hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center justify-center gap-1.5"
+                                                    >
+                                                        <span>⚠️</span> Start Wind-Up
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -543,6 +1010,137 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             </div>
                         )}
+
+                        {/* Income & Spend (P&L) Accountability Panel */}
+                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
+                                        <span>📊</span>
+                                        <span>Income & Spend (P&L)</span>
+                                    </div>
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
+                                        Transparent accounting · visible to every member
+                                    </p>
+                                </div>
+                                <div className="inline-flex rounded-xl bg-nature-100 dark:bg-nature-800 p-1 self-start sm:self-auto">
+                                    {(['all', '30d', '90d', '365d'] as const).map((period) => (
+                                        <button
+                                            key={period}
+                                            type="button"
+                                            onClick={() => setLedgerPeriod(period)}
+                                            className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-colors ${
+                                                ledgerPeriod === period
+                                                    ? 'bg-white dark:bg-nature-700 text-nature-900 dark:text-white shadow-xs'
+                                                    : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
+                                            }`}
+                                        >
+                                            {period === 'all' ? 'All time' : period === '30d' ? '30d' : period === '90d' ? '90d' : '1y'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl p-3 border border-emerald-200/60 dark:border-emerald-800/40">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                                        Came in
+                                    </div>
+                                    <div className="text-lg font-black text-emerald-700 dark:text-emerald-400 mt-1">
+                                        +{ledgerData?.summary?.totalIncome?.toFixed(2) ?? '0.00'} 🫘
+                                    </div>
+                                </div>
+                                <div className="bg-amber-50/70 dark:bg-amber-950/30 rounded-xl p-3 border border-amber-200/60 dark:border-amber-800/40">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                                        Went out
+                                    </div>
+                                    <div className="text-lg font-black text-amber-700 dark:text-amber-400 mt-1">
+                                        -{ledgerData?.summary?.totalSpend?.toFixed(2) ?? '0.00'} 🫘
+                                    </div>
+                                </div>
+                                <div className="col-span-2 sm:col-span-1 bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                        Net change
+                                    </div>
+                                    <div className={`text-lg font-black mt-1 ${
+                                        (ledgerData?.summary?.netChange ?? 0) >= 0
+                                            ? 'text-emerald-600 dark:text-emerald-400'
+                                            : 'text-amber-600 dark:text-amber-400'
+                                    }`}>
+                                        {(ledgerData?.summary?.netChange ?? 0) >= 0 ? '+' : ''}
+                                        {ledgerData?.summary?.netChange?.toFixed(2) ?? '0.00'} 🫘
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Ledger Entries Table */}
+                            {ledgerLoading ? (
+                                <div className="py-8 text-center text-xs text-nature-400 font-medium">
+                                    Loading ledger records…
+                                </div>
+                            ) : ledgerError ? (
+                                <div className="py-4 text-center text-xs text-red-500 font-medium space-y-2">
+                                    <p>{ledgerError}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => loadLedger(ledgerPeriod)}
+                                        className="text-xs font-bold underline text-red-600 dark:text-red-400"
+                                    >
+                                        Try again
+                                    </button>
+                                </div>
+                            ) : !ledgerData?.entries?.length ? (
+                                <div className="py-6 text-center text-xs text-nature-400 italic">
+                                    No transactions recorded for this period.
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="overflow-x-auto -mx-5 px-5">
+                                        <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                                            <thead>
+                                                <tr className="border-b border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 font-bold uppercase text-[10px] tracking-wider">
+                                                    <th className="py-2 pr-3">When</th>
+                                                    <th className="py-2 px-3">What for</th>
+                                                    <th className="py-2 px-3">With</th>
+                                                    <th className="py-2 px-3 text-right">Came in</th>
+                                                    <th className="py-2 px-3 text-right">Went out</th>
+                                                    <th className="py-2 pl-3 text-right">Running balance</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-nature-100 dark:divide-nature-800">
+                                                {ledgerData.entries.map((entry) => (
+                                                    <tr key={entry.id} className="hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors">
+                                                        <td className="py-2.5 pr-3 text-nature-500 dark:text-nature-400 whitespace-nowrap">
+                                                            {formatShortDate(entry.timestamp)}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 font-semibold text-nature-800 dark:text-nature-200 max-w-[140px] truncate" title={entry.memo}>
+                                                            {entry.memo || 'Transfer'}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-nature-600 dark:text-nature-300 max-w-[110px] truncate" title={entry.counterpartyName}>
+                                                            {entry.counterpartyName || 'Member'}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                        </td>
+                                                        <td className="py-2.5 pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
+                                                            {entry.runningBalance.toFixed(2)} 🫘
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="pt-2 border-t border-nature-100 dark:border-nature-800 flex items-center justify-between text-[11px] text-nature-500 dark:text-nature-400">
+                                        <span>Starting balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.startingBalance.toFixed(2)} 🫘</strong></span>
+                                        <span>Ending balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.endingBalance.toFixed(2)} 🫘</strong></span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Enterprise Listings */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
@@ -570,6 +1168,21 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                                     </span>
                                                     {post.repeatable && (
                                                         <span className="text-[10px] text-nature-400 font-semibold">🔄 recurring</span>
+                                                    )}
+                                                    {detail.paused && (
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                                                            ⏸️ Paused
+                                                        </span>
+                                                    )}
+                                                    {detail.status === 'winding_up' && (
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300">
+                                                            ⏳ Winding up
+                                                        </span>
+                                                    )}
+                                                    {detail.status === 'completed' && (
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                                                            Closed
+                                                        </span>
                                                     )}
                                                 </div>
                                                 <div className="font-bold text-sm text-nature-900 dark:text-white truncate">

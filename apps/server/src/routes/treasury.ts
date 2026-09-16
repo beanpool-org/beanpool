@@ -111,7 +111,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may perform this action' };
             return null;
         }
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        const blocked = (s?: string) => s === 'disabled' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so it can no longer be modified.' };

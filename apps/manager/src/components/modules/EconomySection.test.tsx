@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
@@ -34,6 +34,7 @@ const mockNodeData: nodeClient.NodeDataPayload = {
 
 describe('EconomySection Component', () => {
     beforeEach(() => {
+        sessionStorage.clear();
         vi.clearAllMocks();
         vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(mockTreasuries);
         vi.spyOn(nodeClient, 'fetchTreasuryKeepers').mockResolvedValue(['member_pk_alice']);
@@ -47,6 +48,10 @@ describe('EconomySection Component', () => {
             ok: true,
             json: () => Promise.resolve({ proposed: [], activeRound: null, pastRounds: [] }),
         }));
+    });
+
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     it('renders enterprises and displays keeper information', async () => {
@@ -403,5 +408,141 @@ describe('EconomySection Component', () => {
         expect(optionValues).toContain('unassigned_member_pk');
         expect(optionValues).not.toContain('already_assigned_pk');
     });
-});
 
+    it('forwards 2FA session token to createNodeTreasury when creating an enterprise', async () => {
+        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-sess-economy');
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        const createButton = screen.getByRole('button', { name: /create enterprise/i });
+        await act(async () => {
+            fireEvent.click(createButton);
+        });
+
+        const nameInput = screen.getByPlaceholderText(/Community Eggs, Tool Shed, Bakery/i);
+        fireEvent.change(nameInput, { target: { value: 'Community Bakery' } });
+
+        const submitBtn = screen.getByRole('button', { name: /^create enterprise$/i });
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
+            mockProfile.url,
+            expect.objectContaining({ name: 'Community Bakery' }),
+            mockProfile.adminPassword,
+            'tfa-sess-economy'
+        );
+
+        nodeClient.setTfaSessionToken(mockProfile.id, undefined);
+    });
+
+    it('forwards 2FA session token to seedTreasuryOffer when posting an initial offer', async () => {
+        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-sess-economy');
+        vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({
+            success: true,
+            post: {},
+        });
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        const seedOfferBtn = screen.getByRole('button', { name: /seed offer/i });
+        await act(async () => {
+            fireEvent.click(seedOfferBtn);
+        });
+
+        expect(screen.getByText(/Post Initial Offer for Community Garden/i)).toBeInTheDocument();
+
+        const titleInput = screen.getByPlaceholderText(/e\.g\. Fresh farm eggs dozen/i);
+        fireEvent.change(titleInput, { target: { value: 'Organic Veggie Box' } });
+
+        const postOfferBtn = screen.getByRole('button', { name: /post offer/i });
+        await act(async () => {
+            fireEvent.click(postOfferBtn);
+        });
+
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            expect.objectContaining({ title: 'Organic Veggie Box' }),
+            mockProfile.adminPassword,
+            'tfa-sess-economy'
+        );
+
+        nodeClient.setTfaSessionToken(mockProfile.id, undefined);
+    });
+
+    it('forwards tfaToken prop to assignTreasuryKeeper and revokeTreasuryKeeper', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    tfaToken="tfa-prop-xyz"
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        const manageButton = screen.getAllByRole('button', { name: /manage/i })[0];
+        await act(async () => {
+            fireEvent.click(manageButton);
+        });
+
+        expect(nodeClient.fetchTreasuryKeepers).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            mockProfile.adminPassword,
+            'tfa-prop-xyz'
+        );
+
+        const select = screen.getByLabelText(/Select Member/i);
+        await act(async () => {
+            fireEvent.change(select, { target: { value: 'member_pk_bob' } });
+        });
+
+        const assignButton = screen.getByRole('button', { name: /\+ assign keeper/i });
+        await act(async () => {
+            fireEvent.click(assignButton);
+        });
+
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            'member_pk_bob',
+            mockProfile.adminPassword,
+            'tfa-prop-xyz'
+        );
+
+        const revokeButton = screen.getAllByRole('button', { name: /revoke/i })[0];
+        await act(async () => {
+            fireEvent.click(revokeButton);
+        });
+
+        expect(nodeClient.revokeTreasuryKeeper).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            'member_pk_alice',
+            mockProfile.adminPassword,
+            'tfa-prop-xyz'
+        );
+    });
+});

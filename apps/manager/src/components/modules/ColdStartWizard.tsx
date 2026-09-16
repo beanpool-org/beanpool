@@ -16,6 +16,7 @@ export interface ColdStartWizardProps {
     activeNode: NodeProfile;
     diag: DiagnosticsResponse | null;
     nodeData: NodeDataPayload | null;
+    tfaToken?: string;
     onComplete: () => void;
     onCancel?: () => void;
 }
@@ -84,9 +85,11 @@ export function ColdStartWizard({
     activeNode,
     diag,
     nodeData,
+    tfaToken,
     onComplete,
     onCancel,
 }: ColdStartWizardProps) {
+    const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
     const [currentStep, setCurrentStep] = useState<number>(1);
 
     // Step 1: Name & Locate
@@ -129,7 +132,7 @@ export function ColdStartWizard({
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -144,7 +147,7 @@ export function ColdStartWizard({
             }
         };
         enrollTotp();
-    }, [activeNode?.id, activeNode?.url]);
+    }, [activeNode?.id, activeNode?.url, activeNode?.adminPassword, effectiveTfaToken]);
 
     // Step 3: First Enterprise & First Offer
     const [selectedPresetId, setSelectedPresetId] = useState<'food' | 'tools' | 'machinery'>('food');
@@ -193,7 +196,7 @@ export function ColdStartWizard({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
                 body: JSON.stringify({
                     password: activeNode.adminPassword,
                     communityName: communityName.trim(),
@@ -274,7 +277,7 @@ TOTP Secret:    ${totpSecret}
                     purpose: enterprisePurpose.trim() || undefined,
                 },
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
 
             const treasuryPk = res.publicKey;
@@ -288,7 +291,7 @@ TOTP Secret:    ${totpSecret}
                     treasuryPk,
                     adminPubkey,
                     activeNode.adminPassword,
-                    getTfaSessionToken(activeNode.id)
+                    effectiveTfaToken
                 );
             } catch {
                 // Non-blocking in test environment
@@ -306,7 +309,7 @@ TOTP Secret:    ${totpSecret}
                         description: `First community offer for ${enterpriseName}`,
                     },
                     activeNode.adminPassword,
-                    getTfaSessionToken(activeNode.id)
+                    effectiveTfaToken
                 );
             } catch {
                 // Non-blocking
@@ -345,7 +348,7 @@ TOTP Secret:    ${totpSecret}
                         activeNode.url,
                         activeNode.adminPassword,
                         'trusted',
-                        getTfaSessionToken(activeNode.id)
+                        effectiveTfaToken
                     );
                     if (res?.code) code = res.code;
                 } catch {

@@ -1823,11 +1823,6 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0;
     const totalKeepers = (backingRow?.totalKeepers ?? 0);
     const { floor, earnedCredit, grantedCredit } = getMemberTrustProfile(enterprisePubkey);
-
-    if (totalKeepers === 0) {
-        return { floor: 0, totalBacking: 0, hasBacking: false };
-    }
-
     if (hasExplicitBacking) {
         const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, totalBacking + (earnedCredit || 0) + (grantedCredit || 0));
         return { floor: -allowance, totalBacking, hasBacking: true };

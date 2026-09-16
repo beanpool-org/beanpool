@@ -53,7 +53,7 @@ import {
 } from '../admin-key-auth.js';
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
-import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs } from '../engine/storage-health.js';
+import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -658,6 +658,19 @@ function getProcessCpuLoad(): number {
     return Math.min(100, Math.max(0, pct));
 }
 
+let cachedDiskHealth: DiskHealth | null = null;
+let lastDiskHealthCheck = 0;
+const DISK_HEALTH_CACHE_TTL_MS = 60_000;
+
+function getCachedDiskHealth(): DiskHealth {
+    const now = Date.now();
+    if (!cachedDiskHealth || now - lastDiskHealthCheck > DISK_HEALTH_CACHE_TTL_MS) {
+        cachedDiskHealth = getDiskHealth();
+        lastDiskHealthCheck = now;
+    }
+    return cachedDiskHealth;
+}
+
 const getDiagnosticsHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
 
@@ -713,7 +726,7 @@ const getDiagnosticsHandler = async (ctx: any) => {
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
             shutdownStatus: getShutdownStatus(),
-            diskHealth: getDiskHealth(),
+            diskHealth: getCachedDiskHealth(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -782,6 +795,7 @@ router.post('/api/local/admin/storage/clean-preview', async (ctx) => {
 router.post('/api/local/admin/storage/clean', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const result = cleanStorageAndCompressLogs();
+    cachedDiskHealth = null;
     ctx.body = result;
 });
 

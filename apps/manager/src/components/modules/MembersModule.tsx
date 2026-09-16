@@ -85,6 +85,7 @@ interface MembersModuleProps {
     nodeDataLoading: boolean;
     activeNodeUrl?: string;
     adminPassword?: string;
+    tfaToken?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
@@ -178,6 +179,7 @@ export function MembersModule({
     nodeDataLoading,
     activeNodeUrl,
     adminPassword,
+    tfaToken,
     onRefresh,
     onFreezeUser,
     onPruneUser,
@@ -380,7 +382,7 @@ export function MembersModule({
                 : 'data:image/svg+xml,' + encodeURIComponent(
                     `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">${newTreasuryAvatar || '🏛️'}</text></svg>`
                 );
-            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword);
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword, tfaToken);
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
@@ -402,7 +404,7 @@ export function MembersModule({
                 credits: Number(offerCredits) || 0,
                 description: offerDescription.trim(),
                 repeatable: true
-            }, adminPassword);
+            }, adminPassword, tfaToken);
             setOfferTreasury(null);
             setOfferTitle('');
             setOfferDescription('');

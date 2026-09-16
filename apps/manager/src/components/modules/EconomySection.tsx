@@ -18,6 +18,7 @@ import {
 interface EconomySectionProps {
     activeNode: NodeProfile;
     nodeData?: NodeDataPayload | null;
+    tfaToken?: string;
     onRefresh: () => void;
 }
 
@@ -62,7 +63,8 @@ const ENTERPRISE_PRESETS = [
     },
 ];
 
-export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySectionProps) {
+export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: EconomySectionProps) {
+    const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
     const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool'>('enterprises');
 
     // Enterprises state
@@ -118,7 +120,6 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned
-            const tfaToken = getTfaSessionToken(activeNode.id);
             const initialMap: Record<string, string[]> = {};
             for (const t of list || []) {
                 if (t.publicKey) {
@@ -137,7 +138,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                                 activeNode.url,
                                 t.publicKey,
                                 activeNode.adminPassword,
-                                tfaToken
+                                effectiveTfaToken
                             );
                             return { pubkey: t.publicKey, keepers };
                         } catch {
@@ -167,7 +168,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/projects');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -204,7 +205,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                     purpose: newEnterprisePurpose.trim() || undefined,
                 },
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
 
             // If an initial keeper was selected, assign them immediately
@@ -215,7 +216,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                         res.publicKey,
                         newEnterpriseKeeper.trim(),
                         activeNode.adminPassword,
-                        getTfaSessionToken(activeNode.id)
+                        effectiveTfaToken
                     );
                 } catch (assignErr) {
                     console.error('Failed to assign initial keeper:', assignErr);
@@ -255,7 +256,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                 activeNode.url,
                 t.publicKey,
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
             setKeepersMap((prev) => ({ ...prev, [t.publicKey]: keepers }));
         } catch {
@@ -280,7 +281,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                 manageKeepersTreasury.publicKey,
                 targetPubkey,
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
             setKeepersMap((prev) => ({
                 ...prev,
@@ -311,7 +312,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                 manageKeepersTreasury.publicKey,
                 keeperPubkey,
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
             setKeepersMap((prev) => ({
                 ...prev,
@@ -341,7 +342,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
                     description: `${seedOfferTreasury.name} community offer`,
                 },
                 activeNode.adminPassword,
-                getTfaSessionToken(activeNode.id)
+                effectiveTfaToken
             );
             setSeedOfferTreasury(null);
             setOfferTitle('');
@@ -365,7 +366,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/round');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
                 body: JSON.stringify({
                     action: 'create',
                     projectIds: commonsData.proposed.map((p) => p.id),
@@ -393,7 +394,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/round');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
                 body: JSON.stringify({
                     action: 'close',
                     roundId: commonsData.activeRound.id,
@@ -419,7 +420,7 @@ export function EconomySection({ activeNode, nodeData, onRefresh }: EconomySecti
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/reject');
             await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
                 body: JSON.stringify({ projectId }),
             });
             await loadCommonsData();

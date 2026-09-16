@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ColdStartWizard } from './ColdStartWizard';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
@@ -27,6 +27,7 @@ const mockDiag = {
 
 describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
     beforeEach(() => {
+        sessionStorage.clear();
         vi.clearAllMocks();
         localStorage.clear();
         vi.spyOn(nodeClient, 'createNodeTreasury').mockResolvedValue({
@@ -48,6 +49,10 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             status: 200,
             json: () => Promise.resolve({ success: true }),
         }));
+    });
+
+    afterEach(() => {
+        sessionStorage.clear();
     });
 
     it('navigates through all 5 steps of the cold-start wizard and enforces invariants', async () => {
@@ -205,4 +210,137 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText(/Public endpoint unreachable or health check failed/i)).toBeInTheDocument();
         expect(screen.queryByText(/Public endpoint verified reachable/i)).not.toBeInTheDocument();
     });
+
+    it('forwards 2FA session token to identity, treasury, keeper, offer, and invite calls when tfaToken is provided', async () => {
+        await act(async () => {
+            render(
+                <ColdStartWizard
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    nodeData={{ members: [] }}
+                    tfaToken="tfa-wizard-token"
+                    onComplete={vi.fn()}
+                />
+            );
+        });
+
+        // Step 1: Enrol Owner Key -> checks update-identity header
+        const nextStep1Button = screen.getByRole('button', { name: /Next: Enrol Owner Key/i });
+        await act(async () => {
+            fireEvent.click(nextStep1Button);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/update-identity'),
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-password',
+                    'X-Admin-2FA-Session': 'tfa-wizard-token',
+                }),
+            })
+        );
+
+        // Step 2 -> Step 3
+        const checkbox = screen.getByRole('checkbox');
+        await act(async () => {
+            fireEvent.click(checkbox);
+        });
+        const nextStep2Button = screen.getByRole('button', { name: /Next: Create First Enterprise/i });
+        await act(async () => {
+            fireEvent.click(nextStep2Button);
+        });
+
+        // Step 3: Create Enterprise
+        const nextStep3Button = screen.getByRole('button', { name: /Next: Seed the Commons/i });
+        await act(async () => {
+            fireEvent.click(nextStep3Button);
+        });
+
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
+            mockProfile.url,
+            expect.any(Object),
+            mockProfile.adminPassword,
+            'tfa-wizard-token'
+        );
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_first',
+            expect.any(String),
+            mockProfile.adminPassword,
+            'tfa-wizard-token'
+        );
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_first',
+            expect.any(Object),
+            mockProfile.adminPassword,
+            'tfa-wizard-token'
+        );
+
+        // Step 4 -> Step 5
+        const nextStep4Button = screen.getByRole('button', { name: /Next: Founding Invites/i });
+        await act(async () => {
+            fireEvent.click(nextStep4Button);
+        });
+
+        // Step 5: Founding Invites
+        const genInvitesButton = screen.getByRole('button', { name: /Generate 3 Founding Invites/i });
+        await act(async () => {
+            fireEvent.click(genInvitesButton);
+        });
+
+        expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
+            mockProfile.url,
+            mockProfile.adminPassword,
+            'trusted',
+            'tfa-wizard-token'
+        );
+    });
+
+    it('re-runs enrollTotp and forwards updated effectiveTfaToken to 2fa setup endpoint', async () => {
+        const { rerender } = render(
+            <ColdStartWizard
+                activeNode={mockProfile}
+                diag={mockDiag}
+                nodeData={{ members: [] }}
+                tfaToken="tfa-initial"
+                onComplete={vi.fn()}
+            />
+        );
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/2fa/setup'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-password',
+                    'X-Admin-2FA-Session': 'tfa-initial',
+                }),
+            })
+        );
+
+        await act(async () => {
+            rerender(
+                <ColdStartWizard
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    nodeData={{ members: [] }}
+                    tfaToken="tfa-updated"
+                    onComplete={vi.fn()}
+                />
+            );
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/2fa/setup'),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'X-Admin-Password': 'admin-password',
+                    'X-Admin-2FA-Session': 'tfa-updated',
+                }),
+            })
+        );
+    });
 });
+

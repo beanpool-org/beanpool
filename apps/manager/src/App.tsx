@@ -914,6 +914,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             activeNode={activeNode}
                                             diag={diag}
                                             nodeData={nodeData}
+                                            tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                             onComplete={() => {
                                                 setShowColdStart(false);
                                                 loadNodeData();
@@ -924,7 +925,6 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                         />
                                     );
                                 }
-
                                 return (
                                     <HomeScreen
                                         communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
@@ -1003,6 +1003,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                 <EconomySection
                                     activeNode={activeNode}
                                     nodeData={nodeData}
+                                    tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                     onRefresh={() => {
                                         loadNodeData();
                                         loadDiagnostics();
@@ -1091,6 +1092,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                     nodeDataLoading={nodeDataLoading}
                                     activeNodeUrl={activeNode?.url}
                                     adminPassword={activeNode?.adminPassword}
+                                    tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                     onRefresh={() => loadNodeData()}
                                     onFreezeUser={async (pubkey, freeze) => {
                                         if (activeNode) {

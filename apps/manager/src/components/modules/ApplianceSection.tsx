@@ -16,6 +16,7 @@ import {
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
+import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -898,6 +899,14 @@ export function ApplianceSection({
                             </div>
                         )}
                     </div>
+
+                    {/* Standby Live Backup / Replication Configuration & Resync */}
+                    <SectionErrorBoundary sectionName="Standby Live Backup" resetKey={activeNode.id}>
+                        <StandbyReplicationPanel
+                            activeNode={activeNode}
+                            onRefreshDiag={onRefreshDiag}
+                        />
+                    </SectionErrorBoundary>
                 </div>
             )}
 

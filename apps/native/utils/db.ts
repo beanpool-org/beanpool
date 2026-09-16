@@ -254,8 +254,41 @@ async function _doInitDB() {
             author_energy_cycled INTEGER DEFAULT 0,
             author_founding_needed INTEGER DEFAULT 1,
             poll_options TEXT,
-            poll_closes_at DATETIME
+            poll_closes_at DATETIME,
+            audience_scope TEXT DEFAULT 'public',
+            target_group_id TEXT,
+            target_pubkey TEXT,
+            assigned_to TEXT,
+            target_archetypes TEXT
         );
+
+        -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
+        -- A group is an audience scope and NOTHING else. Roles: convenor | member | observer.
+        CREATE TABLE IF NOT EXISTS groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            description TEXT,
+            avatar_url TEXT,
+            category TEXT DEFAULT 'general',
+            created_by TEXT NOT NULL,
+            join_policy TEXT DEFAULT 'open',
+            is_official INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id TEXT NOT NULL,
+            member_pubkey TEXT NOT NULL,
+            role TEXT DEFAULT 'member',
+            status TEXT DEFAULT 'active',
+            joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            invited_by TEXT,
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (group_id, member_pubkey)
+        );
+        CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
 
         CREATE TABLE IF NOT EXISTS poll_votes (
             post_id TEXT NOT NULL,
@@ -411,6 +444,13 @@ async function _doInitDB() {
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
 
+        // Add audience scoping columns to posts table
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
+
         // Add price_type column if not exists
         try {
             await database.execAsync(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed';`);
@@ -542,7 +582,7 @@ export async function clearDB() {
 /**
  * PWA Fetch Equivalents executed cleanly across the Local Disk
  */
-export async function getPosts(filter?: { type?: string; category?: string }) {
+export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string }) {
     let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
@@ -559,6 +599,14 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     if (filter?.category) {
         query += ' AND p.category = ?';
         params.push(filter.category);
+    }
+    if (filter?.targetGroupId) {
+        query += ' AND p.target_group_id = ?';
+        params.push(filter.targetGroupId);
+    }
+    if (filter?.audienceScope) {
+        query += ' AND p.audience_scope = ?';
+        params.push(filter.audienceScope);
     }
     query += ' ORDER BY p.created_at DESC';
     
@@ -606,6 +654,11 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     return rows.map(r => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        r.audienceScope = r.audience_scope || 'public';
+        r.targetGroupId = r.target_group_id || null;
+        r.targetPubkey = r.target_pubkey || null;
+        r.assignedTo = r.assigned_to || null;
+        r.targetArchetypes = r.target_archetypes || null;
 
         if (r.type === 'poll') {
             if (typeof r.poll_options === 'string') {
@@ -1517,7 +1570,12 @@ export async function createPost(post: any) {
         ...(post.type === 'poll' ? {
             pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
             durationDays: post.durationDays || 7
-        } : {})
+        } : {}),
+        ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
+        ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
+        ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(post.targetArchetypes || post.target_archetypes ? { targetArchetypes: post.targetArchetypes || post.target_archetypes } : {})
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
@@ -1573,14 +1631,16 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
          post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
          post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
-         post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null)]
+         post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null),
+         post.audienceScope || post.audience_scope || 'public',
+         post.targetGroupId || post.target_group_id || null]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }
@@ -4449,5 +4509,227 @@ export async function getDatabaseStats() {
         messages: msgCount,
         integrity
     };
+}
+
+// ===================== GROUPS & AUDIENCE SCOPING =====================
+// Docs: docs/the-commons.md §9 (Item 10)
+// Hard rules: roles are convenor / member / observer. Never "steward", never "admin".
+// A group is an audience scope and NOTHING else.
+
+export type GroupRole = 'convenor' | 'member' | 'observer';
+export type JoinPolicy = 'open' | 'request_to_join' | 'invite_only';
+export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+
+export interface GroupItem {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    avatarUrl: string | null;
+    category: GroupCategory;
+    createdBy: string;
+    joinPolicy: JoinPolicy;
+    createdAt: string;
+    updatedAt: string;
+    memberCount?: number;
+    viewerRole?: GroupRole | null;
+    viewerStatus?: GroupMemberStatus | null;
+    convenorPubkey?: string;
+    convenorCallsign?: string;
+    convenorAvatarUrl?: string | null;
+}
+
+export interface GroupMemberItem {
+    groupId: string;
+    memberPubkey: string;
+    callsign?: string;
+    avatarUrl?: string | null;
+    role: GroupRole;
+    status: GroupMemberStatus;
+    joinedAt: string;
+    invitedBy: string | null;
+    updatedAt?: string;
+}
+
+/** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
+
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+
+    const bodyString = payload !== undefined ? JSON.stringify(payload) : '';
+    const signPath = endpoint.split('?')[0];
+    const headers = await buildSignedHeaders(method, signPath, bodyString, identity.privateKey, identity.publicKey);
+
+    const res = await fetch(`${anchorUrl}${endpoint}`, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...headers
+        },
+        body: payload !== undefined ? bodyString : undefined,
+    });
+
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.message || `Request failed: ${res.status}`);
+    }
+    return await res.json();
+}
+
+export async function fetchGroups(filter?: { category?: string; memberPubkey?: string; search?: string }): Promise<GroupItem[]> {
+    const params = new URLSearchParams();
+    if (filter?.category) params.set('category', filter.category);
+    if (filter?.memberPubkey) params.set('member', filter.memberPubkey);
+    if (filter?.search) params.set('q', filter.search);
+
+    try {
+        const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                // Update local cache
+                const database = await getDb();
+                for (const g of data) {
+                    await database.runAsync(`
+                        INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            name = excluded.name,
+                            slug = excluded.slug,
+                            description = excluded.description,
+                            avatar_url = excluded.avatar_url,
+                            category = excluded.category,
+                            join_policy = excluded.join_policy,
+                            updated_at = excluded.updated_at
+                    `, [
+                        g.id, g.name, g.slug, g.description || null, g.avatarUrl || null,
+                        g.category || 'general', g.createdBy, g.joinPolicy || 'open',
+                        g.createdAt, g.updatedAt || g.createdAt
+                    ]);
+                }
+                return data;
+            }
+        }
+    } catch (e) {
+        console.warn('[Groups] Remote fetch failed, falling back to local DB:', e);
+    }
+
+    // Local fallback
+    const database = await getDb();
+    let query = `
+        SELECT g.*,
+            (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as memberCount,
+            (SELECT gm2.role FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.member_pubkey = ?) as viewerRole,
+            (SELECT gm3.status FROM group_members gm3 WHERE gm3.group_id = g.id AND gm3.member_pubkey = ?) as viewerStatus
+        FROM groups g
+        WHERE 1=1
+    `;
+    const identity = await loadIdentity();
+    const myPubkey = identity?.publicKey || filter?.memberPubkey || '';
+    const queryParams: any[] = [myPubkey, myPubkey];
+    if (filter?.category) {
+        query += ' AND g.category = ?';
+        queryParams.push(filter.category);
+    }
+    if (filter?.search) {
+        query += ' AND (g.name LIKE ? OR g.description LIKE ?)';
+        queryParams.push(`%${filter.search}%`, `%${filter.search}%`);
+    }
+    query += ' ORDER BY g.updated_at DESC';
+
+    const rows = await database.getAllAsync<any>(query, queryParams);
+    return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        description: r.description,
+        avatarUrl: r.avatar_url,
+        category: r.category,
+        createdBy: r.created_by,
+        joinPolicy: r.join_policy,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        memberCount: r.memberCount || 0,
+        viewerRole: r.viewerRole || null,
+        viewerStatus: r.viewerStatus || null,
+    }));
+}
+
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] } | null> {
+    try {
+        const [groupRes, membersRes] = await Promise.all([
+            signedGet(`/api/groups/${encodeURIComponent(id)}`),
+            signedGet(`/api/groups/${encodeURIComponent(id)}/members`)
+        ]);
+        if (groupRes.ok) {
+            const group = await groupRes.json();
+            const members = membersRes.ok ? await membersRes.json() : [];
+            return { group, members: Array.isArray(members) ? members : [] };
+        }
+    } catch (e) {
+        console.warn('[Groups] Failed to fetch group detail:', e);
+    }
+    return null;
+}
+
+export async function createGroupApi(groupData: {
+    name: string;
+    slug?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: string;
+    joinPolicy?: JoinPolicy;
+}): Promise<GroupItem> {
+    return signedRequestWithMethod('POST', '/api/groups', groupData);
+}
+
+export async function joinGroupApi(groupId: string): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+}
+
+export async function approveGroupMemberApi(groupId: string, memberPubkey: string): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        action: 'approve'
+    });
+}
+
+export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        role,
+        action: 'invite'
+    });
+}
+
+export async function setGroupMemberRoleApi(groupId: string, memberPubkey: string, role: GroupRole): Promise<any> {
+    return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`, {
+        role
+    });
+}
+
+export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+    return Boolean(res?.success);
+}
+
+export async function updateGroupApi(groupId: string, data: {
+    name?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: string;
+    joinPolicy?: JoinPolicy;
+}): Promise<{ success: boolean; group: GroupItem }> {
+    return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}`, data);
+}
+
+export async function deleteGroupPostApi(groupId: string, postId: string): Promise<boolean> {
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
+    return Boolean(res?.success);
 }
 

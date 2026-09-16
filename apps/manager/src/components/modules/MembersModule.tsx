@@ -1010,6 +1010,17 @@ export function MembersModule({
                     nodeRole={selectedMember.nodeRole}
                     members={members}
                     accounts={nodeData?.accounts}
+                    nodeUrl={activeNodeUrl}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    onRekeySuccess={() => {
+                        setSelectedMember(null);
+                        onRefresh?.();
+                    }}
+                    onOffboardSuccess={() => {
+                        setSelectedMember(null);
+                        onRefresh?.();
+                    }}
                     onPrune={(pk) => handlePruneMember(pk)}
                     onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}

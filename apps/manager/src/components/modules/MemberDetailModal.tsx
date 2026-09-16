@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getMemberDisplayName, getMemberAvatar, getMemberRawAvatar, fmtDate, fmtLastActive } from './MembersModule';
 import { PruneBranchModal } from './PruneBranchModal';
 import { Avatar } from '../common/Avatar';
+import { RekeyMemberWizard } from './RekeyMemberWizard';
+import { OffboardMemberWizard } from './OffboardMemberWizard';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
@@ -45,6 +47,12 @@ interface MemberDetailModalProps {
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onPrune?: (pubkey: string) => void;
     onPruneBranch?: (pubkey: string) => Promise<void>;
+    nodeUrl?: string;
+    adminPassword?: string;
+    tfaToken?: string;
+    currentAdminPubkey?: string;
+    onRekeySuccess?: (newPubkey: string) => void;
+    onOffboardSuccess?: () => void;
     onClose: () => void;
 }
 
@@ -65,12 +73,20 @@ export function MemberDetailModal({
     onRevokeNodeRole,
     onPrune,
     onPruneBranch,
+    nodeUrl,
+    adminPassword,
+    tfaToken,
+    currentAdminPubkey,
+    onRekeySuccess,
+    onOffboardSuccess,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
     const [revokedVouch, setRevokedVouch] = useState(false);
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
     const [showPruneBranch, setShowPruneBranch] = useState(false);
+    const [showRekeyWizard, setShowRekeyWizard] = useState(false);
+    const [showOffboardWizard, setShowOffboardWizard] = useState(false);
     const [roleLoading, setRoleLoading] = useState(false);
     const [roleError, setRoleError] = useState<string | null>(null);
     const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
@@ -486,10 +502,31 @@ export function MemberDetailModal({
                                 <span>{isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>
                             </button>
 
+                            <button
+                                disabled={isFrozen}
+                                onClick={() => setShowRekeyWizard(true)}
+                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                    isFrozen
+                                        ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
+                                        : 'bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-800/80'
+                                }`}
+                                title="Re-key member to a new device key after in-person verification (Lost Phone)"
+                            >
+                                <span>🔑 Re-Key</span>
+                            </button>
+
+                            <button
+                                onClick={() => setShowOffboardWizard(true)}
+                                className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800 text-[11px]"
+                                title="Offboard member: donate/gift surplus or formally write off debt before pruning"
+                            >
+                                <span>🚪 Offboard</span>
+                            </button>
+
                             {onPrune && (
                                 <button
                                     onClick={() => setShowPruneConfirm(true)}
-                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-red-950/80 hover:bg-red-900 text-red-300 border-red-800 text-[11px]"
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-nature-900 hover:bg-nature-800 text-nature-300 border-nature-700 text-[11px]"
                                 >
                                     <span>🗑️ Prune Account</span>
                                 </button>
@@ -520,6 +557,45 @@ export function MemberDetailModal({
                         onClose();
                     }}
                     onClose={() => setShowPruneBranch(false)}
+                />
+            )}
+
+            {showRekeyWizard && (
+                <RekeyMemberWizard
+                    member={{
+                        publicKey: pubkey,
+                        callsign: member?.callsign ? String(member.callsign) : displayName,
+                        status: member?.status ? String(member.status) : undefined,
+                        avatarUrl: member?.avatarUrl ? String(member.avatarUrl) : undefined,
+                    }}
+                    nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    onSuccess={(newPk) => {
+                        onRekeySuccess?.(newPk);
+                    }}
+                    onClose={() => setShowRekeyWizard(false)}
+                />
+            )}
+
+            {showOffboardWizard && (
+                <OffboardMemberWizard
+                    member={{
+                        publicKey: pubkey,
+                        callsign: member?.callsign ? String(member.callsign) : displayName,
+                        status: member?.status ? String(member.status) : undefined,
+                        avatarUrl: member?.avatarUrl ? String(member.avatarUrl) : undefined,
+                    }}
+                    nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    currentAdminPubkey={currentAdminPubkey}
+                    onSuccess={() => {
+                        setShowOffboardWizard(false);
+                        onOffboardSuccess?.();
+                        onClose();
+                    }}
+                    onClose={() => setShowOffboardWizard(false)}
                 />
             )}
         </div>

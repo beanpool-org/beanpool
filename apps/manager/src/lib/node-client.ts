@@ -586,6 +586,26 @@ export async function pruneNodeUser(
     return res.json();
 }
 
+export async function pruneInviteBranch(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey)}/prune`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,

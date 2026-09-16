@@ -89,6 +89,7 @@ interface MembersModuleProps {
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
@@ -186,6 +187,7 @@ export function MembersModule({
     onRefresh,
     onFreezeUser,
     onPruneUser,
+    onPruneBranch,
     onUpdateTier,
     onToggleVoucher,
     onToggleOperator,
@@ -991,7 +993,9 @@ export function MembersModule({
                     onGrantNodeRole={onGrantNodeRole}
                     onRevokeNodeRole={onRevokeNodeRole}
                     nodeRole={selectedMember.nodeRole}
+                    members={members}
                     onPrune={(pk) => handlePruneMember(pk)}
+                    onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}
                 />
             )}

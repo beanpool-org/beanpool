@@ -4,7 +4,7 @@ import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch } from '../../lib/node-client';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -13,6 +13,7 @@ interface PeopleSafetySectionProps {
     onRefresh: () => void;
     onFreezeUser: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
@@ -28,6 +29,7 @@ export function PeopleSafetySection({
     onRefresh,
     onFreezeUser,
     onPruneUser,
+    onPruneBranch,
     onUpdateTier,
     onToggleVoucher,
     onToggleOperator,
@@ -38,6 +40,11 @@ export function PeopleSafetySection({
     const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation'>(initialSubTab);
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
+
+    const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
+        await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+        onRefresh();
+    });
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
 
@@ -146,6 +153,7 @@ export function PeopleSafetySection({
                     onRefresh={onRefresh}
                     onFreezeUser={onFreezeUser}
                     onPruneUser={onPruneUser}
+                    onPruneBranch={handlePruneBranch}
                     onUpdateTier={onUpdateTier}
                     onToggleVoucher={onToggleVoucher}
                     onToggleOperator={onToggleOperator}

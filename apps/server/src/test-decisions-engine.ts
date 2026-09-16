@@ -494,6 +494,7 @@ async function runDecisionsSuite() {
     const disabledMember = 'disabled_member_' + Date.now();
     seedTestMember(disabledMember, 'DisabledDave');
     db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
 
     const decOpenRemoval = createDecision({
         authorPubkey: admin,
@@ -505,6 +506,8 @@ async function runDecisionsSuite() {
         closesAt: new Date(Date.now() + 100000).toISOString(),
     });
     testAssert(decOpenRemoval.status === 'open', 'Decision is open');
+    testAssert(decOpenRemoval.params?.debt === 75, 'Canonical debt of 75 beans populated on removal decision from accounts ledger');
+    testAssert(decOpenRemoval.params?.memberName === 'DisabledDave', 'Member callsign populated in params.memberName');
     const haltOpenRes = adminHaltDecision(decOpenRemoval.id, admin, 'Halted while open; member remains disabled');
     testAssert(haltOpenRes.success, 'Halted open decision');
     const disabledMemberCheck = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(disabledMember) as any;

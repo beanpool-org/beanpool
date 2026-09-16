@@ -120,7 +120,7 @@ export function ProjectsPage({ identity, onOpenTreasury }: Props) {
                 profs[m.publicKey] = { callsign: m.callsign };
             });
             setProfiles(profs);
-            setAllMembersList((members as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign })));
+            setAllMembersList((members as any[]).map((m: any) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: m.balance })));
         } catch (err: any) {
             setError(err.message || 'Failed to fetch projects');
         } finally {

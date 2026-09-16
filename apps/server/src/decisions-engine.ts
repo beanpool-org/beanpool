@@ -357,7 +357,26 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     const now = new Date();
     const opensAt = now.toISOString();
     const closesAt = opts.closesAt || new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const serializedParams = opts.params !== undefined ? JSON.stringify(opts.params) : null;
+
+    let params = opts.params !== undefined && opts.params !== null ? { ...opts.params } : {};
+    if (opts.effect === 'remove_member' && opts.subject) {
+        const acc = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(opts.subject) as { balance: number } | undefined;
+        const memberRow = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(opts.subject) as { callsign: string } | undefined;
+        const targetBal = acc?.balance ?? 0;
+        const debt = Math.abs(targetBal < 0 ? targetBal : 0);
+        const commonsBal = typeof getCommonsBalanceExact === 'function' ? Math.round(getCommonsBalanceExact()) : 0;
+        params = {
+            ...params,
+            memberName: params.memberName || memberRow?.callsign || opts.subject.slice(0, 8),
+            debt,
+            commonsPool: commonsBal,
+            balance: targetBal,
+        };
+    }
+
+    const serializedParams = (opts.params !== undefined && opts.params !== null) || Object.keys(params).length > 0
+        ? JSON.stringify(params)
+        : null;
 
     db.prepare(`
         INSERT INTO decisions (

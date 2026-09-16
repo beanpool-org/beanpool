@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
     createDecision,
+    getBalance,
     type DecisionTouch,
     type DecisionEffect,
 } from '../lib/api';
@@ -91,14 +92,43 @@ export function ProposeDecisionModal({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
+    const [fetchedBalance, setFetchedBalance] = useState<number | null>(null);
+
     // Lookup selected member details for removal preview
     const selectedMember = useMemo(() => {
         if (!subject) return null;
         return members.find(m => m.publicKey === subject || m.callsign?.toLowerCase() === subject.toLowerCase());
     }, [members, subject]);
 
+    useEffect(() => {
+        if (effect !== 'remove_member' || !subject) {
+            setFetchedBalance(null);
+            return;
+        }
+        const targetPubkey = selectedMember ? selectedMember.publicKey : (subject.trim().length >= 32 ? subject.trim() : null);
+        if (!targetPubkey) {
+            setFetchedBalance(null);
+            return;
+        }
+        if (selectedMember && typeof selectedMember.balance === 'number') {
+            setFetchedBalance(null);
+            return;
+        }
+        let cancelled = false;
+        getBalance(targetPubkey)
+            .then(bal => {
+                if (!cancelled && bal && typeof bal.balance === 'number') {
+                    setFetchedBalance(bal.balance);
+                }
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [effect, subject, selectedMember]);
+
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? 0;
+    const targetBalance = selectedMember?.balance ?? fetchedBalance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
     const poolAmount = Math.round(commonsBalance || 0);
 

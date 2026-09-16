@@ -743,6 +743,47 @@ async function main(): Promise<void> {
     assert(resProxy.body.equals(sampleJpeg), 'Proxy serves matching bytes from ingest cache');
     assert(ingestFetchCount === 1, 'Zero additional upstream fetches occurred when proxy served ingested thumbnail');
 
+    // Ingest recovery SSRF defense: SSRF error during recovery at ingest is caught and logged
+    const ingestSsrfItemId = makePulseItem(chan, alice, {
+        platform: 'instagram',
+        url: 'https://www.instagram.com/p/INGEST_SSRF/',
+        externalId: 'INGEST_SSRF',
+        thumbnailUrl: 'https://images.example.org/ingest-403.jpg',
+    });
+    const ingestSsrfService = new PulseThumbnailService({
+        fetchFn: (async (url: string) => {
+            if (url.includes('ingest-403.jpg')) {
+                return {
+                    status: 403,
+                    statusText: 'Forbidden',
+                    headers: { 'content-type': 'text/plain' },
+                    url,
+                    buffer: async () => Buffer.from('Forbidden'),
+                    text: async () => 'Forbidden',
+                    json: async () => ({}),
+                };
+            }
+            if (url.includes('INGEST_SSRF/embed/')) {
+                throw new SsrfSecurityError('SSRF_BLOCKED: Prohibited address');
+            }
+            return {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'image/jpeg' },
+                url,
+                buffer: async () => sampleJpeg,
+                text: async () => sampleJpeg.toString(),
+                json: async () => ({}),
+            };
+        }) as any,
+    });
+    const ssrfIngestRes = await ingestSsrfService.ingestThumbnail(
+        ingestSsrfItemId,
+        'https://images.example.org/ingest-403.jpg'
+    );
+    assert(ssrfIngestRes.status === 400, 'Ingest recovery SSRF rejection returns status 400');
+    assert(Boolean(ssrfIngestRes.error?.includes('SSRF_BLOCKED')), 'Ingest recovery SSRF error message preserved');
+
     // ──────────────────────────────────────────────────────────────────────────
     // Tombstones beat the cache: an erased item must stop being served
     // ──────────────────────────────────────────────────────────────────────────

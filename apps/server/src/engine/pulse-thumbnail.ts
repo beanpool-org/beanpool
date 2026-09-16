@@ -909,7 +909,12 @@ export class PulseThumbnailService {
                             const recovered = await this.attemptThumbnailRecovery(itemId, row);
                             if (recovered && recovered.status === 200) return recovered;
                         }
-                    } catch {}
+                    } catch (recoveryErr: any) {
+                        if (recoveryErr instanceof SsrfSecurityError) {
+                            logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address at ingest for item ${itemId}: ${recoveryErr.message}`);
+                            return { status: 400, error: recoveryErr.message };
+                        }
+                    }
                 }
                 const status = (res.status >= 400 && res.status < 500) ? res.status : 502;
                 const error = `Upstream refused: HTTP ${res.status}`;

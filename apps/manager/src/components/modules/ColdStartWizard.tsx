@@ -653,7 +653,7 @@ TOTP Secret:    ${totpSecret}
                                 >
                                     <Avatar
                                         src={p.avatar}
-                                        alt={p.title}
+                                        alt=""
                                         className="w-8 h-8 rounded flex items-center justify-center text-2xl mb-2 overflow-hidden shrink-0"
                                         fallbackGlyph="🌾"
                                     />
@@ -680,7 +680,7 @@ TOTP Secret:    ${totpSecret}
                                         value={enterpriseAvatar}
                                         onChange={(e) => setEnterpriseAvatar(e.target.value)}
                                         placeholder="🌾"
-                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white"
+                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white focus:outline-none focus:border-terra-500"
                                     />
                                 </div>
                             </div>

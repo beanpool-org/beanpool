@@ -826,7 +826,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                         <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-terra-300">
                                             <Avatar
                                                 src={p.avatar}
-                                                alt={p.name}
+                                                alt=""
                                                 className="w-5 h-5 rounded flex items-center justify-center text-xs overflow-hidden shrink-0"
                                                 fallbackGlyph="🌾"
                                             />

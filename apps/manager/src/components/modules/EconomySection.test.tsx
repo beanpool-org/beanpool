@@ -632,7 +632,7 @@ describe('EconomySection Component', () => {
             });
 
             expect(screen.getByText('🛠️')).toBeInTheDocument();
-            expect(screen.queryByRole('img', { name: 'Tool Shed' })).not.toBeInTheDocument();
+            expect(screen.getByRole('img', { name: 'Tool Shed' })).toBeInTheDocument();
         });
 
         it('renders fallback glyph for an empty avatar', async () => {
@@ -659,7 +659,7 @@ describe('EconomySection Component', () => {
             });
 
             expect(screen.getByText('🌾')).toBeInTheDocument();
-            expect(screen.queryByRole('img', { name: 'No Avatar Co-op' })).not.toBeInTheDocument();
+            expect(screen.getByRole('img', { name: 'No Avatar Co-op' })).toBeInTheDocument();
         });
 
         it('does not render raw URL string when image fails to load and falls back to glyph', async () => {
@@ -695,7 +695,7 @@ describe('EconomySection Component', () => {
             });
 
             expect(screen.getByText('🌾')).toBeInTheDocument();
-            expect(screen.queryByRole('img', { name: 'Broken Image Co-op' })).not.toBeInTheDocument();
+            expect(screen.getByRole('img', { name: 'Broken Image Co-op' })).toBeInTheDocument();
             expect(screen.queryByText(brokenUrl)).not.toBeInTheDocument();
         });
     });

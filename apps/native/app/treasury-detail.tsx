@@ -254,7 +254,7 @@ export default function TreasuryDetailScreen() {
                             )}
                             <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
                                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.subtitle}>Community treasury · run by the Commons</Text>
+                                <Text style={styles.subtitle}>Community enterprise · run by the Commons</Text>
                             </View>
                         </View>
 

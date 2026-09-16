@@ -1310,16 +1310,13 @@ export default function WelcomeScreen() {
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
                             <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                Right now your 12 words are the only way back into your account. No
-                                email, no password reset — nobody, including your hub, can restore it
-                                for you.
+                                Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
                             </Text>
                             <Text style={guideStyles.bulletItem}>
                                 📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
                             </Text>
                             <Text style={guideStyles.bulletItem}>
-                                🤝 Soon you'll be able to share the job with your hub and the person who
-                                invited you, so losing your phone stops being a problem you carry alone.
+                                🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
                             </Text>
                         </View>
 
@@ -1630,7 +1627,7 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing may permanently lose access to {outCallsign}.
+                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing without them will require operator-assisted recovery to regain access to {outCallsign}.
                                     </Text>
                                 </View>
                             )}

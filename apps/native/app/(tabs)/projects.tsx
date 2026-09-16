@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getProjects, getBalance, getActiveVotingRound, getTreasuries, getDecisions, type DecisionWithTally } from '../../utils/db';
+import { getProjects, getBalance, getActiveVotingRound, getTreasuries, getDecisions, getAllCommunityMembers, type DecisionWithTally } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -26,6 +26,7 @@ export default function ProjectsScreen() {
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>('decide');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    const [members, setMembers] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
 
@@ -197,6 +198,8 @@ export default function ProjectsScreen() {
         } catch (err) {
             console.error('[Projects] Failed loading decisions:', err);
         }
+
+        getAllCommunityMembers().then(setMembers).catch(() => {});
     }, []);
 
     const canProposeDecision = (balanceState.earnedCredit || 0) > 0;
@@ -685,6 +688,7 @@ export default function ProjectsScreen() {
                 identity={identity}
                 commonsBalance={balanceState.commons || 0}
                 treasuries={treasuries}
+                members={members}
             />
         </View>
     );

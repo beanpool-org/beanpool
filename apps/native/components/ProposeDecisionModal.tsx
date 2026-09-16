@@ -103,14 +103,16 @@ export function ProposeDecisionModal({
     }, [members, subject]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? -180;
+    const targetBalance = selectedMember?.balance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance || 240);
+    const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
     // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+    const debtWriteOffLine = debtAmount > 0
+        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -324,13 +326,14 @@ export function ProposeDecisionModal({
 
         setSubmitting(true);
         try {
+            const resolvedSubject = selectedMember ? selectedMember.publicKey : (subject.trim() || null);
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
                 description: description.trim(),
                 touches,
                 effect,
-                subject: subject.trim() || null,
+                subject: resolvedSubject,
                 params,
             });
 

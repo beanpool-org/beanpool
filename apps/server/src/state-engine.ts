@@ -2885,7 +2885,15 @@ export function adminBulkDeletePosts(postIds: string[]): number {
     return adminBulkDeletePostsEngine(broadcast, postIds, transfer);
 }
 
-export function getPostCount(filter?: { type?: string; category?: string; status?: string; query?: string }): number {
+export function getPostCount(filter?: {
+    type?: string;
+    category?: string;
+    status?: string;
+    query?: string;
+    audienceScope?: AudienceScope | string;
+    viewerPubkey?: string;
+    targetGroupId?: string;
+}): number {
     return getPostCountEngine(db, filter);
 }
 

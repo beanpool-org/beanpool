@@ -98,14 +98,16 @@ export function ProposeDecisionModal({
     }, [members, subject]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
-    const targetBalance = selectedMember?.balance ?? -180;
+    const targetBalance = selectedMember?.balance ?? 0;
     const debtAmount = Math.abs(targetBalance < 0 ? targetBalance : 0);
-    const poolAmount = Math.round(commonsBalance || 240);
+    const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8 verbatim line:
     // "<name>'s balance is −N beans. Removing them charges that N to the Commons pool, which currently holds M."
     // Note: Unicode \u2212 minus sign
-    const debtWriteOffLine = `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`;
+    const debtWriteOffLine = debtAmount > 0
+        ? `${targetName}'s balance is \u2212${debtAmount} beans. Removing them charges that ${debtAmount} to the Commons pool, which currently holds ${poolAmount}.`
+        : `${targetName} has no outstanding debt (balance: ${targetBalance} beans). Removing them incurs no write-off charge against the Commons pool (balance: ${poolAmount}).`;
 
     if (!isOpen) return null;
 
@@ -146,13 +148,14 @@ export function ProposeDecisionModal({
         setSubmitting(true);
         setError(null);
         try {
+            const resolvedSubject = selectedMember ? selectedMember.publicKey : (subject.trim() || null);
             const res = await createDecision({
                 authorPubkey: identity.publicKey,
                 title: title.trim(),
                 description: description.trim(),
                 touches,
                 effect,
-                subject: subject.trim() || null,
+                subject: resolvedSubject,
                 params,
             });
 
@@ -265,16 +268,20 @@ export function ProposeDecisionModal({
                         <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-2">
                             Specific Action / Effect
                         </label>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1" role="radiogroup" aria-label="Specific Action or Effect">
                             {EFFECTS_BY_TOUCH[touches].map(eff => (
-                                <div
+                                <button
+                                    type="button"
                                     key={eff.id}
-                                    onClick={() => setEffect(eff.id)}
-                                    className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                                    role="radio"
+                                    aria-checked={effect === eff.id}
+                                    onClick={() => !submitting && setEffect(eff.id)}
+                                    disabled={submitting}
+                                    className={`w-full text-left p-2.5 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                                         effect === eff.id
                                             ? 'bg-emerald-500/15 border-emerald-500'
                                             : 'bg-nature-800/40 border-nature-700 hover:border-nature-600'
-                                    }`}
+                                    } ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                     <div className={`text-sm font-semibold ${effect === eff.id ? 'text-emerald-300' : 'text-white'}`}>
                                         {eff.label}
@@ -282,7 +289,7 @@ export function ProposeDecisionModal({
                                     <div className="text-xs text-nature-400 leading-tight mt-0.5">
                                         {eff.desc}
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     </div>

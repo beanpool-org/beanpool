@@ -141,7 +141,7 @@ async function main() {
     disputes = getEscrowDisputes(7);
     const foundDispute = disputes.find(d => d.id === tx1.id);
     assert(Boolean(foundDispute), 'Aged transaction (>7 days) appears in getEscrowDisputes(7)');
-    assert(foundDispute?.daysStuck! >= 9, 'Dispute calculates daysStuck >= 9');
+    assert((foundDispute?.daysStuck ?? 0) >= 9, 'Dispute calculates daysStuck >= 9');
     assert(foundDispute?.isStalled === true, 'Dispute marked as isStalled');
     assert(foundDispute?.buyerPubkey === alice, 'Dispute records buyerPubkey');
     assert(foundDispute?.sellerPubkey === bob, 'Dispute records sellerPubkey');

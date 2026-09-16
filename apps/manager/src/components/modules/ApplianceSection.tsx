@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotScheduleConfig, BackupVerificationResult } from '../../lib/node-client';
+import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotScheduleConfig, BackupVerificationResult, DiskHealth, StorageCleanPreview, StorageCleanResult } from '../../lib/node-client';
 import {
     fetchNodeSnapshots,
     createNodeSnapshot,
@@ -12,6 +12,9 @@ import {
     buildAdminHeaders,
     getTfaSessionToken,
     setTfaSessionToken,
+    fetchDiskHealth,
+    fetchStorageCleanPreview,
+    cleanStorageAndCompressLogs,
 } from '../../lib/node-client';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
 import { PublicAddressPanel } from './PublicAddressPanel';
@@ -130,6 +133,81 @@ export function ApplianceSection({
     const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
     const [checkingUpdate, setCheckingUpdate] = useState(false);
 
+    // Disk Health & Clean Storage state
+    const [diskHealth, setDiskHealth] = useState<DiskHealth | null>(diag?.diskHealth || null);
+    const [showCleanModal, setShowCleanModal] = useState(false);
+    const [cleanPreview, setCleanPreview] = useState<StorageCleanPreview | null>(null);
+    const [loadingPreview, setLoadingPreview] = useState(false);
+    const [cleaningStorage, setCleaningStorage] = useState(false);
+    const [cleanResult, setCleanResult] = useState<StorageCleanResult | null>(null);
+    const [cleanError, setCleanError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (diag?.diskHealth) {
+            setDiskHealth(diag.diskHealth);
+        }
+    }, [diag?.diskHealth]);
+
+    const formatBytes = (bytes?: number): string => {
+        if (!bytes || bytes <= 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+    };
+
+    const loadDiskHealth = async () => {
+        try {
+            const res = await fetchDiskHealth(
+                activeNode.url,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            if (res?.diskHealth) {
+                setDiskHealth(res.diskHealth);
+            }
+        } catch {}
+    };
+
+    const handleOpenCleanModal = async () => {
+        setShowCleanModal(true);
+        setLoadingPreview(true);
+        setCleanPreview(null);
+        setCleanResult(null);
+        setCleanError(null);
+        try {
+            const res = await fetchStorageCleanPreview(
+                activeNode.url,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            setCleanPreview(res.preview);
+        } catch (e: unknown) {
+            setCleanError(e instanceof Error ? e.message : 'Failed to load storage clean preview');
+        } finally {
+            setLoadingPreview(false);
+        }
+    };
+
+    const handleExecuteClean = async () => {
+        setCleaningStorage(true);
+        setCleanError(null);
+        try {
+            const res = await cleanStorageAndCompressLogs(
+                activeNode.url,
+                activeNode.adminPassword,
+                getTfaSessionToken(activeNode.id)
+            );
+            setCleanResult(res);
+            onRefreshDiag();
+            await loadDiskHealth();
+        } catch (e: unknown) {
+            setCleanError(e instanceof Error ? e.message : 'Failed to clean storage');
+        } finally {
+            setCleaningStorage(false);
+        }
+    };
+
     const loadSnapshots = async () => {
         setLoadingSnapshots(true);
         try {
@@ -179,6 +257,7 @@ export function ApplianceSection({
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
+        loadDiskHealth();
     }, [activeNode?.id, activeNode?.url]);
 
     const handleCreateSnapshot = async () => {
@@ -451,6 +530,8 @@ export function ApplianceSection({
         ? new Date(latestSnapshot.createdAt).toLocaleString()
         : 'No backup recorded';
 
+    const effectiveDiskHealth = diskHealth || diag?.diskHealth || null;
+
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
@@ -623,6 +704,145 @@ export function ApplianceSection({
                                 {diag?.activeWsConnections ?? 0}
                             </div>
                         </div>
+                    </div>
+
+                    {/* Disk Health & Storage Breakdown Card */}
+                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-nature-800 pb-4">
+                            <div>
+                                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                    <span>💾</span>
+                                    <span>Disk Health &amp; Storage Breakdown</span>
+                                </h3>
+                                <p className="text-xs text-nature-400 m-0 mt-0.5">
+                                    Storage utilization broken down into database, media, and system logs with automated 80% safety warning.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleOpenCleanModal}
+                                className="px-3.5 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 shadow-sm shrink-0"
+                            >
+                                <span>🧹</span>
+                                <span>Clean Orphaned Media &amp; Compress Logs</span>
+                            </button>
+                        </div>
+
+                        {/* 80% Warning Banner */}
+                        {effectiveDiskHealth && (effectiveDiskHealth.warning || effectiveDiskHealth.usedPercent >= 80) && (
+                            <div className="p-4 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex items-start gap-3">
+                                <span className="text-base leading-none">⚠️</span>
+                                <div>
+                                    <span className="font-bold">High Disk Usage Warning:</span>
+                                    <span className="ml-1 text-amber-300">
+                                        Disk utilization is at {effectiveDiskHealth.usedPercent}% (exceeds 80% safety threshold). Clean orphaned media and compress old logs to prevent SD card runaway and SQLite write locks.
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Overall Disk Meter */}
+                        {effectiveDiskHealth ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between text-xs">
+                                    <span className="text-nature-300 font-medium">Capacity Used</span>
+                                    <span className="font-mono text-white font-bold">
+                                        {formatBytes(effectiveDiskHealth.usedBytes)} of {formatBytes(effectiveDiskHealth.totalBytes)} ({effectiveDiskHealth.usedPercent}%)
+                                        <span className="text-nature-400 font-normal ml-2">({formatBytes(effectiveDiskHealth.freeBytes)} free)</span>
+                                    </span>
+                                </div>
+                                <div className="w-full h-3 bg-nature-950 rounded-full overflow-hidden flex border border-nature-800">
+                                    <div
+                                        style={{ width: `${Math.min(100, Math.max(0, effectiveDiskHealth.usedPercent))}%` }}
+                                        className={`h-full transition-all duration-500 ${
+                                            effectiveDiskHealth.usedPercent >= 80
+                                                ? 'bg-amber-500'
+                                                : 'bg-gradient-to-r from-emerald-500 to-terra-500'
+                                        }`}
+                                    />
+                                </div>
+
+                                {/* 3-Way Breakdown: Database vs Media vs Logs */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2">
+                                    {/* Database Breakdown */}
+                                    <div className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-nature-300 flex items-center gap-1.5">
+                                                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                                                <span>Database</span>
+                                            </span>
+                                            <span className="text-xs font-mono font-bold text-white">
+                                                {formatBytes(effectiveDiskHealth.breakdown?.database?.totalBytes ?? effectiveDiskHealth.databaseBytes)}
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-nature-400 space-y-0.5">
+                                            <div className="flex justify-between">
+                                                <span>SQLite state:</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.database?.dbSizeBytes)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>WAL journal:</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.database?.walSizeBytes)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Snapshots:</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.database?.snapshotsSizeBytes)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Media Breakdown */}
+                                    <div className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-nature-300 flex items-center gap-1.5">
+                                                <span className="w-2 h-2 rounded-full bg-terra-400"></span>
+                                                <span>Media</span>
+                                            </span>
+                                            <span className="text-xs font-mono font-bold text-white">
+                                                {formatBytes(effectiveDiskHealth.breakdown?.media?.totalBytes ?? effectiveDiskHealth.mediaBytes)}
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-nature-400 space-y-0.5">
+                                            <div className="flex justify-between">
+                                                <span>Post photos ({effectiveDiskHealth.breakdown?.media?.postPhotosCount ?? 0}):</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.media?.postPhotosBytes)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Thumbnails ({effectiveDiskHealth.breakdown?.media?.pulseThumbnailsCount ?? 0}):</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.media?.pulseThumbnailsBytes)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Logs Breakdown */}
+                                    <div className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-nature-300 flex items-center gap-1.5">
+                                                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                                                <span>Logs</span>
+                                            </span>
+                                            <span className="text-xs font-mono font-bold text-white">
+                                                {formatBytes(effectiveDiskHealth.breakdown?.logs?.totalBytes ?? effectiveDiskHealth.logsBytes)}
+                                            </span>
+                                        </div>
+                                        <div className="text-[11px] text-nature-400 space-y-0.5">
+                                            <div className="flex justify-between">
+                                                <span>System events ({effectiveDiskHealth.breakdown?.logs?.systemLogsCount ?? 0}):</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.logs?.systemLogsBytes)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Log files on disk:</span>
+                                                <span className="font-mono text-nature-300">{formatBytes(effectiveDiskHealth.breakdown?.logs?.logFilesBytes)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-nature-400 italic">
+                                Connecting to node storage metrics...
+                            </div>
+                        )}
                     </div>
 
                     {/* Ledger Conservation Audit Panel */}
@@ -1209,6 +1429,140 @@ export function ApplianceSection({
                         >
                             Wipe &amp; Reset Node
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* One-Click Clean Storage & Compress Logs Modal */}
+            {showCleanModal && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="clean-storage-title"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                >
+                    <div className="bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
+                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
+                            <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2">
+                                <span>🧹</span>
+                                <span>Clean Orphaned Media &amp; Compress Logs</span>
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowCleanModal(false)}
+                                className="text-nature-400 hover:text-white text-lg font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {loadingPreview && (
+                            <div className="py-8 text-center text-xs text-nature-400 flex flex-col items-center gap-2">
+                                <span className="animate-spin text-xl">⏳</span>
+                                <span>Scanning storage for orphaned photos, thumbnails, and pruneable logs...</span>
+                            </div>
+                        )}
+
+                        {cleanError && (
+                            <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs font-mono">
+                                {cleanError}
+                            </div>
+                        )}
+
+                        {cleanResult && (
+                            <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-200 text-xs space-y-2">
+                                <div className="font-bold text-sm flex items-center gap-1.5 text-emerald-300">
+                                    <span>✓</span>
+                                    <span>Cleanup Complete!</span>
+                                </div>
+                                <p className="m-0">
+                                    Successfully reclaimed <strong>{formatBytes(cleanResult.totalReclaimedBytes)}</strong> of disk space:
+                                </p>
+                                <ul className="list-disc list-inside space-y-1 text-emerald-300">
+                                    <li>Removed {cleanResult.removedPhotosCount} orphaned post photos ({formatBytes(cleanResult.removedPhotosBytes)})</li>
+                                    <li>Removed {cleanResult.removedThumbnailsCount} orphaned cached thumbnails ({formatBytes(cleanResult.removedThumbnailsBytes)})</li>
+                                    <li>Compressed and pruned {cleanResult.compressedLogsCount} old log events ({formatBytes(cleanResult.compressedLogsBytes)})</li>
+                                </ul>
+                            </div>
+                        )}
+
+                        {!loadingPreview && cleanPreview && !cleanResult && (
+                            <div className="space-y-4">
+                                <p className="text-xs text-nature-300 m-0">
+                                    Review items identified for deletion and log compression. Valid active data will NOT be touched.
+                                </p>
+
+                                <div className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-3 text-xs">
+                                    <div className="flex items-center justify-between pb-2 border-b border-nature-800/80">
+                                        <div>
+                                            <span className="font-bold text-white block">Orphaned Post Photos</span>
+                                            <span className="text-[11px] text-nature-400">Photos from deleted marketplace and community posts</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-white font-mono">{cleanPreview.orphanedPostPhotos.count} items</span>
+                                            <span className="text-[11px] text-nature-400 block font-mono">{formatBytes(cleanPreview.orphanedPostPhotos.totalBytes)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pb-2 border-b border-nature-800/80">
+                                        <div>
+                                            <span className="font-bold text-white block">Orphaned Pulse Thumbnails</span>
+                                            <span className="text-[11px] text-nature-400">Cached image thumbnails for removed news and pulse items</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-white font-mono">{cleanPreview.orphanedThumbnails.count} items</span>
+                                            <span className="text-[11px] text-nature-400 block font-mono">{formatBytes(cleanPreview.orphanedThumbnails.totalBytes)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pb-2 border-b border-nature-800/80">
+                                        <div>
+                                            <span className="font-bold text-white block">Compressible System Logs</span>
+                                            <span className="text-[11px] text-nature-400">Archived to gzip beyond the latest 500 active events</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="font-bold text-white font-mono">{cleanPreview.compressibleLogs.count} rows</span>
+                                            <span className="text-[11px] text-nature-400 block font-mono">{formatBytes(cleanPreview.compressibleLogs.totalBytes)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-1 font-bold text-sm">
+                                        <span className="text-white">Estimated Space Reclaimed:</span>
+                                        <span className="text-terra-400 font-mono">{formatBytes(cleanPreview.totalReclaimableBytes)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-nature-800">
+                            <button
+                                type="button"
+                                onClick={() => setShowCleanModal(false)}
+                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-nature-300"
+                            >
+                                {cleanResult ? 'Close' : 'Cancel'}
+                            </button>
+                            {!cleanResult && (
+                                <button
+                                    type="button"
+                                    onClick={handleExecuteClean}
+                                    disabled={loadingPreview || cleaningStorage || !cleanPreview}
+                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50 flex items-center gap-1.5"
+                                >
+                                    {cleaningStorage ? (
+                                        <>
+                                            <span className="animate-spin">⏳</span>
+                                            <span>Cleaning &amp; Compressing...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>🧹</span>
+                                            <span>Confirm &amp; Clean Now</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

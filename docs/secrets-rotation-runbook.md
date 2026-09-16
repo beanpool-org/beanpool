@@ -253,7 +253,7 @@ Run these commands after completing the rotation sweep:
 | :--- | :--- | :--- |
 | **Node API Status** | `curl -sk https://test.beanpool.org/api/version` | HTTP 200 with `{ "version": ... }` |
 | **Pulse Config** | `curl -sk https://test.beanpool.org/api/pulse/oauth/config` | HTTP 200 with enabled providers and valid client keys |
-| **Admin Authentication** | `curl -sk -H "x-admin-password: $NEW_PW" https://test.beanpool.org/api/local/admin/status` | HTTP 200 with node status payload (HTTP 401 with bad password) |
+| **Admin Authentication** | `curl -sk -H "x-admin-password: $NEW_PW" https://test.beanpool.org/api/local/admin/diagnostics` | HTTP 200 with node diagnostics payload (HTTP 401 with bad password) |
 | **Backup Pull Convergence** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 30 beanpool-test-mirror-beanpool-node-1"` | `[Backup] ⬇️ Pulled snapshot` (no 401 Unauthorized) |
 | **Cloudflare Tunnel Status** | `ssh root@ssh-qld.beanpool.org "docker logs --tail 20 beanpool-test-cloudflared-1"` | `Registered tunnel connection` / 0 errors |
 | **Registrar Attestation** | `curl -sk -H "x-admin-secret: $NEW_ADMIN_SECRET" https://beanpool.org/api/local/admin/registrar/pending` | HTTP 200 list of pending leases |

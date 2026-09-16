@@ -54,6 +54,8 @@ export function OffboardMemberWizard({
                     setPreview(data);
                     if (data.activeMembers.length > 0) {
                         setGiftRecipient(data.activeMembers[0].publicKey);
+                    } else {
+                        setResolutionChoice('donate_to_commons');
                     }
                 }
             } catch (err: any) {
@@ -98,7 +100,7 @@ export function OffboardMemberWizard({
 
         let resolution: 'donate_to_commons' | 'gift_to_member' | 'write_off_commons' | 'prune_zero_balance';
         if (preview.balance > 0) {
-            resolution = hasKeyAuth ? resolutionChoice : 'donate_to_commons';
+            resolution = hasKeyAuth && (preview.activeMembers?.length ?? 0) > 0 ? resolutionChoice : 'donate_to_commons';
         } else if (preview.balance < 0) {
             resolution = 'write_off_commons';
         } else {
@@ -244,16 +246,16 @@ export function OffboardMemberWizard({
                                 </label>
 
                                 <label className={`flex items-start gap-2.5 p-2 rounded-xl transition-all ${
-                                    !hasKeyAuth ? 'opacity-60 cursor-not-allowed bg-nature-950/40' : 'hover:bg-nature-800/40 cursor-pointer'
+                                    !hasKeyAuth || (preview?.activeMembers?.length ?? 0) === 0 ? 'opacity-60 cursor-not-allowed bg-nature-950/40' : 'hover:bg-nature-800/40 cursor-pointer'
                                 }`}>
                                     <input
                                         type="radio"
                                         name="resolution"
                                         value="gift_to_member"
-                                        disabled={!hasKeyAuth}
-                                        checked={hasKeyAuth && resolutionChoice === 'gift_to_member'}
+                                        disabled={!hasKeyAuth || (preview?.activeMembers?.length ?? 0) === 0}
+                                        checked={hasKeyAuth && resolutionChoice === 'gift_to_member' && (preview?.activeMembers?.length ?? 0) > 0}
                                         onChange={() => {
-                                            if (hasKeyAuth) {
+                                            if (hasKeyAuth && (preview?.activeMembers?.length ?? 0) > 0) {
                                                 setResolutionChoice('gift_to_member');
                                             }
                                         }}
@@ -269,10 +271,15 @@ export function OffboardMemberWizard({
                                                 ⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; password-only sessions must donate departing balances to the Commons Pool.
                                             </span>
                                         )}
+                                        {hasKeyAuth && (preview?.activeMembers?.length ?? 0) === 0 && (
+                                            <span className="block mt-1 text-[11px] text-nature-400">
+                                                No other active members available to receive a gift. Departing balance will be donated to the Commons Pool.
+                                            </span>
+                                        )}
                                     </div>
                                 </label>
 
-                                {resolutionChoice === 'gift_to_member' && (
+                                {resolutionChoice === 'gift_to_member' && (preview.activeMembers?.length ?? 0) > 0 && (
                                     <div className="pl-6 pt-1 space-y-2">
                                         <label className="block text-[11px] font-bold text-nature-300">
                                             Select Recipient Member:

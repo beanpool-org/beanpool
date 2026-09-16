@@ -275,4 +275,39 @@ describe('OffboardMemberWizard', () => {
             expect(screen.getByText('Member Offboarded')).toBeDefined();
         });
     });
+
+    it('disables gifting and explains when no other active members exist', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: {
+                publicKey: mockMember.publicKey,
+                callsign: 'dave',
+                status: 'active',
+                joinedAt: '2026-01-01',
+            },
+            balance: 100,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 600,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [], // Departing member is only active member
+        });
+
+        render(
+            <OffboardMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                hasKeyAuth={true}
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('+100.00 Beans')).toBeDefined();
+            const giftRadio = screen.getByLabelText(/Gift to another community member/) as HTMLInputElement;
+            expect(giftRadio.disabled).toBe(true);
+            expect(screen.getByText(/No other active members available to receive a gift/)).toBeDefined();
+            expect(screen.queryByLabelText(/Select Recipient Member/)).toBeNull();
+        });
+    });
 });

@@ -181,9 +181,10 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     <style>
                         body { background: #f8fafc; color: #0f172a; padding: 30px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
                         @media print {
+                            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                             body { background: #ffffff !important; color: #000000 !important; padding: 0 !important; }
                             .no-print { display: none !important; }
-                            .print-card { page-break-inside: avoid; border: 2px solid #000000 !important; box-shadow: none !important; }
+                            .print-card { break-inside: avoid; page-break-inside: avoid; border: 2px solid #000000 !important; box-shadow: none !important; }
                         }
                     </style>
                 </head>
@@ -438,7 +439,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         {/* Sheet Grid Preview */}
                         <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
                             {generatedTokens.map((item, idx) => (
-                                <div key={idx} className="bg-white text-emerald-950 p-6 rounded-2xl border-2 border-emerald-700 shadow-md">
+                                <div key={item.code} className="bg-white text-emerald-950 p-6 rounded-2xl border-2 border-emerald-700 shadow-md">
                                     <div className="flex justify-between items-center border-b border-emerald-200 pb-3 mb-4">
                                         <div>
                                             <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">

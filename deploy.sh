@@ -72,7 +72,7 @@ echo ""
 
 # Verify image in registry before touching any node if pulling is requested or required
 NEEDS_REGISTRY_IMAGE=0
-if [ "${DEPLOY_PULL:-}" = "1" ] || [ -n "${DEPLOY_TAG:-}" ]; then
+if [ "${DEPLOY_PULL:-}" = "1" ]; then
   NEEDS_REGISTRY_IMAGE=1
 else
   for NODE in "${TARGETS[@]}"; do

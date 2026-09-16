@@ -263,14 +263,14 @@ run_check "secrets_guard" bash -c '
   fi
 
   # Check 2: Tracked secret or environment files
-  TRACKED_SECRETS=$(git ls-files | grep -iE "(^|/)\.env($|\.[^e]|.*\.local$|.*\.prod$)|community\.key$|tunnel-token$|pc-api-key\.json$|\.p8$|\.pem$|\.keystore$" | grep -v "\.env\.example$" || true)
+  TRACKED_SECRETS=$(git ls-files | grep -iE "(^|/)\.env(\..+)?$|community\.key$|tunnel-token$|pc-api-key\.json$|\.p8$|\.pem$|\.keystore$" | grep -v "\.env\.example$" || true)
   if [ -n "$TRACKED_SECRETS" ]; then
     echo "❌ Error: Tracked secret file(s) found in git: $TRACKED_SECRETS" && exit 1
   fi
 
   # Check 3: Inventoried secret keys assigned hardcoded values in tracked files
   INVENTORIED_KEYS="ADMIN_PASSWORD|BACKUP_ADMIN_PASSWORD|ADMIN_SECRET|CF_API_TOKEN|CF_TUNNEL_TOKEN|CLOUDFLARE_API_KEY|CLOUDFLARE_API_TOKEN|TIKTOK_CLIENT_SECRET|INSTAGRAM_APP_SECRET|INSTAGRAM_CLIENT_SECRET|BACKUP_REPLICATION_TOKEN"
-  LEAKS=$(git grep -nE "^[[:space:]]*(-[[:space:]]+)?(export[[:space:]]+)?($INVENTORIED_KEYS)=" 2>/dev/null | grep -vE "=\\\$\\{" | grep -vE "(\.env\.example|apps/server/README\.md|deploy\.sh|docs/|apps/registrar/\.dev\.vars|scripts/bootstrap-community-eggs\.mjs|scripts/grant-operator\.mjs)" || true)
+  LEAKS=$(git grep -nE "^[[:space:]]*(-[[:space:]]+)?(export[[:space:]]+)?($INVENTORIED_KEYS)=" 2>/dev/null | grep -vE "=['\''\"]?\\$\\{[A-Za-z0-9_]+(:-)?\\}['\''\"]?$" | grep -vE "(\.env\.example|apps/server/README\.md|deploy\.sh|docs/|apps/registrar/\.dev\.vars|scripts/bootstrap-community-eggs\.mjs|scripts/grant-operator\.mjs)" || true)
   if [ -n "$LEAKS" ]; then
     echo "❌ Error: Hardcoded assignment to inventoried secret key found in tracked file:" && echo "$LEAKS" && exit 1
   fi

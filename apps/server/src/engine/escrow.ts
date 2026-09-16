@@ -104,6 +104,21 @@ export function requestPost(
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
+    if (post.audience_scope === 'group' && post.target_group_id) {
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+        ).get(post.target_group_id, requesterPublicKey);
+        if (!isMem && post.author_pubkey !== requesterPublicKey) {
+            throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
+        }
+    }
+    if (post.audience_scope === 'direct') {
+        const isTarget = post.target_pubkey === requesterPublicKey || post.assigned_to === requesterPublicKey || post.author_pubkey === requesterPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct post is not addressed to you');
+        }
+    }
+
     const author = getMember(db, post.author_pubkey);
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');

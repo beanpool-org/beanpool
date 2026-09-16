@@ -35,6 +35,7 @@ import {
     approveGroupMember,
     inviteGroupMember,
     deleteGroupPost,
+    requestPost,
     broadcast,
     addWsClient,
     removeWsClient
@@ -444,6 +445,27 @@ async function runTests() {
         // Node roles remain separate
         const nodeRolesRow = db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ?").get(alice.pubKeyHex);
         assert(!nodeRolesRow, '10r. HARD RULE §9: Creating group or being convenor confers NO node role (node_roles remains separate)');
+
+        // 6. Escrow requestPost audience isolation:
+        // Carol (non-member of Gardeners) cannot request a group post in Gardeners
+        const gardenOffer = createPost('offer', 'tools', 'Special Rake', 'For gardeners only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
+        let nonMemberReqFailed = false;
+        try {
+            requestPost(gardenOffer!.id, carol.pubKeyHex);
+        } catch (e: any) {
+            nonMemberReqFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(nonMemberReqFailed, '10s. Non-member Carol CANNOT request a group-scoped post');
+
+        // Direct post to Dave cannot be requested by Carol
+        const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
+        let nonTargetReqFailed = false;
+        try {
+            requestPost(directOffer!.id, carol.pubKeyHex);
+        } catch (e: any) {
+            nonTargetReqFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post');
     }
 
     console.log(`\n🎉 All ${passed}/${run} tests passed successfully!`);

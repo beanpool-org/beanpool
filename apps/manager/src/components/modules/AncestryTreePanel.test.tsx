@@ -4,6 +4,15 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import type { NodeProfile } from '../../lib/profiles';
+import * as nodeClient from '../../lib/node-client';
+
+vi.mock('../../lib/node-client', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../lib/node-client')>();
+    return {
+        ...actual,
+        pruneInviteBranch: vi.fn().mockResolvedValue({ ok: true }),
+    };
+});
 
 describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
     const mockNode: NodeProfile = {
@@ -163,6 +172,7 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         await waitFor(() => {
             expect(handlePruneBranch).toHaveBeenCalledWith('pk_alice_genesis_0000000000');
         });
+        expect(handleRefresh).not.toHaveBeenCalled();
     });
 
     it('renders safely with an empty payload', async () => {
@@ -212,5 +222,174 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(screen.getByText(/Hierarchical Ancestry Tree & Lineage Audit/i)).toBeInTheDocument();
         // Component does not crash and renders valid member
         expect(screen.getByText('9999')).toBeInTheDocument();
+    });
+
+    it('handles snake_case invited_by payloads correctly without flattening the tree', async () => {
+        const snakeCasePayload = {
+            members: [
+                {
+                    publicKey: 'pk_alice',
+                    callsign: 'Alice',
+                    invitedBy: 'genesis',
+                },
+                {
+                    publicKey: 'pk_bob',
+                    callsign: 'Bob',
+                    invited_by: 'pk_alice',
+                },
+                {
+                    publicKey: 'pk_charlie',
+                    callsign: 'Charlie',
+                    invited_by: 'pk_bob',
+                },
+            ],
+            memberStats: {
+                pk_alice: { posts: 1 },
+                pk_bob: { posts: 2 },
+                pk_charlie: { posts: 3 },
+            },
+        };
+
+        render(
+            <AncestryTreePanel
+                nodeData={snakeCasePayload as any}
+                activeNode={mockNode}
+            />
+        );
+
+        // All 3 members render
+        expect(screen.getByText(/Alice/)).toBeInTheDocument();
+        expect(screen.getByText(/Bob/)).toBeInTheDocument();
+        expect(screen.getByText(/Charlie/)).toBeInTheDocument();
+
+        // Alice is a genesis root with children, so Alice has a disclosure button
+        const aliceToggle = screen.getByRole('button', { name: /Collapse Alice branch/i });
+        expect(aliceToggle).toBeInTheDocument();
+
+        // Bob has Charlie as a child via invited_by, so Bob also has a disclosure button
+        const bobToggle = screen.getByRole('button', { name: /Collapse Bob branch/i });
+        expect(bobToggle).toBeInTheDocument();
+    });
+
+    it('gracefully handles cyclical parent/invite relationships without freezing or stack overflow', async () => {
+        const cyclicPayload = {
+            members: [
+                {
+                    publicKey: 'pk_cycle_1',
+                    callsign: 'CycleOne',
+                    invitedBy: 'pk_cycle_2',
+                },
+                {
+                    publicKey: 'pk_cycle_2',
+                    callsign: 'CycleTwo',
+                    invitedBy: 'pk_cycle_1',
+                },
+                {
+                    publicKey: 'pk_self_ref',
+                    callsign: 'SelfRef',
+                    invitedBy: 'pk_self_ref',
+                },
+            ],
+            health: {
+                flags: [
+                    {
+                        type: 'cycle_flag',
+                        description: 'Cyclic loop detected',
+                        members: ['pk_cycle_1', 'pk_cycle_2'],
+                    },
+                ],
+            },
+            memberStats: {
+                pk_cycle_1: { posts: 10, volume: 100 },
+                pk_cycle_2: { posts: 5, volume: 50 },
+                pk_self_ref: { posts: 1, volume: 10 },
+            },
+        };
+
+        // Renders without RangeError: Maximum call stack size exceeded
+        render(
+            <AncestryTreePanel
+                nodeData={cyclicPayload as any}
+                activeNode={mockNode}
+            />
+        );
+
+        expect(screen.getByText(/Showing 3 of 3 members/i)).toBeInTheDocument();
+        expect(screen.getByText(/CycleOne/)).toBeInTheDocument();
+        expect(screen.getByText(/CycleTwo/)).toBeInTheDocument();
+        expect(screen.getByText(/SelfRef/)).toBeInTheDocument();
+    });
+
+    it('supports accessible disclosure toggle button with aria-expanded and separate action controls', async () => {
+        render(
+            <AncestryTreePanel
+                nodeData={realPayload}
+                activeNode={mockNode}
+                onSelectMember={vi.fn()}
+            />
+        );
+
+        // Bob has child Charlie, so Bob has an accessible disclosure toggle
+        const bobToggle = screen.getByRole('button', { name: /Collapse Bob branch/i });
+        expect(bobToggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText(/Charlie/)).toBeInTheDocument();
+
+        // Collapse Bob branch
+        await userEvent.click(bobToggle);
+        expect(bobToggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByText(/Charlie/)).not.toBeInTheDocument();
+
+        // Re-expand Bob branch
+        await userEvent.click(bobToggle);
+        expect(bobToggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText(/Charlie/)).toBeInTheDocument();
+
+        // Action controls (stats, inspect, prune) are NOT nested within the disclosure button
+        const statsBtns = screen.getAllByTitle(/Toggle branch activity stats/i);
+        expect(bobToggle).not.toContainElement(statsBtns[0]);
+
+        const inspectBtns = screen.getAllByTitle(/Inspect member profile/i);
+        expect(bobToggle).not.toContainElement(inspectBtns[0]);
+    });
+
+    it('calls onRefresh when onPruneBranch is omitted and fallback pruneInviteBranch executes', async () => {
+        const handleRefresh = vi.fn();
+
+        render(
+            <AncestryTreePanel
+                nodeData={realPayload}
+                activeNode={mockNode}
+                onRefresh={handleRefresh}
+            />
+        );
+
+        // Click Prune Branch on Bob
+        const pruneBranchButtons = screen.getAllByText(/Prune Branch/i);
+        await userEvent.click(pruneBranchButtons[0]);
+
+        // Type exact callsign to unlock
+        const confirmInput = document.getElementById('prune-branch-confirm-input') as HTMLInputElement;
+        await userEvent.type(confirmInput, 'Alice');
+
+        const confirmBtn = document.getElementById('confirm-prune-branch-btn') as HTMLButtonElement;
+        await waitFor(() => {
+            expect(confirmBtn).not.toBeDisabled();
+        });
+
+        await userEvent.click(confirmBtn);
+
+        // Fallback pruneInviteBranch was called, followed by onRefresh
+        await waitFor(() => {
+            expect(nodeClient.pruneInviteBranch).toHaveBeenCalledWith(
+                mockNode.url,
+                'pk_alice_genesis_0000000000',
+                mockNode.adminPassword,
+                undefined
+            );
+        });
+
+        await waitFor(() => {
+            expect(handleRefresh).toHaveBeenCalledTimes(1);
+        });
     });
 });

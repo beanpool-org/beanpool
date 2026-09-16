@@ -33,6 +33,7 @@ export function AncestryTreePanel({
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState<'all' | 'voucher' | 'threats' | 'reported' | 'frozen'>('all');
     const [expandedStats, setExpandedStats] = useState<Record<string, boolean>>({});
+    const [expandedBranches, setExpandedBranches] = useState<Record<string, boolean>>({});
     const [pruneTarget, setPruneTarget] = useState<{ pubkey: string; callsign?: string } | null>(null);
 
     const members: MemberItem[] = useMemo(() => {
@@ -116,28 +117,57 @@ export function AncestryTreePanel({
         for (const m of members) {
             const pk = typeof m?.publicKey === 'string' ? m.publicKey : (typeof (m as any)?.pubkey === 'string' ? (m as any).pubkey : '');
             if (!pk) continue;
-            const inv = typeof m?.invitedBy === 'string' ? m.invitedBy : null;
-            if (!inv || inv === 'genesis' || !membersMap.has(inv)) {
+            const inv = typeof m?.invitedBy === 'string'
+                ? m.invitedBy
+                : (typeof (m as any)?.invited_by === 'string' ? (m as any).invited_by : null);
+            if (!inv || inv === 'genesis' || inv === pk || !membersMap.has(inv)) {
                 roots.push(m);
             } else {
                 if (!t[inv]) t[inv] = [];
                 t[inv].push(m);
             }
         }
+
+        // Ensure unrooted cyclic components or orphan subgraphs are still visible to operator
+        const visitedInTree = new Set<string>();
+        function markReachable(pk: string) {
+            if (visitedInTree.has(pk)) return;
+            visitedInTree.add(pk);
+            const children = t[pk] || [];
+            for (const child of children) {
+                const cPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
+                if (cPk) markReachable(cPk);
+            }
+        }
+        for (const r of roots) {
+            const rPk = typeof r?.publicKey === 'string' ? r.publicKey : (typeof (r as any)?.pubkey === 'string' ? (r as any).pubkey : '');
+            if (rPk) markReachable(rPk);
+        }
+        for (const m of members) {
+            const pk = typeof m?.publicKey === 'string' ? m.publicKey : (typeof (m as any)?.pubkey === 'string' ? (m as any).pubkey : '');
+            if (pk && !visitedInTree.has(pk)) {
+                roots.push(m);
+                markReachable(pk);
+            }
+        }
+
         return { tree: t, genesisRoots: roots };
     }, [members, membersMap]);
 
     // Branch flags computation
     const branchFlagsMap = useMemo(() => {
         const cache: Record<string, any[]> = {};
-        function compute(pubkey: string): any[] {
+        function compute(pubkey: string, visiting = new Set<string>()): any[] {
             if (cache[pubkey]) return cache[pubkey];
+            if (visiting.has(pubkey)) return [];
+            visiting.add(pubkey);
+
             const direct = nodeFlags[pubkey] || [];
             const children = tree[pubkey] || [];
             const all = [...direct];
             for (const child of children) {
                 const childPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
-                if (childPk) all.push(...compute(childPk));
+                if (childPk) all.push(...compute(childPk, new Set(visiting)));
             }
             const unique: any[] = [];
             const seen = new Set<string>();
@@ -161,8 +191,20 @@ export function AncestryTreePanel({
     // Branch stats computation
     const branchStatsMap = useMemo(() => {
         const cache: Record<string, BranchStats> = {};
-        function compute(pubkey: string): BranchStats {
+        function compute(pubkey: string, visiting = new Set<string>()): BranchStats {
             if (cache[pubkey]) return cache[pubkey];
+            if (visiting.has(pubkey)) {
+                return {
+                    memberCount: 0,
+                    posts: 0,
+                    messages: 0,
+                    deals: 0,
+                    volume: 0,
+                    cancelled: 0,
+                };
+            }
+            visiting.add(pubkey);
+
             const rawPersonal = memberStats[pubkey] || {};
             const personal = {
                 posts: typeof rawPersonal.posts === 'number' ? rawPersonal.posts : 0,
@@ -183,7 +225,7 @@ export function AncestryTreePanel({
             for (const child of children) {
                 const childPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
                 if (childPk) {
-                    const childAgg = compute(childPk);
+                    const childAgg = compute(childPk, new Set(visiting));
                     agg.memberCount += childAgg.memberCount;
                     agg.posts += childAgg.posts;
                     agg.messages += childAgg.messages;
@@ -232,11 +274,13 @@ export function AncestryTreePanel({
     };
 
     // Check if node or any of its descendants match
-    const hasMatchingDescendant = (pubkey: string): boolean => {
+    const hasMatchingDescendant = (pubkey: string, visiting = new Set<string>()): boolean => {
+        if (!pubkey || visiting.has(pubkey)) return false;
+        visiting.add(pubkey);
         const children = tree[pubkey] || [];
         for (const child of children) {
             const childPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
-            if (checkMatches(child) || hasMatchingDescendant(childPk)) {
+            if (checkMatches(child) || (childPk && hasMatchingDescendant(childPk, new Set(visiting)))) {
                 return true;
             }
         }
@@ -260,6 +304,13 @@ export function AncestryTreePanel({
         }));
     };
 
+    const toggleBranch = (pubkey: string, defaultOpen: boolean) => {
+        setExpandedBranches((prev) => ({
+            ...prev,
+            [pubkey]: !(prev[pubkey] !== undefined ? prev[pubkey] : defaultOpen),
+        }));
+    };
+
     const handleExecutePrune = async (pubkey: string) => {
         if (onPruneBranch) {
             await onPruneBranch(pubkey);
@@ -270,15 +321,17 @@ export function AncestryTreePanel({
                 activeNode.adminPassword,
                 getTfaSessionToken(activeNode.id)
             );
+            onRefresh?.();
         }
         setPruneTarget(null);
-        onRefresh?.();
     };
 
     // Recursive node rendering
-    const renderNode = (m: MemberItem, depth = 0): React.ReactNode => {
+    const renderNode = (m: MemberItem, depth = 0, visiting = new Set<string>()): React.ReactNode => {
         const pk = typeof m?.publicKey === 'string' ? m.publicKey : (typeof (m as any)?.pubkey === 'string' ? (m as any).pubkey : '');
-        if (!pk) return null;
+        if (!pk || visiting.has(pk)) return null;
+        const nextVisiting = new Set(visiting);
+        nextVisiting.add(pk);
 
         const callsign = m?.callsign != null ? String(m.callsign) : 'Unknown';
         const profile = profilesMap.get(pk);
@@ -336,15 +389,17 @@ export function AncestryTreePanel({
         const isStatsOpen = Boolean(expandedStats[pk]);
         const dimStyle = isFilterActive && !isDirectMatch ? 'opacity-40' : '';
 
+        const defaultOpen = depth < 2 || hasFlags || memberReportCount > 0;
+        const isOpen = isFilterActive ? true : (expandedBranches[pk] !== undefined ? expandedBranches[pk] : defaultOpen);
+
         return (
-            <details
+            <div
                 key={pk}
-                open={depth < 2 || hasFlags || memberReportCount > 0 || isFilterActive}
                 className={`group font-sans my-1.5 transition-all ${dimStyle}`}
                 style={{ marginLeft: depth === 0 ? 0 : '14px' }}
             >
-                <summary
-                    className={`list-none flex items-center justify-between p-2.5 rounded-xl border bg-nature-950/70 hover:bg-nature-900/90 transition-all cursor-pointer select-none ${
+                <div
+                    className={`flex items-center justify-between p-2.5 rounded-xl border bg-nature-950/70 hover:bg-nature-900/90 transition-all ${
                         isPruned
                             ? 'border-l-4 border-l-slate-600 border-nature-800'
                             : isFrozen
@@ -352,21 +407,18 @@ export function AncestryTreePanel({
                                 : 'border-l-4 border-l-emerald-500 border-nature-800'
                     }`}
                 >
-                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <span className={`text-[10px] text-nature-400 font-mono ${hasChildren ? 'visible' : 'invisible'}`}>
-                            ▶
-                        </span>
-
-                        {/* Callsign & Pubkey */}
-                        <div
-                            onClick={(e) => {
-                                if (onSelectMember) {
-                                    e.stopPropagation();
-                                    onSelectMember(m);
-                                }
-                            }}
-                            className="flex items-center gap-1.5 hover:underline cursor-pointer"
+                    {/* Disclosure Trigger or Leaf Node Label */}
+                    {hasChildren ? (
+                        <button
+                            type="button"
+                            onClick={() => toggleBranch(pk, defaultOpen)}
+                            aria-expanded={isOpen}
+                            aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${callsign} branch`}
+                            className="flex items-center gap-2 flex-wrap min-w-0 text-left flex-1 bg-transparent border-none p-0 cursor-pointer text-inherit hover:opacity-90 focus:outline-none"
                         >
+                            <span className={`text-[10px] text-nature-400 font-mono transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}>
+                                ▶
+                            </span>
                             <span className="font-bold text-white text-xs">
                                 {isPruned ? '🗑️ ' : isFrozen ? '⏸️ ' : ''}
                                 {callsign}
@@ -374,50 +426,102 @@ export function AncestryTreePanel({
                             <span className="font-mono text-[11px] text-nature-400">
                                 ({pk.slice(0, 8)})
                             </span>
+
+                            {/* Tier Badge */}
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
+                                {tierBadge === 'Elder' ? '⛰️ Elder' : tierBadge === 'Steward' ? '🏛️ Steward' : tierBadge === 'Resident' ? '🏠 Resident' : '🥚 Newcomer'}
+                            </span>
+
+                            {/* Voucher Pill */}
+                            {canVouch && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    🤝 Voucher
+                                </span>
+                            )}
+
+                            {/* Health Flag Pill */}
+                            {hasFlags && (
+                                <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
+                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    }`}
+                                    title={bFlags.map((f) => f?.type || '').join(', ')}
+                                >
+                                    {bFlags.length} ⚠️
+                                </span>
+                            )}
+
+                            {/* Report Pill */}
+                            {memberReportCount > 0 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
+                                    🚩 {memberReportCount}
+                                </span>
+                            )}
+
+                            {/* Personal Stat Chips */}
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-nature-400 ml-1">
+                                {personal.posts > 0 && <span title={`${personal.posts} posts`}>📦{personal.posts}</span>}
+                                {personal.messages > 0 && <span title={`${personal.messages} msgs`}>💬{personal.messages}</span>}
+                                {personal.deals > 0 && <span title={`${personal.deals} deals`}>🤝{personal.deals}</span>}
+                                {personal.cancelled > 0 && <span title={`${personal.cancelled} cancelled`}>🚫{personal.cancelled}</span>}
+                            </span>
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2 flex-wrap min-w-0 text-left flex-1">
+                            <span className="text-[10px] text-nature-600 font-mono invisible select-none">
+                                ▶
+                            </span>
+                            <span className="font-bold text-white text-xs">
+                                {isPruned ? '🗑️ ' : isFrozen ? '⏸️ ' : ''}
+                                {callsign}
+                            </span>
+                            <span className="font-mono text-[11px] text-nature-400">
+                                ({pk.slice(0, 8)})
+                            </span>
+
+                            {/* Tier Badge */}
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
+                                {tierBadge === 'Elder' ? '⛰️ Elder' : tierBadge === 'Steward' ? '🏛️ Steward' : tierBadge === 'Resident' ? '🏠 Resident' : '🥚 Newcomer'}
+                            </span>
+
+                            {/* Voucher Pill */}
+                            {canVouch && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    🤝 Voucher
+                                </span>
+                            )}
+
+                            {/* Health Flag Pill */}
+                            {hasFlags && (
+                                <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
+                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    }`}
+                                    title={bFlags.map((f) => f?.type || '').join(', ')}
+                                >
+                                    {bFlags.length} ⚠️
+                                </span>
+                            )}
+
+                            {/* Report Pill */}
+                            {memberReportCount > 0 && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
+                                    🚩 {memberReportCount}
+                                </span>
+                            )}
+
+                            {/* Personal Stat Chips */}
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-nature-400 ml-1">
+                                {personal.posts > 0 && <span title={`${personal.posts} posts`}>📦{personal.posts}</span>}
+                                {personal.messages > 0 && <span title={`${personal.messages} msgs`}>💬{personal.messages}</span>}
+                                {personal.deals > 0 && <span title={`${personal.deals} deals`}>🤝{personal.deals}</span>}
+                                {personal.cancelled > 0 && <span title={`${personal.cancelled} cancelled`}>🚫{personal.cancelled}</span>}
+                            </span>
                         </div>
+                    )}
 
-                        {/* Tier Badge */}
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
-                            {tierBadge === 'Elder' ? '⛰️ Elder' : tierBadge === 'Steward' ? '🏛️ Steward' : tierBadge === 'Resident' ? '🏠 Resident' : '🥚 Newcomer'}
-                        </span>
-
-                        {/* Voucher Pill */}
-                        {canVouch && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                🤝 Voucher
-                            </span>
-                        )}
-
-                        {/* Health Flag Pill */}
-                        {hasFlags && (
-                            <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                                    isAlert ? 'bg-red-600' : 'bg-amber-600'
-                                }`}
-                                title={bFlags.map((f) => f?.type || '').join(', ')}
-                            >
-                                {bFlags.length} ⚠️
-                            </span>
-                        )}
-
-                        {/* Report Pill */}
-                        {memberReportCount > 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
-                                🚩 {memberReportCount}
-                            </span>
-                        )}
-
-                        {/* Personal Stat Chips */}
-                        <div className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-nature-400 ml-1">
-                            {personal.posts > 0 && <span title={`${personal.posts} posts`}>📦{personal.posts}</span>}
-                            {personal.messages > 0 && <span title={`${personal.messages} msgs`}>💬{personal.messages}</span>}
-                            {personal.deals > 0 && <span title={`${personal.deals} deals`}>🤝{personal.deals}</span>}
-                            {personal.cancelled > 0 && <span title={`${personal.cancelled} cancelled`}>🚫{personal.cancelled}</span>}
-                        </div>
-                    </div>
-
-                    {/* Node Actions */}
-                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    {/* Node Actions - completely separated outside disclosure button */}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                         {/* Toggle Stats Button */}
                         <button
                             type="button"
@@ -452,7 +556,7 @@ export function AncestryTreePanel({
                             </button>
                         )}
                     </div>
-                </summary>
+                </div>
 
                 {/* Expandable Stats Card */}
                 {isStatsOpen && (
@@ -481,12 +585,12 @@ export function AncestryTreePanel({
                 )}
 
                 {/* Children Recursive Container */}
-                {hasChildren && (
+                {hasChildren && isOpen && (
                     <div className="pl-2 border-l border-nature-800/80 mt-1">
-                        {children.map((c) => renderNode(c, depth + 1))}
+                        {children.map((c) => renderNode(c, depth + 1, nextVisiting))}
                     </div>
                 )}
-            </details>
+            </div>
         );
     };
 
@@ -638,6 +742,7 @@ export function AncestryTreePanel({
                         callsign: pruneTarget.callsign,
                     }}
                     members={members}
+                    accounts={accounts}
                     onClose={() => setPruneTarget(null)}
                     onConfirm={handleExecutePrune}
                 />

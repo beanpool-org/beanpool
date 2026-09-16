@@ -73,7 +73,7 @@ export function GroupDetailModal({
     if (!isOpen || !groupData) return null;
 
     const myMembership = members.find(m => m.memberPubkey === myPubkey);
-    const isConvenor = groupData.viewerRole === 'convenor' || myMembership?.role === 'convenor' || groupData.createdBy === myPubkey;
+    const isConvenor = groupData.viewerRole === 'convenor' || (myMembership?.role === 'convenor' && myMembership?.status === 'active');
     const isMember = (myMembership && myMembership.status === 'active') || groupData.viewerStatus === 'active';
     const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';
 

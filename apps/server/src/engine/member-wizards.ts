@@ -145,15 +145,17 @@ export function issueRekeyCode(
     operatorPubkey: string,
     opts?: { ttlMs?: number }
 ): { code: string; oldPubkey: string; callsign: string; expiresAt: string } {
-    const member = getMember(oldPublicKey);
+    const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
+    const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
+    const member = getMember(cleanOld);
     if (!member) {
         throw new Error('Member not found');
     }
     if (member.status === 'pruned') {
         throw new Error('Cannot re-key a pruned member');
     }
-    if (isKeyInvalidated(oldPublicKey)) {
-        const info = getInvalidatedKeyInfo(oldPublicKey);
+    if (isKeyInvalidated(cleanOld)) {
+        const info = getInvalidatedKeyInfo(cleanOld);
         if (info?.rekeyed_to) {
             throw new Error(`This key was already re-keyed to ${info.rekeyed_to}`);
         }
@@ -167,23 +169,23 @@ export function issueRekeyCode(
     // Atomic issuance & invalidation
     db.transaction(() => {
         // Cancel any existing pending requests for this member
-        db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE old_pubkey = ? AND status = 'pending'").run(oldPublicKey);
+        db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE old_pubkey = ? AND status = 'pending'").run(cleanOld);
 
         // Record in invalidated_keys
         db.prepare(`
             INSERT INTO invalidated_keys (public_key, reason, invalidated_at)
             VALUES (?, 'rekey_pending', ?)
             ON CONFLICT(public_key) DO UPDATE SET reason = 'rekey_pending', invalidated_at = excluded.invalidated_at
-        `).run(oldPublicKey, nowIso);
+        `).run(cleanOld, nowIso);
 
         // Suspend member row so assertMemberActive rejects operations from old device
-        db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, oldPublicKey);
+        db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanOld);
 
         // Insert new pending rekey request
         db.prepare(`
             INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at)
             VALUES (?, ?, ?, 'pending', ?, ?)
-        `).run(code, oldPublicKey, operatorPubkey, nowIso, expiresAtIso);
+        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso);
 
         // Write system log
         db.prepare(`
@@ -191,25 +193,25 @@ export function issueRekeyCode(
             VALUES (?, 'INFO', 'AUTH', ?, ?)
         `).run(
             nowIso,
-            `Re-enrolment code issued for member ${member.callsign} (${oldPublicKey.slice(0, 10)}...) by operator ${operatorPubkey}`,
-            JSON.stringify({ oldPubkey: oldPublicKey, operatorPubkey, code, expiresAt: expiresAtIso })
+            `Re-enrolment code issued for member ${member.callsign} (${cleanOld.slice(0, 10)}...) by operator ${cleanOperator}`,
+            JSON.stringify({ oldPubkey: cleanOld, operatorPubkey: cleanOperator, code, expiresAt: expiresAtIso })
         );
     })();
 
     // Revoke any web admin sessions for old key
     try {
-        revokeAllMemberSessions(oldPublicKey);
-        purgeMemberSessions(oldPublicKey);
+        revokeAllMemberSessions(cleanOld);
+        purgeMemberSessions(cleanOld);
     } catch {
         // Ignored if member is not an admin
     }
 
-    broadcast({ type: 'profile_updated', publicKey: oldPublicKey });
-    logger.info('AUTH', `[Rekey] Re-enrolment code ${code} issued for ${member.callsign} by ${operatorPubkey}`);
+    broadcast({ type: 'profile_updated', publicKey: cleanOld });
+    logger.info('AUTH', `[Rekey] Re-enrolment code ${code} issued for ${member.callsign} by ${cleanOperator}`);
 
     return {
         code,
-        oldPubkey: oldPublicKey,
+        oldPubkey: cleanOld,
         callsign: member.callsign,
         expiresAt: expiresAtIso,
     };
@@ -284,10 +286,10 @@ export function completeRekey(
         // (c) accounts (ledger balance & epochs)
         db.prepare('UPDATE accounts SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
 
-        // (d) transactions
+        // (d) transactions - preserve immutable cryptographic authorship
         db.prepare('UPDATE transactions SET from_pubkey = ? WHERE from_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE transactions SET to_pubkey = ? WHERE to_pubkey = ?').run(cleanNew, cleanOld);
-        db.prepare('UPDATE transactions SET auth_signer = ? WHERE auth_signer = ?').run(cleanNew, cleanOld);
+        // Note: auth_signer is left untouched because auth_signature was produced by cleanOld's private key
 
         // (e) marketplace_transactions
         db.prepare('UPDATE marketplace_transactions SET buyer_pubkey = ? WHERE buyer_pubkey = ?').run(cleanNew, cleanOld);
@@ -335,6 +337,7 @@ export function completeRekey(
 
         // (p) recovery shares / collections / releases
         db.prepare('UPDATE recovery_shares SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare("UPDATE recovery_shares SET holder_ref = ? WHERE holder_type = 'member' AND holder_ref = ?").run(cleanNew, cleanOld);
         db.prepare('UPDATE recovery_collections SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE recovery_releases SET released_by = ? WHERE released_by = ?').run(cleanNew, cleanOld);
 
@@ -369,10 +372,10 @@ export function completeRekey(
         db.prepare('UPDATE creator_channels SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE pulse_items SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);
 
-        // (y) decisions & votes
+        // (y) decisions & votes - update subject for member proposals and pool hardship grants
         db.prepare('UPDATE decisions SET author_pubkey = ? WHERE author_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE decisions SET admin_halted_by = ? WHERE admin_halted_by = ?').run(cleanNew, cleanOld);
-        db.prepare("UPDATE decisions SET subject = ? WHERE touches = 'member' AND subject = ?").run(cleanNew, cleanOld);
+        db.prepare("UPDATE decisions SET subject = ? WHERE (touches = 'member' OR touches = 'pool') AND subject = ?").run(cleanNew, cleanOld);
         db.prepare('UPDATE decision_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
 
         // (z) enterprise_pledges
@@ -408,10 +411,10 @@ export function completeRekey(
             `Member ${member.callsign} re-keyed: ${cleanOld.slice(0, 10)}... -> ${cleanNew.slice(0, 10)}... bound to new key by operator ${operatorPubkey}`,
             JSON.stringify({ oldPubkey: cleanOld, newPubkey: cleanNew, operatorPubkey, code })
         );
-
-        // 6. Resync the in-memory LedgerManager from SQLite accounts
-        reconcileLedgerFromDb();
     });
+
+    // 6. Resync the in-memory LedgerManager from SQLite accounts after transaction commit succeeds
+    reconcileLedgerFromDb();
 
     // Revoke any residual sessions for old key
     try {
@@ -547,6 +550,14 @@ export function executeOffboard(
         throw new Error('Cannot offboard the sole node owner; appoint another owner first');
     }
 
+    // Guard against pending escrows before pruning
+    const pendingEscrows = (db.prepare(
+        "SELECT COUNT(*) as c FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status = 'pending'"
+    ).get(cleanPub, cleanPub) as any)?.c || 0;
+    if (pendingEscrows > 0) {
+        throw new Error('Cannot offboard member with active deals in escrow. Resolve or cancel pending trades first.');
+    }
+
     const balanceInfo = getBalance(cleanPub);
     const balance = balanceInfo.balance;
     const resolution = options.resolution;
@@ -608,6 +619,13 @@ export function executeOffboard(
 
         // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned)
         adminPruneUser(cleanPub);
+
+        // Purge device push tokens to prevent leaked notifications
+        try {
+            db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(cleanPub);
+        } catch {
+            // Non-blocking
+        }
 
         // Full audit record in system_logs
         const nowIso = new Date().toISOString();

@@ -539,6 +539,25 @@ async function main() {
     // Clean up escrow transaction
     db.prepare("DELETE FROM marketplace_transactions WHERE id = ?").run(escrowTxId);
 
+    // Also assert requested trade status blocks offboarding
+    const requestedTxId = 'escrow_tx_req_' + Date.now();
+    db.prepare(`
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        VALUES (?, 'dummy_post_req', ?, ?, 20, 'requested', datetime('now'))
+    `).run(requestedTxId, escrowBuyerKey, bobKey);
+
+    const previewRequested = getOffboardPreview(escrowBuyerKey);
+    assert(previewRequested.pendingEscrowsCount === 1, 'getOffboardPreview detects 1 open requested deal');
+
+    throws(
+        () => executeOffboard(escrowBuyerKey, { resolution: 'prune_zero_balance' }, operatorPubkey),
+        /active deals in escrow or open trade requests/,
+        'executeOffboard rejects offboarding member with requested trade deals'
+    );
+
+    // Clean up requested transaction
+    db.prepare("DELETE FROM marketplace_transactions WHERE id = ?").run(requestedTxId);
+
     // Member 6: Push Token Purge on Prune
     const pushMemberKey = generateValidPubkey();
     makeMember('push_member', pushMemberKey);

@@ -34,6 +34,7 @@ import {
     getBalance,
     getCommonsBalanceExact,
     reconcileLedgerFromDb,
+    countOpenTrades,
 } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
@@ -488,9 +489,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
     const commonsBalance = getCommonsBalanceExact();
     const isOwner = isSoleOwner(cleanPub);
 
-    const pendingEscrows = (db.prepare(
-        "SELECT COUNT(*) as c FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status = 'pending'"
-    ).get(cleanPub, cleanPub) as any)?.c || 0;
+    const pendingEscrows = countOpenTrades(cleanPub);
 
     const activeMembers = db.prepare(
         "SELECT public_key as publicKey, callsign FROM members WHERE status = 'active' AND public_key != ? AND is_treasury = 0 ORDER BY callsign COLLATE NOCASE ASC"
@@ -550,12 +549,10 @@ export function executeOffboard(
         throw new Error('Cannot offboard the sole node owner; appoint another owner first');
     }
 
-    // Guard against pending escrows before pruning
-    const pendingEscrows = (db.prepare(
-        "SELECT COUNT(*) as c FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status = 'pending'"
-    ).get(cleanPub, cleanPub) as any)?.c || 0;
-    if (pendingEscrows > 0) {
-        throw new Error('Cannot offboard member with active deals in escrow. Resolve or cancel pending trades first.');
+    // Guard against pending escrows or open trade requests before pruning
+    const openTrades = countOpenTrades(cleanPub);
+    if (openTrades > 0) {
+        throw new Error('Cannot offboard member with active deals in escrow or open trade requests. Resolve or cancel pending trades first.');
     }
 
     const balanceInfo = getBalance(cleanPub);

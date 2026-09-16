@@ -34,7 +34,8 @@ async function runTests() {
         execSync(`node "${scriptPath}"`, { stdio: 'pipe' });
         assert(true, 'Apps/manager import boundaries and package.json dependencies verified');
     } catch (err: any) {
-        assert(false, `Apps/manager undeclared imports check failed: ${err.message}`);
+        const output = err.stderr?.toString()?.trim() || err.stdout?.toString()?.trim() || err.message;
+        assert(false, `Apps/manager undeclared imports check failed:\n${output}`);
     }
 
     console.log('\n⭐️ ALL PHASE 5 MANAGER CONVERGENCE CHECKS PASSED.');

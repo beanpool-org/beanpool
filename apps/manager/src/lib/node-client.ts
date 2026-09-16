@@ -424,18 +424,15 @@ export async function updateGatewayConfig(
 export function normalizeKeeperPubkey(keeper: unknown): string {
     if (typeof keeper === 'string') return keeper.trim();
     if (typeof keeper === 'object' && keeper !== null) {
-        const obj = keeper as {
-            publicKey?: unknown;
-            pubkey?: unknown;
-            public_key?: unknown;
-            member_pubkey?: unknown;
-            memberPubkey?: unknown;
-        };
-        if (typeof obj.publicKey === 'string') return obj.publicKey.trim();
-        if (typeof obj.pubkey === 'string') return obj.pubkey.trim();
-        if (typeof obj.public_key === 'string') return obj.public_key.trim();
-        if (typeof obj.member_pubkey === 'string') return obj.member_pubkey.trim();
-        if (typeof obj.memberPubkey === 'string') return obj.memberPubkey.trim();
+        const obj = keeper as Record<string, unknown>;
+        const candidate = [
+            obj.publicKey,
+            obj.pubkey,
+            obj.public_key,
+            obj.member_pubkey,
+            obj.memberPubkey,
+        ].find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        if (candidate) return candidate.trim();
     }
     return '';
 }
@@ -456,17 +453,7 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
         result.members = Array.isArray(data.members)
             ? data.members.map((m: any) => {
                 if (!m || typeof m !== 'object') return { publicKey: '', standing: 'Newcomer' };
-                const pubkey = typeof m.publicKey === 'string'
-                    ? m.publicKey.trim()
-                    : (typeof m.pubkey === 'string'
-                        ? m.pubkey.trim()
-                        : (typeof m.public_key === 'string'
-                            ? m.public_key.trim()
-                            : (typeof m.member_pubkey === 'string'
-                                ? m.member_pubkey.trim()
-                                : (typeof m.memberPubkey === 'string'
-                                    ? m.memberPubkey.trim()
-                                    : ''))));
+                const pubkey = normalizeKeeperPubkey(m);
                 const rawName = typeof m.name === 'string'
                     ? m.name
                     : (typeof m.displayName === 'string'

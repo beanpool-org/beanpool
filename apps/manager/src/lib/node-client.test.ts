@@ -599,6 +599,11 @@ describe('normalizeKeeperPubkey and normalizeKeepers', () => {
         ]);
     });
 
+    it('skips empty or whitespace-only candidate keys to find populated alias', () => {
+        const obj = { publicKey: '', pubkey: '   ', member_pubkey: 'actual_pubkey' };
+        expect(normalizeKeeperPubkey(obj)).toBe('actual_pubkey');
+    });
+
     it('filters out empty or malformed keeper entries', () => {
         expect(normalizeKeeperPubkey(null)).toBe('');
         expect(normalizeKeeperPubkey(undefined)).toBe('');

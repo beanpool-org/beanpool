@@ -462,4 +462,39 @@ describe('PublicAddressPanel Component', () => {
         fireEvent.click(dialog);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
+
+    it('applies flex-wrap and break-all to pending domain status to prevent mobile overflow', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        status: 'pending',
+                        name: 'long-community-subdomain-overflow-test',
+                    }),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ logs: [] }),
+            } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/Awaiting registrar approval for/i)).toBeInTheDocument();
+        });
+
+        const pendingContainer = screen.getByText(/Awaiting registrar approval for/i).closest('div');
+        expect(pendingContainer?.className).toContain('flex-wrap');
+
+        const domainSpan = pendingContainer?.querySelector('.break-all');
+        expect(domainSpan).not.toBeNull();
+        expect(domainSpan?.textContent).toBe('long-community-subdomain-overflow-test.beanpool.org');
+    });
 });
+

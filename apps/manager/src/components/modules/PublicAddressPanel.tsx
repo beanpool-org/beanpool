@@ -522,10 +522,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         </div>
                     ) : isPending ? (
                         <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-xs text-amber-400 font-bold">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-amber-400 font-bold">
                                 <span>⏳</span>
                                 <span>Awaiting registrar approval for</span>
-                                <span className="font-mono underline text-white">
+                                <span className="font-mono underline text-white break-all">
                                     {statusData?.name || 'subdomain'}.beanpool.org
                                 </span>
                             </div>

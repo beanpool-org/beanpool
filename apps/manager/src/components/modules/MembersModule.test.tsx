@@ -37,6 +37,13 @@ describe('MembersModule helper functions', () => {
             expect(getMemberDisplayName({ pubkey: 'SYSTEM-1' }, mockProfilesMap)).toBe('System Node Operator');
         });
 
+        it('resolves name using Array lookup with memberPubkey alias case-insensitively', () => {
+            const profilesWithAlias = [
+                { memberPubkey: 'PK-ALICE-12345678', name: 'Alice Alias' } as any,
+            ];
+            expect(getMemberDisplayName({ publicKey: 'pk-alice-12345678' }, profilesWithAlias)).toBe('Alice Alias');
+        });
+
         it('falls back to member object properties if not in profiles', () => {
             expect(getMemberDisplayName({ publicKey: 'pk-charlie', name: 'Charlie' }, mockProfilesMap)).toBe('Charlie');
         });

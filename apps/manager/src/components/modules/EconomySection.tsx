@@ -82,7 +82,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
     const [creatingEnterprise, setCreatingEnterprise] = useState(false);
 
     // Keepers state
-    const [keepersMap, setKeepersMap] = useState<Record<string, string[]>>({});
+    const [keepersMap, setKeepersMap] = useState<Record<string, any[]>>({});
     const [manageKeepersTreasury, setManageKeepersTreasury] = useState<NodeTreasury | null>(null);
     const [assignMemberPubkey, setAssignMemberPubkey] = useState('');
     const [customKeeperPubkey, setCustomKeeperPubkey] = useState('');
@@ -114,34 +114,44 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
         let directName = '';
 
         if (typeof input === 'string') {
-            pubkey = input;
+            pubkey = input.trim();
         } else if (typeof input === 'object' && input !== null) {
             const obj = input as {
-                publicKey?: unknown;
-                pubkey?: unknown;
-                name?: unknown;
                 callsign?: unknown;
+                name?: unknown;
                 displayName?: unknown;
             };
-            if (typeof obj.name === 'string' && obj.name.trim()) directName = obj.name.trim();
+            if (typeof obj.callsign === 'string' && obj.callsign.trim()) directName = obj.callsign.trim();
+            else if (typeof obj.name === 'string' && obj.name.trim()) directName = obj.name.trim();
             else if (typeof obj.displayName === 'string' && obj.displayName.trim()) directName = obj.displayName.trim();
-            else if (typeof obj.callsign === 'string' && obj.callsign.trim()) directName = obj.callsign.trim();
 
-            if (typeof obj.publicKey === 'string') pubkey = obj.publicKey;
-            else if (typeof obj.pubkey === 'string') pubkey = obj.pubkey;
+            pubkey = normalizeKeeperPubkey(input);
         }
 
+        // Prefer the keeper entry's own callsign when present rather than depending on a second lookup
+        if (directName) return directName;
+
         if (pubkey && Array.isArray(members)) {
-            const found = members.find((m) => m && (m.publicKey === pubkey || (m as { pubkey?: string }).pubkey === pubkey));
+            const lowerPubkey = pubkey.toLowerCase();
+            const found = members.find((m) => {
+                if (!m) return false;
+                const mPk = normalizeKeeperPubkey(m);
+                return mPk && mPk.toLowerCase() === lowerPubkey;
+            });
             if (found) {
-                const foundName = found.name || (found as { callsign?: string }).callsign;
-                if (typeof foundName === 'string' && foundName.trim()) {
-                    return foundName.trim();
+                const foundName = (typeof found.callsign === 'string' && found.callsign.trim())
+                    ? found.callsign.trim()
+                    : ((typeof found.name === 'string' && found.name.trim())
+                        ? found.name.trim()
+                        : ((typeof (found as any).displayName === 'string' && (found as any).displayName.trim())
+                            ? (found as any).displayName.trim()
+                            : ''));
+                if (foundName) {
+                    return foundName;
                 }
             }
         }
 
-        if (directName) return directName;
         if (typeof pubkey === 'string' && pubkey.length > 0) {
             return pubkey.length > 10 ? `${pubkey.slice(0, 10)}...` : pubkey;
         }
@@ -155,16 +165,16 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned
-            const initialMap: Record<string, string[]> = {};
+            const initialMap: Record<string, any[]> = {};
             for (const t of list || []) {
                 if (t.publicKey) {
-                    initialMap[t.publicKey] = normalizeKeepers(t.keepers);
+                    initialMap[t.publicKey] = Array.isArray(t.keepers) ? t.keepers : [];
                 }
             }
             setKeepersMap(initialMap);
 
             // Fetch live keepers for any treasury missing keepers in initial list
-            const missing = (list || []).filter((t) => t.publicKey && !t.keepers);
+            const missing = (list || []).filter((t) => t.publicKey && !Array.isArray(t.keepers));
             if (missing.length > 0) {
                 const results = await Promise.all(
                     missing.map(async (t) => {
@@ -175,7 +185,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                 activeNode.adminPassword,
                                 effectiveTfaToken
                             );
-                            return { pubkey: t.publicKey, keepers: normalizeKeepers(keepers) };
+                            return { pubkey: t.publicKey, keepers: Array.isArray(keepers) ? keepers : [] };
                         } catch {
                             return { pubkey: t.publicKey, keepers: [] };
                         }
@@ -293,7 +303,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                 activeNode.adminPassword,
                 effectiveTfaToken
             );
-            setKeepersMap((prev) => ({ ...prev, [t.publicKey]: normalizeKeepers(keepers) }));
+            setKeepersMap((prev) => ({ ...prev, [t.publicKey]: Array.isArray(keepers) ? keepers : [] }));
         } catch {
             // Keep existing from map if fetch fails
         }
@@ -320,7 +330,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             );
             setKeepersMap((prev) => ({
                 ...prev,
-                [manageKeepersTreasury.publicKey]: normalizeKeepers(updatedKeepers),
+                [manageKeepersTreasury.publicKey]: Array.isArray(updatedKeepers) ? updatedKeepers : [],
             }));
             setAssignMemberPubkey('');
             setCustomKeeperPubkey('');
@@ -357,7 +367,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
             );
             setKeepersMap((prev) => ({
                 ...prev,
-                [manageKeepersTreasury.publicKey]: normalizeKeepers(updatedKeepers),
+                [manageKeepersTreasury.publicKey]: Array.isArray(updatedKeepers) ? updatedKeepers : [],
             }));
             onRefresh();
         } catch (err: unknown) {
@@ -617,9 +627,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                                 ) : (
                                                     <div className="flex flex-wrap gap-1">
                                                         {currentKeepers.slice(0, 3).map((pk, idx) => {
-                                                            const kPubkey = typeof pk === 'string'
-                                                                ? pk
-                                                                : (pk && typeof (pk as any).publicKey === 'string' ? (pk as any).publicKey : String(idx));
+                                                            const kPubkey = normalizeKeeperPubkey(pk) || String(idx);
                                                             return (
                                                                 <span
                                                                     key={kPubkey || idx}
@@ -999,9 +1007,7 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                             <div className="space-y-2">
                                                 {currentTreasuryKeepers.map((pk, idx) => {
                                                     const name = getMemberDisplayName(pk);
-                                                    const pubkeyStr = typeof pk === 'string'
-                                                        ? pk
-                                                        : (pk && typeof (pk as any).publicKey === 'string' ? (pk as any).publicKey : '');
+                                                    const pubkeyStr = normalizeKeeperPubkey(pk);
                                                     return (
                                                         <div
                                                             key={pubkeyStr || idx}
@@ -1067,19 +1073,22 @@ export function EconomySection({ activeNode, nodeData, tfaToken, onRefresh }: Ec
                                             const activeKeepers = Array.isArray(keepersMap[manageKeepersTreasury.publicKey])
                                                 ? keepersMap[manageKeepersTreasury.publicKey]
                                                 : (Array.isArray(manageKeepersTreasury.keepers) ? manageKeepersTreasury.keepers : []);
-                                            const assignedPubkeys = activeKeepers.map(normalizeKeeperPubkey).filter(Boolean);
+                                            const assignedPubkeys = activeKeepers.map(normalizeKeeperPubkey).filter(Boolean).map((k) => k.toLowerCase());
                                             return members
                                                 .filter((m) => {
-                                                    const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
-                                                    return pk && !assignedPubkeys.includes(pk);
+                                                    const pk = normalizeKeeperPubkey(m);
+                                                    return pk && !assignedPubkeys.includes(pk.toLowerCase());
                                                 })
                                                 .map((m, idx) => {
-                                                    const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof m.pubkey === 'string' ? m.pubkey : '');
-                                                    const rawName = m.name || (m as { callsign?: string }).callsign;
-                                                    const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : (pk ? pk.slice(0, 10) : 'Member');
+                                                    const pk = normalizeKeeperPubkey(m);
+                                                    const rawName = m.callsign || m.name || (m as { displayName?: string }).displayName;
+                                                    const hasName = typeof rawName === 'string' && rawName.trim().length > 0;
+                                                    const label = hasName
+                                                        ? `@${rawName.trim().replace(/^@/, '')} (${pk ? `${pk.slice(0, 8)}...` : ''})`
+                                                        : (pk ? `Member (${pk.slice(0, 8)}...)` : 'Member');
                                                     return (
                                                         <option key={pk || `assign-member-${idx}`} value={pk}>
-                                                            @{name} ({pk ? `${pk.slice(0, 8)}...` : ''})
+                                                            {label}
                                                         </option>
                                                     );
                                                 });

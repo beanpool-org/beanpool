@@ -318,10 +318,10 @@ export function OffboardMemberWizard({
                             </button>
                             <button
                                 type="button"
-                                disabled={submitting || preview.isSoleOwner || isSelfDealing}
+                                disabled={submitting || preview.isSoleOwner || isSelfDealing || (preview.pendingEscrowsCount > 0)}
                                 onClick={handleConfirmOffboard}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg text-xs ${
-                                    !submitting && !preview.isSoleOwner && !isSelfDealing
+                                    !submitting && !preview.isSoleOwner && !isSelfDealing && (preview.pendingEscrowsCount === 0)
                                         ? 'bg-red-600 hover:bg-red-500 text-white'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                 }`}

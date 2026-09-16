@@ -1579,11 +1579,9 @@ export async function fetchEscrowDisputes(
     tfaToken?: string
 ): Promise<EscrowDisputesResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', { minDays: String(minDays) });
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
-    const res = await fetch(endpoint, { headers });
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -1607,13 +1605,9 @@ export async function resolveEscrowDisputeApi(
     tfaToken?: string
 ): Promise<ResolveEscrowDisputeResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/disputes/${encodeURIComponent(disputeId)}/resolve`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ action, reason }),
     });
     if (!res.ok) {

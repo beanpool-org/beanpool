@@ -1822,16 +1822,23 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     const totalBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
     const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0;
     const totalKeepers = (backingRow?.totalKeepers ?? 0);
-    const { floor, earnedCredit } = getMemberTrustProfile(enterprisePubkey);
+    const { floor, earnedCredit, grantedCredit } = getMemberTrustProfile(enterprisePubkey);
 
-    if (hasExplicitBacking) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, totalBacking + (earnedCredit || 0));
-        return { floor: -allowance, totalBacking, hasBacking: true };
-    }
     if (totalKeepers === 0) {
         return { floor: 0, totalBacking: 0, hasBacking: false };
     }
-    return { floor, totalBacking: 0, hasBacking: false };
+
+    if (hasExplicitBacking) {
+        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, totalBacking + (earnedCredit || 0) + (grantedCredit || 0));
+        return { floor: -allowance, totalBacking, hasBacking: true };
+    }
+
+    if (grantedCredit > 0 || (earnedCredit || 0) > 0) {
+        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, (earnedCredit || 0) + grantedCredit);
+        return { floor: -allowance, totalBacking: 0, hasBacking: false };
+    }
+
+    return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
 export function usableFloor(publicKey: string): number {

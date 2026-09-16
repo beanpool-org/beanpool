@@ -82,6 +82,9 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
 
+    // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
+    const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
+
     const handleVote = async (optionId: string) => {
         if (isClosed) {
             Alert.alert('Poll Closed', 'This poll has ended and can no longer receive votes.');
@@ -283,7 +286,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                         Village voting is open and transparent. Every vote is signed and visible to members.
                     </Text>
                     {votesList.map((v, i) => {
-                        const matchedOpt = options.find(o => o.id === v.optionId);
+                        const matchedOpt = optionsById.get(v.optionId);
                         const optText = matchedOpt ? matchedOpt.text : v.optionId;
                         const voterName = v.voterCallsign || (v.voterPubkey ? v.voterPubkey.slice(0, 8) : 'Member');
 

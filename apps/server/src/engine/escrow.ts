@@ -834,7 +834,11 @@ export function resolveEscrowDispute(
     opts?: { reason?: string }
 ): MarketplaceTransaction {
     if (!['release_to_seller', 'refund_to_buyer', 'split'].includes(action)) {
-        throw new Error("Invalid dispute action. Must be 'release_to_seller', 'refund_to_buyer', or 'split'.");
+        throw new Error("Invalid dispute resolution action. Must be 'release_to_seller', 'refund_to_buyer', or 'split'.");
+    }
+
+    if (!adminSigner || typeof adminSigner !== 'string' || !adminSigner.trim()) {
+        throw new Error('Missing admin authSigner for escrow dispute resolution');
     }
 
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
@@ -843,7 +847,7 @@ export function resolveEscrowDispute(
     }
 
     const post = db.prepare('SELECT * FROM posts WHERE id=?').get(row.post_id) as any;
-    const authSigner = adminSigner || 'owner:password';
+    const authSigner = adminSigner.trim();
     const completedAt = new Date().toISOString();
     const reasonText = opts?.reason ? ` (Reason: ${opts.reason})` : '';
 
@@ -896,8 +900,6 @@ export function resolveEscrowDispute(
                     db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
                         .run(sellerShare, row.seller_pubkey);
                 }
-                if (cb.processDeferredWageClaims) cb.processDeferredWageClaims(row.seller_pubkey);
-                if (cb.sweepEnterpriseCeiling) cb.sweepEnterpriseCeiling(row.seller_pubkey);
             }
 
             if (post && !post.repeatable) {
@@ -970,12 +972,12 @@ export function resolveEscrowDispute(
                         db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
                             .run(sellerShare, row.seller_pubkey);
                     }
-                    if (cb.processDeferredWageClaims) cb.processDeferredWageClaims(row.seller_pubkey);
-                    if (cb.sweepEnterpriseCeiling) cb.sweepEnterpriseCeiling(row.seller_pubkey);
                 }
             }
 
             if (buyerMember?.is_treasury === 1) {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE transaction_id = ? AND status = 'pending'")
+                    .run(transactionId);
                 const isPayeeKeeper = Boolean(
                     db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
                         .get(row.buyer_pubkey, row.seller_pubkey)
@@ -993,6 +995,12 @@ export function resolveEscrowDispute(
             }
         }
     });
+
+    // Wage claims and ceiling sweep executed outside conservingTransaction to prevent nested transactions
+    if (sellerMember?.is_treasury === 1 && (action === 'release_to_seller' || (action === 'split' && sellerShare > 0))) {
+        if (cb.processDeferredWageClaims) cb.processDeferredWageClaims(row.seller_pubkey);
+        if (cb.sweepEnterpriseCeiling) cb.sweepEnterpriseCeiling(row.seller_pubkey);
+    }
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
     cb.broadcast({ type: 'dispute_resolved', transactionId, action, authSigner, transaction: tx });

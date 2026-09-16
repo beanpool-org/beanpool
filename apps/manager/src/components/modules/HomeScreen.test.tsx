@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { HomeScreen } from './HomeScreen';
 
@@ -52,4 +52,67 @@ describe('HomeScreen Component', () => {
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
         expect(circulationCard).toHaveTextContent('50.4 beans');
     });
+
+    it('renders plain-language reassurance card on clean recovery after unclean shutdown', async () => {
+        const mockDiag: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: true,
+                ok: true,
+                powerLossAt: '04:12',
+                message: 'Recovered from power loss at 04:12. Database verified, no corruption.',
+                acknowledged: false,
+            },
+        };
+
+        const onAcknowledge = vi.fn().mockResolvedValue(undefined);
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} onAcknowledgeShutdown={onAcknowledge} />);
+
+        // Should display the plain-language card
+        expect(screen.getByText(/Recovered from power loss at 04:12\. Database verified, no corruption\./i)).toBeInTheDocument();
+        expect(screen.getByText(/PRAGMA integrity_check: ok/i)).toBeInTheDocument();
+
+        // Dismissing card
+        const dismissBtn = screen.getByRole('button', { name: /Dismiss/i });
+        await act(async () => {
+            dismissBtn.click();
+        });
+        expect(onAcknowledge).toHaveBeenCalled();
+    });
+
+    it('renders loud critical alert card when database corruption is detected after unclean shutdown', () => {
+        const mockDiag: any = {
+            shutdownStatus: {
+                uncleanShutdown: true,
+                recovered: false,
+                ok: false,
+                powerLossAt: '04:12',
+                error: 'Page 42 is corrupted',
+                message: 'Database corruption detected after power loss at 04:12!',
+                acknowledged: false,
+            },
+        };
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} />);
+
+        expect(screen.getByText(/CRITICAL ALERT · DATABASE CORRUPTION DETECTED/i)).toBeInTheDocument();
+        expect(screen.getByText(/Database corruption detected after power loss at 04:12!/i)).toBeInTheDocument();
+        expect(screen.getByText(/Page 42 is corrupted/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Restore from Backup/i })).toBeInTheDocument();
+    });
+
+    it('shows storage warning at 80% or greater in Action Required', () => {
+        const mockDiag: any = {
+            diskHealth: {
+                usedPercent: 82,
+                warning: true,
+            },
+        };
+
+        render(<HomeScreen {...defaultProps} diag={mockDiag} />);
+
+        expect(screen.getByText(/Storage 82%/i)).toBeInTheDocument();
+    });
 });
+

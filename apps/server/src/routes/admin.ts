@@ -52,6 +52,8 @@ import {
     verifyEd25519Signature,
 } from '../admin-key-auth.js';
 import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
+import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs } from '../engine/storage-health.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -710,6 +712,8 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
+            shutdownStatus: getShutdownStatus(),
+            diskHealth: getDiskHealth(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -737,6 +741,50 @@ const getDiagnosticsHandler = async (ctx: any) => {
 
 router.get('/api/local/admin/diagnostics', getDiagnosticsHandler);
 router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
+
+// ===================== UNCLEAN SHUTDOWN DIAGNOSTICS =====================
+const getShutdownStatusHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, shutdownStatus: getShutdownStatus() };
+};
+
+const acknowledgeShutdownHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const updated = acknowledgeShutdownRecovery();
+    ctx.body = { success: true, shutdownStatus: updated };
+};
+
+router.get('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status/acknowledge', acknowledgeShutdownHandler);
+
+// ===================== STORAGE & DISK HEALTH =====================
+router.get('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.post('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.get('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const result = cleanStorageAndCompressLogs();
+    ctx.body = result;
+});
+
 
 /**
  * Onboarding funnel: how many people tried to join, and where they stopped.

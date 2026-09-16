@@ -51,6 +51,7 @@ import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
+import { initShutdownRecovery } from './engine/shutdown-recovery.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -71,6 +72,16 @@ async function main() {
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
     migrateAdminConversations();
+
+    // Step 2.51: Unclean shutdown detection & SQLite PRAGMA integrity_check
+    const shutdownRecovery = initShutdownRecovery();
+    if (shutdownRecovery.uncleanShutdown) {
+        if (shutdownRecovery.ok) {
+            console.log(`🛡️  ${shutdownRecovery.message}`);
+        } else {
+            console.error(`🚨 ${shutdownRecovery.message}`);
+        }
+    }
 
     // Step 2.55: Auto-snapshot scheduler — periodic local DB snapshots into
     // data/snapshots/ (Backup tab). Defaults to daily, keeping the last 7.

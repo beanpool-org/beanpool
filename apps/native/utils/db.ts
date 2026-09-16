@@ -4617,18 +4617,24 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
                         g.createdAt, g.updatedAt || g.createdAt
                     ]);
 
-                    if (identity?.publicKey && (g.viewerRole || g.viewerStatus)) {
-                        await database.runAsync(`
-                            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
-                                role = excluded.role,
-                                status = excluded.status,
-                                updated_at = excluded.updated_at
-                        `, [
-                            g.id, identity.publicKey, g.viewerRole || 'member',
-                            g.viewerStatus || 'active', g.createdAt, g.updatedAt || g.createdAt
-                        ]);
+                    if (identity?.publicKey) {
+                        if (g.viewerRole || g.viewerStatus) {
+                            await database.runAsync(`
+                                INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
+                                    role = excluded.role,
+                                    status = excluded.status,
+                                    updated_at = excluded.updated_at
+                            `, [
+                                g.id, identity.publicKey, g.viewerRole || 'member',
+                                g.viewerStatus || 'active', g.createdAt, g.updatedAt || g.createdAt
+                            ]);
+                        } else {
+                            await database.runAsync(`
+                                DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?
+                            `, [g.id, identity.publicKey]);
+                        }
                     }
                 }
                 return data;
@@ -4734,6 +4740,14 @@ export async function setGroupMemberRoleApi(groupId: string, memberPubkey: strin
 
 export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
     const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+    if (res?.success) {
+        try {
+            const database = await getDb();
+            await database.runAsync('DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?', [groupId, memberPubkey]);
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to remove group member locally:', dbErr);
+        }
+    }
     return Boolean(res?.success);
 }
 

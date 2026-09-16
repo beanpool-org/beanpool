@@ -592,7 +592,10 @@ export async function pruneInviteBranch(
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; error?: string }> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey)}/prune`);
+    if (!pubkey || typeof pubkey !== 'string' || !pubkey.trim()) {
+        throw new Error('Valid public key is required to prune an invite branch');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey.trim())}/prune`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
@@ -611,7 +614,10 @@ export async function deleteNodePost(
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; error?: string }> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/posts/${encodeURIComponent(postId)}/delete`);
+    if (!postId || typeof postId !== 'string' || !postId.trim()) {
+        throw new Error('Valid post ID is required to delete a post');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/posts/${encodeURIComponent(postId.trim())}/delete`);
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),

@@ -179,16 +179,19 @@ export function sendMessage(
 
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
-    const senderMember = getMember(db, authorPubkey) as any;
-    const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
-    cb.dispatchPushNotification(
-        participants.map(p => p.public_key),
-        authorPubkey,
-        '💬 New Message',
-        `${senderName} sent you a message`,
-        { screen: 'chat', conversationId: effectiveConvId },
-        'chat'
-    );
+    const convRow = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
+    if (convRow?.type !== 'enterprise_thread') {
+        const senderMember = getMember(db, authorPubkey) as any;
+        const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
+        cb.dispatchPushNotification(
+            participants.map(p => p.public_key),
+            authorPubkey,
+            '💬 New Message',
+            `${senderName} sent you a message`,
+            { screen: 'chat', conversationId: effectiveConvId },
+            'chat'
+        );
+    }
 
     return msg;
 }

@@ -44,6 +44,7 @@ interface FleetSidebarProps {
     nodeHealthMap?: Record<string, NodeHealthStatus>;
     tabAlertCounts?: Partial<Record<TabId, AlertCounts>>;
     isFleetMode?: boolean;
+    communityName?: string;
     onLogout?: () => void;
 }
 
@@ -60,6 +61,7 @@ export function FleetSidebar({
     nodeHealthMap = {},
     tabAlertCounts = {},
     isFleetMode = IS_FLEET_MODE,
+    communityName,
     onLogout,
 }: FleetSidebarProps) {
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -153,12 +155,15 @@ export function FleetSidebar({
             {/* Header Brand */}
             <div className="p-5 border-b border-nature-800/80 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20">
+                    <div
+                        className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                        aria-hidden="true"
+                    >
                         🌱
                     </div>
                     <div>
-                        <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight">
-                            BeanPool
+                        <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight truncate max-w-[170px]" title={isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}>
+                            {isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}
                         </h1>
                         <p className="text-[11px] font-semibold text-terra-400 m-0">
                             {isFleetMode ? 'Fleet Manager v1.2' : 'Node Settings'}
@@ -396,8 +401,8 @@ export function FleetSidebar({
                                 <span>Online</span>
                             </span>
                         </div>
-                        <div className="text-xs font-bold text-white truncate" title={activeNode?.name}>
-                            {activeNode?.name || 'Local Sovereign Node'}
+                        <div className="text-xs font-bold text-white truncate" title={communityName || activeNode?.name}>
+                            {communityName || activeNode?.name || 'Local Sovereign Node'}
                         </div>
                         <div className="text-[10px] font-mono text-nature-400 truncate">
                             {activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}

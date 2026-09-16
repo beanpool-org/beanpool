@@ -217,8 +217,12 @@ router.post('/api/local/update-identity', async (ctx) => {
     }
 
     if (callsign !== undefined) config.callsign = (callsign || '').slice(0, 20);
-    if (lat !== undefined && lng !== undefined) {
-        config.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+    if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lng);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            config.location = { lat: parsedLat, lng: parsedLng };
+        }
     }
     if (communityName !== undefined) config.communityName = (communityName || '').slice(0, 60) || null;
     if (contactEmail !== undefined) config.contactEmail = (contactEmail || '').slice(0, 100) || null;

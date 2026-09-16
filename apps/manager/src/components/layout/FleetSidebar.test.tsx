@@ -158,5 +158,14 @@ describe('FleetSidebar Component', () => {
             expect(screen.getByText('Alpha Node')).toBeInTheDocument();
             expect(screen.getByText('Legacy Settings')).toHaveAttribute('href', '/settings-legacy');
         });
+
+        it('renders community name in header brand and marks decorative seedling as aria-hidden', () => {
+            render(<FleetSidebar {...singleNodeProps} communityName="Mullumbimby Commons" />);
+
+            expect(screen.getAllByText('Mullumbimby Commons').length).toBe(2);
+            expect(screen.queryByRole('img', { name: 'Mullumbimby Commons — Node Settings' })).toBeNull();
+            const seedlingEl = screen.getByText('🌱');
+            expect(seedlingEl).toHaveAttribute('aria-hidden', 'true');
+        });
     });
 });

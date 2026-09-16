@@ -35,6 +35,12 @@ describe('App Component', () => {
             expect(screen.getByText('BeanPool')).toBeInTheDocument();
             expect(screen.getByText('Fleet Manager v1.2')).toBeInTheDocument();
             expect(screen.getAllByRole('button', { name: /fleet telemetry/i }).length).toBeGreaterThanOrEqual(1);
+            expect(document.title).toBe('BeanPool Fleet Manager — Control Plane');
+            expect(document.title).toContain('Fleet');
+            const favicon = document.querySelector("link[rel~='icon']");
+            if (favicon) {
+                expect(favicon.getAttribute('aria-label')).toBeNull();
+            }
         });
 
         it('switches tabs when tab navigation buttons are clicked', async () => {
@@ -88,6 +94,18 @@ describe('App Component', () => {
             expect(screen.getByPlaceholderText(/enter node admin password/i)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
             expect(screen.getByText('Switch to Legacy Settings Page')).toHaveAttribute('href', '/settings-legacy');
+            expect(document.title).not.toContain('Fleet');
+            expect(document.title).not.toMatch(/fleet/i);
+            expect(document.title).toBe('BeanPool — Node Settings');
+        });
+
+        it('verifies document title does not contain "Fleet" in single-node mode', async () => {
+            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            expect(document.title).not.toContain('Fleet');
+            expect(document.title).not.toMatch(/fleet/i);
         });
 
         it('renders single-node shell with HomeScreen when authenticated', async () => {

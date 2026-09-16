@@ -277,6 +277,15 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN reach TEXT NOT NULL DEFAULT 'local'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN reach_peers TEXT`).run(); } catch { }
 
+    // Audience scoping on posts (docs/the-commons.md §9, Item 10)
+    // Additive and idempotent migration: every existing post defaults to 'public'.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN audience_scope TEXT NOT NULL DEFAULT 'public'`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN assigned_to TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT`).run(); } catch { }
+    try { db.prepare(`UPDATE posts SET audience_scope = 'public' WHERE audience_scope IS NULL`).run(); } catch { }
+
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN project_id TEXT REFERENCES projects(id)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id)`).run(); } catch { }
 

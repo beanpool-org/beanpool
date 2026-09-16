@@ -71,6 +71,7 @@ export interface MarketplacePost {
     // Audience scoping (docs/the-commons.md §9, Item 10)
     audienceScope?: AudienceScope;
     targetGroupId?: string;
+    targetGroupName?: string;
     targetPubkey?: string;
     assignedTo?: string;
     targetArchetypes?: string;
@@ -226,6 +227,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         pollClosesAt: row.poll_closes_at || undefined,
         audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
         targetGroupId: row.target_group_id || undefined,
+        targetGroupName: row.target_group_name || undefined,
         targetPubkey: row.target_pubkey || undefined,
         assignedTo: row.assigned_to || undefined,
         targetArchetypes: row.target_archetypes || undefined
@@ -266,6 +268,7 @@ export function usableFloor(db: Db, publicKey: string): number {
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+               g.name as target_group_name,
                COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
@@ -281,6 +284,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
+        LEFT JOIN groups g ON p.target_group_id = g.id
         WHERE 1=1
     `;
     const params: any[] = [];

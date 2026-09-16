@@ -585,9 +585,10 @@ export async function clearDB() {
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string }) {
     let database = await waitForInit();
     let query = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
+        LEFT JOIN groups g ON p.target_group_id = g.id
         WHERE p.status IN ('active', 'pending', 'completed')
     `;
     const params: any[] = [];
@@ -656,6 +657,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
         r.audienceScope = r.audience_scope || 'public';
         r.targetGroupId = r.target_group_id || null;
+        r.targetGroupName = r.target_group_name || null;
         r.targetPubkey = r.target_pubkey || null;
         r.assignedTo = r.assigned_to || null;
         r.targetArchetypes = r.target_archetypes || null;

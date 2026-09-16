@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, getBalance } from '../../utils/db';
+import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, type GroupItem } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
@@ -640,6 +640,8 @@ export default function MarketScreen() {
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [categoryFilter, setCategoryFilter] = useState('all');
+    const [groupFilter, setGroupFilter] = useState('all');
+    const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [radiusKm, setRadiusKm] = useState<number | null>(null);
     const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
@@ -655,6 +657,13 @@ export default function MarketScreen() {
     const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
 
     useEffect(() => {
+        fetchGroups().then(groups => {
+            const active = groups.filter(g => g.viewerStatus === 'active');
+            setUserGroups(active);
+        }).catch(console.error);
+    }, [identity?.publicKey]);
+
+    useEffect(() => {
         getBlockedUsers().then(setBlockedUsers);
         const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (newList) => {
             setBlockedUsers(newList);
@@ -665,7 +674,7 @@ export default function MarketScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadPosts();
-        }, [filter, identity?.publicKey])
+        }, [filter, groupFilter, identity?.publicKey])
     );
 
     const params = useLocalSearchParams<{ tab?: string, dealsTab?: string }>();
@@ -794,9 +803,15 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter = filter === 'all' || filter === 'for-you' ? undefined : { type: filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll' };
+        const queryFilter: any = {};
+        if (filter !== 'all' && filter !== 'for-you') {
+            queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll';
+        }
+        if (groupFilter !== 'all') {
+            queryFilter.targetGroupId = groupFilter;
+        }
         const runLoad = async () => {
-            const data = await getPosts(queryFilter);
+            const data = await getPosts(Object.keys(queryFilter).length > 0 ? queryFilter : undefined);
             setPosts(data);
             if (identity) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
@@ -842,6 +857,11 @@ export default function MarketScreen() {
             if (p.status !== 'active') return false;
         }
         if (blockedUsers.includes(p.author_pubkey)) return false;
+        // Group filter (Item 10)
+        if (groupFilter !== 'all') {
+            const postGroupId = p.target_group_id || p.targetGroupId;
+            if (postGroupId !== groupFilter) return false;
+        }
         // Category filter: polls are civic governance posts and bypass goods category filters
         if (categoryFilter !== 'all' && p.category !== categoryFilter && filter !== 'polls') return false;
         // #108: beans-only browse excludes polls
@@ -906,7 +926,7 @@ export default function MarketScreen() {
 
     const selectedCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0;
+    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0 || groupFilter !== 'all';
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
@@ -1127,6 +1147,45 @@ export default function MarketScreen() {
                         )}
                     </Pressable>
                 </View>
+
+                {/* Row 4: Group Filter Chips (Item 10) */}
+                {userGroups.length > 0 && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
+                    >
+                        <Pressable
+                            onPress={() => setGroupFilter('all')}
+                            style={[styles.chip, groupFilter === 'all' && styles.chipActive]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: groupFilter === 'all' }}
+                        >
+                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextActive]}>
+                                👥 All Groups & Public
+                            </Text>
+                        </Pressable>
+                        {userGroups.map((g) => {
+                            const isSelected = groupFilter === g.id;
+                            return (
+                                <Pressable
+                                    key={g.id}
+                                    onPress={() => setGroupFilter(isSelected ? 'all' : g.id)}
+                                    style={[
+                                        styles.chip,
+                                        isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary }
+                                    ]}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: isSelected }}
+                                >
+                                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                                        👥 {g.name}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
+                )}
             </View>
 
             {/* Interests Tag Cloud when in For You mode */}
@@ -1304,6 +1363,9 @@ export default function MarketScreen() {
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         const elderCard = !isPulse && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
+        const groupName = item.target_group_name || item.targetGroupName || 'Group';
+        const groupScopeBadgeText = isGroupScope ? `🔒 Only ${groupName} can see this` : null;
 
         const priceLabel = item.price_type === 'hourly' ? '/Hr' :
                            item.price_type === 'daily' ? '/Dy' :
@@ -1380,6 +1442,13 @@ export default function MarketScreen() {
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={item.authorFoundingNeeded} />
+                        {groupScopeBadgeText && (
+                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
+                                    {groupScopeBadgeText}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                 </Pressable>
             );
@@ -1404,6 +1473,13 @@ export default function MarketScreen() {
                             <Text style={styles.compactAuthor} numberOfLines={1}>
                                 by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
                             </Text>
+                            {groupScopeBadgeText && (
+                                <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
+                                        {groupScopeBadgeText}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
                             {!isPulse && (
@@ -1495,6 +1571,13 @@ export default function MarketScreen() {
                                 {item.cash_also_needed === 1 && (
                                     <View style={{ backgroundColor: colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.warning.border }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>💸 CASH TOO</Text>
+                                    </View>
+                                )}
+                                {groupScopeBadgeText && (
+                                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.brand.primary }}>
+                                            {groupScopeBadgeText}
+                                        </Text>
                                     </View>
                                 )}
                             </View>

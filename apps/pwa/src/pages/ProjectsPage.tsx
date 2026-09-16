@@ -18,9 +18,10 @@ interface Props {
     identity: BeanPoolIdentity | null;
     onOpenTreasury?: (publicKey: string) => void;
     initialSection?: 'decide' | 'enterprises' | 'groups';
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises' }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate }: Props) {
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
@@ -839,6 +840,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 onClose={() => setSelectedGroupForDetail(null)}
                 myPubkey={identity?.publicKey}
                 onMembershipChanged={() => fetchGroups()}
+                onPostToGroup={(group) => {
+                    setSelectedGroupForDetail(null);
+                    onNavigate?.('map-post', group.id);
+                }}
             />
         </div>
     );

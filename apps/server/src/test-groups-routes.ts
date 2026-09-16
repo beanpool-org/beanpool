@@ -94,16 +94,58 @@ async function runRouteTests() {
         groupId = ctx.body.id;
     }
 
-    // 3. GET /api/groups - Public listing
+    // 3. GET /api/groups - Public listing & ETag handling
+    let listingEtag = '';
     {
+        const headers: Record<string, string> = {};
         const ctx: any = {
             query: { category: 'guild' },
             state: {},
-            set: () => {}
+            set: (k: string, v: string) => { headers[k.toLowerCase()] = v; },
+            get: (k: string) => headers[k.toLowerCase()]
         };
         await dispatch(router, 'GET', '/api/groups', ctx);
         check(ctx.status === 200, '3a. GET /api/groups returns 200');
         check(Array.isArray(ctx.body) && ctx.body.some((g: any) => g.id === groupId), '3b. Listing contains created group');
+        listingEtag = headers['etag'];
+        check(!!listingEtag, '3c. GET /api/groups emits ETag');
+    }
+
+    // 3d. Conditional GET with matching ETag returns 304
+    {
+        const ctx: any = {
+            query: { category: 'guild' },
+            state: {},
+            set: () => {},
+            get: (k: string) => k.toLowerCase() === 'if-none-match' ? listingEtag : undefined
+        };
+        await dispatch(router, 'GET', '/api/groups', ctx);
+        check(ctx.status === 304, '3d. GET /api/groups with matching ETag returns 304');
+    }
+
+    // 3e. Conditional GET with multi-value If-None-Match returns 304
+    {
+        const ctx: any = {
+            query: { category: 'guild' },
+            state: {},
+            set: () => {},
+            get: (k: string) => k.toLowerCase() === 'if-none-match' ? `"dummy-1", ${listingEtag}, "dummy-2"` : undefined
+        };
+        await dispatch(router, 'GET', '/api/groups', ctx);
+        check(ctx.status === 304, '3e. GET /api/groups with multi-value If-None-Match returns 304');
+    }
+
+    // 3f. Conditional GET with partial substring does not match (returns 200)
+    {
+        const partial = listingEtag.slice(3, -3);
+        const ctx: any = {
+            query: { category: 'guild' },
+            state: {},
+            set: () => {},
+            get: (k: string) => k.toLowerCase() === 'if-none-match' ? `"${partial}"` : undefined
+        };
+        await dispatch(router, 'GET', '/api/groups', ctx);
+        check(ctx.status === 200, '3f. GET /api/groups with partial substring does not match (returns 200)');
     }
 
     // 4. GET /api/groups/:id - Single group lookup

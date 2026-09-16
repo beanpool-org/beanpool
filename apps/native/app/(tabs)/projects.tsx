@@ -434,7 +434,7 @@ export default function ProjectsScreen() {
                             ) : null}
                         </View>
                         <Text style={styles.cardMeta}>
-                            🏷️ {item.category.replace('_', ' ')} · {item.memberCount || 0} {item.memberCount === 1 ? 'member' : 'members'} · {item.joinPolicy.replace(/_/g, ' ')}
+                            🏷️ {item.category.replace(/_/g, ' ')} · {item.memberCount || 0} {item.memberCount === 1 ? 'member' : 'members'} · {item.joinPolicy.replace(/_/g, ' ')}
                         </Text>
                     </View>
                 </View>

@@ -505,7 +505,7 @@ export function GroupDetailModal({
                         <View style={styles.badgeRow}>
                             <View style={styles.pill}>
                                 <MaterialCommunityIcons name="tag-outline" size={14} color={colors.text.secondary} />
-                                <Text style={styles.pillText}>{groupData.category.replace('_', ' ')}</Text>
+                                <Text style={styles.pillText}>{groupData.category.replace(/_/g, ' ')}</Text>
                             </View>
                             <View style={styles.pill}>
                                 <MaterialCommunityIcons name="door-open" size={14} color={colors.text.secondary} />

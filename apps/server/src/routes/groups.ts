@@ -63,9 +63,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
         if (ifNoneMatch) {
-            const cleanInm = ifNoneMatch.replace(/^W\//, '');
             const cleanEtag = etag.replace(/^W\//, '');
-            if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            const tags = ifNoneMatch.split(',').map((t: string) => t.trim().replace(/^W\//, ''));
+            if (tags.includes(cleanEtag) || tags.includes('*')) {
                 ctx.status = 304;
                 return;
             }

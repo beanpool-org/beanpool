@@ -442,7 +442,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             <h4 className="font-extrabold text-base text-white truncate">{g.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[11px] font-bold text-nature-400 capitalize">
-                                                    🏷️ {g.category.replace('_', ' ')}
+                                                    🏷️ {g.category.replace(/_/g, ' ')}
                                                 </span>
                                                 <span className="text-nature-600">•</span>
                                                 <span className="text-[11px] text-nature-400">

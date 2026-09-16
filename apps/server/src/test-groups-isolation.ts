@@ -38,6 +38,7 @@ import {
     deleteGroupPost,
     removePost,
     requestPost,
+    acceptPost,
     closePoll,
     votePoll,
     broadcast,
@@ -476,7 +477,7 @@ async function runTests() {
         assert(!nodeRolesRow, '10r. HARD RULE §9: Creating group or being convenor confers NO node role (node_roles remains separate)');
 
         // 6. Escrow requestPost audience isolation:
-        // Carol (non-member of Gardeners) cannot request a group post in Gardeners
+        // Carol (non-member of Gardeners) cannot request or accept a group post in Gardeners
         const gardenOffer = createPost('offer', 'tools', 'Special Rake', 'For gardeners only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         let nonMemberReqFailed = false;
         try {
@@ -486,7 +487,15 @@ async function runTests() {
         }
         assert(nonMemberReqFailed, '10s. Non-member Carol CANNOT request a group-scoped post');
 
-        // Direct post to Dave cannot be requested by Carol
+        let nonMemberAcceptFailed = false;
+        try {
+            acceptPost(gardenOffer!.id, carol.pubKeyHex);
+        } catch (e: any) {
+            nonMemberAcceptFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(nonMemberAcceptFailed, '10s-accept. Non-member Carol CANNOT accept a group-scoped post');
+
+        // Direct post to Dave cannot be requested or accepted by Carol
         const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
         let nonTargetReqFailed = false;
         try {
@@ -495,6 +504,14 @@ async function runTests() {
             nonTargetReqFailed = e.message.includes('UNAUTHORIZED');
         }
         assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post');
+
+        let nonTargetAcceptFailed = false;
+        try {
+            acceptPost(directOffer!.id, carol.pubKeyHex);
+        } catch (e: any) {
+            nonTargetAcceptFailed = e.message.includes('UNAUTHORIZED');
+        }
+        assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post');
 
         // 7. Public posts clear foreign target fields:
         const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {

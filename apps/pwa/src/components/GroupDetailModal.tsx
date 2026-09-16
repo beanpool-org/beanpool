@@ -200,7 +200,7 @@ export function GroupDetailModal({
                     {/* Tags */}
                     <div className="flex flex-wrap gap-2">
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            🏷️ {groupData.category.replace('_', ' ')}
+                            🏷️ {groupData.category.replace(/_/g, ' ')}
                         </span>
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
                             🚪 {groupData.joinPolicy.replace(/_/g, ' ')}

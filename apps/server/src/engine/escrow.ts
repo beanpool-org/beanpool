@@ -104,16 +104,24 @@ export function requestPost(
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
-    if (post.audience_scope === 'group' && post.target_group_id) {
+    // NOTE: post is a raw DB row here (snake_case), not a MarketplacePost (camelCase).
+    // acceptPost uses getPosts() which returns camelCase. Support both for resilience.
+    const audienceScope = post.audience_scope ?? post.audienceScope;
+    const targetGroupId = post.target_group_id ?? post.targetGroupId;
+    const targetPubkey = post.target_pubkey ?? post.targetPubkey;
+    const assignedTo = post.assigned_to ?? post.assignedTo;
+    const authorPubkey = post.author_pubkey ?? post.authorPublicKey;
+
+    if (audienceScope === 'group' && targetGroupId) {
         const isMem = db.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
-        ).get(post.target_group_id, requesterPublicKey);
-        if (!isMem && post.author_pubkey !== requesterPublicKey) {
+        ).get(targetGroupId, requesterPublicKey);
+        if (!isMem && authorPubkey !== requesterPublicKey) {
             throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
         }
     }
-    if (post.audience_scope === 'direct') {
-        const isTarget = post.target_pubkey === requesterPublicKey || post.assigned_to === requesterPublicKey || post.author_pubkey === requesterPublicKey;
+    if (audienceScope === 'direct') {
+        const isTarget = targetPubkey === requesterPublicKey || assignedTo === requesterPublicKey || authorPubkey === requesterPublicKey;
         if (!isTarget) {
             throw new Error('UNAUTHORIZED: This direct post is not addressed to you');
         }
@@ -429,16 +437,24 @@ export function acceptPost(
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post) throw new Error('Post not found or not active');
-    if (post.audienceScope === 'group' && post.targetGroupId) {
+
+    // NOTE: post comes from getPosts() which returns camelCase MarketplacePost.
+    // Support both camelCase and snake_case for resilience across refactors.
+    const audienceScope = post.audienceScope ?? (post as any).audience_scope;
+    const targetGroupId = post.targetGroupId ?? (post as any).target_group_id;
+    const targetPubkey = post.targetPubkey ?? (post as any).target_pubkey;
+    const assignedTo = post.assignedTo ?? (post as any).assigned_to;
+
+    if (audienceScope === 'group' && targetGroupId) {
         const isMem = db.prepare(
             "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
-        ).get(post.targetGroupId, buyerPublicKey);
+        ).get(targetGroupId, buyerPublicKey);
         if (!isMem) {
             throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');
         }
     }
-    if (post.audienceScope === 'direct') {
-        const isTarget = post.targetPubkey === buyerPublicKey || post.assignedTo === buyerPublicKey;
+    if (audienceScope === 'direct') {
+        const isTarget = targetPubkey === buyerPublicKey || assignedTo === buyerPublicKey;
         if (!isTarget) {
             throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
         }

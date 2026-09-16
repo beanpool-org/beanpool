@@ -108,7 +108,9 @@ describe('NodeIdentityPanel Component', () => {
         expect(screen.getByText(/Update the public identity, geographic location/i)).toBeInTheDocument();
 
         // Callsign & Community Name
-        expect(screen.getByLabelText(/Callsign \(Short Name\)/i)).toBeInTheDocument();
+        const callsignInput = screen.getByLabelText(/Callsign \(Short Name\)/i);
+        expect(callsignInput).toBeInTheDocument();
+        expect(callsignInput).toHaveAttribute('maxLength', '20');
         expect(screen.getByLabelText(/Community Name/i)).toBeInTheDocument();
 
         // Location search & Leaflet Map container
@@ -116,8 +118,14 @@ describe('NodeIdentityPanel Component', () => {
         expect(document.getElementById('settings-map')).toBeInTheDocument();
 
         // Radius slider & KM input
-        expect(document.getElementById('radius-slider')).toBeInTheDocument();
-        expect(document.getElementById('radius-km')).toBeInTheDocument();
+        const radiusSlider = document.getElementById('radius-slider') as HTMLInputElement;
+        const radiusKmInput = document.getElementById('radius-km') as HTMLInputElement;
+        expect(radiusSlider).toBeInTheDocument();
+        expect(radiusSlider).toHaveAttribute('max', '500');
+        expect(radiusSlider).toHaveAttribute('aria-label', 'Service radius slider in kilometers');
+        expect(radiusKmInput).toBeInTheDocument();
+        expect(radiusKmInput).toHaveAttribute('max', '500');
+        expect(radiusKmInput).toHaveAttribute('aria-label', 'Service radius in kilometers');
 
         // Directory publishing & preview link
         expect(screen.getByText('Directory Publishing')).toBeInTheDocument();

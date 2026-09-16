@@ -388,7 +388,7 @@ export function NodeIdentityPanel({
                     <input
                         id="cfg-callsign"
                         type="text"
-                        maxLength={50}
+                        maxLength={20}
                         value={callsign}
                         onChange={(e) => setCallsign(e.target.value)}
                         placeholder="e.g. Mullumbimby BeanPool"
@@ -458,7 +458,7 @@ export function NodeIdentityPanel({
 
                 {/* Service Radius */}
                 <div id="radius-field" className="space-y-2 pt-2">
-                    <label className="block text-xs font-bold text-nature-300">
+                    <label htmlFor="radius-slider" className="block text-xs font-bold text-nature-300">
                         Service Radius
                     </label>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -466,9 +466,10 @@ export function NodeIdentityPanel({
                             id="radius-slider"
                             type="range"
                             min="0"
-                            max="200"
+                            max="500"
                             step="1"
-                            value={Math.min(radiusKm, 200)}
+                            value={radiusKm}
+                            aria-label="Service radius slider in kilometers"
                             onChange={(e) => setRadiusKm(Number(e.target.value))}
                             className="flex-1 accent-terra-500 cursor-pointer h-2 bg-nature-950 rounded-lg appearance-none"
                         />
@@ -480,6 +481,7 @@ export function NodeIdentityPanel({
                                 max="500"
                                 step="1"
                                 value={radiusKm}
+                                aria-label="Service radius in kilometers"
                                 onChange={(e) => {
                                     const v = Math.min(Math.max(0, parseInt(e.target.value, 10) || 0), 500);
                                     setRadiusKm(v);

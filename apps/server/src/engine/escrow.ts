@@ -118,6 +118,29 @@ export function requestPost(
     if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
     if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
 
+    // NOTE: post is a raw DB row here (snake_case), not a MarketplacePost (camelCase).
+    // acceptPost uses getPosts() which returns camelCase. Support both for resilience.
+    const audienceScope = post.audience_scope ?? post.audienceScope;
+    const targetGroupId = post.target_group_id ?? post.targetGroupId;
+    const targetPubkey = post.target_pubkey ?? post.targetPubkey;
+    const assignedTo = post.assigned_to ?? post.assignedTo;
+    const authorPubkey = post.author_pubkey ?? post.authorPublicKey;
+
+    if (audienceScope === 'group' && targetGroupId) {
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(targetGroupId, requesterPublicKey);
+        if (!isMem && authorPubkey !== requesterPublicKey) {
+            throw new Error('UNAUTHORIZED: Must be an active member of the group to request this post');
+        }
+    }
+    if (audienceScope === 'direct') {
+        const isTarget = targetPubkey === requesterPublicKey || assignedTo === requesterPublicKey || authorPubkey === requesterPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct post is not addressed to you');
+        }
+    }
+
     const author = getMember(db, post.author_pubkey);
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
@@ -438,7 +461,7 @@ export function acceptPost(
 ): MarketplaceTransaction {
     assertMemberActive(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
-    const post = getPosts(db, { id: postId, status: 'active' })[0];
+    const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
     if (!post) throw new Error('Post not found or not active');
     assertMemberActive(post.authorPublicKey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
@@ -452,6 +475,28 @@ export function acceptPost(
         if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
         if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
         if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+    }
+
+    // NOTE: post comes from getPosts() which returns camelCase MarketplacePost.
+    // Support both camelCase and snake_case for resilience across refactors.
+    const audienceScope = post.audienceScope ?? (post as any).audience_scope;
+    const targetGroupId = post.targetGroupId ?? (post as any).target_group_id;
+    const targetPubkey = post.targetPubkey ?? (post as any).target_pubkey;
+    const assignedTo = post.assignedTo ?? (post as any).assigned_to;
+
+    if (audienceScope === 'group' && targetGroupId) {
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(targetGroupId, buyerPublicKey);
+        if (!isMem) {
+            throw new Error('UNAUTHORIZED: Must be an active member of the group to accept this offer');
+        }
+    }
+    if (audienceScope === 'direct') {
+        const isTarget = targetPubkey === buyerPublicKey || assignedTo === buyerPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
+        }
     }
     if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
     if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');

@@ -53,6 +53,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     ) : null;
 
     const elderCard = isElder(authorEnergy);
+    const isGroupScope = post.audienceScope === 'group' || !!post.targetGroupId;
+    const targetGroupName = post.targetGroupName || 'Group';
+    const groupScopeBadge = isGroupScope ? `🔒 Only ${targetGroupName} can see this` : null;
     const elderStyleGrid = isPulse
         ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
@@ -80,6 +83,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
                                     🌱 FOUNDING
+                                </span>
+                            )}
+                            {groupScopeBadge && (
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 shrink-0">
+                                    {groupScopeBadge}
                                 </span>
                             )}
                         </span>
@@ -195,6 +203,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     🌱 FOUNDING TRADE
                                 </span>
                             )}
+                            {groupScopeBadge && (
+                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50">
+                                    {groupScopeBadge}
+                                </span>
+                            )}
                         </div>
                         
                         {/* Compact Price Header */}
@@ -260,6 +273,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {pulsePill && <div className="mt-1">{pulsePill}</div>}
                     {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
+                    {groupScopeBadge && (
+                        <div className="mt-1">
+                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 block truncate">
+                                {groupScopeBadge}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div className={`flex items-center shrink-0 bg-oat-50 dark:bg-nature-900 rounded-lg gap-0.5 px-1.5 py-0.5`}>

@@ -1,36 +1,47 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     getTreasuries, getBalance, type Treasury, type BalanceInfo,
     createEnterprise,
     getDecisions, type DecisionWithTally,
     getCommonsBalance,
     getAllMembers, type MemberSummary,
+    getGroups, type Group,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { DecideSection } from '../components/DecideSection';
 import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
+import { CreateGroupModal } from '../components/CreateGroupModal';
+import { GroupDetailModal } from '../components/GroupDetailModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
     onOpenTreasury?: (publicKey: string) => void;
-    initialSection?: 'decide' | 'enterprises';
+    initialSection?: 'decide' | 'enterprises' | 'groups';
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises' }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate }: Props) {
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // UI States
-    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises'>(initialSection);
+    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+
+    // Groups State
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
+    const [groupCategoryFilter, setGroupCategoryFilter] = useState<string>('all');
+    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
 
     // Filter: all | ongoing | bounded
     const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
@@ -167,6 +178,32 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         }
     };
 
+    const fetchGroups = useCallback(async () => {
+        setLoadingGroups(true);
+        try {
+            const list = await getGroups();
+            setGroups(Array.isArray(list) ? list : []);
+        } catch (e) {
+            console.warn('[ProjectsPage] Failed to fetch groups:', e);
+        } finally {
+            setLoadingGroups(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (activeSection === 'groups') {
+            fetchGroups();
+        }
+    }, [activeSection, fetchGroups]);
+
+    const filteredGroups = useMemo(() => {
+        if (groupCategoryFilter === 'all') return groups;
+        if (groupCategoryFilter === 'my_groups') {
+            return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
+        }
+        return groups.filter(g => g.category === groupCategoryFilter);
+    }, [groups, groupCategoryFilter]);
+
     const energySentence = (energyBalance: number): string => {
         const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
         if (beans === 0) return 'Square — nothing owed either way';
@@ -218,6 +255,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         return;
                                     }
                                     setShowProposeDecision(true);
+                                } else if (activeSection === 'groups') {
+                                    setShowCreateGroupModal(true);
                                 } else {
                                     setShowNewModal(true);
                                     setCreateError(null);
@@ -225,7 +264,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             }}
                             className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
-                            + Propose
+                            {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
                     )}
                 </div>
@@ -250,7 +289,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     </div>
                 </div>
 
-                {/* Section Switcher: Decide vs Enterprises */}
+                {/* Section Switcher: Decide vs Enterprises vs Groups */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
                     <button
                         onClick={() => setActiveSection('decide')}
@@ -279,6 +318,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <span>🏛️</span>
                         <span>Enterprises</span>
                     </button>
+                    <button
+                        onClick={() => setActiveSection('groups')}
+                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
+                            activeSection === 'groups'
+                                ? 'bg-nature-800 text-white shadow-sm'
+                                : 'text-nature-400 hover:text-white'
+                        }`}
+                    >
+                        <span>👥</span>
+                        <span>Groups</span>
+                    </button>
                 </div>
 
                 {/* Filter Controls: All / Ongoing / Bounded */}
@@ -297,6 +347,34 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
                             </button>
                         ))}
+                    </div>
+                )}
+
+                {/* Filter Controls: Groups Category */}
+                {activeSection === 'groups' && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
+                        <div className="flex gap-2 overflow-x-auto py-1 scrollbar-none">
+                            {[
+                                { key: 'all', label: 'All Groups' },
+                                { key: 'my_groups', label: 'My Groups' },
+                                { key: 'working_group', label: '🤝 Working Groups' },
+                                { key: 'project', label: '🛠️ Projects' },
+                                { key: 'guild', label: '🛡️ Guilds' },
+                                { key: 'social', label: '☕ Social' },
+                            ].map(option => (
+                                <button
+                                    key={option.key}
+                                    onClick={() => setGroupCategoryFilter(option.key)}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                                        groupCategoryFilter === option.key
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                    }`}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
             </header>
@@ -326,6 +404,90 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         activeView={activeDecideView}
                         onChangeView={setActiveDecideView}
                     />
+                </div>
+            ) : activeSection === 'groups' ? (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4">
+                    <div className="p-3 bg-nature-950/60 border border-nature-800 rounded-xl text-xs text-nature-300 leading-relaxed">
+                        👥 <strong>Groups & Teams:</strong> A group is a place to talk to some people rather than everyone. Groups do not hold beans and do not confer trust or voting standing.
+                    </div>
+
+                    {loadingGroups ? (
+                        <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
+                    ) : filteredGroups.length === 0 ? (
+                        <div className="text-center py-16 px-4 bg-nature-950/40 rounded-2xl border border-nature-800/80">
+                            <div className="text-4xl mb-3">👥</div>
+                            <h3 className="text-base font-bold text-white mb-1">No groups found</h3>
+                            <p className="text-xs text-nature-400 max-w-xs mx-auto mb-4">
+                                {groupCategoryFilter === 'my_groups'
+                                    ? 'You have not joined any groups yet.'
+                                    : 'Start a working group, guild, or team to coordinate discussions.'}
+                            </p>
+                            <button
+                                onClick={() => setShowCreateGroupModal(true)}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                            >
+                                + Create a Group
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {filteredGroups.map(g => (
+                                <div
+                                    key={g.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`View details for group ${g.name}`}
+                                    onClick={() => setSelectedGroupForDetail(g)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedGroupForDetail(g);
+                                        }
+                                    }}
+                                    className="p-4 bg-nature-950/70 hover:bg-nature-900/80 border border-nature-800 hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="font-extrabold text-base text-white truncate">{g.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-[11px] font-bold text-nature-400 capitalize">
+                                                    🏷️ {g.category.replace(/_/g, ' ')}
+                                                </span>
+                                                <span className="text-nature-600">•</span>
+                                                <span className="text-[11px] text-nature-400">
+                                                    {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {g.viewerRole ? (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                g.viewerRole === 'convenor'
+                                                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-700/60'
+                                                    : 'bg-nature-800 text-nature-300'
+                                            }`}>
+                                                {g.viewerRole}
+                                            </span>
+                                        ) : g.viewerStatus === 'pending_approval' ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-950/60 text-amber-300 border border-amber-700/60">
+                                                Pending
+                                            </span>
+                                        ) : null}
+                                    </div>
+
+                                    {g.description && (
+                                        <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
+                                            {g.description}
+                                        </p>
+                                    )}
+
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500">
+                                        <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
+                                        <span className="text-emerald-500 font-bold hover:underline">View Details →</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             ) : loading ? (
                 <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
@@ -694,6 +856,24 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 commonsBalance={commonsBalance}
                 treasuries={treasuries}
                 members={allMembersList}
+            />
+
+            <CreateGroupModal
+                isOpen={showCreateGroupModal}
+                onClose={() => setShowCreateGroupModal(false)}
+                onCreated={() => fetchGroups()}
+            />
+
+            <GroupDetailModal
+                group={selectedGroupForDetail}
+                isOpen={!!selectedGroupForDetail}
+                onClose={() => setSelectedGroupForDetail(null)}
+                myPubkey={identity?.publicKey}
+                onMembershipChanged={() => fetchGroups()}
+                onPostToGroup={(group) => {
+                    setSelectedGroupForDetail(null);
+                    onNavigate?.('map-post', group.id);
+                }}
             />
         </div>
     );

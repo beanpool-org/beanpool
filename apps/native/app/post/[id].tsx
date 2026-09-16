@@ -12,8 +12,10 @@ import {
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance,
-    treasuryApprove, treasuryComplete, treasuryReject
+    treasuryApprove, treasuryComplete, treasuryReject,
+    fetchGroupDetails, deleteGroupPostApi
 } from '../../utils/db';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, describeMissing } from '../../utils/profile-status';
@@ -404,6 +406,8 @@ export default function PostDetailModal() {
     const [unreadCount, setUnreadCount] = useState<number>(0);
     const [reqUnreadCounts, setReqUnreadCounts] = useState<Record<string, number>>({});
     const [operatedTreasuries, setOperatedTreasuries] = useState<string[]>([]);
+    const [isConvenor, setIsConvenor] = useState(false);
+    const [deletingAsConvenor, setDeletingAsConvenor] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -416,6 +420,14 @@ export default function PostDetailModal() {
                         if (p) {
                             if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                             setPostMissing(false);
+                            const targetGroupId = p.target_group_id || p.targetGroupId;
+                            if (targetGroupId) {
+                                fetchGroupDetails(targetGroupId).then(res => {
+                                    setIsConvenor(res?.group?.viewerRole === 'convenor');
+                                }).catch(() => setIsConvenor(false));
+                            } else {
+                                setIsConvenor(false);
+                            }
                         } else if (!notFoundTimer.current) {
                             // Local miss: getPost kicked off a server upsert that emits
                             // sync_data_updated (→ reload) if the post exists. Declare
@@ -891,6 +903,16 @@ export default function PostDetailModal() {
                     <View style={{ backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 12, lineHeight: 17 }}>
                             💸 <Text style={{ fontWeight: '700' }}>Cash also needed</Text> for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.
+                        </Text>
+                    </View>
+                )}
+
+                {/* Audience Scope Banner (Item 10) */}
+                {(post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId) && (
+                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1.5, borderRadius: 12, padding: 12, marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <MaterialCommunityIcons name="lock" size={18} color={colors.brand.primary} />
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, flex: 1 }}>
+                            Only {post.target_group_name || post.targetGroupName || 'group members'} can see this
                         </Text>
                     </View>
                 )}
@@ -1522,6 +1544,53 @@ export default function PostDetailModal() {
                                         </Pressable>
                                     </View>
                                 )}
+                            </View>
+                        )}
+
+                        {/* Convenor Post Moderation (Item 10) */}
+                        {!isOwnPost && isConvenor && Boolean(post.target_group_id || post.targetGroupId) && (
+                            <View style={{ marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint }}>
+                                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, marginBottom: 8 }}>
+                                    🛡️ Convenor Moderation ({post.target_group_name || post.targetGroupName || 'Group'})
+                                </Text>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityHint="Deletes this post as convenor"
+                                    disabled={deletingAsConvenor}
+                                    style={[styles.deletePostBtn, { backgroundColor: colors.surface.card }]}
+                                    onPress={() => {
+                                        const groupTitle = post.target_group_name || post.targetGroupName || 'the group';
+                                        Alert.alert(
+                                            `Delete Group Post?`,
+                                            `Delete this post as Convenor of ${groupTitle}? This action cannot be undone.`,
+                                            [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                {
+                                                    text: 'Delete Post',
+                                                    style: 'destructive',
+                                                    onPress: async () => {
+                                                        try {
+                                                            setDeletingAsConvenor(true);
+                                                            const gId = (post.target_group_id || post.targetGroupId)!;
+                                                            await deleteGroupPostApi(gId, post.id);
+                                                            Alert.alert('Post Deleted', 'The post has been removed from the group.', [
+                                                                { text: 'OK', onPress: () => router.back() }
+                                                            ]);
+                                                        } catch (e: any) {
+                                                            Alert.alert('Error', e?.message || 'Failed to delete post');
+                                                        } finally {
+                                                            setDeletingAsConvenor(false);
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        );
+                                    }}
+                                >
+                                    <Text style={styles.deletePostBtnText}>
+                                        {deletingAsConvenor ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                                    </Text>
+                                </Pressable>
                             </View>
                         )}
 

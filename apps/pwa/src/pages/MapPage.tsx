@@ -16,7 +16,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses, type MarketplacePost, type PostReach, type ReachablePeer } from '../lib/api';
+import { getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts, getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses, getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group } from '../lib/api';
 import { haversineDistance } from '../lib/geo';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -44,11 +44,12 @@ const DEFAULT_ZOOM = 13;
 interface Props {
     identity: BeanPoolIdentity;
     openNewPost?: boolean;
+    initialGroupId?: string;
     onOpenNewPostHandled?: () => void;
     onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigate }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -58,6 +59,9 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
     const [locating, setLocating] = useState(false);
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [showNewPost, setShowNewPost] = useState(false);
+    const [userGroups, setUserGroups] = useState<Group[]>([]);
+    const [audienceScope, setAudienceScope] = useState<'public' | 'group'>('public');
+    const [targetGroupId, setTargetGroupId] = useState<string>('');
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll'>('need');
@@ -174,13 +178,31 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
         setShowNewPost(true);
     }, [identity]);
 
-    // Auto-open post form when navigated from marketplace
+    // Fetch user groups for audience scoping (Item 10)
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getGroups().then(groups => {
+                const active = groups.filter(g => g.viewerStatus === 'active');
+                setUserGroups(active);
+                if (initialGroupId && active.some(g => g.id === initialGroupId)) {
+                    setAudienceScope('group');
+                    setTargetGroupId(initialGroupId);
+                }
+            }).catch(console.error);
+        }
+    }, [identity, initialGroupId]);
+
+    // Auto-open post form when navigated from marketplace or groups
     useEffect(() => {
         if (openNewPost) {
             onOpenNewPostHandled?.();
+            if (initialGroupId) {
+                setAudienceScope('group');
+                setTargetGroupId(initialGroupId);
+            }
             tryOpenComposer();
         }
-    }, [openNewPost, onOpenNewPostHandled, tryOpenComposer]);
+    }, [openNewPost, initialGroupId, onOpenNewPostHandled, tryOpenComposer]);
 
     // Initialize map
     useEffect(() => {
@@ -472,11 +494,15 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     repeatable: false,
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
+                    audienceScope,
+                    ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 });
                 setNewPostTitle('');
                 setNewPostDescription('');
                 setPollOptions(['', '']);
                 setPollDurationDays(7);
+                setAudienceScope('public');
+                setTargetGroupId('');
                 setShowNewPost(false);
                 refreshPosts();
                 if (onNavigate) onNavigate('marketplace');
@@ -517,10 +543,12 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                 authorPublicKey: identity.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
-                reach: newPostReach,
-                ...(newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
+                reach: audienceScope === 'group' ? 'local' : newPostReach,
+                ...(audienceScope !== 'group' && newPostReach === 'peers' ? { reachPeers: newPostReachPeers } : {}),
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
                 ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
+                audienceScope,
+                ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
             setNewPostTitle('');
             setNewPostDescription('');
@@ -531,6 +559,8 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
             setNewPostReach('local');
             setNewPostReachPeers([]);
             setNewPostPhotos([]);
+            setAudienceScope('public');
+            setTargetGroupId('');
             setPostLat(null);
             setPostLng(null);
             setPinDropMode(false);
@@ -911,6 +941,8 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">New Post</span>
                     <button onClick={() => {
                         setShowNewPost(false);
+                        setAudienceScope('public');
+                        setTargetGroupId('');
                         setPinDropMode(false);
                         setPostLat(null);
                         setPostLng(null);
@@ -940,6 +972,85 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                             {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : '🗳️ Poll'}
                         </button>
                     ))}
+                </div>
+
+                {/* Audience Scope Selector — scope must be unmistakable before posting (Item 10) */}
+                <div className="mb-4">
+                    <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1.5">
+                        Audience Scope
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                        <button
+                            type="button"
+                            aria-pressed={audienceScope === 'public'}
+                            onClick={() => { setAudienceScope('public'); setTargetGroupId(''); }}
+                            className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                audienceScope === 'public'
+                                    ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                            }`}
+                        >
+                            🌍 Everyone (Public)
+                        </button>
+                        {userGroups.length > 0 && (
+                            <button
+                                type="button"
+                                aria-pressed={audienceScope === 'group'}
+                                onClick={() => {
+                                    setAudienceScope('group');
+                                    if (!targetGroupId && userGroups[0]) {
+                                        setTargetGroupId(userGroups[0].id);
+                                    }
+                                }}
+                                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                                    audienceScope === 'group'
+                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                                }`}
+                            >
+                                👥 Group ({userGroups.length})
+                            </button>
+                        )}
+                    </div>
+
+                    {audienceScope === 'group' && userGroups.length > 0 && (
+                        <div className="mb-2">
+                            <select
+                                value={targetGroupId}
+                                onChange={(e) => setTargetGroupId(e.target.value)}
+                                className="w-full py-2 px-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            >
+                                {userGroups.map((g) => (
+                                    <option key={g.id} value={g.id}>
+                                        {g.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Unmistakable Scope Notice */}
+                    {audienceScope === 'public' ? (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl text-xs text-blue-900 dark:text-blue-200">
+                            <p className="font-bold flex items-center gap-1.5 mb-0.5">
+                                <span>🌍</span>
+                                <span>Public — visible to everyone on BeanPool</span>
+                            </p>
+                            <p className="m-0 leading-relaxed text-[11px] opacity-90">
+                                Anyone in the community can discover and respond to this listing.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 rounded-xl text-xs text-emerald-950 dark:text-emerald-200">
+                            <p className="font-black text-sm flex items-center gap-1.5 mb-1 text-emerald-800 dark:text-emerald-300">
+                                <span>🔒</span>
+                                <span>Only {userGroups.find(g => g.id === targetGroupId)?.name || 'Group'} can see this</span>
+                            </p>
+                            <p className="m-0 leading-relaxed text-[11px]">
+                                This post will be visible <strong>only to active members of {userGroups.find(g => g.id === targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {newPostType === 'poll' ? (
@@ -1194,7 +1305,7 @@ export function MapPage({ identity, openNewPost, onOpenNewPostHandled, onNavigat
                             has always been a public HTTPS read, so anyone with the node's URL can list every active
                             listing regardless. That is by design (Rule 9 — reach is a discovery filter, not an
                             access control), so the honest fix is the words, not a guarantee we cannot make. */}
-                        {reachablePeerList.length > 0 && (
+                        {audienceScope !== 'group' && reachablePeerList.length > 0 && (
                             <div className="py-2 px-1">
                                 <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Where does this travel?</label>
                                 {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"

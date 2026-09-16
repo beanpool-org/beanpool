@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, parseReachPeers, type PostReach } from '@beanpool/core';
+import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
@@ -111,10 +111,18 @@ export function createPost(
     repeatable?: boolean,
     id?: string,
     cashAlsoNeeded?: boolean,
-    // #143 step 4. An OPTIONS OBJECT rather than positions 15 and 16: this list is already fourteen
-    // positional parameters deep, and `createPost(…, undefined, undefined, 'peers', [id])` at a call site
-    // is how the wrong argument ends up in the wrong slot.
-    options?: { reach?: unknown; reachPeers?: unknown; createdBy?: string; pollOptions?: Array<{ id: string; text: string }>; durationDays?: number },
+    options?: {
+        reach?: unknown;
+        reachPeers?: unknown;
+        createdBy?: string;
+        pollOptions?: Array<{ id: string; text: string }>;
+        durationDays?: number;
+        audienceScope?: AudienceScope;
+        targetGroupId?: string;
+        targetPubkey?: string;
+        assignedTo?: string;
+        targetArchetypes?: string;
+    },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -123,6 +131,47 @@ export function createPost(
     assertProfileComplete(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     assertEnterpriseCanPost(authorPublicKey);
+
+    const audienceScope: AudienceScope = (options?.audienceScope as AudienceScope) || 'public';
+    if (!['public', 'group', 'direct'].includes(audienceScope)) {
+        throw new Error(`Invalid audience scope: ${audienceScope}`);
+    }
+
+    if (audienceScope !== 'public') {
+        options = { ...options, reach: 'local', reachPeers: null };
+    }
+
+    if (audienceScope === 'group') {
+        if (!options?.targetGroupId) {
+            throw new Error('targetGroupId is required when audienceScope is group');
+        }
+        const grp = db.prepare("SELECT id FROM groups WHERE id = ?").get(options.targetGroupId) as any;
+        if (!grp) {
+            throw new Error('Group not found');
+        }
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(options.targetGroupId, authorPublicKey);
+        if (!isMem) {
+            throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
+        }
+    } else if (audienceScope === 'direct') {
+        if (!options?.targetPubkey && !options?.assignedTo) {
+            throw new Error('targetPubkey or assignedTo is required when audienceScope is direct');
+        }
+        if (options?.targetPubkey) {
+            const targetMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.targetPubkey) as any;
+            if (!targetMem || targetMem.status === 'pruned') {
+                throw new Error('Target member not found or pruned');
+            }
+        }
+        if (options?.assignedTo) {
+            const assignedMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.assignedTo) as any;
+            if (!assignedMem || assignedMem.status === 'pruned') {
+                throw new Error('Assigned member not found or pruned');
+            }
+        }
+    }
 
     let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
     let pollClosesAt: string | null = null;
@@ -200,13 +249,18 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to, target_archetypes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
-            pollClosesAt
+            pollClosesAt,
+            audienceScope,
+            audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
+            audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
+            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
+            options?.targetArchetypes ?? null
         );
 
         if (photos && photos.length > 0) {
@@ -218,23 +272,72 @@ export function createPost(
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     bumpPostsVersion();
-    const post = getPosts(db, { id: finalId })[0]!;
-    broadcast({ type: 'new_post', post });
-    try {
-        recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
-    } catch (e) {
-        console.warn('[ActivityFeed] Could not record post_created:', e);
+    const post = getPosts(db, { id: finalId, viewerPubkey: authorPublicKey })[0]!;
+
+    let recipients: string[] | undefined;
+    if (audienceScope === 'group') {
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(options!.targetGroupId) as any[];
+        recipients = rows.map(r => r.member_pubkey);
+    } else if (audienceScope === 'direct') {
+        recipients = Array.from(new Set([authorPublicKey, options?.targetPubkey, options?.assignedTo].filter(Boolean) as string[]));
+    }
+
+    broadcast({ type: 'new_post', post }, recipients);
+
+    // Activity feed isolation (docs/the-commons.md §9, Item 10)
+    // Only public posts are recorded to the public activity feed
+    if (audienceScope === 'public') {
+        try {
+            recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
+        } catch (e) {
+            console.warn('[ActivityFeed] Could not record post_created:', e);
+        }
     }
     return post;
 }
 
-export function removePost(broadcast: BroadcastFn, id: string, authorPublicKey: string): boolean {
+export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string): boolean {
+    const postRow = db.prepare("SELECT id, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
+    if (!postRow) return false;
+
+    const isDirectAuthor = postRow.author_pubkey === callerPublicKey;
+    const isTreasuryAuthor = !isDirectAuthor && !!db.prepare(
+        "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
+    ).get(callerPublicKey, postRow.author_pubkey);
+    const isAuthor = isDirectAuthor || isTreasuryAuthor;
+
+    let isConvenor = false;
+    if (postRow.audience_scope === 'group' && postRow.target_group_id) {
+        const convenorRow = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
+        ).get(postRow.target_group_id, callerPublicKey);
+        isConvenor = !!convenorRow;
+    }
+
+    if (!isAuthor && !isConvenor) {
+        return false;
+    }
+
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
-    if (pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
+    if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
 
     let removed = false;
     db.transaction(() => {
-        const result = db.prepare(`UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ?`).run(id, authorPublicKey);
+        const result = db.prepare(`
+            UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE id = ? AND (
+                author_pubkey = ?
+                OR author_pubkey IN (SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?)
+                OR (
+                    audience_scope = 'group'
+                    AND target_group_id IS NOT NULL
+                    AND target_group_id IN (
+                        SELECT group_id FROM group_members
+                        WHERE member_pubkey = ? AND role = 'convenor' AND status = 'active'
+                    )
+                )
+            )
+        `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
@@ -242,13 +345,27 @@ export function removePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     })();
     if (!removed) return false;
     bumpPostsVersion();
-    broadcast({ type: 'post_removed', id });
+
+    let recipients: string[] | undefined;
+    if (postRow.audience_scope === 'group' && postRow.target_group_id) {
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
+        recipients = rows.map(r => r.member_pubkey);
+    } else if (postRow.audience_scope === 'direct') {
+        recipients = Array.from(new Set([postRow.author_pubkey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
+    }
+
+    broadcast({ type: 'post_removed', id }, recipients);
     return true;
 }
 
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
-    const existingPost = getPosts(db, { id })[0] ?? null;
+    const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
     if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
+
+    if (existingPost.audienceScope !== 'public') {
+        delete updates.reach;
+        delete (updates as any).reachPeers;
+    }
 
     if (existingPost.type === 'poll') {
         if (existingPost.status !== 'active') {
@@ -369,12 +486,21 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     bumpPostsVersion();
     const updated = getPosts(db, { id, viewerPubkey: authorPublicKey })[0] ?? null;
-    if (updated) broadcast({ type: 'post_updated', post: updated });
+    if (updated) {
+        let recipients: string[] | undefined;
+        if (updated.audienceScope === 'group' && updated.targetGroupId) {
+            const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updated.targetGroupId) as any[];
+            recipients = rows.map(r => r.member_pubkey);
+        } else if (updated.audienceScope === 'direct') {
+            recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
+        }
+        broadcast({ type: 'post_updated', post: updated }, recipients);
+    }
     return updated;
 }
 
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
-    const post = getPosts(db, { id: postId })[0];
+    const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     if (!post || post.type !== 'poll') {
         throw new Error('Poll not found');
     }
@@ -387,8 +513,17 @@ export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKe
     const now = new Date().toISOString();
     db.prepare("UPDATE posts SET status = 'completed', updated_at = ? WHERE id = ?").run(now, postId);
     bumpPostsVersion();
-    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey })[0] ?? null;
-    if (updated) broadcast({ type: 'post_updated', post: updated });
+    const updated = getPosts(db, { id: postId, viewerPubkey: authorPublicKey, includeAllScopes: true })[0] ?? null;
+    if (updated) {
+        let recipients: string[] | undefined;
+        if (updated.audienceScope === 'group' && updated.targetGroupId) {
+            const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updated.targetGroupId) as any[];
+            recipients = rows.map(r => r.member_pubkey);
+        } else if (updated.audienceScope === 'direct') {
+            recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
+        }
+        broadcast({ type: 'post_updated', post: updated }, recipients);
+    }
     return updated;
 }
 
@@ -408,12 +543,28 @@ export function votePoll(
         throw new Error('Credit-frozen members cannot vote in polls');
     }
 
-    const post = getPosts(db, { id: postId })[0];
+    const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     if (!post || post.type !== 'poll') {
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {
         throw new Error('This poll is closed');
+    }
+    if (post.audienceScope === 'group') {
+        if (!post.targetGroupId) {
+            throw new Error('UNAUTHORIZED: Group-scoped poll missing target group');
+        }
+        const isMem = db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(post.targetGroupId, voterPublicKey);
+        if (!isMem && post.authorPublicKey !== voterPublicKey) {
+            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to vote in this poll');
+        }
+    } else if (post.audienceScope === 'direct') {
+        const isTarget = post.targetPubkey === voterPublicKey || post.assignedTo === voterPublicKey || post.authorPublicKey === voterPublicKey;
+        if (!isTarget) {
+            throw new Error('UNAUTHORIZED: This direct poll is not addressed to you');
+        }
     }
     const nowIso = new Date().toISOString();
     if (post.pollClosesAt && post.pollClosesAt <= nowIso) {
@@ -471,24 +622,47 @@ export function votePoll(
     })();
 
     bumpPostsVersion();
-    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey })[0]!;
-    broadcast({ type: 'post_updated', post: updatedPost });
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: voterPublicKey, includeAllScopes: true })[0]!;
+    let recipients: string[] | undefined;
+    if (updatedPost.audienceScope === 'group' && updatedPost.targetGroupId) {
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(updatedPost.targetGroupId) as any[];
+        recipients = rows.map(r => r.member_pubkey);
+    } else if (updatedPost.audienceScope === 'direct') {
+        recipients = Array.from(new Set([updatedPost.authorPublicKey, updatedPost.targetPubkey, updatedPost.assignedTo].filter(Boolean) as string[]));
+    }
+    broadcast({ type: 'post_updated', post: updatedPost }, recipients);
     return { success: true, post: updatedPost };
 }
 
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
+    const postRow = db.prepare("SELECT audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
     const res = db.prepare(`UPDATE posts SET status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'active'`).run(postId, authorPublicKey);
     if (res.changes > 0) {
-        broadcast({ type: 'post_updated', id: postId });
+        let recipients: string[] | undefined;
+        if (postRow?.audience_scope === 'group' && postRow.target_group_id) {
+            const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
+            recipients = rows.map(r => r.member_pubkey);
+        } else if (postRow?.audience_scope === 'direct') {
+            recipients = Array.from(new Set([authorPublicKey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
+        }
+        broadcast({ type: 'post_updated', id: postId }, recipients);
         return true;
     }
     return false;
 }
 
 export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string): boolean {
+    const postRow = db.prepare("SELECT audience_scope, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
     const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, authorPublicKey);
     if (res.changes > 0) {
-        broadcast({ type: 'post_updated', id: postId });
+        let recipients: string[] | undefined;
+        if (postRow?.audience_scope === 'group' && postRow.target_group_id) {
+            const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
+            recipients = rows.map(r => r.member_pubkey);
+        } else if (postRow?.audience_scope === 'direct') {
+            recipients = Array.from(new Set([authorPublicKey, postRow.target_pubkey, postRow.assigned_to].filter(Boolean) as string[]));
+        }
+        broadcast({ type: 'post_updated', id: postId }, recipients);
         return true;
     }
     return false;

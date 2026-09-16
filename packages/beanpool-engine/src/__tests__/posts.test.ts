@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert';
-import { generateSearchKeywords } from '../posts.js';
+import Database from 'better-sqlite3';
+import { generateSearchKeywords, getPosts } from '../posts.js';
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
@@ -33,5 +34,110 @@ describe('Posts Search Keyword Expansion', () => {
     it('handles empty synonym map or missing synonyms gracefully', () => {
         const keywords = generateSearchKeywords('Guitar', 'Vintage electric guitar', 'music');
         assert.strictEqual(keywords, 'music');
+    });
+});
+
+describe('Posts Archetype Filtering & LIKE Metacharacter Escaping', () => {
+    it('escapes LIKE metacharacters (% and _) in targetArchetype filter', () => {
+        const db = new Database(':memory:');
+        db.exec(`
+            CREATE TABLE members (
+                public_key TEXT PRIMARY KEY,
+                callsign TEXT NOT NULL,
+                avatar_url TEXT,
+                status TEXT DEFAULT 'active',
+                earned_credit REAL DEFAULT 0,
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE groups (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                slug TEXT UNIQUE,
+                description TEXT,
+                avatar_url TEXT,
+                category TEXT DEFAULT 'general',
+                created_by TEXT,
+                join_policy TEXT DEFAULT 'open',
+                created_at DATETIME,
+                updated_at DATETIME
+            );
+            CREATE TABLE group_members (
+                group_id TEXT,
+                member_pubkey TEXT,
+                role TEXT DEFAULT 'member',
+                status TEXT DEFAULT 'active',
+                joined_at DATETIME,
+                invited_by TEXT,
+                updated_at DATETIME,
+                PRIMARY KEY (group_id, member_pubkey)
+            );
+            CREATE TABLE transactions (
+                id TEXT PRIMARY KEY,
+                from_pubkey TEXT,
+                to_pubkey TEXT,
+                amount REAL
+            );
+            CREATE TABLE marketplace_transactions (
+                id TEXT PRIMARY KEY,
+                post_id TEXT,
+                buyer_pubkey TEXT,
+                seller_pubkey TEXT,
+                status TEXT,
+                created_at DATETIME,
+                completed_at DATETIME
+            );
+            CREATE TABLE member_preferences (
+                public_key TEXT,
+                pref_key TEXT,
+                pref_value TEXT
+            );
+            CREATE TABLE post_photos (
+                post_id TEXT,
+                photo_data TEXT,
+                order_num INTEGER,
+                updated_at DATETIME
+            );
+            CREATE TABLE posts (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                credits REAL NOT NULL,
+                price_type TEXT DEFAULT 'fixed',
+                author_pubkey TEXT NOT NULL REFERENCES members(public_key),
+                created_at DATETIME NOT NULL,
+                active INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'active',
+                repeatable INTEGER DEFAULT 0,
+                accepted_by TEXT,
+                accepted_at DATETIME,
+                lat REAL,
+                lng REAL,
+                updated_at DATETIME,
+                search_keywords TEXT,
+                cash_also_needed INTEGER DEFAULT 0,
+                reach TEXT DEFAULT 'local',
+                reach_peers TEXT,
+                created_by TEXT,
+                poll_options TEXT,
+                poll_closes_at DATETIME,
+                audience_scope TEXT DEFAULT 'public',
+                target_group_id TEXT,
+                target_pubkey TEXT,
+                assigned_to TEXT,
+                target_archetypes TEXT
+            );
+            INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, target_archetypes)
+            VALUES ('p1', 'offer', 'tools', 'Hammer', 'A hammer', 5, 'author1', datetime('now'), '["builder"]');
+        `);
+
+        // Without escaping, '%' matches any archetype, leaking posts that don't literally contain '%'
+        const wildcardMatches = getPosts(db, { targetArchetype: '%' });
+        assert.strictEqual(wildcardMatches.length, 0, 'Wildcard % must not match posts without literal % archetype');
+
+        const singleCharMatches = getPosts(db, { targetArchetype: '_' });
+        assert.strictEqual(singleCharMatches.length, 0, 'Wildcard _ must not match posts without literal _ archetype');
     });
 });

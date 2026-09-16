@@ -34,6 +34,7 @@ import {
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing,
+    getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
 } from '../lib/api';
@@ -100,6 +101,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [beansOnly, setBeansOnly] = useState(() => localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
+    const [groupFilter, setGroupFilter] = useState<string>('all');
+    const [userGroups, setUserGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [favCategories, setFavCategories] = useState<string[]>(() => {
@@ -349,8 +352,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // successful refresh of the new one.
     const refreshKeyRef = useRef<string>('');
 
+    // Fetch user groups for feed filtering (Item 10)
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getGroups().then(groups => {
+                const active = groups.filter(g => g.viewerStatus === 'active');
+                setUserGroups(active);
+            }).catch(console.error);
+        }
+    }, [identity]);
+
     const refresh = useCallback(async () => {
-        const refreshKey = `${typeFilter}|${categoryFilter}`;
+        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}`;
         if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
             return refreshPromiseRef.current;
         }
@@ -361,6 +374,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
                 if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
                 if (beansOnly) filter.beansOnly = true;
+                if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
 
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
                 // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
@@ -424,7 +438,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [typeFilter, categoryFilter, beansOnly, enabledPeers, identity]);
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -868,6 +882,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                             {selectedPost.title}
                         </h2>
+
+                        {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
+                            <div className="p-3 mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
+                                <span className="text-base">🔒</span>
+                                <span>Only {selectedPost.targetGroupName || 'group members'} can see this</span>
+                            </div>
+                        )}
 
                         {selectedPost.description && (
                             <p className="text-base text-nature-600 leading-relaxed mb-5 whitespace-pre-wrap">
@@ -2002,6 +2023,37 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
+                {/* Convenor Post Moderation (Item 10) */}
+                {!isOwnPost && Boolean(selectedPost.targetGroupId && userGroups.some(g => g.id === selectedPost.targetGroupId && (g.viewerRole === 'convenor' || (g as any).isConvenor))) && (
+                    <div className="mt-4 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            🛡️ Convenor Moderation ({selectedPost.targetGroupName || 'Group'})
+                        </p>
+                        <button
+                            onClick={async () => {
+                                if (!confirm(`Delete this post as Convenor of ${selectedPost.targetGroupName || 'the group'}? This action cannot be undone.`)) return;
+                                setDeleting(selectedPost.id);
+                                try {
+                                    await deleteGroupPost(selectedPost.targetGroupId!, selectedPost.id);
+                                    setSelectedPost(null);
+                                    setSelectedTxId(null);
+                                    refresh();
+                                } catch (e: any) {
+                                    setError(e.message || 'Failed to delete post as convenor');
+                                } finally {
+                                    setDeleting(null);
+                                }
+                            }}
+                            disabled={deleting === selectedPost.id}
+                            className={`w-full py-3 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors ${
+                                deleting === selectedPost.id ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                        >
+                            {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                        </button>
+                    </div>
+                )}
+
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4 text-red-600 text-sm text-center shadow-sm">
                         {error}
@@ -2150,6 +2202,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         💡 Pricing Guide
                     </button>
+
+                    {userGroups.length > 0 && (
+                        <div className="relative inline-block">
+                            <select
+                                value={groupFilter}
+                                onChange={(e) => setGroupFilter(e.target.value)}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                                    groupFilter !== 'all'
+                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-800'
+                                }`}
+                                aria-label="Filter feed by group"
+                            >
+                                <option value="all">👥 All Groups & Public</option>
+                                {userGroups.map((g) => (
+                                    <option key={g.id} value={g.id}>
+                                        👥 {g.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 {/* Row 3: Symmetrical Filter Dropdowns (50% / 50% split) */}
@@ -2258,6 +2332,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                     return p.status === 'active';
                 });
+
+                // Group filter (Item 10)
+                if (groupFilter !== 'all') {
+                    filtered = filtered.filter(p => p.targetGroupId === groupFilter || (p as any).target_group_id === groupFilter);
+                }
 
                 // Text search (synonym-expanded): exclude polls from goods search unless polls filter active
                 if (searchQuery.trim()) {

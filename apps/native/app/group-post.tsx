@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, Activi
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Crypto from 'expo-crypto';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { createPost } from '../utils/db';
 import { useIdentity } from './IdentityContext';
@@ -200,18 +201,26 @@ export default function GroupPostScreen() {
             return;
         }
 
+        if (!identity?.publicKey) {
+            Alert.alert('Authentication Required', 'You must be logged in to create a group post.');
+            return;
+        }
+
         submittingRef.current = true;
         setSubmitting(true);
         try {
             await createPost({
+                id: Crypto.randomUUID(),
                 type,
                 title: title.trim(),
                 description: description.trim(),
                 category,
                 credits: Number(credits) || 0,
-                priceType,
-                repeatable,
-                cashAlsoNeeded,
+                price_type: priceType,
+                repeatable: repeatable ? 1 : 0,
+                cash_also_needed: cashAlsoNeeded ? 1 : 0,
+                author_pubkey: identity.publicKey,
+                created_at: new Date().toISOString(),
                 audienceScope: 'group',
                 targetGroupId: groupId,
                 reach: 'local',

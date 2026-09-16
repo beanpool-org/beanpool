@@ -572,10 +572,22 @@ export function GroupDetailModal({
                                                     </Text>
                                                 </View>
                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                    <Pressable style={styles.approveBtn} onPress={() => handleApprove(p.memberPubkey)}>
+                                                    <Pressable
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        disabled={actionLoading}
+                                                        style={[styles.approveBtn, actionLoading && { opacity: 0.6 }]}
+                                                        onPress={() => handleApprove(p.memberPubkey)}
+                                                    >
                                                         <Text style={styles.approveBtnText}>Approve</Text>
                                                     </Pressable>
-                                                    <Pressable style={styles.declineBtn} onPress={() => handleRemoveMember(p.memberPubkey, p.callsign)}>
+                                                    <Pressable
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
+                                                        disabled={actionLoading}
+                                                        style={[styles.declineBtn, actionLoading && { opacity: 0.6 }]}
+                                                        onPress={() => handleRemoveMember(p.memberPubkey, p.callsign)}
+                                                    >
                                                         <Text style={styles.declineBtnText}>Decline</Text>
                                                     </Pressable>
                                                 </View>

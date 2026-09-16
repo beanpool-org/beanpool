@@ -608,6 +608,8 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
     if (filter?.audienceScope) {
         query += ' AND p.audience_scope = ?';
         params.push(filter.audienceScope);
+    } else if (!filter?.targetGroupId) {
+        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     }
     query += ' ORDER BY p.created_at DESC';
     
@@ -4596,6 +4598,7 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
             if (Array.isArray(data)) {
                 // Update local cache
                 const database = await getDb();
+                const identity = await loadIdentity();
                 for (const g of data) {
                     await database.runAsync(`
                         INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
@@ -4613,6 +4616,20 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
                         g.category || 'general', g.createdBy, g.joinPolicy || 'open',
                         g.createdAt, g.updatedAt || g.createdAt
                     ]);
+
+                    if (identity?.publicKey && (g.viewerRole || g.viewerStatus)) {
+                        await database.runAsync(`
+                            INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
+                                role = excluded.role,
+                                status = excluded.status,
+                                updated_at = excluded.updated_at
+                        `, [
+                            g.id, identity.publicKey, g.viewerRole || 'member',
+                            g.viewerStatus || 'active', g.createdAt, g.updatedAt || g.createdAt
+                        ]);
+                    }
                 }
                 return data;
             }
@@ -4732,6 +4749,17 @@ export async function updateGroupApi(groupId: string, data: {
 
 export async function deleteGroupPostApi(groupId: string, postId: string): Promise<boolean> {
     const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
+    if (res?.success) {
+        try {
+            const database = await getDb();
+            await database.runAsync('DELETE FROM posts WHERE id = ?', [postId]);
+            await database.runAsync('DELETE FROM post_photos WHERE post_id = ?', [postId]);
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('sync_data_updated');
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to delete group post locally:', dbErr);
+        }
+    }
     return Boolean(res?.success);
 }
 

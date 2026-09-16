@@ -127,6 +127,13 @@ function generateValidPubkey(): string {
     return crypto.randomBytes(32).toString('hex');
 }
 
+function generateKeyPair(): { pubHex: string; privateKey: crypto.KeyObject } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const spki = publicKey.export({ type: 'spki', format: 'der' });
+    const pubHex = spki.subarray(spki.length - 32).toString('hex');
+    return { pubHex, privateKey };
+}
+
 function makeMember(callsign: string, pubkey?: string): string {
     const pk = pubkey || generateValidPubkey();
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
@@ -233,8 +240,29 @@ async function main() {
         bobKey
     );
 
-    // Step A: Issue re-key code
-    const rekeyIssue = issueRekeyCode(oldAliceKey, operatorPubkey);
+    // 13. Social recovery shares (Alice as guardian for Bob)
+    const recShareInsert = db.prepare(`
+        INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
+        VALUES (?, 'member', ?, 1, 'enc_share', 'iv_bytes', 'tag_bytes', 1)
+    `).run(bobKey, oldAliceKey);
+    const recShareId = recShareInsert.lastInsertRowid;
+
+    // 14. Governance pool hardship proposal (Alice as subject)
+    const hardshipDecId = 'dec_hardship_' + crypto.randomBytes(6).toString('hex');
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, subject, effect, franchise, closes_at)
+        VALUES (?, ?, 'Hardship Grant', 'Emergency grant', 'pool', ?, 'grant_hardship', '1m1v', datetime('now', '+7 days'))
+    `).run(hardshipDecId, bobKey, oldAliceKey);
+
+    // 15. Transaction with immutable cryptographic authorship
+    const txSignedId = 'tx_' + crypto.randomBytes(6).toString('hex');
+    db.prepare(`
+        INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp, auth_signer, auth_signature, auth_payload)
+        VALUES (?, ?, ?, 5, 'coffee', datetime('now'), ?, 'sig_bytes', 'payload_bytes')
+    `).run(txSignedId, oldAliceKey, bobKey, oldAliceKey);
+
+    // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
+    const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
     assert(/^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(rekeyIssue.code), 'Code format is RK-XXXX-XXXX');
     assert(isKeyInvalidated(oldAliceKey), 'oldAliceKey is immediately recorded in invalidated_keys');
@@ -242,8 +270,9 @@ async function main() {
     assert(invInfo?.reason === 'rekey_pending', 'Invalidation reason is rekey_pending');
     assert(invInfo?.rekeyed_to === null, 'rekeyed_to is null before completion');
 
-    // Check that assertMemberActive immediately fails for old key
+    // Check that assertMemberActive immediately fails for old key (tested with mixed-case and lowercase)
     throws(() => assertMemberActive(oldAliceKey), /invalidated|suspended/, 'assertMemberActive rejects old key while rekey is pending');
+    throws(() => assertMemberActive(oldAliceKey.toUpperCase()), /invalidated|suspended/, 'assertMemberActive rejects uppercase hex old key');
 
     // Check rekey status helper
     const statusBefore = getRekeyStatus(oldAliceKey);
@@ -351,6 +380,22 @@ async function main() {
     assert(decAuthor === newAliceKey, 'Decision author updated to newAliceKey');
     const voteRow = (db.prepare('SELECT voter_pubkey FROM decision_votes WHERE decision_id = ?').get(decId) as any)?.voter_pubkey;
     assert(voteRow === newAliceKey, 'Decision vote voter updated to newAliceKey');
+
+    // Social recovery shares: guardian holder_ref updated to newAliceKey
+    const recRow = db.prepare('SELECT holder_ref FROM recovery_shares WHERE id = ?').get(recShareId) as any;
+    assert(recRow?.holder_ref === newAliceKey, 'Recovery share holder_ref updated to newAliceKey');
+
+    // Governance pool hardship: subject updated to newAliceKey
+    const hardshipRow = db.prepare('SELECT subject FROM decisions WHERE id = ?').get(hardshipDecId) as any;
+    assert(hardshipRow?.subject === newAliceKey, 'Pool hardship decision subject updated to newAliceKey');
+
+    // Transactions: auth_signer left untouched for cryptographic signature verification
+    const txRow = db.prepare('SELECT from_pubkey, auth_signer FROM transactions WHERE id = ?').get(txSignedId) as any;
+    assert(txRow?.from_pubkey === newAliceKey, 'Transaction from_pubkey updated to newAliceKey');
+    assert(txRow?.auth_signer === oldAliceKey, 'Transaction auth_signer left untouched for cryptographic signature verification');
+
+    // Case-insensitive assertMemberActive check
+    throws(() => assertMemberActive(oldAliceKey.toUpperCase()), new RegExp(newAliceKey), 'assertMemberActive on uppercase old key reports rekeyed_to new key');
 
     // Rekey audit log
     const auditLogRow = db.prepare('SELECT * FROM rekey_audit_log WHERE old_pubkey = ?').get(oldAliceKey) as any;
@@ -473,6 +518,35 @@ async function main() {
     // Clean up owner role so it does not interfere
     db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(frankOwnerKey);
 
+    // Member 5: Active Escrow Protection
+    const escrowBuyerKey = generateValidPubkey();
+    makeMember('escrow_buyer', escrowBuyerKey);
+    const escrowTxId = 'mptx_' + crypto.randomBytes(6).toString('hex');
+    db.prepare(`
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        VALUES (?, 'dummy_post', ?, ?, 15, 'pending', datetime('now'))
+    `).run(escrowTxId, escrowBuyerKey, bobKey);
+
+    const previewEscrow = getOffboardPreview(escrowBuyerKey);
+    assert(previewEscrow.pendingEscrowsCount === 1, 'getOffboardPreview detects 1 pending escrow');
+
+    throws(
+        () => executeOffboard(escrowBuyerKey, { resolution: 'prune_zero_balance' }, operatorPubkey),
+        /active deals in escrow/,
+        'executeOffboard rejects offboarding member with pending escrow deals'
+    );
+
+    // Clean up escrow transaction
+    db.prepare("DELETE FROM marketplace_transactions WHERE id = ?").run(escrowTxId);
+
+    // Member 6: Push Token Purge on Prune
+    const pushMemberKey = generateValidPubkey();
+    makeMember('push_member', pushMemberKey);
+    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'token_123', 'ios')").run(pushMemberKey);
+    assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 1, 'Push token created');
+    executeOffboard(pushMemberKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
+    assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 0, 'Push token purged on offboard');
+
     // =========================================================================
     // PART 3: HTTP API ENDPOINTS (ADMIN & COMMUNITY)
     // =========================================================================
@@ -588,14 +662,31 @@ async function main() {
         assert(statusData.isInvalidated === true, 'statusData shows isInvalidated: true');
         assert(statusData.pendingRequest?.code === graceRekeyCode, 'statusData pendingRequest matches issued code');
 
-        // 4. Public re-enroll endpoint: /api/member/re-enroll (redeemed from replacement phone)
-        const graceNewKey = generateValidPubkey();
+        // 4a. Public re-enroll with invalid Proof of Possession signature rejected
+        const graceKeyPair = generateKeyPair();
+        const invalidSigRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                code: graceRekeyCode,
+                newPublicKey: graceKeyPair.pubHex,
+                signature: 'dGhpcyBpcyBhIGZha2Ugc2lnbmF0dXJl',
+            }),
+        });
+        assert(invalidSigRes.status === 401, 'POST /api/member/re-enroll with invalid signature returns 401');
+        const invalidSigData = await invalidSigRes.json();
+        assert(invalidSigData.error?.includes('proof of possession failed'), 'Error indicates proof of possession failure');
+
+        // 4b. Public re-enroll endpoint: /api/member/re-enroll with valid Proof of Possession signature succeeds
+        const validSig = crypto.sign(null, Buffer.from(graceRekeyCode, 'utf8'), graceKeyPair.privateKey).toString('base64');
+        const graceNewKey = graceKeyPair.pubHex;
         const reenrollRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 code: graceRekeyCode,
                 newPublicKey: graceNewKey,
+                signature: validSig,
             }),
         });
         assert(reenrollRes.status === 200, 'POST /api/member/re-enroll returns 200');
@@ -616,7 +707,23 @@ async function main() {
         assert(previewData.costToCommunity === 0, 'costToCommunity is 0');
         assert(Array.isArray(previewData.activeMembers), 'activeMembers list returned');
 
-        // 6. Two-person rule enforcement via POST /api/local/admin/members/:pubkey/offboard
+        // 6a. Password auth attempting gift_to_member rejected with KEY_AUTH_REQUIRED
+        const pwGiftRes = await fetch(`${baseUrl}/api/local/admin/members/${graceNewKey}/offboard`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': 'test-admin-secret',
+            },
+            body: JSON.stringify({
+                resolution: 'gift_to_member',
+                giftRecipientPubkey: bobKey,
+            }),
+        });
+        assert(pwGiftRes.status === 403, 'POST offboard with password auth and gift_to_member returns 403');
+        const pwGiftData = await pwGiftRes.json();
+        assert(pwGiftData.code === 'KEY_AUTH_REQUIRED', 'Response returns KEY_AUTH_REQUIRED when password auth used for gift_to_member');
+
+        // 6b. Two-person rule enforcement via POST /api/local/admin/members/:pubkey/offboard
         const selfGiftRes = await fetch(`${baseUrl}/api/local/admin/members/${graceNewKey}/offboard`, {
             method: 'POST',
             headers: {

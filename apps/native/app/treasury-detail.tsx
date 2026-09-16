@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi, getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage } from '../utils/db';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
+import { MemberAvatar } from '../components/MemberAvatar';
 import { useTheme, useStyles } from './ThemeContext';
 
 function decodeThreadMessage(ciphertext: string, type: string): string {
@@ -824,16 +825,13 @@ export default function TreasuryDetailScreen() {
                                     const authorAvatar = m.authorAvatar;
                                     const textContent = decodeThreadMessage(m.ciphertext, m.type);
                                     return (
-                                        <View key={m.id || idx} style={[styles.threadMsgRow, idx === threadMessages.length - 1 && { borderBottomWidth: 0 }]}>
-                                            {authorAvatar ? (
-                                                <Image source={{ uri: authorAvatar }} style={styles.threadMsgAvatar} />
-                                            ) : (
-                                                <View style={[styles.threadMsgAvatar, styles.avatarPlaceholder]}>
-                                                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text.secondary }}>
-                                                        {authorName.charAt(0).toUpperCase()}
-                                                    </Text>
-                                                </View>
-                                            )}
+                                        <View key={m.id} style={[styles.threadMsgRow, idx === threadMessages.length - 1 && { borderBottomWidth: 0 }]}>
+                                            <MemberAvatar
+                                                avatarUrl={authorAvatar}
+                                                pubkey={m.authorPubkey}
+                                                callsign={authorName}
+                                                size={32}
+                                            />
                                             <View style={styles.threadMsgContent}>
                                                 <View style={styles.threadMsgMeta}>
                                                     <Text style={styles.threadMsgAuthor} numberOfLines={1}>{authorName}</Text>
@@ -842,10 +840,12 @@ export default function TreasuryDetailScreen() {
                                                         {isKeeperOfThis && !isRemoved && (
                                                             <Pressable
                                                                 style={styles.threadRemoveBtn}
+                                                                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                                                 onPress={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 accessibilityRole="button"
-                                                                accessibilityLabel="Remove message"
+                                                                accessibilityLabel={`Remove message from ${authorName}`}
+                                                                accessibilityState={{ disabled: threadRemovingId === m.id, busy: threadRemovingId === m.id }}
                                                             >
                                                                 {threadRemovingId === m.id ? (
                                                                     <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
@@ -868,7 +868,7 @@ export default function TreasuryDetailScreen() {
                             {!threadReadOnly && (
                                 <View style={styles.threadInputRow}>
                                     <TextInput
-                                        style={styles.threadInput}
+                                        style={[styles.threadInput, threadPosting && { opacity: 0.6 }]}
                                         placeholder="Message the enterprise..."
                                         placeholderTextColor={colors.text.muted}
                                         value={threadInput}
@@ -876,6 +876,8 @@ export default function TreasuryDetailScreen() {
                                         maxLength={2000}
                                         returnKeyType="send"
                                         onSubmitEditing={handlePostThreadMessage}
+                                        editable={!threadPosting}
+                                        accessibilityLabel="Message the enterprise"
                                     />
                                     <Pressable
                                         style={[

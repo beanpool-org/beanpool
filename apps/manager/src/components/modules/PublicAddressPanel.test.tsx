@@ -381,4 +381,85 @@ describe('PublicAddressPanel Component', () => {
             expect(screen.getByText('✓ Copied')).toBeInTheDocument();
         });
     });
+
+    it('has security attributes on tunnel token input to prevent password manager autofill', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        status: 'live',
+                        hostname: 'cairns.beanpool.org',
+                        mode: 'tunnel',
+                        tunnelToken: 'cf-tunnel-token-secret-xyz-12345',
+                    }),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ logs: [] }),
+            } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByLabelText(/Tunnel Token/i)).toBeInTheDocument();
+        });
+
+        const tokenInput = screen.getByLabelText(/Tunnel Token/i) as HTMLInputElement;
+        expect(tokenInput.getAttribute('autocomplete')).toBe('off');
+        expect(tokenInput.getAttribute('data-lpignore')).toBe('true');
+        expect(tokenInput.getAttribute('data-1p-ignore')).toBe('true');
+        expect(tokenInput.getAttribute('spellcheck')).toBe('false');
+    });
+
+    it('dismisses confirmation modal on Escape key press and backdrop click', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        status: 'live',
+                        hostname: 'cairns.beanpool.org',
+                        mode: 'tunnel',
+                        tunnelToken: 'token-abc',
+                    }),
+                } as Response);
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ logs: [] }),
+            } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+        });
+
+        // Open modal
+        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+        // Dismiss via Escape key
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Open modal again
+        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+
+        // Dismiss via backdrop click
+        fireEvent.click(dialog);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
 });

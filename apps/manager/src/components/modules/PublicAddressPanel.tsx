@@ -69,6 +69,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
     const logTerminalRef = useRef<HTMLDivElement>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Poll logs
     const fetchLogs = useCallback(async () => {
@@ -92,22 +93,28 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
     // Start background log monitor
     const startLogMonitor = useCallback(() => {
+        if (stopTimerRef.current) {
+            clearTimeout(stopTimerRef.current);
+            stopTimerRef.current = null;
+        }
         setIsPollingLogs(true);
         fetchLogs();
         if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-        pollTimerRef.current = setInterval(fetchLogs, 800);
+        pollTimerRef.current = setInterval(fetchLogs, 2500);
     }, [fetchLogs]);
 
     // Stop background log monitor
     const stopLogMonitor = useCallback(() => {
-        setTimeout(() => {
+        if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = setTimeout(() => {
             fetchLogs();
             if (pollTimerRef.current) {
                 clearInterval(pollTimerRef.current);
                 pollTimerRef.current = null;
             }
             setIsPollingLogs(false);
-        }, 3000);
+            stopTimerRef.current = null;
+        }, 65000);
     }, [fetchLogs]);
 
     // Fetch public address status
@@ -121,9 +128,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             const data: PublicAddressStatus = await res.json().catch(() => ({ status: 'error', error: 'Invalid JSON response' }));
             if (res.ok) {
                 setStatusData(data);
-                if (data.communityName && !communityName) setCommunityName(String(data.communityName));
-                if (data.contact && !contact) setContact(String(data.contact));
-                if (data.name && !claimName) setClaimName(String(data.name));
+                if (data.communityName) setCommunityName((prev) => prev || String(data.communityName));
+                if (data.contact) setContact((prev) => prev || String(data.contact));
+                if (data.name) setClaimName((prev) => prev || String(data.name));
             } else {
                 setStatusData({
                     status: 'error',
@@ -139,7 +146,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             setLoading(false);
             fetchLogs();
         }
-    }, [activeNode.url, activeNode.adminPassword, activeNode.id, communityName, contact, claimName, fetchLogs]);
+    }, [activeNode.url, activeNode.adminPassword, activeNode.id, fetchLogs]);
 
     useEffect(() => {
         loadStatus();
@@ -147,6 +154,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             if (pollTimerRef.current) {
                 clearInterval(pollTimerRef.current);
                 pollTimerRef.current = null;
+            }
+            if (stopTimerRef.current) {
+                clearTimeout(stopTimerRef.current);
+                stopTimerRef.current = null;
             }
         };
     }, [loadStatus]);
@@ -157,6 +168,18 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             logTerminalRef.current.scrollTop = logTerminalRef.current.scrollHeight;
         }
     }, [logs]);
+
+    // Close confirmation modal on Escape key
+    useEffect(() => {
+        if (!confirmModal.isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [confirmModal.isOpen]);
 
     // Subdomain sanitization and preview
     const cleanSubdomain = (val: string) => {
@@ -470,6 +493,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                             id="tunnel-token-input"
                                             type={revealToken ? 'text' : 'password'}
                                             readOnly
+                                            autoComplete="off"
+                                            data-lpignore="true"
+                                            data-1p-ignore="true"
+                                            spellCheck={false}
                                             value={tunnelToken}
                                             className="flex-1 bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none select-all"
                                         />
@@ -725,6 +752,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="confirm-modal-title"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                        }
+                    }}
                     className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
                     <div className="w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -745,14 +777,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <button
                                 type="button"
                                 onClick={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-300 hover:text-white transition-all min-h-[40px]"
+                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-nature-300 hover:text-white transition-all min-h-[44px]"
                             >
                                 Cancel
                             </button>
                             <button
                                 type="button"
                                 onClick={handleConfirmAction}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[40px] ${
+                                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[44px] ${
                                     confirmModal.actionType === 'offline'
                                         ? 'bg-red-600 hover:bg-red-500'
                                         : 'bg-blue-600 hover:bg-blue-500'

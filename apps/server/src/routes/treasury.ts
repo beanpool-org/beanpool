@@ -20,6 +20,8 @@ import {
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
+    isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
+    getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -365,6 +367,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             keepers: treasuryKeepers(treasury),
             pledges: getEnterprisePledges(treasury),
             availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
+            keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
+                ? getKeeperRequests(treasury, 'pending')
+                : [],
+            myPendingRequest: actor
+                ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
+                : null,
+            leadInactivity: getLeadInactivity(treasury),
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
             link: linkDetail(treasury),
         };
@@ -1001,6 +1010,125 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/treasury/:treasury/pledge/release', releaseHandler);
     router.delete('/api/treasury/:treasury/backing', releaseHandler);
     router.post('/api/treasury/:treasury/backing/release', releaseHandler);
+    router.post('/api/enterprise/:treasury/release', releaseHandler);
+    router.delete('/api/enterprise/:treasury/pledge', releaseHandler);
+    router.post('/api/enterprise/:treasury/pledge/release', releaseHandler);
+    router.delete('/api/enterprise/:treasury/backing', releaseHandler);
+    router.post('/api/enterprise/:treasury/backing/release', releaseHandler);
+
+    // ---- Keeper Join Requests (docs/the-commons.md §2.3, §2.4 Rule 3) ------------------
+    const requestJoinHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        const { pledgedBacking, amount, backing } = (ctx as any).requestBody || {};
+        const pledge = pledgedBacking ?? amount ?? backing ?? 0;
+        try {
+            const req = requestToJoinEnterprise(treasury, actor, pledge);
+            ctx.body = { success: true, request: req };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to submit join request' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/request', requestJoinHandler);
+    router.post('/api/enterprise/:treasury/keepers/request', requestJoinHandler);
+
+    const listKeeperRequestsHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        const { status } = ctx.query;
+        try {
+            const requests = getKeeperRequests(treasury, status ? String(status) : undefined);
+            ctx.body = { success: true, requests };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to list keeper requests' };
+        }
+    };
+    router.get('/api/treasury/:treasury/keepers/requests', listKeeperRequestsHandler);
+    router.get('/api/enterprise/:treasury/keepers/requests', listKeeperRequestsHandler);
+
+    const approveKeeperRequestHandler = async (ctx: any) => {
+        const { treasury: _treasury, requestId } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        try {
+            const res = approveKeeperRequest(requestId, actor);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const isAuth = /Only the lead keeper/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to approve keeper request' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
+    router.post('/api/enterprise/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
+
+    const declineKeeperRequestHandler = async (ctx: any) => {
+        const { treasury: _treasury, requestId } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        try {
+            const res = declineKeeperRequest(requestId, actor);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const isAuth = /Only the lead keeper/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to decline keeper request' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/requests/:requestId/decline', declineKeeperRequestHandler);
+    router.post('/api/enterprise/:treasury/keepers/requests/:requestId/decline', declineKeeperRequestHandler);
+
+    // ---- Lead Succession (docs/the-commons.md §2.3) -------------------------------------
+    const getSuccessionHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        try {
+            const data = getSuccessionProposals(treasury);
+            ctx.body = { success: true, ...data };
+        } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message || 'Failed to get succession information' };
+        }
+    };
+    router.get('/api/treasury/:treasury/succession', getSuccessionHandler);
+    router.get('/api/enterprise/:treasury/succession', getSuccessionHandler);
+
+    const proposeSuccessionHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        const { candidatePubkey } = (ctx as any).requestBody || {};
+        if (!candidatePubkey) { ctx.status = 400; ctx.body = { error: 'candidatePubkey is required' }; return; }
+        try {
+            const res = proposeLeadSuccession(treasury, actor, candidatePubkey);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const isAuth = /Only an active keeper|Lead keeper cannot/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to propose lead succession' };
+        }
+    };
+    router.post('/api/treasury/:treasury/succession/propose', proposeSuccessionHandler);
+    router.post('/api/enterprise/:treasury/succession/propose', proposeSuccessionHandler);
+
+    const voteSuccessionHandler = async (ctx: any) => {
+        const { treasury: _treasury, proposalId } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        try {
+            const res = voteLeadSuccession(proposalId, actor);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const isAuth = /Only active keepers|Lead keeper cannot/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to vote on succession' };
+        }
+    };
+    router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
+    router.post('/api/enterprise/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
 
     return router;
 }

@@ -13,6 +13,11 @@ import { bumpMembersVersion } from './versions.js';
  */
 export function recordActivity(publicKey: string): void {
     db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    try {
+        db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'").run(publicKey);
+    } catch {
+        // Safe to ignore if table does not exist in isolated db test
+    }
 }
 
 /**

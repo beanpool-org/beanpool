@@ -4121,14 +4121,11 @@ export function createTreasury(
     const paused = opts.paused ? 1 : 0;
 
     let pubKeyHex = opts.publicKeyHex;
-    let privKeyHex = '';
     if (!pubKeyHex) {
-        const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
+        const { publicKey } = crypto.generateKeyPairSync('ed25519', {
             publicKeyEncoding: { type: 'spki', format: 'pem' },
-            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
         });
         pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-        privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
     }
 
     db.transaction(() => {
@@ -4140,9 +4137,6 @@ export function createTreasury(
                     VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?)`)
             .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
-        if (privKeyHex) {
-            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
-        }
         if (opts.leadKeeperPubkey) {
             db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);

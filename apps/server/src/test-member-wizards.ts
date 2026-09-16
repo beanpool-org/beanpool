@@ -463,6 +463,18 @@ async function main() {
         assert(e.code === 'TWO_PERSON_RULE' || e.status === 403, 'Two-person rule correctly rejected self-gifting by operator');
     }
 
+    // Assert an ordinary admin-signed transfer (without offboardOverride) is STILL subject to the trust gate
+    const ordinaryAdminTx = transfer(
+        daveKey,
+        bobKey,
+        10,
+        'ordinary admin-signed transfer without offboardOverride',
+        'direct',
+        false,
+        { signer: operatorPubkey }
+    );
+    assert(ordinaryAdminTx === null, 'Ordinary admin-signed transfer is blocked by the earned-credit trust gate');
+
     // Now execute valid gift to Bob (different from operator)
     const bobBalanceBefore = getBalance(bobKey).balance;
     const offboardDaveRes = executeOffboard(

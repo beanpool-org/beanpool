@@ -1355,7 +1355,7 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -1377,9 +1377,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
     // #104: a bridge_<peer> account is the local payer when settling a visitor's purchase. It has no
     // trust profile, so the completed-trade gate would block every cross-node settlement.
-    // Operator/admin-signed transfers (e.g. member offboarding wizard gifts) are also exempt.
-    const isOperatorSigner = Boolean(auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
-    if (!isEscrow && !isOperatorSigner && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
+    const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
+    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);

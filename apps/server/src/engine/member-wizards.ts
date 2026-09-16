@@ -604,7 +604,7 @@ export function executeOffboard(
                     `Offboarding gift from ${member.callsign.trim()}`,
                     'direct',
                     false,
-                    { signer: cleanOperator }
+                    { signer: cleanOperator, offboardOverride: true }
                 );
                 if (!txRes) {
                     throw new Error('Failed to transfer offboarding balance to recipient');

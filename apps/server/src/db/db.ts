@@ -338,6 +338,15 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
+    // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN paused_floor_snapshot REAL`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_initiated_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN wind_up_finalised_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
 

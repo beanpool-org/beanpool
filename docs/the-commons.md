@@ -240,6 +240,13 @@ unreachable, ❌ missing.
   stages, and a bounded enterprise waiting on materials all need it, and without it the offer
   covenant quietly closes their floor the moment they stop listing.
 
+  **The credit floor while paused** (decided by Marty, 2026-09-16, implemented exactly as written):
+  - On pause, snapshot the enterprise's current derived floor (`paused_floor_snapshot`, `paused_at`).
+  - While paused, its usable floor is `max(snapshot, derived)` — the covenant cannot pull it below what it had the day it paused, and genuinely earned growth still counts. It is NOT recomputed downward.
+  - The snapshot expires after **90 days paused**: past that the floor is the normally derived value again. Warn visibly before the expiry, not after it.
+  - On resume, clear the snapshot and recompute normally.
+  - Keeper exits during a pause still release their backing per §2.6 — a pause freezes the covenant, never a keeper's right to leave.
+
 **Being accountable**
 - ✅ Ratings accrue to the enterprise, not to whoever was operating it that day
 - ❌ A visible ledger of what it took in and paid out
@@ -1255,6 +1262,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Underfunded passed grants | **queue, do not fail** — one at a time, visible, expires at 90 days |
 | Admin spending an enterprise's money | **no** — split the permission; admins may administer, not spend (§2.3, `admin-surface.md` §6) |
 | Approving your own payment | **no** — two-person rule; a different keeper approves |
+| Credit floor while paused | snapshot on pause (`paused_floor_snapshot`, `paused_at`); usable floor is `max(snapshot, derived)` — cannot pull below pause-day floor, earned growth counts, not recomputed downward; expires at **90 days paused** (warn visibly before); clear on resume; keeper exits during pause still release backing per §2.6 (Marty, 2026-09-16, §2.2) |
 
 ---
 

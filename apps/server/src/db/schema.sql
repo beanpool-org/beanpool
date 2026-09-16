@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS members (
     deadline_at DATETIME DEFAULT NULL,
     lifecycle TEXT DEFAULT 'ongoing',
     paused INTEGER DEFAULT 0,
+    paused_at DATETIME,
+    paused_by TEXT,
+    paused_floor_snapshot REAL,
+    wind_up_initiated_at DATETIME,
+    wind_up_initiated_by TEXT,
+    wind_up_finalised_at DATETIME,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -711,6 +717,7 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
     role            TEXT NOT NULL DEFAULT 'keeper',
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
+    backing         REAL DEFAULT 0,
     PRIMARY KEY (treasury_pubkey, member_pubkey)
 );
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that

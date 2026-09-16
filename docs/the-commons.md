@@ -1255,6 +1255,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Underfunded passed grants | **queue, do not fail** — one at a time, visible, expires at 90 days |
 | Admin spending an enterprise's money | **no** — split the permission; admins may administer, not spend (§2.3, `admin-surface.md` §6) |
 | Approving your own payment | **no** — two-person rule; a different keeper approves |
+| Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
 
 ---
 

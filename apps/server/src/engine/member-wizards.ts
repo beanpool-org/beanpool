@@ -360,6 +360,11 @@ export function completeRekey(
         db.prepare('UPDATE settlements SET seller_pubkey = ? WHERE seller_pubkey = ?').run(cleanNew, cleanOld);
 
         // (u) federation_links
+        // KNOWN LIMITATION (federation key propagation):
+        // Remote peer nodes retain the member's former public key in their cached member tables
+        // and federation_links until peer-to-peer key rotation gossip is implemented. Consequently,
+        // cross-village trust validation and settlements will fail verification against the new key.
+        // Trades with other villages will need re-linking on peer nodes.
         db.prepare('UPDATE federation_links SET treasury_pubkey = ? WHERE treasury_pubkey = ?').run(cleanNew, cleanOld);
 
         // (v) activity_feed

@@ -92,6 +92,7 @@ describe('RekeyMemberWizard', () => {
             );
             expect(screen.getByText('RK-1234-5678')).toBeDefined();
             expect(screen.getByPlaceholderText(/64 hex characters/)).toBeDefined();
+            expect(screen.getByText(/Trades with other villages will need re-linking/)).toBeDefined();
         });
     });
 

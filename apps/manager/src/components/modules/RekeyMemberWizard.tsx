@@ -296,6 +296,16 @@ export function RekeyMemberWizard({
                             </p>
                         </div>
 
+                        {/* Federation notice: plain explanation before committing */}
+                        <div className="p-3 bg-nature-900/80 border border-nature-700/80 rounded-2xl space-y-1">
+                            <span className="font-bold text-amber-300 block text-[11px] flex items-center gap-1.5">
+                                🌐 Federation Limitation
+                            </span>
+                            <p className="text-[11px] leading-relaxed text-nature-300 m-0">
+                                Trades with other villages will need re-linking. Peer nodes do not automatically receive the replacement key, so cross-village trust and settlement links involving this member must be updated on remote nodes.
+                            </p>
+                        </div>
+
                         <div className="flex items-center justify-between gap-2 pt-2">
                             <button
                                 type="button"

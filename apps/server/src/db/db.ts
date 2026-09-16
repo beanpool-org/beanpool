@@ -367,17 +367,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
-    // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
-    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);`); } catch { }
-    try {
-        db.prepare(`
-            INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
-            SELECT public_key, 'enterprise_thread', callsign, public_key, joined_at
-            FROM members
-            WHERE is_treasury = 1
-        `).run();
-    } catch { }
-
     // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
     const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
     if (hasNodeRoles) {
@@ -457,6 +446,17 @@ export function initSchema() {
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
+
+    // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
+    try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);`); } catch { }
+    try {
+        db.prepare(`
+            INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
+            SELECT public_key, 'enterprise_thread', callsign, public_key, COALESCE(joined_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            FROM members
+            WHERE is_treasury = 1
+        `).run();
+    } catch { }
 
     if (ratingsSql && ratingsSql.sql.includes('marketplace_transactions_old')) {
         try {

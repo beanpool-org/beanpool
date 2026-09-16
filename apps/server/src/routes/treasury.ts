@@ -1050,7 +1050,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
-        if (blocked(statusOf(actor))) {
+        const actorStatus = statusOf(actor);
+        if (!actorStatus || blocked(actorStatus)) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };
             return;
@@ -1064,7 +1065,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
         const body = (ctx as any).requestBody || (ctx.request as any).body || {};
         const text = typeof body.text === 'string' ? body.text : (typeof body.message === 'string' ? body.message : '');
-        const clientId = typeof body.clientId === 'string' ? body.clientId : undefined;
+
+        let clientId: string | undefined;
+        if (body.clientId !== undefined && body.clientId !== null) {
+            if (typeof body.clientId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.clientId)) {
+                ctx.status = 400;
+                ctx.body = { error: 'clientId must be a UUID v4' };
+                return;
+            }
+            clientId = body.clientId.toLowerCase();
+        }
 
         if (!text.trim()) {
             ctx.status = 400;
@@ -1081,9 +1091,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             const msg = e?.message || 'Failed to post message';
+            if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
+                ctx.status = 409;
+                ctx.body = { error: msg };
+                return;
+            }
             if (msg.includes('Enterprise not found')) {
                 ctx.status = 404;
-            } else if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended') || msg.includes('pruned') || msg.includes('Device key has been invalidated')) {
+            } else if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended') || msg.includes('pruned') || msg.includes('Device key has been invalidated') || msg.includes('Member not found')) {
                 ctx.status = 403;
             } else if (msg.includes('read-only') || msg.includes('wound up')) {
                 ctx.status = 400;

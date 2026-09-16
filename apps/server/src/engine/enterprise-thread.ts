@@ -24,6 +24,11 @@ export interface EnterpriseThreadMessage {
 }
 
 export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: string): boolean {
+    const cleanKey = typeof actorPubkey === 'string' ? actorPubkey.trim().toLowerCase() : '';
+    try {
+        const invalidated = db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(cleanKey);
+        if (invalidated) return false;
+    } catch { }
     const op = db.prepare("SELECT can_operate, status FROM members WHERE public_key = ?").get(actorPubkey) as any;
     if (!op || op.status === 'disabled' || op.status === 'suspended' || op.status === 'pruned') return false;
     if (!op.can_operate) return false;
@@ -63,11 +68,11 @@ export function getEnterpriseThreadMessages(
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
-        ORDER BY m.rowid ASC
+        ORDER BY m.timestamp DESC, m.rowid DESC
         LIMIT ? OFFSET ?
     `).all(enterprisePubkey, limit, offset) as any[];
 
-    return rows.map(r => {
+    return rows.reverse().map(r => {
         let displayCiphertext = r.ciphertext;
         if (r.type === 'removed') {
             displayCiphertext = Buffer.from('removed by a keeper', 'utf8').toString('base64');
@@ -96,7 +101,7 @@ function checkMemberCanPost(authorPubkey: string): void {
     if (isSyntheticAccount(authorPubkey) || authorPubkey.toLowerCase() === 'system') return;
     const cleanKey = typeof authorPubkey === 'string' ? authorPubkey.trim().toLowerCase() : '';
     try {
-        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?").get(cleanKey) as any;
         if (invalidated) {
             const rekeyDetail = invalidated.rekeyed_to ? ` and re-keyed to ${invalidated.rekeyed_to}` : '';
             throw new Error(`Device key has been invalidated (${invalidated.reason}${rekeyDetail}). Please re-enrol using your replacement device.`);
@@ -104,7 +109,7 @@ function checkMemberCanPost(authorPubkey: string): void {
     } catch (e: any) {
         if (e?.message?.includes('Device key has been invalidated')) throw e;
     }
-    const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+    const member = db.prepare("SELECT status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(cleanKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
     if (member.status === 'suspended') throw new Error('Account is suspended');
@@ -139,6 +144,32 @@ export function postEnterpriseThreadMessage(
 
     ensureEnterpriseThread(enterprisePubkey);
 
+    if (clientId) {
+        const existing = db.prepare("SELECT * FROM messages WHERE id = ?").get(clientId) as any;
+        if (existing) {
+            if (existing.author_pubkey === authorPubkey && existing.conversation_id === enterprisePubkey) {
+                const senderMember = getMember(db, authorPubkey) as any;
+                return {
+                    id: existing.id,
+                    conversationId: existing.conversation_id,
+                    authorPubkey: existing.author_pubkey,
+                    authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
+                    authorAvatar: senderMember?.avatar_url
+                        ? (senderMember.avatar_url.startsWith('bundled://')
+                            ? senderMember.avatar_url
+                            : `/api/avatar/${authorPubkey}?size=thumb`)
+                        : null,
+                    ciphertext: existing.ciphertext,
+                    nonce: existing.nonce,
+                    type: existing.type,
+                    metadata: existing.metadata,
+                    timestamp: existing.timestamp,
+                };
+            }
+            throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
+        }
+    }
+
     const msgId = clientId || crypto.randomUUID();
     const ciphertext = Buffer.from(cleanText, 'utf8').toString('base64');
     const nonce = 'plaintext-v1';
@@ -156,7 +187,11 @@ export function postEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey,
         authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-        authorAvatar: senderMember?.avatar_url || null,
+        authorAvatar: senderMember?.avatar_url
+            ? (senderMember.avatar_url.startsWith('bundled://')
+                ? senderMember.avatar_url
+                : `/api/avatar/${authorPubkey}?size=thumb`)
+            : null,
         ciphertext,
         nonce,
         type,
@@ -216,10 +251,17 @@ export function removeEnterpriseThreadMessage(
         WHERE id = ?
     `).run(ciphertext, nonce, metadataStr, messageId);
 
+    const authorMember = getMember(db, msgRow.author_pubkey) as any;
     const updatedMsg: EnterpriseThreadMessage = {
         id: messageId,
         conversationId: enterprisePubkey,
         authorPubkey: msgRow.author_pubkey,
+        authorCallsign: authorMember?.callsign || msgRow.author_pubkey?.slice(0, 8),
+        authorAvatar: authorMember?.avatar_url
+            ? (authorMember.avatar_url.startsWith('bundled://')
+                ? authorMember.avatar_url
+                : `/api/avatar/${msgRow.author_pubkey}?size=thumb`)
+            : null,
         ciphertext,
         nonce,
         type: 'removed',
@@ -228,11 +270,11 @@ export function removeEnterpriseThreadMessage(
     };
 
     cb.broadcast({
-        type: 'message_removed',
+        type: 'new_message',
         conversationId: enterprisePubkey,
-        messageId,
         message: updatedMsg,
         threadType: 'enterprise_thread',
+        action: 'removed',
     });
 
     return updatedMsg;

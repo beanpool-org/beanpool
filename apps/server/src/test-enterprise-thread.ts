@@ -164,6 +164,12 @@ async function main() {
     assert(isKeeperOfEnterprise(carolOutsider.pubKeyHex, bakery) === false, 'Carol is not keeper of Bakery');
     assert(isKeeperOfEnterprise(danActive.pubKeyHex, bakery) === false, 'Dan is not keeper of Bakery');
 
+    // Invalidation check on keeper
+    db.prepare("INSERT INTO invalidated_keys (public_key, reason) VALUES (?, 'rekeyed')").run(bobKeeper.pubKeyHex);
+    assert(isKeeperOfEnterprise(bobKeeper.pubKeyHex, bakery) === false, 'Bob with invalidated key is not authorized keeper');
+    db.prepare("DELETE FROM invalidated_keys WHERE public_key = ?").run(bobKeeper.pubKeyHex);
+    assert(isKeeperOfEnterprise(bobKeeper.pubKeyHex, bakery) === true, 'Bob restored after invalidation removal');
+
     // ─────────────────────────────────────────────────────────────────────────
     // Step 2: Active members reading and posting
     // ─────────────────────────────────────────────────────────────────────────
@@ -300,6 +306,8 @@ async function main() {
     // Keeper of Bakery removes message 1
     const removedMsg = removeEnterpriseThreadMessage(bakery, msg1.id, leadAlice.pubKeyHex);
     assert(removedMsg.type === 'removed', 'Removed message type is removed');
+    assert(removedMsg.authorCallsign === 'DanActive', 'Removed message retains author callsign');
+    assert(removedMsg.authorPubkey === danActive.pubKeyHex, 'Removed message retains author pubkey');
 
     // CRITICAL: Row is NOT deleted from messages table!
     const rowInDb = db.prepare("SELECT * FROM messages WHERE id = ?").get(msg1.id) as any;
@@ -372,6 +380,42 @@ async function main() {
         text: 'Frozen HTTP post attempt'
     });
     assert(frozenPostRes.status === 403, `POST by frozen member returns 403 (got ${frozenPostRes.status})`);
+
+    // POST by un-enrolled actor returns 403
+    const { publicKey: unKey, privateKey: unPriv } = crypto.generateKeyPairSync('ed25519');
+    const unenrolled = { pubKeyHex: unKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey: unPriv };
+    const unenrolledPostRes = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, unenrolled, {
+        text: 'Unenrolled actor attempt'
+    });
+    assert(unenrolledPostRes.status === 403, `POST by un-enrolled actor returns 403 (got ${unenrolledPostRes.status})`);
+
+    // POST with invalid clientId returns 400
+    const invalidClientIdRes = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, danActive, {
+        text: 'Invalid clientId attempt',
+        clientId: 'not-a-valid-uuid'
+    });
+    assert(invalidClientIdRes.status === 400, `POST with invalid clientId returns 400 (got ${invalidClientIdRes.status})`);
+
+    // POST with valid UUID clientId returns 201 and is idempotent
+    const validUuid = crypto.randomUUID();
+    const validUuidRes1 = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, danActive, {
+        text: 'Valid clientId post',
+        clientId: validUuid
+    });
+    assert(validUuidRes1.status === 201, `POST with valid clientId returns 201`);
+    assert(validUuidRes1.body.message.id === validUuid, 'POST returned message has clientId');
+    const validUuidRes2 = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, danActive, {
+        text: 'Valid clientId post retry',
+        clientId: validUuid
+    });
+    assert(validUuidRes2.status === 201, `POST retry with same clientId returns 201 (idempotent)`);
+
+    // POST with conflicting clientId returns 409
+    const conflictUuidRes = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, leadAlice, {
+        text: 'Conflicting author post',
+        clientId: validUuid
+    });
+    assert(conflictUuidRes.status === 409, `POST with conflicting clientId returns 409 (got ${conflictUuidRes.status})`);
 
     // POST with empty text returns 400
     const emptyPostRes = await signedFetch('POST', `/api/treasury/${bakery}/thread/message`, danActive, {

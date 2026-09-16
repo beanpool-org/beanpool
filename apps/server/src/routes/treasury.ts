@@ -90,7 +90,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return null;
         }
         // Only an EXPLICIT suspension refuses. A missing row means "not a suspended member".
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
@@ -104,9 +104,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         return actor;
     };
 
-    // Gate an administrative or lifecycle action: authorized for enterprise keepers or node admin.
-    // Also checks that both enterprise and actor are not explicitly suspended or pruned.
-    const requireKeeperOrAdmin = (ctx: any, treasury: string): string | null => {
+    /**
+     * Authorisation guard for lifecycle mutations (pause, resume, initiateWindUp, cancelWindUp, finaliseWindUp).
+     * Requires the actor to be an authorised keeper or node admin.
+     * Also checks that both enterprise and actor are not explicitly suspended or pruned.
+     */
+    const requireKeeperOrAdmin = (ctx: any, treasury: string) => {
         const actor = ctx.state?.actor;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
         if (!actor || !canAdministerTreasury(actor, treasury)) {
@@ -114,7 +117,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only a keeper of this enterprise (or node admin) may perform this action' };
             return null;
         }
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned' || s === 'completed';
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(treasury))) {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so it can no longer be modified.' };
@@ -961,7 +964,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const blocked = (s?: string) => s === 'disabled' || s === 'pruned';
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
             ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };

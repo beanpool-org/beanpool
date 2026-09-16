@@ -25,6 +25,7 @@ import {
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
     runLedgerAudit,
+    getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -579,6 +580,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
+        escrowDisputesCount: (db.prepare(`
+            SELECT COUNT(*)
+            FROM marketplace_transactions
+            WHERE status = 'pending'
+              AND (julianday('now') - julianday(created_at)) >= 7
+        `).pluck().get() as number) || 0,
         memberStats: getMemberStats(),
     };
 });
@@ -1380,6 +1387,83 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
     } catch (e: any) {
         const msg = e?.message || 'Failed to revoke node role';
         ctx.status = msg.includes('Only an owner') ? 403 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+// ===================== ESCROW DISPUTE RESOLUTION =====================
+// docs/settings-ia.md §5 item 2 & §6 correction 2
+
+router.get('/api/local/admin/disputes', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const minDays = !isNaN(Number(ctx.query.minDays)) ? Number(ctx.query.minDays) : 7;
+    const limit = !isNaN(Number(ctx.query.limit)) ? Math.max(1, Math.min(200, Number(ctx.query.limit))) : 50;
+    const offset = !isNaN(Number(ctx.query.offset)) ? Math.max(0, Number(ctx.query.offset)) : 0;
+    const status = (typeof ctx.query.status === 'string' && ['all', 'pending', 'resolved'].includes(ctx.query.status))
+        ? (ctx.query.status as 'all' | 'pending' | 'resolved')
+        : 'all';
+
+    const total = (db.prepare(`
+        SELECT COUNT(*) FROM marketplace_transactions mt
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+          AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).pluck().get(status, status, status, minDays, minDays) as number) || 0;
+
+    const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    ctx.body = {
+        disputes,
+        total,
+        count: disputes.length,
+        minDays,
+        limit,
+        offset
+    };
+});
+
+router.get('/api/local/admin/disputes/:id', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const dispute = getEscrowDispute(id);
+    if (!dispute) {
+        ctx.status = 404;
+        ctx.body = { error: 'Dispute not found' };
+        return;
+    }
+    ctx.body = { dispute };
+});
+
+router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const action = body.action as EscrowDisputeAction;
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : undefined;
+
+    if (!action || !['release_to_seller', 'refund_to_buyer', 'split'].includes(action)) {
+        ctx.status = 400;
+        ctx.body = { error: "action must be 'release_to_seller', 'refund_to_buyer', or 'split'" };
+        return;
+    }
+
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const tx = resolveEscrowDispute(id, action, effectiveActor, { reason });
+        ctx.body = {
+            success: true,
+            transactionId: id,
+            resolution: action,
+            authSigner: effectiveActor,
+            transaction: tx
+        };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to resolve escrow dispute';
+        ctx.status = msg.includes('not found') ? 404 : 400;
         ctx.body = { error: msg };
     }
 });

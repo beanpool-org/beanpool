@@ -230,7 +230,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- Marketplace hygiene: when a lingering escrow deal was last nudged. Same reasoning as
     -- invite_codes.genesis_type above — the ALTER runs pre-exec, so a fresh database gets the
     -- column from here or not at all.
-    last_reminded_at DATETIME
+    last_reminded_at DATETIME,
+    -- Escrow dispute arbitration (§5 item 2, §6 correction 2): resolution type, timestamp and acting admin
+    dispute_resolution TEXT,
+    dispute_resolved_at DATETIME,
+    dispute_resolved_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -972,7 +976,7 @@ CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
 -- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).
 CREATE TABLE IF NOT EXISTS activity_feed (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created')),
+    event_type    TEXT NOT NULL CHECK (event_type IN ('member_joined', 'trade_completed', 'rating_given', 'post_created', 'dispute_resolved')),
     actor_pubkey  TEXT NOT NULL,
     target_pubkey TEXT,
     metadata      TEXT,

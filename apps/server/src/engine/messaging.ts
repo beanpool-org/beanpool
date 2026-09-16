@@ -326,7 +326,10 @@ export function injectSystemMessage(
         [SystemMessageType.ESCROW_CANCELLED]: `Escrow cancelled and funds refunded.`,
         [SystemMessageType.COMMONS_GRANT]: `Commons grant awarded.`,
         [SystemMessageType.VOUCH_GRANTED]: `Vouch granted.`,
-        [SystemMessageType.VOUCH_REVOKED]: `Vouch revoked.`
+        [SystemMessageType.VOUCH_REVOKED]: `Vouch revoked.`,
+        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: `Dispute arbitrated by admin (${meta.authSigner || 'admin'}): ${
+            meta.resolution === 'release_to_seller' ? 'Released to seller' : meta.resolution === 'refund_to_buyer' ? 'Refunded to buyer' : 'Split 50/50'
+        }${meta.reason ? ` — ${meta.reason}` : ''}.`
     };
     
     for (const row of convRows) {

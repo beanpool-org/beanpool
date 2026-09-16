@@ -82,6 +82,7 @@ export interface NodeDataPayload {
     profiles?: Record<string, unknown>[];
     posts?: unknown[];
     reportCount?: number;
+    escrowDisputesCount?: number;
     memberStats?: Record<string, unknown>;
     tradeVolume?: number;
     circulation?: number;
@@ -532,6 +533,10 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
             flags,
             healthScore,
         };
+    }
+
+    if (typeof data.escrowDisputesCount === 'number') {
+        result.escrowDisputesCount = data.escrowDisputesCount;
     }
 
     return result;
@@ -1370,4 +1375,101 @@ export async function getReplicationAccess(
     return res.json();
 }
 
+// ======================== ESCROW DISPUTES ========================
 
+export interface EscrowDisputeItem {
+    id: string;
+    postId: string;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    buyerName?: string;
+    sellerCallsign?: string;
+    sellerName?: string;
+    credits: number;
+    status: string;
+    createdAt: number;
+    daysStuck: number;
+    post: {
+        id: string;
+        title: string;
+        description: string;
+        authorPubkey: string;
+        authorName?: string;
+        authorCallsign?: string;
+        priceCredits: number;
+        unitPrice: number;
+        category: string;
+        imageUrl?: string;
+    } | null;
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey: string;
+        senderName?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
+    resolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+}
+
+export interface EscrowDisputesResponse {
+    disputes: EscrowDisputeItem[];
+    total: number;
+    minDays: number;
+}
+
+export async function fetchEscrowDisputes(
+    nodeUrl: string,
+    minDays = 7,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<EscrowDisputesResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', { minDays: String(minDays) });
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export interface ResolveEscrowDisputeResponse {
+    success: boolean;
+    transactionId: string;
+    resolution: 'release_to_seller' | 'refund_to_buyer' | 'split';
+    authSigner: string;
+    transaction: any;
+}
+
+export async function resolveEscrowDisputeApi(
+    nodeUrl: string,
+    disputeId: string,
+    action: 'release_to_seller' | 'refund_to_buyer' | 'split',
+    reason?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ResolveEscrowDisputeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/disputes/${encodeURIComponent(disputeId)}/resolve`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action, reason }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}

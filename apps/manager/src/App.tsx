@@ -1055,6 +1055,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                         activeNode={activeNode}
                                         nodeData={nodeData}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        initialSubTab={(navSubTab as any) || 'enterprises'}
                                         onRefresh={() => {
                                             loadNodeData();
                                             loadDiagnostics();

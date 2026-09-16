@@ -360,8 +360,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         params.push(filter.assignedTo);
     }
     if (filter?.targetArchetype) {
-        query += " AND (p.target_archetypes LIKE ? OR p.target_archetypes LIKE ?)";
-        params.push(`%"${filter.targetArchetype}"%`, `%${filter.targetArchetype}%`);
+        const escaped = filter.targetArchetype.replace(/[%_\\]/g, '\\$&');
+        query += " AND (p.target_archetypes LIKE ? ESCAPE '\\' OR p.target_archetypes LIKE ? ESCAPE '\\')";
+        params.push(`%"${escaped}"%`, `%${escaped}%`);
     }
 
     if (filter?.query && filter.query.trim()) {

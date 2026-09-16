@@ -421,6 +421,21 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
+export function normalizeKeeperPubkey(keeper: unknown): string {
+    if (typeof keeper === 'string') return keeper;
+    if (typeof keeper === 'object' && keeper !== null) {
+        const obj = keeper as { publicKey?: unknown; pubkey?: unknown };
+        if (typeof obj.publicKey === 'string') return obj.publicKey;
+        if (typeof obj.pubkey === 'string') return obj.pubkey;
+    }
+    return '';
+}
+
+export function normalizeKeepers(rawKeepers: unknown): string[] {
+    if (!Array.isArray(rawKeepers)) return [];
+    return rawKeepers.map(normalizeKeeperPubkey).filter(Boolean);
+}
+
 export function normalizeNodeData(raw: unknown): NodeDataPayload {
     if (!raw || typeof raw !== 'object') {
         return {};
@@ -437,12 +452,12 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                     ...m,
                     publicKey: pubkey,
                     pubkey: pubkey,
-                    name: typeof m.name === 'string' ? m.name : (typeof m.displayName === 'string' ? m.displayName : undefined),
+                    name: typeof m.name === 'string' ? m.name : (typeof m.displayName === 'string' ? m.displayName : (typeof m.callsign === 'string' ? m.callsign : undefined)),
                     callsign: typeof m.callsign === 'string' ? m.callsign : undefined,
                     tier: typeof m.tier === 'string' ? m.tier : (typeof m.standing === 'string' ? m.standing : 'Newcomer'),
                     standing: typeof m.standing === 'string' ? m.standing : (typeof m.tier === 'string' ? m.tier : 'Newcomer'),
-                    canVouch: Boolean(m.canVouch),
-                    canOperate: Boolean(m.canOperate),
+                    canVouch: Boolean(m.canVouch ?? m.isVoucher),
+                    canOperate: Boolean(m.canOperate ?? m.isOperator ?? m.can_operate),
                     nodeRole: (m.nodeRole === 'owner' || m.nodeRole === 'admin' || m.nodeRole === 'moderator') ? m.nodeRole : null,
                 };
             })
@@ -453,20 +468,8 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
         const rawReports = Array.isArray(data.reports) ? data.reports : [];
         result.reports = rawReports.map((r: any) => {
             if (!r || typeof r !== 'object') return { id: '', targetPubkey: '', target_pubkey: '' };
-            const targetPubkey = typeof r.targetPubkey === 'string'
-                ? r.targetPubkey
-                : (typeof r.target_pubkey === 'string'
-                    ? r.target_pubkey
-                    : (r.targetPubkey && typeof r.targetPubkey.publicKey === 'string'
-                        ? r.targetPubkey.publicKey
-                        : ''));
-            const reporterPubkey = typeof r.reporterPubkey === 'string'
-                ? r.reporterPubkey
-                : (typeof r.reporter_pubkey === 'string'
-                    ? r.reporter_pubkey
-                    : (r.reporterPubkey && typeof r.reporterPubkey.publicKey === 'string'
-                        ? r.reporterPubkey.publicKey
-                        : ''));
+            const targetPubkey = normalizeKeeperPubkey(r.targetPubkey) || normalizeKeeperPubkey(r.target_pubkey);
+            const reporterPubkey = normalizeKeeperPubkey(r.reporterPubkey) || normalizeKeeperPubkey(r.reporter_pubkey);
             return {
                 ...r,
                 id: r.id !== undefined && r.id !== null ? String(r.id) : undefined,
@@ -719,21 +722,6 @@ export async function revokeNodeRoleApi(
         throw new Error(data.error || 'Failed to revoke node role');
     }
     return data;
-}
-
-export function normalizeKeeperPubkey(keeper: unknown): string {
-    if (typeof keeper === 'string') return keeper;
-    if (typeof keeper === 'object' && keeper !== null) {
-        const obj = keeper as { publicKey?: unknown; pubkey?: unknown };
-        if (typeof obj.publicKey === 'string') return obj.publicKey;
-        if (typeof obj.pubkey === 'string') return obj.pubkey;
-    }
-    return '';
-}
-
-export function normalizeKeepers(rawKeepers: unknown): string[] {
-    if (!Array.isArray(rawKeepers)) return [];
-    return rawKeepers.map(normalizeKeeperPubkey).filter(Boolean);
 }
 
 export async function fetchTreasuryKeepers(

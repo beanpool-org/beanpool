@@ -568,5 +568,56 @@ describe('normalizeNodeData boundary normalization', () => {
         expect(normalized.reports?.[1].targetPubkey).toBe('');
         expect(normalized.reports?.[1].reporterPubkey).toBe('');
     });
+
+    it('normalizes member aliases (isVoucher, isOperator, can_operate, callsign)', () => {
+        const raw = {
+            members: [
+                {
+                    pubkey: 'pk_alias_1',
+                    callsign: 'Maverick',
+                    isVoucher: true,
+                    can_operate: true,
+                    standing: 'Steward',
+                },
+                {
+                    pubkey: 'pk_alias_2',
+                    displayName: 'Goose',
+                    callsign: 'Bradley',
+                    isOperator: true,
+                    canVouch: true,
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.members?.[0].name).toBe('Maverick');
+        expect(normalized.members?.[0].callsign).toBe('Maverick');
+        expect(normalized.members?.[0].canVouch).toBe(true);
+        expect(normalized.members?.[0].canOperate).toBe(true);
+        expect(normalized.members?.[0].tier).toBe('Steward');
+
+        expect(normalized.members?.[1].name).toBe('Goose');
+        expect(normalized.members?.[1].callsign).toBe('Bradley');
+        expect(normalized.members?.[1].canVouch).toBe(true);
+        expect(normalized.members?.[1].canOperate).toBe(true);
+    });
+
+    it('extracts report targetPubkey and reporterPubkey from objects with pubkey or nested keys', () => {
+        const raw = {
+            reports: [
+                {
+                    id: 'rep-pubkey',
+                    target_pubkey: { pubkey: 'target_pubkey_val' },
+                    reporter_pubkey: { pubkey: 'reporter_pubkey_val' },
+                },
+            ],
+        };
+
+        const normalized = normalizeNodeData(raw);
+        expect(normalized.reports?.[0].targetPubkey).toBe('target_pubkey_val');
+        expect(normalized.reports?.[0].target_pubkey).toBe('target_pubkey_val');
+        expect(normalized.reports?.[0].reporterPubkey).toBe('reporter_pubkey_val');
+        expect(normalized.reports?.[0].reporter_pubkey).toBe('reporter_pubkey_val');
+    });
 });
 

@@ -6,12 +6,24 @@ import {
     deleteCrowdfundProject,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp,
     getEnterpriseLedger, type EnterpriseLedgerResponse,
-    type BalanceInfo
+    type BalanceInfo,
+    getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
+    type EnterpriseThreadMessage
 } from '../lib/api';
+import { onSyncActivity } from '../lib/sync';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { ReportModal } from '../components/ReportModal';
+
+function decodeThreadText(ciphertext: string, type: string): string {
+    if (type === 'removed') return 'removed by a keeper';
+    try {
+        return atob(ciphertext);
+    } catch {
+        return ciphertext;
+    }
+}
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -52,6 +64,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
+
+    // Discussion Thread State
+    const [threadMessages, setThreadMessages] = useState<EnterpriseThreadMessage[]>([]);
+    const [threadReadOnly, setThreadReadOnly] = useState(false);
+    const [threadInput, setThreadInput] = useState('');
+    const [threadPosting, setThreadPosting] = useState(false);
+    const [threadError, setThreadError] = useState<string | null>(null);
+    const [threadRemovingId, setThreadRemovingId] = useState<string | null>(null);
 
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
@@ -145,6 +165,58 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     useEffect(() => {
         loadLedger(ledgerPeriod);
     }, [loadLedger, ledgerPeriod]);
+
+    const loadThread = useCallback(async () => {
+        if (!pubkey) return;
+        try {
+            const res = await getEnterpriseThread(pubkey);
+            if (res) {
+                setThreadMessages(res.messages || []);
+                setThreadReadOnly(!!res.readOnly);
+            }
+        } catch {
+            // ignore
+        }
+    }, [pubkey]);
+
+    useEffect(() => {
+        loadThread();
+        const unsubscribe = onSyncActivity(() => {
+            loadThread();
+        });
+        return () => unsubscribe();
+    }, [loadThread]);
+
+    const handlePostThreadMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!pubkey || threadPosting || !threadInput.trim()) return;
+        setThreadPosting(true);
+        setThreadError(null);
+        try {
+            const res = await postEnterpriseThreadMessage(pubkey, threadInput.trim());
+            if (res?.success) {
+                setThreadInput('');
+                await loadThread();
+            }
+        } catch (e: any) {
+            setThreadError(e?.message || 'Could not post message');
+        } finally {
+            setThreadPosting(false);
+        }
+    };
+
+    const handleRemoveThreadMessage = async (messageId: string) => {
+        if (!pubkey || threadRemovingId) return;
+        setThreadRemovingId(messageId);
+        try {
+            await removeEnterpriseThreadMessage(pubkey, messageId);
+            await loadThread();
+        } catch (e: any) {
+            alert(e?.message || 'Could not remove message');
+        } finally {
+            setThreadRemovingId(null);
+        }
+    };
 
     const handlePause = async () => {
         try {
@@ -1423,6 +1495,108 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                         );
                                     })}
                                 </div>
+                            )}
+                        </div>
+
+                        {/* Enterprise Discussion Thread (Slice 6) */}
+                        <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
+                                        <span>💬</span>
+                                        <span>Enterprise Discussion</span>
+                                    </div>
+                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
+                                        Public coordination for this enterprise
+                                    </p>
+                                </div>
+                                {threadReadOnly && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300">
+                                        Read-only (Wound up)
+                                    </span>
+                                )}
+                            </div>
+
+                            {threadReadOnly && (
+                                <div className="bg-nature-50 dark:bg-nature-800/60 p-3 rounded-xl text-xs italic text-nature-600 dark:text-nature-300 text-center">
+                                    This enterprise has wound up. Discussion is read-only for accountability.
+                                </div>
+                            )}
+
+                            {threadMessages.length === 0 ? (
+                                <p className="text-xs text-nature-400 italic py-2">No messages yet. Start the conversation!</p>
+                            ) : (
+                                <div className="divide-y divide-nature-100 dark:divide-nature-800">
+                                    {threadMessages.map((m) => {
+                                        const isRemoved = m.type === 'removed';
+                                        const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
+                                        const textContent = decodeThreadText(m.ciphertext, m.type);
+                                        return (
+                                            <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
+                                                {m.authorAvatar ? (
+                                                    <img
+                                                        src={resolveAvatarUrl(m.authorAvatar) || undefined}
+                                                        alt={authorName}
+                                                        className="w-8 h-8 rounded-full object-cover shrink-0 bg-nature-100 dark:bg-nature-800"
+                                                    />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-nature-700 dark:text-nature-200 shrink-0">
+                                                        {authorName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-nature-900 dark:text-white">{authorName}</span>
+                                                            <span className="text-[10px] text-nature-400">{formatTimestamp(m.timestamp)}</span>
+                                                        </div>
+                                                        {isKeeperOfThis && !isRemoved && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveThreadMessage(m.id)}
+                                                                disabled={threadRemovingId === m.id}
+                                                                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none p-0"
+                                                                title="Remove message"
+                                                            >
+                                                                {threadRemovingId === m.id ? 'Removing...' : 'Remove'}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
+                                                        {textContent}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {!threadReadOnly && (
+                                <form onSubmit={handlePostThreadMessage} className="mt-2 space-y-2">
+                                    {threadError && (
+                                        <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                            {threadError}
+                                        </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={threadInput}
+                                            onChange={(e) => setThreadInput(e.target.value)}
+                                            placeholder="Message the enterprise..."
+                                            maxLength={2000}
+                                            className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={!threadInput.trim() || threadPosting}
+                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                                        >
+                                            {threadPosting ? 'Posting...' : 'Post'}
+                                        </button>
+                                    </div>
+                                </form>
                             )}
                         </div>
 

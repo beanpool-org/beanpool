@@ -1704,6 +1704,32 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
     return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
 }
 
+export interface EnterpriseThreadMessage {
+    id: string;
+    conversationId: string;
+    authorPubkey: string;
+    authorCallsign?: string;
+    authorAvatar?: string | null;
+    ciphertext: string;
+    nonce: string;
+    type: 'text' | 'removed' | string;
+    metadata?: string;
+    timestamp: string;
+    editedAt?: string | null;
+}
+
+export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: EnterpriseThreadMessage[]; readOnly: boolean }> {
+    return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);
+}
+
+export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
+}
+
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {
     return request('GET', '/api/commons/rounds');
 }

@@ -4,6 +4,7 @@ import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
+import { AncestryTreePanel } from './AncestryTreePanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch } from '../../lib/node-client';
@@ -40,6 +41,7 @@ export function PeopleSafetySection({
     initialSubTab = 'directory',
 }: PeopleSafetySectionProps) {
     const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation'>(initialSubTab);
+    const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
 
@@ -146,22 +148,67 @@ export function PeopleSafetySection({
 
             {/* Sub-tab content */}
             {subTab === 'directory' && (
-                <MembersModule
-                    nodeData={nodeData}
-                    nodeDataLoading={nodeDataLoading}
-                    activeNodeUrl={activeNode.url}
-                    adminPassword={activeNode.adminPassword}
-                    tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
-                    onRefresh={onRefresh}
-                    onFreezeUser={onFreezeUser}
-                    onPruneUser={onPruneUser}
-                    onPruneBranch={handlePruneBranch}
-                    onUpdateTier={onUpdateTier}
-                    onToggleVoucher={onToggleVoucher}
-                    onToggleOperator={onToggleOperator}
-                    onGrantNodeRole={onGrantNodeRole}
-                    onRevokeNodeRole={onRevokeNodeRole}
-                />
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 bg-nature-950/70 p-2 rounded-xl border border-nature-800">
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                id="view-roster-btn"
+                                onClick={() => setDirectoryView('roster')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    directoryView === 'roster'
+                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        : 'text-nature-400 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <span>📋</span>
+                                <span>Member Roster</span>
+                            </button>
+                            <button
+                                type="button"
+                                id="view-tree-btn"
+                                onClick={() => setDirectoryView('tree')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    directoryView === 'tree'
+                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        : 'text-nature-400 hover:text-white border border-transparent'
+                                }`}
+                            >
+                                <span>🌳</span>
+                                <span>Ancestry Tree</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {directoryView === 'roster' ? (
+                        <MembersModule
+                            nodeData={nodeData}
+                            nodeDataLoading={nodeDataLoading}
+                            activeNodeUrl={activeNode.url}
+                            adminPassword={activeNode.adminPassword}
+                            tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                            onRefresh={onRefresh}
+                            onFreezeUser={onFreezeUser}
+                            onPruneUser={onPruneUser}
+                            onPruneBranch={handlePruneBranch}
+                            onUpdateTier={onUpdateTier}
+                            onToggleVoucher={onToggleVoucher}
+                            onToggleOperator={onToggleOperator}
+                            onGrantNodeRole={onGrantNodeRole}
+                            onRevokeNodeRole={onRevokeNodeRole}
+                        />
+                    ) : (
+                        <SectionErrorBoundary sectionName="Ancestry Tree" resetKey={activeNode.id}>
+                            <AncestryTreePanel
+                                nodeData={nodeData}
+                                nodeDataLoading={nodeDataLoading}
+                                activeNode={activeNode}
+                                onRefresh={onRefresh}
+                                onPruneBranch={handlePruneBranch}
+                            />
+                        </SectionErrorBoundary>
+                    )}
+                </div>
             )}
 
             {subTab === 'invites' && (

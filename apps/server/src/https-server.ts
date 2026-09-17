@@ -515,6 +515,14 @@ function untrackConnection(ws: any) {
 }
 
 /**
+ * The methods that carry a request body and change state. The body parser, the signature requirement and
+ * activity recording all key off this one list. They used to spell out POST/PUT/DELETE separately and all
+ * three left out PATCH, so the group member-role and group-update routes (both PATCH) never received their
+ * body, and every correctly signed PATCH failed signature verification against an empty body.
+ */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
  * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
  * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
  * toggles) compares the path as sent. Those two views must never disagree about what a request is, so a
@@ -617,13 +625,13 @@ export async function startHttpsServer(port: number): Promise<void> {
                 ctx.set('Access-Control-Allow-Credentials', 'true');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
-                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (isWildcardAllowed) {
                 // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
-                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             }
         }
 
@@ -789,7 +797,7 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {
-        if (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') {
+        if (MUTATING_METHODS.has(ctx.method)) {
             if (ctx.request.type === 'application/json' || ctx.get('content-type')?.includes('json')) {
                 // A2-10: reject an over-limit body up-front by Content-Length so a
                 // well-behaved client gets a clean 413 before we read a byte. The
@@ -851,7 +859,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         // spelling can only ever be held to the stricter rule. isNonCanonicalPath refuses such spellings
         // earlier; this keeps the middleware correct on its own.
         const isApiPath = ctx.path.toLowerCase().startsWith('/api/');
-        const isMutatingApi = (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') && isApiPath;
+        const isMutatingApi = MUTATING_METHODS.has(ctx.method) && isApiPath;
         // SRV-2/SRV-4: gated reads require the same signature as writes when
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
         // unless it is on the public allowlist.
@@ -998,7 +1006,7 @@ export async function startHttpsServer(port: number): Promise<void> {
 
         // Activity (the lead-succession "gone quiet" signal) is recorded from the VERIFIED signer only, never
         // from a body field — an unsigned request naming the lead must not stamp them active (PR #838 B2).
-        if (ctx.state.actor && (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE')) {
+        if (ctx.state.actor && MUTATING_METHODS.has(ctx.method)) {
             try { recordActivity(ctx.state.actor); } catch (e: any) { console.warn('[Activity] could not record:', e?.message || e); }
         }
 

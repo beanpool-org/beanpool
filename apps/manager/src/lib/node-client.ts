@@ -1795,11 +1795,7 @@ export async function fetchRekeyStatusApi(
     tfaToken?: string
 ): Promise<RekeyStatusResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/status`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
-    const res = await fetch(endpoint, { headers });
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -1813,13 +1809,9 @@ export async function issueRekeyCodeApi(
     tfaToken?: string
 ): Promise<IssueRekeyCodeResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1837,13 +1829,9 @@ export async function completeRekeyApi(
     tfaToken?: string
 ): Promise<CompleteRekeyResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ code, newPubkey }),
     });
     if (!res.ok) {
@@ -1860,11 +1848,7 @@ export async function fetchOffboardPreviewApi(
     tfaToken?: string
 ): Promise<OffboardPreviewResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard/preview`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
-    const res = await fetch(endpoint, { headers });
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
@@ -1883,13 +1867,9 @@ export async function executeOffboardApi(
     tfaToken?: string
 ): Promise<OffboardResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard`);
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
-        headers['x-admin-secret'] = adminPassword;
-    }
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify(payload),
     });
     if (!res.ok) {

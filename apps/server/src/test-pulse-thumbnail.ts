@@ -787,11 +787,11 @@ async function main(): Promise<void> {
     // ──────────────────────────────────────────────────────────────────────────
     // Tombstones beat the cache: an erased item must stop being served
     // ──────────────────────────────────────────────────────────────────────────
-    // Only the single-item delete route calls thumbnailService.delete. Erasing an account
-    // (purgeMemberSelf), an inactivity prune, a channel disconnect and the 30-day retention
-    // cleaner all go straight to scrubPulseItems, so the DB check has to come first or the
-    // bytes outlive the deletion — and every request refreshed the entry's access time, so
-    // they would never have been evicted either.
+    // scrubPulseItems evicts the DEFAULT service's cache (test-pulse-cache-eviction.ts); this
+    // service is a separate instance, standing in for any tombstone that arrives without an
+    // eviction (a replica's sync import, a fetch landing after the scrub). The DB check has to
+    // come first or the bytes outlive the deletion — and every request refreshed the entry's
+    // access time, so they would never have been evicted either.
     const scrubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-test-disk-scrub-'));
     let scrubFetchCount = 0;
     const scrubService = new PulseThumbnailService({

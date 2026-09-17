@@ -13,6 +13,7 @@ import { GroupDetailModal } from '../../components/GroupDetailModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
+import { enterpriseCardStatus } from '../../utils/enterprise-card';
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -68,12 +69,14 @@ export default function ProjectsScreen() {
         statCardValueRow: { flexDirection: 'row', alignItems: 'center' },
         statCardAmount: { fontSize: 20, color: colors.text.heading, fontWeight: '800' },
 
-        sectionTabsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-        sectionTabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 14, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
+        // Three equal pills share ~288dp at 320dp wide, ~88dp each. "Enterprises" beside its icon
+        // needs ~110dp at 1.2x font, so the icon sits ABOVE the label and the label caps its scale.
+        sectionTabsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+        sectionTabBtn: { flex: 1, minWidth: 0, minHeight: 56, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 14, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         sectionTabBtnActive: { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary },
-        sectionTabText: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
+        sectionTabText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         sectionTabTextActive: { color: colors.brand.primary },
-        sectionBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10, backgroundColor: colors.brand.primary },
+        sectionBadge: { position: 'absolute', top: 4, right: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, backgroundColor: colors.brand.primary },
         sectionBadgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
 
         roundBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.feedback.info.bg, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.info.border },
@@ -92,11 +95,19 @@ export default function ProjectsScreen() {
         avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface.subtle },
         avatarPlaceholder: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border.default },
         cardTitleCol: { flex: 1, minWidth: 0 },
-        titleBadgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-        cardTitle: { fontSize: 17, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3, flex: 1 },
+        // Badges sit on their own row under the name: beside it, a CONVENOR or ONGOING badge took
+        // ~90dp of a ~200dp column and cut names to "Communi…" at 320dp.
+        badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+        cardTitle: { fontSize: 17, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         cardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
 
         badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, alignSelf: 'flex-start' },
+        badgePaused: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border },
+        badgePausedText: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, letterSpacing: 0.5 },
+        badgeWindingUp: { backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
+        badgeWindingUpText: { fontSize: 10, fontWeight: '800', color: colors.feedback.danger.fg, letterSpacing: 0.5 },
+        badgeClosed: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
+        badgeClosedText: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.5 },
         badgeOngoing: { backgroundColor: colors.brand.tint },
         badgeOngoingText: { fontSize: 10, fontWeight: '800', color: colors.brand.primary, letterSpacing: 0.5 },
         badgeProject: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.indigo100 },
@@ -289,11 +300,9 @@ export default function ProjectsScreen() {
     }, [enterprises, filter, sortBy]);
 
     const renderItem = ({ item }: { item: TreasurySummary }) => {
-        const hasGoal = item.goalAmount != null && item.goalAmount > 0;
-        const currentRaised = item.currentAmount != null ? item.currentAmount : Math.max(0, item.balance);
+        const { stateBadge, kindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
-        const isFunded = hasGoal && (currentRaised >= goalAmount || item.status === 'funded' || item.status === 'completed');
         const daysRemaining = getDaysRemaining(item.deadlineAt);
 
         return (
@@ -320,26 +329,38 @@ export default function ProjectsScreen() {
                         </View>
                     )}
                     <View style={styles.cardTitleCol}>
-                        <View style={styles.titleBadgeRow}>
-                            <Text style={styles.cardTitle} numberOfLines={1}>{item.name || item.callsign}</Text>
-                            {isFunded ? (
-                                <View style={[styles.badge, styles.badgeFunded]}>
-                                    <Text style={styles.badgeFundedText}>🎉 FUNDED</Text>
+                        <Text style={styles.cardTitle} numberOfLines={2}>{item.name || item.callsign}</Text>
+                        <View style={styles.badgeRow}>
+                            {stateBadge === 'paused' && (
+                                <View style={[styles.badge, styles.badgePaused]}>
+                                    <Text style={styles.badgePausedText} numberOfLines={1}>⏸️ PAUSED</Text>
                                 </View>
-                            ) : hasGoal ? (
+                            )}
+                            {stateBadge === 'winding_up' && (
+                                <View style={[styles.badge, styles.badgeWindingUp]}>
+                                    <Text style={styles.badgeWindingUpText} numberOfLines={1}>⏳ WINDING UP</Text>
+                                </View>
+                            )}
+                            {stateBadge === 'closed' && (
+                                <View style={[styles.badge, styles.badgeClosed]}>
+                                    <Text style={styles.badgeClosedText} numberOfLines={1}>CLOSED</Text>
+                                </View>
+                            )}
+                            {kindBadge === 'funded' ? (
+                                <View style={[styles.badge, styles.badgeFunded]}>
+                                    <Text style={styles.badgeFundedText} numberOfLines={1}>🎉 FUNDED</Text>
+                                </View>
+                            ) : kindBadge === 'project' ? (
                                 <View style={[styles.badge, styles.badgeProject]}>
-                                    <Text style={styles.badgeProjectText}>🌱 PROJECT</Text>
+                                    <Text style={styles.badgeProjectText} numberOfLines={1}>🌱 PROJECT</Text>
                                 </View>
                             ) : (
                                 <View style={[styles.badge, styles.badgeOngoing]}>
-                                    <Text style={styles.badgeOngoingText}>🏛️ ONGOING</Text>
+                                    <Text style={styles.badgeOngoingText} numberOfLines={1}>🏛️ ONGOING</Text>
                                 </View>
                             )}
                         </View>
-                        <Text style={styles.cardMeta}>
-                            {item.liveOffers} live offer{item.liveOffers === 1 ? '' : 's'}
-                            {item.keepers && item.keepers.length > 0 ? ` · ${item.keepers.length} keeper${item.keepers.length === 1 ? '' : 's'}` : ''}
-                        </Text>
+                        <Text style={styles.cardMeta} numberOfLines={2}>{meta}</Text>
                     </View>
                 </View>
 
@@ -419,21 +440,23 @@ export default function ProjectsScreen() {
                         <Text style={{ fontSize: 20 }}>👥</Text>
                     </View>
                     <View style={styles.cardTitleCol}>
-                        <View style={styles.titleBadgeRow}>
-                            <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
-                            {item.viewerRole ? (
+                        <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+                        {item.viewerRole ? (
+                            <View style={styles.badgeRow}>
                                 <View style={[styles.badge, isConvenor ? styles.badgeFunded : styles.badgeOngoing]}>
-                                    <Text style={[styles.badgeFundedText, !isConvenor && styles.badgeOngoingText]}>
+                                    <Text style={[styles.badgeFundedText, !isConvenor && styles.badgeOngoingText]} numberOfLines={1}>
                                         {item.viewerRole.toUpperCase()}
                                     </Text>
                                 </View>
-                            ) : isPending ? (
+                            </View>
+                        ) : isPending ? (
+                            <View style={styles.badgeRow}>
                                 <View style={[styles.badge, { backgroundColor: palette.amber500 }]}>
-                                    <Text style={styles.badgeFundedText}>PENDING</Text>
+                                    <Text style={styles.badgeFundedText} numberOfLines={1}>PENDING</Text>
                                 </View>
-                            ) : null}
-                        </View>
-                        <Text style={styles.cardMeta}>
+                            </View>
+                        ) : null}
+                        <Text style={styles.cardMeta} numberOfLines={2}>
                             🏷️ {item.category.replace(/_/g, ' ')} · {item.memberCount || 0} {item.memberCount === 1 ? 'member' : 'members'} · {item.joinPolicy.replace(/_/g, ' ')}
                         </Text>
                     </View>
@@ -451,10 +474,10 @@ export default function ProjectsScreen() {
                     )}
 
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border.default }}>
-                        <Text style={{ fontSize: 11, color: colors.text.muted }}>
+                        <Text style={{ fontSize: 11, color: colors.text.muted, flex: 1, marginRight: 8 }} numberOfLines={1}>
                             Join policy: {item.joinPolicy.replace(/_/g, ' ')}
                         </Text>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.brand.primary }}>View Details →</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 }} numberOfLines={1}>View Details →</Text>
                     </View>
                 </View>
             </Pressable>
@@ -523,12 +546,18 @@ export default function ProjectsScreen() {
                                     size={18}
                                     color={activeSection === 'decide' ? colors.brand.primary : colors.text.secondary}
                                 />
-                                <Text style={[styles.sectionTabText, activeSection === 'decide' && styles.sectionTabTextActive]}>
+                                <Text
+                                    style={[styles.sectionTabText, activeSection === 'decide' && styles.sectionTabTextActive]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                    maxFontSizeMultiplier={1.1}
+                                >
                                     Decide
                                 </Text>
                                 {openDecisionsCount > 0 && (
                                     <View style={styles.sectionBadge}>
-                                        <Text style={styles.sectionBadgeText}>{openDecisionsCount}</Text>
+                                        <Text style={styles.sectionBadgeText} maxFontSizeMultiplier={1}>{openDecisionsCount}</Text>
                                     </View>
                                 )}
                             </Pressable>
@@ -544,7 +573,13 @@ export default function ProjectsScreen() {
                                     size={18}
                                     color={activeSection === 'enterprises' ? colors.brand.primary : colors.text.secondary}
                                 />
-                                <Text style={[styles.sectionTabText, activeSection === 'enterprises' && styles.sectionTabTextActive]}>
+                                <Text
+                                    style={[styles.sectionTabText, activeSection === 'enterprises' && styles.sectionTabTextActive]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                    maxFontSizeMultiplier={1.1}
+                                >
                                     Enterprises
                                 </Text>
                             </Pressable>
@@ -560,7 +595,13 @@ export default function ProjectsScreen() {
                                     size={18}
                                     color={activeSection === 'groups' ? colors.brand.primary : colors.text.secondary}
                                 />
-                                <Text style={[styles.sectionTabText, activeSection === 'groups' && styles.sectionTabTextActive]}>
+                                <Text
+                                    style={[styles.sectionTabText, activeSection === 'groups' && styles.sectionTabTextActive]}
+                                    numberOfLines={1}
+                                    adjustsFontSizeToFit
+                                    minimumFontScale={0.8}
+                                    maxFontSizeMultiplier={1.1}
+                                >
                                     Groups
                                 </Text>
                             </Pressable>
@@ -671,7 +712,7 @@ export default function ProjectsScreen() {
                         )}
 
                         {/* Filter Controls: All / Ongoing / Bounded */}
-                        <View style={styles.filterRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
                             {(['all', 'ongoing', 'bounded'] as const).map(option => (
                                 <Pressable
                                     key={option}
@@ -685,7 +726,7 @@ export default function ProjectsScreen() {
                                     </Text>
                                 </Pressable>
                             ))}
-                        </View>
+                        </ScrollView>
                             </>
                         )}
                     </View>

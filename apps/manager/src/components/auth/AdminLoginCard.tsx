@@ -107,7 +107,9 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps
                         <label className="block text-xs font-bold text-nature-300 mb-1.5 uppercase tracking-wider">
                             Admin Password
                         </label>
-                        <div className="relative">
+                        {/* Show/Hide sits beside the input, not over it: absolutely placed, it was drawn
+                            across the placeholder on a 320px screen. */}
+                        <div className="flex items-center bg-nature-950 border border-nature-700/80 rounded-xl focus-within:border-terra-500 transition-colors" data-testid="admin-password-field">
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
@@ -115,12 +117,12 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps
                                 placeholder="Enter node admin password"
                                 autoFocus
                                 required
-                                className="w-full bg-nature-950 border border-nature-700/80 rounded-xl px-4 py-2.5 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-terra-500 transition-colors"
+                                className="flex-1 min-w-0 bg-transparent border-none rounded-xl pl-4 pr-2 py-2.5 text-sm text-white placeholder-nature-500 text-ellipsis focus:outline-none"
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-nature-400 hover:text-nature-200 text-xs font-semibold px-1"
+                                className="shrink-0 self-stretch pl-2 pr-4 text-nature-400 hover:text-nature-200 text-xs font-semibold"
                             >
                                 {showPassword ? 'Hide' : 'Show'}
                             </button>

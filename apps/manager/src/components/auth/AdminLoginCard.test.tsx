@@ -42,6 +42,21 @@ describe('AdminLoginCard component', () => {
         expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
     });
 
+    it('keeps the Show/Hide button beside the password input rather than drawn over it', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
+        const field = screen.getByTestId('admin-password-field');
+        const passwordInput = screen.getByPlaceholderText('Enter node admin password');
+        const toggleBtn = screen.getByRole('button', { name: 'Show' });
+
+        // Siblings in one flex row: the input shrinks, the button keeps its own space.
+        expect(field).toHaveClass('flex');
+        expect(passwordInput.parentElement).toBe(field);
+        expect(toggleBtn.parentElement).toBe(field);
+        expect(passwordInput).toHaveClass('flex-1', 'min-w-0');
+        expect(toggleBtn).toHaveClass('shrink-0');
+        expect(toggleBtn.className).not.toMatch(/(^|\s)absolute(\s|$)/);
+    });
+
     it('handles successful authentication without 2FA', async () => {
         const mockFetch = vi.fn().mockResolvedValue({
             ok: true,

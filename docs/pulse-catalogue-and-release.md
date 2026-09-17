@@ -1,174 +1,98 @@
-# Pulse: back-catalogue import and staged release
+# Pulse: what a member's connected account publishes
 
-**Status: DESIGN ONLY — none of this is built.** Everything below describes proposed
-behaviour. The "Today" section is measured from the code as it stands on 2026-09-02;
-the "Proposal" sections are not implemented. Do not read this document as a
-description of how the app works.
-
-Raised by Marty on 2026-09-02 while preparing the TikTok and Meta App Review
-submissions.
-
----
+**Decision note.** Rewritten 2026-09-17 against main at 882fd048 (node v1.2.19, app v1.2.33).
+Replaces the 2026-09-02 draft, which proposed five things; two were built since, two are dropped,
+one stands. Nothing in the "Decision" section is built yet unless it says so.
 
 ## The problem
 
-When a member connects a TikTok or Instagram account, the app pulls their recent
-posts into the community feed automatically. Two things follow from that:
+When a member connects TikTok or Instagram in the native app, the app fetches their newest posts
+(TikTok asks for 20, Instagram returns its default page of about 25) and publishes all of them to
+the community feed straight away, under the member's name, without asking which ones. The
+"↻ Sync videos" button on the Channels screen does the same again. The member sees "Imported N
+recent videos to the community feed" only after it has happened.
 
-**A back-catalogue dump.** A member's existing posts land in their neighbours' feed
-in one burst, with no say over which ones. Nobody chose to publish them *here*.
+That is a consent problem, not a volume problem. The Pulse puts a member's name and face in front
+of people who know them. Old, off-topic or embarrassing posts go out with no chance to say no.
+The web app is not affected: it has no OAuth connect.
 
-**An unfiltered content mix.** The Pulse is a raw feed of whatever members have
-posted elsewhere. A community feed will end up with fluffy cat videos sitting beside
-material some members would not have chosen to put in front of their neighbours.
-That is not a hypothetical — it is the normal consequence of importing someone's
-whole recent history without asking.
+Code: `apps/native/utils/pulse-oauth.ts` (fetch and ingest are one function, `syncChannelVideos`),
+`apps/native/app/channels.tsx` (connect and Sync call it, then show the toast).
 
-## Today (measured, not proposed)
+## What changed since the first draft
 
-| Behaviour | Where | Value |
-|---|---|---|
-| TikTok fetch cap | `apps/native/utils/pulse-oauth.ts` | `max_count: 20`, single request, **no cursor pagination** |
-| Instagram fetch cap | `apps/native/utils/pulse-oauth.ts` | no `limit` param and no paging loop → Instagram's default page (~25) |
-| Server-side cap on ingest | `apps/server/src/routes/pulse-submit.ts` | **none** — `rawItems.length` is not bounded |
-| Retention | `apps/server/src/engine/pulse-resolver.ts` | `prunePulseItems(maxAgeDays = 30)` tombstones items older than 30 days |
-| Website/RSS refresh | `apps/server/src/engine/pulse-resolver.ts` | `startPulseScheduler(intervalMs = 5 * 60 * 1000)` |
-| OAuth ingest timing | `apps/native/utils/pulse-oauth.ts` | synchronous — awaited inside the connect flow, inserted in a `db.transaction()`, no queue or pending state |
+- **Retention is now "keep the newest 20 per channel"** (#658), not a 30-day age cutoff. Curated
+  items are exempt. So the 20 posts that import are exactly the 20 the node keeps; the old
+  "import then vanish" bug is gone. `apps/server/src/engine/pulse-resolver.ts`, `prunePulseItems`.
+- **The server caps an ingest batch at 50 items** and the body at 512 KB (#710). The flood vector
+  is closed. `apps/server/src/routes/pulse-submit.ts`, `MAX_OAUTH_INGEST_ITEMS`.
+- **Operators can add curated channels** under the BeanPool system identity (#660), and a seeded
+  curated channel fills a new node's feed. Cold start is no longer a reason to pull a member's
+  back catalogue.
+- **The node caches thumbnail images** at ingest and serves them itself (#698, #711, #813).
+  Video is still never hosted.
 
-So a member with 750 videos does **not** get 750 imported; they get the 20 most
-recent. Two problems hide behind that reassurance:
+## Decision
 
-**The cap is incidental, not designed.** It is a hardcoded `max_count` with no
-pagination. The server accepts whatever array the device sends, so the limit exists
-only in the client — a modified client can post any number. That is a flood vector
-independent of any curation decision, and it wants a server-side bound regardless of
-what we do about the rest of this document.
+### 1. A picker on connect and on "Sync videos"
 
-**Ingest and retention disagree.** Ingest takes the last 20 *regardless of age*;
-prune deletes anything older than 30 days. A member connecting with 20 posts spanning
-three years sees a burst of old content that then silently disappears on the next
-prune. That will read as "the app deleted my video".
+Fetch the posts, show them as a list, tick the newest by default, publish only what is ticked.
+One tap still proves the connection works; unticking is the member's choice, made before anything
+goes out.
 
-## Proposal
+- **No paging past the first 20/25.** Keep-20 would prune anything older on the next tick, so
+  offering it would only offer posts the node will not keep.
+- **Native only.** Split `syncChannelVideos` into fetch and ingest-selected. The row shape the
+  fetch already produces (url, title, thumbnail, date, external id) is what the picker renders,
+  and the ingest route already takes an array, so a subset needs no server change. The 50-item cap
+  already covers it.
+- **Ship after the Instagram review returns.** The Meta review filed 2026-09-04 walks the reviewer
+  through connect, Sync videos, see them in The Pulse. Those steps rely on auto-import, and Meta
+  allows no withdrawal once in review. Build it when a lane is free, hold the release, then update
+  the reviewer steps in the runbook and the portal.
 
-Three parts, in descending order of value. The first is worth doing on its own.
+### 2. Node moderation: members report, operators remove
 
-### 1. Forward-only by default
+A member can report a Pulse item. A node operator (admin level of `node_roles`) can remove any
+member's item. Removal tombstones it the same way the owner's own delete does; the member is not
+penalised. **Being built now** on `feat/pulse-report-takedown`.
 
-On connect, record a watermark and import **nothing** historical. From that moment,
-only posts published *after* connecting flow into the feed.
+Today the only tools are: the owner can hide or delete their own item, the member can disconnect,
+the operator can add curated channels. Viewers cannot hide items: the "Hide from feed" action on
+a card is owner-only and the feed has no viewer context (`NOT_YOURS` in `pulse-resolver.ts`,
+`apps/native/components/PulseFeedCard.tsx`). The first draft said viewers could. They cannot, and
+no paragraph sent to a reviewer should say so.
 
-This removes the dump outright, and it matches what people already expect "connect my
-account" to mean. Channels already carry a `post_count_seen` watermark to build on.
+### 3. Per-node category policy
 
-### 2. A catalogue picker, not an automatic pull
+Each node decides what its feed is for. The operator sets the allowed categories, matching how
+curated channels are set in #660. A Commons Decision could change it later, once Decisions are
+seen to auto-execute in practice. Not built; nothing on main has a node-level category policy.
+Do it after the report and takedown work, since it touches the feed query, ingest validation and
+settings on both the manager and the native app.
 
-After connect, fetch the member's recent posts and **show them without publishing
-anything**, newest first, with the newest item pre-ticked. The member sees their real
-videos listed — which proves the integration works immediately — and the default
-action is a single tap to publish that one. "Show more" reveals the rest.
+## Dropped, and why
 
-Why a picker rather than auto-importing just the latest: the newest video is not
-necessarily the one they would have chosen. Auto-publishing it reintroduces exactly
-the failure this design exists to prevent, and "it was only one" will not feel better
-to the member it happens to.
+- **Forward-only import (watermark on connect, import nothing historical).** #658 decided the
+  opposite on purpose: a quiet creator's old posts are "simply your latest 20", and keep-20 is
+  what stops a new node looking empty. It would also show the Instagram reviewer nothing. The
+  consent problem it was solving is answered by the picker instead. The building block it named,
+  `post_count_seen`, is a nudge counter, not a per-item watermark.
+- **A per-member release queue that drips selected old posts over days.** The feed sorts by
+  publish date, so old posts land deep in the feed; there is no burst to spread out. Its cold-start
+  purpose belongs to the seeded curated channel and the Learn-lane cadence drip
+  (`docs/pulse-learn-lane.md` §2.4). And queued items older than a channel's newest 20 would be
+  pruned before release.
 
-This is mostly UI work. The data path already exists:
+## What to tell app reviewers
 
-- `syncChannelVideos` already fetches the list and builds `itemsToIngest` as
-  `{url, title, thumbnailUrl, publishedAt, externalId}` — already the right shape to
-  render a picker row.
-- `/api/member/pulse/oauth-ingest` already accepts an **array**, so publishing a
-  subset needs no server change.
+Three defences against "this duplicates TikTok's Nearby feed" hold:
 
-The work is splitting that function into `fetchCatalogue()` and `ingest(selected)`,
-plus the picker screen.
+1. Content comes only from members who connected their own account, plus curated channels the
+   operator adds.
+2. Every item links out to the platform. Cards are facades; there are no embeds.
+3. We do not host video. We cache a thumbnail image on the community's own node.
 
-### 3. A release queue
-
-Selected back-catalogue items go into a queue with a release interval rather than
-publishing all at once, so a member importing fifteen old posts drips them out over
-days instead of flooding the feed.
-
-This reuses machinery that already exists: the Pulse scheduler already wakes every 5
-minutes, so a queue needs a release timestamp per item and a check on that tick — not
-a new subsystem.
-
-Best use for this is **seeding a new node** whose feed is empty, making a fresh
-community look alive over its first weeks. It should be opt-in, not the default path.
-
-### 4. Push the content standard down to the node
-
-Do not try to set a global line on acceptable content. Every community runs its own
-node and sets its own rules — that is the premise of the whole project, and it applies
-here.
-
-The pieces are largely present: `category` exists on both channels and items,
-viewers already have per-item Hide (`/api/member/pulse/items/:id/mute`) and the
-category filter chips. What is missing is a **per-node category policy** the operator
-can set.
-
-"Cat videos beside radical content" is only a problem if the community has not said
-what the feed is *for*. The software's job is to let them express that, not to decide
-it for them.
-
-### 5. Reconcile ingest with retention
-
-Either filter by the 30-day window at ingest so we never import what prune will
-immediately tombstone, or make per-item retention explicit and visible. The current
-mismatch is silently confusing.
-
-## Prior art
-
-Worth being accurate about what is and is not novel here.
-
-**The queue and drip mechanic is well established.** [OneUp](https://www.oneupapp.io/)
-posts an entire back catalogue between accounts with a configurable interval to drip
-them out over time — essentially proposal 3. [SmarterQueue](https://smarterqueue.com/)
-and [Cloud Campaign](https://www.cloudcampaign.com/tools/social-media-scheduling) add
-categorised recurring drip campaigns, add-to-top/bottom-of-queue, and evergreen
-recycling. There is a mature vocabulary to borrow rather than invent.
-
-One inversion to keep in mind: those tools **push out** to platforms. We **pull in**
-and republish locally. The queue mechanic transfers; their UX does not map one-for-one.
-
-**Multi-provider aggregation exists too** — [Juicer.io](https://www.juicer.io/),
-[Walls.io](https://walls.io/features/social-media-aggregator) (14+ platforms),
-[EmbedSocial](https://embedsocial.com/blog/social-media-aggregator/) — but as *one
-brand, many channels, onto their own website*. The Pulse is *many members, one shared
-community feed*, which is a different shape.
-
-**Local feeds are not novel either: TikTok shipped one.**
-[TikTok Nearby / Local Feed](https://newsroom.tiktok.com/introducing-tiktok-nearby-discover-whats-happening-around-you?lang=en-150)
-recommends posts by location to surface local creators and businesses.
-
-What *is* distinctive is none of the plumbing — it is that the feed lives on a node
-the community owns. TikTok's Nearby is TikTok deciding what counts as local to you;
-the Pulse is an invite-gated group of people who know each other, with the feed on
-their own server.
-
-## Consequence for App Review
-
-TikTok's Nearby feature makes this submission-relevant, not just trivia: a "local feed
-of TikTok videos" can read to a reviewer as duplicating core platform functionality,
-which is a rejection reason.
-
-The defences are all true today and should be stated explicitly in the submission:
-
-- content appears only from members who **connected their own account**;
-- we **do not host or replay video** — already stated in the privacy policy;
-- every item **links out** to TikTok or Instagram to watch, sending traffic *to* the
-  platform.
-
-A moderation story is also worth having ready before the Meta review rather than
-after. Even the short version — members choose what they import, node operators set
-category policy, viewers can hide and report — is better than being asked cold.
-
-## Open questions
-
-- Does forward-only leave a new node's feed too empty to be worth opening? (Proposal 3
-  is the intended answer, but it is unproven.)
-- What is the right server-side cap on `rawItems.length`?
-- Should the picker page beyond the first 20/25, i.e. do we add cursor pagination we
-  currently do not have?
-- Who sets per-node category policy — the operator alone, or a Commons decision?
+The privacy policy page (`apps/website/privacy.html`) still says image media is never re-hosted
+and that retention is 30 days. Both are out of date and are being corrected on
+`docs/privacy-policy-matches-code`. Do not point a reviewer at that page until it lands.

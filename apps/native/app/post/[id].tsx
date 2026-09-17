@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
@@ -339,7 +341,7 @@ export default function PostDetailModal() {
         },
     }));
 
-    const { id, txId } = useLocalSearchParams<{ id?: string; txId?: string }>();
+    const { id, txId } = useLocalSearchParams<{ id?: string | string[]; txId?: string | string[] }>();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {

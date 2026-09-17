@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, writeTombstone } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
@@ -15,6 +15,7 @@ import {
     generateSearchKeywords,
     hasListedOffer,
     isEventHost,
+    EVENT_READABLE_AFTER_END_MS,
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
     type MarketplacePost,
@@ -1039,8 +1040,23 @@ export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicK
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean) => any;
 type ConservingTxnFn = <T>(fn: () => T) => T;
 
-export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn): boolean {
+/**
+ * Admin removal, the far end of the report flow (routes/admin.ts -> actionReport -> here).
+ *
+ * An event needs one thing more than a listing does (docs/events-on-the-map.md §2.5): the chat has to go
+ * read-only and everyone marked Going has to be told the gathering is off. The chat needs no separate
+ * write — event-thread.ts reads `event_state`, `status` and `active`, and the branch below sets
+ * `event_state = 'cancelled'` inside the same transaction that deactivates the row, so the chat is
+ * read-only the moment the removal commits and stays readable until the 30-day scrub takes it.
+ *
+ * The push is the host's own cancellation message on the same `marketplace` category (decision 27): a
+ * member who said they were going needs to know the event is not happening, and does not need to know
+ * whether it was the host or an admin who ended it. The actor is SYSTEM, so nobody is dropped as
+ * "the person who caused this" — an admin is not in the Going list.
+ */
+export function adminDeletePost(broadcast: BroadcastFn, postId: string, transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn): boolean {
     let deleted = false;
+    const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
     const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
@@ -1055,19 +1071,106 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
         if (result.changes > 0) {
             deleted = true;
             db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
+            if (eventRow) db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(postId);
         }
     });
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId });
+    if (eventRow) notifyEventChange(push, 'cancelled', postId, eventRow.title, 'SYSTEM');
     return true;
 }
 
-export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn, conservingTxn?: ConservingTxnFn): number {
+export function adminBulkDeletePosts(broadcast: BroadcastFn, postIds: string[], transferFn?: TransferFn, conservingTxn?: ConservingTxnFn, push?: PushFn): number {
     let deletedCount = 0;
     for (const postId of postIds) {
-        if (adminDeletePost(broadcast, postId, transferFn, conservingTxn)) {
+        if (adminDeletePost(broadcast, postId, transferFn, conservingTxn, push)) {
             deletedCount++;
         }
     }
     return deletedCount;
+}
+
+// ===================== THE 30-DAY SCRUB =====================
+
+/**
+ * An ended event is scrubbed this long after its end — the same 30 days it stays readable by id to its
+ * host and the people who were going. The two are deliberately one number: the day the event stops being
+ * readable is the day nothing personal about it is left to read.
+ */
+export const EVENT_SCRUB_AFTER_END_MS = EVENT_READABLE_AFTER_END_MS;
+
+/**
+ * The 30-day scrub (docs/events-on-the-map.md §2.2, decision 30).
+ *
+ * Thirty days after an event ended, everything personal about it goes — the RSVPs, the chat and the note
+ * for the people going — and the post row stays, inactive, as every other post does. A scrub, not a hard
+ * delete: posts are never hard-deleted and carry no tombstone of their own, so that surviving row is what
+ * keeps a replica consistent.
+ *
+ * Every delete writes its own tombstone, because a backup is a full copy: without them the primary would
+ * scrub and the replica would keep the only surviving copy of a private chat, a private note's readers and
+ * a guest list, forever. The post row's `updated_at` is bumped for the same reason — that is what carries
+ * the nulled note and the new status to a replica pulling deltas.
+ *
+ * Run from the pulse scheduler tick, never lazily from a create path the way polls are swept: an event
+ * nobody ever opens again still has to be scrubbed on time.
+ *
+ * `status = 'completed'` is both the end state and the done marker, so a second run finds nothing and the
+ * job is safe to run every tick. An event is never a trade, so no other path sets that status on one.
+ *
+ * Returns the number of events scrubbed.
+ */
+export function scrubEndedEvents(nowMs = Date.now()): number {
+    const cutoff = new Date(nowMs - EVENT_SCRUB_AFTER_END_MS).toISOString();
+    let due: { id: string }[];
+    try {
+        due = db.prepare(`
+            SELECT id FROM posts
+             WHERE type = 'event'
+               AND event_end_at IS NOT NULL
+               AND event_end_at <= ?
+               AND COALESCE(status, '') != 'completed'
+             ORDER BY event_end_at ASC
+        `).all(cutoff) as { id: string }[];
+    } catch {
+        return 0; // event columns absent on an older schema
+    }
+    if (due.length === 0) return 0;
+
+    let scrubbed = 0;
+    for (const { id } of due) {
+        try {
+            db.transaction(() => {
+                const rsvps = db.prepare('SELECT member_pubkey FROM event_rsvps WHERE post_id = ?').all(id) as any[];
+                db.prepare('DELETE FROM event_rsvps WHERE post_id = ?').run(id);
+                for (const r of rsvps) writeTombstone('event_rsvps', `${id}|${r.member_pubkey}`);
+
+                // The chat's id IS the post id (§2.1). The conversation row itself stays: it is the empty
+                // shell of a chat nobody can open any more, and deleting it would cascade nothing useful
+                // while giving a replica a row key it has no tombstone handler for.
+                const msgs = db.prepare('SELECT id FROM messages WHERE conversation_id = ?').all(id) as any[];
+                db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
+                for (const m of msgs) writeTombstone('messages', m.id);
+
+                const parts = db.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(id) as any[];
+                db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
+                for (const p of parts) writeTombstone('conversation_participants', `${id}|${p.public_key}`);
+
+                db.prepare(`
+                    UPDATE posts
+                       SET event_private_note = NULL,
+                           active = 0,
+                           status = 'completed',
+                           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                     WHERE id = ?
+                `).run(id);
+            })();
+            scrubbed++;
+        } catch (e) {
+            // One bad row must not stop the rest of the sweep, and the tick must not die on it.
+            console.warn(`[Events] could not scrub ${id.slice(0, 8)}:`, e);
+        }
+    }
+    if (scrubbed > 0) bumpPostsVersion();
+    return scrubbed;
 }

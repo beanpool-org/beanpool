@@ -172,6 +172,21 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM event_rsvps WHERE post_id=? AND member_pubkey=?`).run(postId, memberPubkey);
             return r.changes > 0;
         }
+        // The event scrub deletes a chat's messages and its membership 30 days after the event ended
+        // (docs/events-on-the-map.md §2.2). A backup is a full copy, so without these two cases the
+        // primary would scrub and the replica would keep the only surviving copy of a private chat and
+        // of who was going. `messages` is keyed by the message id, `conversation_participants` by
+        // `conversationId|publicKey`, the same shape the conversation-consolidation migration writes.
+        case 'messages': {
+            const r = db.prepare(`DELETE FROM messages WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
+        case 'conversation_participants': {
+            const [conversationId, publicKey] = rowKey.split('|');
+            if (!conversationId || !publicKey) return false;
+            const r = db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=? AND public_key=?`).run(conversationId, publicKey);
+            return r.changes > 0;
+        }
         case 'members': {
             const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
             db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
@@ -205,6 +220,18 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const [postId, memberPubkey] = rowKey.split('|');
             if (!postId || !memberPubkey) return null;
             const r = db.prepare(`SELECT updated_at AS ts FROM event_rsvps WHERE post_id=? AND member_pubkey=?`).get(postId, memberPubkey) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        case 'messages': {
+            const r = db.prepare(`SELECT updated_at AS ts FROM messages WHERE id=?`).get(rowKey) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        // Meaningful only because the import above stores the PRIMARY's updated_at: a member who left an
+        // event chat and rejoined has a row stamped after their tombstone, and must not be deleted again.
+        case 'conversation_participants': {
+            const [conversationId, publicKey] = rowKey.split('|');
+            if (!conversationId || !publicKey) return null;
+            const r = db.prepare(`SELECT updated_at AS ts FROM conversation_participants WHERE conversation_id=? AND public_key=?`).get(conversationId, publicKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         case 'members': {
@@ -654,14 +681,29 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             if (remote.conversationParticipants) {
+                // The PRIMARY's updated_at is written, not left to the local column default and touch
+                // trigger. Without it a replica stamps every imported membership row with its own import
+                // time, which is always later than the primary's delete — so the tombstone that carries a
+                // member leaving an event chat, or the 30-day scrub emptying one, would be skipped as
+                // "stale" forever. Storing the primary's clock is what makes last-write-wins decide.
+                //
+                // The DO UPDATE is guarded so an unchanged row is not rewritten: an UPDATE that sets
+                // updated_at to the value it already holds fires the touch trigger, which would replace
+                // the primary's clock with the replica's all over again.
+                const importParticipant = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key, last_read_at, updated_at)
+                            VALUES (?, ?, ?, ?)
+                            ON CONFLICT(conversation_id, public_key) DO UPDATE SET
+                                last_read_at = excluded.last_read_at,
+                                updated_at = excluded.updated_at
+                            WHERE excluded.updated_at IS NOT NULL
+                              AND (conversation_participants.updated_at IS NULL
+                                   OR excluded.updated_at > conversation_participants.updated_at)`);
                 for (const cp of remote.conversationParticipants) {
-                    db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key, last_read_at)
-                                VALUES (?, ?, ?)
-                                ON CONFLICT(conversation_id, public_key) DO UPDATE SET
-                                    last_read_at = excluded.last_read_at`).run(
+                    importParticipant.run(
                         cp.conversationId,
                         cp.publicKey,
-                        cp.lastReadAt || null
+                        cp.lastReadAt || null,
+                        cp.updatedAt || cp.lastReadAt || new Date().toISOString()
                     );
                 }
             }

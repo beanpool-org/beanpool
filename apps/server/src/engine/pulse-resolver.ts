@@ -23,6 +23,7 @@ import { Readable, Transform } from 'node:stream';
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
+import { scrubEndedEvents } from './posts.js';
 
 // ============================================================================
 // 1. Errors & Types
@@ -1958,6 +1959,18 @@ export async function runPulseSchedulerTick(): Promise<void> {
 
     try {
         prunePulseItems(PULSE_KEEP_PER_CHANNEL);
+
+        // Events: the 30-day scrub rides this tick rather than a sweep of its own
+        // (docs/events-on-the-map.md §2.2). Caught here as well as inside, so a scrub that fails on a
+        // locked database never stops the Pulse from resolving its channels.
+        try {
+            const scrubbedEvents = scrubEndedEvents();
+            if (scrubbedEvents > 0) {
+                console.log(`🧹 [Events] Scrubbed ${scrubbedEvents} event(s) 30 days past their end`);
+            }
+        } catch (e) {
+            console.warn('[Events] 30-day scrub did not run this tick:', e);
+        }
 
         const channels = db.prepare(
             `SELECT id FROM creator_channels

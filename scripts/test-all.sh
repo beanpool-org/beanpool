@@ -287,6 +287,7 @@ run_federation_suites() {
       test-events
       test-event-chat
       test-event-notify
+      test-event-scrub
       test-migration-projects-enterprises
       test-commons-reject-project
       test-commons-projects-update-delete

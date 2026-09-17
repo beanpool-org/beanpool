@@ -151,6 +151,24 @@ export function ensureEventThread(postId: string): Conversation {
     return conv!;
 }
 
+/**
+ * The next timestamp strictly after everything already written for one membership row.
+ *
+ * The same rule `rsvpEvent` uses for the RSVP itself, and for the same reason: a member who taps Not going
+ * and Going again inside one millisecond would otherwise leave a row and a tombstone stamped identically,
+ * and a replica could not tell which came last. Monotonic here means last-write-wins actually decides.
+ */
+function membershipWriteAt(postId: string, pubkey: string): string {
+    const nowIso = new Date().toISOString();
+    const prev = db.prepare(`
+        SELECT MAX(ts) AS ts FROM (
+            SELECT updated_at AS ts FROM conversation_participants WHERE conversation_id = ? AND public_key = ?
+            UNION ALL
+            SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'conversation_participants' AND row_key = ?
+        )`).get(postId, pubkey, `${postId}|${pubkey}`) as { ts: string | null } | undefined;
+    return prev?.ts && prev.ts >= nowIso ? new Date(Date.parse(prev.ts) + 1).toISOString() : nowIso;
+}
+
 /** A participant row only for a real, non-enterprise member — an enterprise pubkey has no inbox. */
 export function addEventThreadParticipant(postId: string, pubkey: string | null | undefined): void {
     if (!pubkey) return;
@@ -158,18 +176,21 @@ export function addEventThreadParticipant(postId: string, pubkey: string | null 
         'SELECT public_key, COALESCE(is_treasury, 0) AS is_treasury FROM members WHERE public_key = ?'
     ).get(pubkey) as any;
     if (!member || member.is_treasury) return;
+    // `updated_at` is written rather than left to the column default so it is strictly later than any
+    // tombstone this member already has for the same chat: that is what tells a replica the re-join
+    // happened after the leaving.
     db.prepare(
-        'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)'
-    ).run(postId, pubkey);
+        'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, updated_at) VALUES (?, ?, ?)'
+    ).run(postId, pubkey, membershipWriteAt(postId, pubkey));
 }
 
 /**
  * Mirror one RSVP into chat membership (§2.2): Going adds you, Interested or "not going" removes you. The
  * host never leaves the chat.
  *
- * The delta backup replicates `event_rsvps` with its tombstones but has no tombstone handler for
- * `conversation_participants`, so a replica can hold a membership row whose RSVP is gone. That is why the
- * read and post paths re-check the RSVP rather than the mirror.
+ * Leaving writes a `conversation_participants` tombstone, so a backup drops the row too rather than
+ * keeping a membership whose RSVP is gone. The read and post paths still re-check the RSVP rather than
+ * trusting the mirror — the mirror is a convenience for the inbox, never the authority on who may read.
  */
 export function syncEventThreadMembership(postId: string, pubkey: string, status: EventRsvpStatus | null): void {
     let row: EventRow;
@@ -184,9 +205,16 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
         return;
     }
     if (isEventHost(db, row, pubkey)) return;
-    db.prepare(
+    const writeAt = membershipWriteAt(postId, pubkey);
+    const removed = db.prepare(
         'DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key = ?'
     ).run(postId, pubkey);
+    if (removed.changes > 0) {
+        db.prepare(`
+            INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
+            VALUES ('conversation_participants', ?, ?)
+        `).run(`${postId}|${pubkey}`, writeAt);
+    }
 }
 
 function toThreadMessage(r: any, conversationId: string): EventThreadMessage {

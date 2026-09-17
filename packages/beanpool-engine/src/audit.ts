@@ -18,6 +18,7 @@ export interface AuditSyncPayload {
     posts?: any[];
     marketplaceTransactions?: any[];
     messages?: any[];
+    conversationParticipants?: any[];
     creatorChannels?: any[];
     pulseItems?: any[];
     eventRsvps?: any[];
@@ -172,6 +173,10 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         ['posts', payload.posts?.length ?? 0],
         ['marketplace_transactions', payload.marketplaceTransactions?.length ?? 0],
         ['messages', payload.messages?.length ?? 0],
+        // Chat membership. The event scrub deletes a chat's participants along with its messages
+        // (docs/events-on-the-map.md §2.2), and a replica that applied one tombstone but not the other
+        // would hold the guest list of a chat whose messages are gone — the audit has to be able to say so.
+        ['conversation_participants', payload.conversationParticipants?.length ?? 0],
         // Replicated since the Pulse's first phase, but absent here — so a channel-replication
         // failure showed a matching hash and ok:true, and only surfaced at failover.
         ['creator_channels', payload.creatorChannels?.length ?? 0],

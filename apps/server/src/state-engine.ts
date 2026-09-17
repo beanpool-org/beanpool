@@ -4705,7 +4705,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
 }
 
 export function adminBulkDeletePosts(postIds: string[]): number {
-    return adminBulkDeletePostsEngine(broadcast, postIds, transfer);
+    return adminBulkDeletePostsEngine(broadcast, postIds, transfer, undefined, dispatchPushNotification);
 }
 
 export function getPostCount(filter?: {
@@ -5320,7 +5320,9 @@ export function createTreasury(
 }
 
 export function adminDeletePost(postId: string) {
-    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
+    // The push dispatcher is passed so an admin removing a reported EVENT tells everyone marked Going
+    // that it is off (docs/events-on-the-map.md §2.5); it is a no-op for every other post type.
+    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification);
 }
 
 export function isSoleOwner(publicKey: string): boolean {

@@ -8,7 +8,7 @@
 // 2. Multi-format feed parsing (RSS 2.0 and Atom 1.0) with zero heavy external dependencies.
 // 3. Instagram og:description post-count probe for un-autolisted channels.
 // 4. Staggered background fetch scheduler with backoff and error tracking on creator_channels.
-// 5. 30-day pruner and single scrubPulseItems helper for tombstone replication.
+// 5. Keep-newest-per-channel retention pruner and single scrubPulseItems helper for tombstone replication.
 // 6. Contract B feed query (cursor pagination, category filtering, strict visibility gating) and
 //    owner-scoped item muting.
 
@@ -1861,7 +1861,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
 }
 
 // ============================================================================
-// 7. 30-Day Pruning & Tombstone Scrubbing
+// 7. Retention Pruning (keep newest per channel) & Tombstone Scrubbing
 // ============================================================================
 
 /**

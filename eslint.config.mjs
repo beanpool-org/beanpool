@@ -25,5 +25,25 @@ export default tseslint.config(
       'no-useless-assignment': 'warn',
       'no-empty': 'warn',
     },
+  },
+  // Native: exactly one KeyboardProvider, in app/_layout.tsx. A second one nested inside a Modal
+  // broke keyboards app-wide (measured 2026-09-17). Screens and modals use the keyboard-controller
+  // hooks/components under the root provider instead.
+  {
+    files: ['apps/native/**/*.{ts,tsx,js,jsx}'],
+    ignores: ['apps/native/app/_layout.tsx'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: 'react-native-keyboard-controller',
+          importNames: ['KeyboardProvider'],
+          message: 'KeyboardProvider lives only in app/_layout.tsx. A nested provider breaks keyboards app-wide.',
+        }],
+      }],
+      'no-restricted-syntax': ['error', {
+        selector: "JSXOpeningElement[name.name='KeyboardProvider'], JSXOpeningElement[name.property.name='KeyboardProvider']",
+        message: 'KeyboardProvider lives only in app/_layout.tsx. A nested provider breaks keyboards app-wide.',
+      }],
+    },
   }
 );

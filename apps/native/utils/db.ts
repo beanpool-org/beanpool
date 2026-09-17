@@ -2615,6 +2615,8 @@ export async function syncMessages(publicKey: string) {
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0;
 
+        // Separate 10s budgets: one shared controller let a slow conversations response use up the
+        // directory fetch's time too, so it was aborted by us rather than by the network.
         const controller1 = new AbortController();
         const timeout1 = setTimeout(() => controller1.abort(), 10000);
         
@@ -2626,16 +2628,19 @@ export async function syncMessages(publicKey: string) {
             clearTimeout(timeout1);
             return;
         }
+        clearTimeout(timeout1);
 
         let dirRes = null;
+        const dirController = new AbortController();
+        const dirTimeout = setTimeout(() => dirController.abort(), 10000);
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { signal: controller1.signal });
+                dirRes = await signedGet('/api/members', { signal: dirController.signal });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
         }
-        clearTimeout(timeout1);
+        clearTimeout(dirTimeout);
         
         if (dirRes && dirRes.ok) {
             try {
@@ -3582,7 +3587,7 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
     }
 }
 
-export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<boolean> {
+export async function redeemInvite(code: string, callsign: string, identityToRegister?: any): Promise<{ success: true; alreadyMember: boolean }> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || (__DEV__ ? 'https://127.0.0.1:8443' : '');
 
@@ -3628,18 +3633,24 @@ export async function redeemInvite(code: string, callsign: string, identityToReg
             throw new Error(errorMsg);
         }
 
-        let alreadyMember = false;
+        // A 2xx is not a registration on its own: a captive portal, a proxy page or a node
+        // answering { success: false } all arrive as 200. Only an explicit success counts,
+        // otherwise the member is told they joined while the node never recorded them.
+        let data: any = null;
         try {
-            const data = await res.json();
-            if (data?.alreadyMember) alreadyMember = true;
+            data = await res.json();
         } catch {}
+        if (data?.success !== true) {
+            throw new Error(data?.error || 'The community node did not confirm the invite. Please try again.');
+        }
+        const alreadyMember = !!data.alreadyMember;
 
         if (alreadyMember) {
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
         }
-        return { success: true, alreadyMember } as any;
+        return { success: true, alreadyMember };
     } catch (e: any) {
         console.warn('[DB] Failed to redeem invite:', e.message);
         throw e;

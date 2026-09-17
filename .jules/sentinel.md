@@ -152,6 +152,11 @@ backup). No server *code* changed — this was ops + config. The only code/doc c
 - **Flags ON** on both: `ENFORCE_READ_AUTH` / `ENFORCE_WS_AUTH` / `ENFORCE_LEDGER_AUTH`. Verified: gated
   reads + unsigned `/ws` → 401; public allowlist open; backup keeps pulling (admin path); failover
   promotion `✅ PROMOTION OK`.
+  **Correction (2026-09-18): this is no longer true — do not rely on it.** Measured 2026-09-17,
+  `ENFORCE_READ_AUTH` is **OFF** on test, mullum and castlemaine: unsigned `GET /api/members` and
+  `GET /api/ledger/transactions` return 200. Treat every node as read-auth OFF until re-measured
+  (turning it on is planned for the release). `ENFORCE_WS_AUTH` / `ENFORCE_LEDGER_AUTH` were not
+  re-measured — check live before assuming either state.
 - **Admin password** reset on both to the shared operator value (held only in each node's chmod-600
   `.env` as `ADMIN_PASSWORD` / `BACKUP_ADMIN_PASSWORD` — not recorded here). The old March lock ignored
   every redeploy (`initAdminPassword` skips when `isLocked`), so the auth fields were nulled + restarted.

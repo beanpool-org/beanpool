@@ -4774,8 +4774,16 @@ export function getCommunityHealth(): CommunityHealth {
     // 2. Wash Trading / Sybil Ring soft enforcement (Change 3)
     try {
         const enforcement = getWashTradingEnforcement();
-        // ⚡ Bolt: Pre-fetch member callsigns into a Map for O(1) lookups during health flag formatting
-        const callsignsMap = new Map((db.prepare("SELECT public_key, callsign FROM members").all() as any[]).map(m => [m.public_key, m.callsign]));
+        // Callsigns only for members who can appear in a flag. A healthy community has none, so
+        // the common path reads no member rows at all (#673); a flagged one reads just those keys.
+        const ringsToName = enforcement.clusterDetails.filter(d => d.insularity >= 0.8 && d.newRatio >= 0.5);
+        const keysToName = new Set<string>([
+            ...[...enforcement.flaggedPairs].flatMap(pairKey => pairKey.split('|')),
+            ...ringsToName.flatMap(d => d.members),
+        ]);
+        const callsignsMap = new Map<string, string>(keysToName.size === 0 ? [] :
+            (db.prepare("SELECT public_key, callsign FROM members WHERE public_key IN (SELECT value FROM json_each(?))")
+                .all(JSON.stringify([...keysToName])) as any[]).map(m => [m.public_key, m.callsign]));
         for (const pairKey of enforcement.flaggedPairs) {
             const [a, b] = pairKey.split('|');
             // Skip if all involved accounts are already credit-frozen by admin

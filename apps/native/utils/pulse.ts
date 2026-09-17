@@ -214,6 +214,26 @@ function offlineFeed(options: FetchPulseFeedOptions): PulseFeedResponse {
 }
 
 /**
+ * Where the phone loads a feed item's preview image from: the node's thumbnail proxy
+ * (GET /api/pulse/items/:id/thumbnail), the same endpoint the web app uses. The platform's
+ * own image URL is never handed to the image loader, so a member's phone does not contact
+ * Meta, Google or TikTok image servers just by scrolling the feed.
+ *
+ * Null when the item has no thumbnail or there is no node to ask; the card then shows its
+ * platform placeholder. That is also the fallback when the proxy fails (404, node offline):
+ * falling back to the platform URL would bring back exactly the contact this avoids.
+ */
+export function resolvePulseThumbnailUrl(
+    nodeUrl: string | null | undefined,
+    item: Pick<PulseFeedItem, 'id' | 'thumbnailUrl'>,
+): string | null {
+    const base = nodeUrl?.trim().replace(/\/+$/, '');
+    const id = item.id?.trim();
+    if (!base || !id || !item.thumbnailUrl) return null;
+    return `${base}/api/pulse/items/${encodeURIComponent(id)}/thumbnail`;
+}
+
+/**
  * Fetch pulse feed items from the node. On a first page, an unreachable node yields an
  * empty feed (see offlineFeed); during pagination it throws so the UI can say so.
  */

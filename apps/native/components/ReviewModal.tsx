@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, Alert, StyleSheet, ScrollView, Platform, Keyboard } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { submitRating, getDb } from '../utils/db';
 import { useIdentity } from '../app/IdentityContext';
 import { colors, palette } from '../constants/colors';

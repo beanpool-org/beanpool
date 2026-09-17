@@ -37,6 +37,7 @@ import {
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
+import { anchorUrl } from '../../utils/node-post';
 
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
@@ -52,6 +53,7 @@ export default function PulseScreen() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasLocalLane, setHasLocalLane] = useState(false);
+    const [nodeUrl, setNodeUrl] = useState<string | null>(null);
 
     // Client-side split is a prototype shortcut — see isOfficialSource(). Production
     // should pass the lane to the API so pagination stays correct per lane.
@@ -99,6 +101,7 @@ export default function PulseScreen() {
             : (category === 'all' ? undefined : category);
 
         try {
+            anchorUrl().then(setNodeUrl).catch(() => {});
             const res = await fetchPulseFeed({
                 category: fetchCat,
                 limit: 20,
@@ -437,6 +440,7 @@ export default function PulseScreen() {
                             currentPubkey={identity?.publicKey}
                             onMute={handleMute}
                             onReport={handleReport}
+                            nodeUrl={nodeUrl}
                         />
                     )}
                     contentContainerStyle={styles.listContent}

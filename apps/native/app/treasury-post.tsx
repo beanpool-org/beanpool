@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -59,6 +59,7 @@ export default function TreasuryPostScreen() {
     const [category, setCategory] = useState('');
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
+    const [footerHeight, setFooterHeight] = useState(0);
     const [description, setDescription] = useState('');
     const [repeatable, setRepeatable] = useState(!isNeed); // offers recur by default; needs don't
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -138,10 +139,14 @@ export default function TreasuryPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
-                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
-            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            {/* The scroll view owns keyboard avoidance: it scrolls the focused field above the keyboard AND the footer
+                (bottomOffset is the footer's measured height, which grows with the font scale). The footer rides the
+                keyboard in a KeyboardStickyView. This replaced a KeyboardAvoidingView around a plain ScrollView: Android's
+                own scroll-to-focus ran before that view shrank, so the price field could stay hidden behind the footer
+                until the first digit was typed. Wrapping the scroll view in the avoiding view as well raced the two and
+                still hid it on some runs (measured on the emulator at 320dp + 1.3x). */}
+            <View style={{ flex: 1 }}>
+                <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name={isNeed ? 'hand-extended' : 'tag'} size={20} color={colors.brand.primary} style={{ marginRight: 10 }} />
                         <Text style={styles.infoText}>
@@ -233,22 +238,24 @@ export default function TreasuryPostScreen() {
                                 : 'Leave on so the offer stays available for the next buyer (e.g. eggs every week).'}
                         </Text>
                     </View>
-                </ScrollView>
+                </KeyboardAwareScrollView>
 
-                {toast ? (
-                    <View style={styles.toast}><Text style={styles.toastText}>{toast}</Text></View>
-                ) : null}
+                <KeyboardStickyView onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+                    {toast ? (
+                        <View style={styles.toast}><Text style={styles.toastText}>{toast}</Text></View>
+                    ) : null}
 
-                <View style={styles.footer}>
-                    <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
-                        {submitting ? (
-                            <ActivityIndicator color={colors.text.inverse} />
-                        ) : (
-                            <Text style={styles.submitBtnText}>{isNeed ? 'POST NEED' : 'POST OFFER'}</Text>
-                        )}
-                    </Pressable>
-                </View>
-            </KeyboardAvoidingView>
+                    <View style={styles.footer}>
+                        <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting} accessibilityRole="button">
+                            {submitting ? (
+                                <ActivityIndicator color={colors.text.inverse} />
+                            ) : (
+                                <Text style={styles.submitBtnText}>{isNeed ? 'POST NEED' : 'POST OFFER'}</Text>
+                            )}
+                        </Pressable>
+                    </View>
+                </KeyboardStickyView>
+            </View>
 
             <CategoryPickerSheet
                 visible={showCategoryPicker}

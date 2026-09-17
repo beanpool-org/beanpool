@@ -4,6 +4,11 @@
 > on every node. Covers a `learn` category, a seeded BeanPool channel, a third Pulse lane, cadence
 > injection ("the drip"), and a retention rule that replaces both the 30-day intake filter and the
 > 30-day pruner (§2.3) — that rule is what fixes the empty feed diagnosed in §0.
+>
+> **Update 2026-09-18:** the §2.3 retention rule is built — `prunePulseItems` keeps the newest
+> `PULSE_KEEP_PER_CHANNEL` (20) non-curated items per channel, curated items exempt, and intake has
+> no age filter. There is no 30-day window anywhere in Pulse now; §0.2 and §1.3 describe the code as
+> it was when this spec was written.
 
 ---
 

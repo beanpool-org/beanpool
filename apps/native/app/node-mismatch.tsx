@@ -8,6 +8,7 @@ import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import { normalizeNodeUrl, looksLikeNodeAddress } from '../utils/node-url';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
+import { SavedNodePicker } from '../components/SavedNodePicker';
 import { wipeIdentity, getMnemonic, hasMnemonic } from '../utils/identity';
 import { requestSync } from '../services/pillar-sync';
 import { colors, palette } from '../constants/colors';
@@ -139,32 +140,14 @@ export default function NodeMismatchScreen() {
                             </View>
                         ) : null}
 
-                        {otherNodes.length > 0 ? (
-                            <View style={styles.pickerWrap}>
-                                <Text style={styles.inputLabel}>Switch to one of your communities</Text>
-                                {otherNodes.map((n) => {
-                                    let host = n.url;
-                                    try { host = new URL(n.url).host; } catch {}
-                                    return (
-                                        <Pressable
-                                            key={n.url}
-                                            style={styles.nodeRow}
-                                            onPress={() => switchToNode(n.url)}
-                                            disabled={loading}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={`Switch to ${n.alias || host}`}
-                                        >
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={styles.nodeRowName}>{n.alias || host}</Text>
-                                                {n.alias ? <Text style={styles.nodeRowUrl}>{host}</Text> : null}
-                                            </View>
-                                            <Text style={styles.nodeRowChevron}>›</Text>
-                                        </Pressable>
-                                    );
-                                })}
-                                <Text style={styles.hint}>Or enter a different address below.</Text>
-                            </View>
-                        ) : null}
+                        <SavedNodePicker
+                            nodes={otherNodes}
+                            onPick={switchToNode}
+                            disabled={loading}
+                            label="Switch to one of your communities"
+                            actionLabel="Switch to"
+                            hint="Or enter a different address below."
+                        />
 
                         <Text style={styles.inputLabel}>Correct community node address</Text>
                         <TextInput
@@ -232,7 +215,6 @@ export default function NodeMismatchScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.app },
-    pickerWrap: { marginBottom: 18 },
     wipeWrap: { marginTop: 4 },
     wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
     wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
@@ -243,15 +225,6 @@ const styles = StyleSheet.create({
     },
     word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
     cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
-    nodeRow: {
-        flexDirection: 'row', alignItems: 'center', gap: 10,
-        paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
-        backgroundColor: colors.surface.app, borderRadius: 12,
-        borderWidth: 1, borderColor: colors.border.default,
-    },
-    nodeRowName: { color: colors.text.heading, fontSize: 15, fontWeight: '700' },
-    nodeRowUrl: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
-    nodeRowChevron: { color: colors.text.muted, fontSize: 22, fontWeight: '300' },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
     emoji: { fontSize: 40, marginBottom: 8 },

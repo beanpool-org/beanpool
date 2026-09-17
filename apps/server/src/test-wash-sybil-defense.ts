@@ -6,6 +6,8 @@
  *   2. Wash trading pair (r < 0.15): mutual volume is excluded from trust.
  *   3. Sybil ring (size <= 12, insularity >= 0.8, >= 50% new members): internal trade volume is excluded from trust.
  *   4. Hard credit freeze: admin can set credit_frozen to force floor to 0.
+ *   5. Community health names flagged members by callsign but never reads the whole members table:
+ *      nothing flagged reads no callsigns, something flagged reads only those keys (#673).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-wash-sybil-defense.ts
  */
@@ -39,11 +41,27 @@ function mtx(buyer: string, seller: string, credits: number, completedDaysAgo = 
         .run('wmtx-' + (txc++), pid, buyer, seller, credits, completedAt);
 }
 
+// Records every SQL string prepared while fn runs.
+function preparedSql<T>(fn: () => T): { result: T; sql: string[] } {
+    const orig = db.prepare;
+    const sql: string[] = [];
+    (db as any).prepare = function (s: string) { sql.push(s); return orig.call(db, s); };
+    try { return { result: fn(), sql }; } finally { (db as any).prepare = orig; }
+}
+// A callsign read from members with no WHERE clause is a whole-table scan.
+const readsAllCallsigns = (sql: string[]) => sql.some(s => /\bcallsign\s+FROM\s+members\b(?![\s\S]*\bWHERE\b)/i.test(s));
+
 async function main() {
     console.log('Running Wash Trading & Sybil Ring Defense tests...\n');
     initStateEngine();
 
     try {
+        // --- Test 0: healthy community reads no member callsigns (#673) ---
+        clearWashTradingCache();
+        const clean = preparedSql(() => getCommunityHealth());
+        assert(!clean.result.flags.some(f => f.type === 'wash_trading' || f.type === 'sybil_ring'), 'Clean community has no wash/ring flags');
+        assert(!readsAllCallsigns(clean.sql), 'Nothing flagged: health does not read the whole members table');
+
         // --- Test 1: Cap 500 & unidirectional trade between non-new members (not flagged as ring) ---
         const userA = 'userA-' + Date.now();
         const userB = 'userB-' + Date.now();
@@ -77,10 +95,15 @@ async function main() {
         assert(profileW1.qualifiedValue === 0, `Wash trading pair volume excluded (got ${profileW1.qualifiedValue})`);
         assert(profileW2.qualifiedValue === 0, `Wash trading pair counterparty volume excluded (got ${profileW2.qualifiedValue})`);
 
-        // Verify wash trading alert exists in health report
-        const health = getCommunityHealth();
+        // Verify wash trading alert exists in health report, naming both members by callsign
+        db.prepare(`UPDATE members SET callsign = ? WHERE public_key = ?`).run('WashOne', wash1);
+        db.prepare(`UPDATE members SET callsign = ? WHERE public_key = ?`).run('WashTwo', wash2);
+        const { result: health, sql: washSql } = preparedSql(() => getCommunityHealth());
         const washFlag = health.flags.find(f => f.type === 'wash_trading' && f.members.includes(wash1));
         assert(!!washFlag, 'Wash trading alert was raised in community health flags');
+        assert(/for pair (WashOne ↔ WashTwo|WashTwo ↔ WashOne) \(gross: 1200\.0\)$/.test(washFlag?.description ?? ''),
+            `Wash flag names the pair by callsign (got ${washFlag?.description})`);
+        assert(!readsAllCallsigns(washSql), 'Wash pair flagged: health does not read the whole members table');
 
         // --- Test 3: Sybil Ring (size <= 12, insularity >= 0.8, >= 50% new members) ---
         const ring = Array.from({ length: 4 }, (_, i) => `ring${i}-${Date.now()}`);
@@ -102,11 +125,16 @@ async function main() {
             assert(profile.qualifiedValue === 0, `Sybil ring member ${r.slice(0, 8)} trust volume excluded (got ${profile.qualifiedValue})`);
         }
 
-        // Verify Sybil ring alert exists in health report
-        const health2 = getCommunityHealth();
+        // Verify Sybil ring alert exists in health report, naming every ring member by callsign
+        ring.forEach((r, i) => db.prepare(`UPDATE members SET callsign = ? WHERE public_key = ?`).run(`Ringer${i}`, r));
+        const { result: health2, sql: ringSql } = preparedSql(() => getCommunityHealth());
         const ringFlag = health2.flags.find(f => f.type === 'sybil_ring' && f.members.includes(ring[0]));
         assert(!!ringFlag, 'Sybil ring alert was raised in community health flags');
         assert(ringFlag?.severity === 'critical', 'Sybil ring severity is critical');
+        const expectedNames = ringFlag ? ringFlag.members.map(m => `Ringer${ring.indexOf(m)}`).join(', ') : '';
+        assert(!!ringFlag && ringFlag.description.endsWith(`% new members (${expectedNames})`),
+            `Ring flag names members by callsign in member order (got ${ringFlag?.description})`);
+        assert(!readsAllCallsigns(ringSql), 'Ring flagged: health does not read the whole members table');
 
         // --- Test 4: Hard credit freeze ---
         const frozenUser = 'frozen-' + Date.now();

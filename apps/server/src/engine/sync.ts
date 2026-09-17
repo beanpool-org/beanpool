@@ -670,8 +670,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             if (remote.abuseReports) {
                 for (const ar of remote.abuseReports) {
-                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at, status, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     status = excluded.status,
                                     updated_at = excluded.updated_at
@@ -681,6 +681,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         ar.reporterPubkey,
                         ar.targetPubkey,
                         ar.targetPostId || null,
+                        ar.targetPulseItemId || null,
                         ar.reason,
                         ar.createdAt,
                         ar.status || 'pending',

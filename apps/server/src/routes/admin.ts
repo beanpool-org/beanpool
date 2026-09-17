@@ -40,6 +40,7 @@ import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
 import { resolveChannel } from '../engine/pulse-resolver.js';
+import { getPulseThumbnailService } from '../engine/pulse-thumbnail.js';
 import {
     createAdminChallenge,
     getAdminChallenge,
@@ -1022,12 +1023,20 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
 router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const { deletePost, suspendUser } = (ctx as any).requestBody || {};
-        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser);
+        const { deletePost, suspendUser, removePulseItem } = (ctx as any).requestBody || {};
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem);
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Abuse report not found' };
             return;
+        }
+        const pulseItemId = removePulseItem
+            ? (db.prepare('SELECT target_pulse_item_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as any)?.target_pulse_item_id
+            : null;
+        if (pulseItemId) {
+            getPulseThumbnailService().delete(pulseItemId);
+            const by = ctx.state?.auth_signer ? String(ctx.state.auth_signer).substring(0, 12) : 'owner:password';
+            logger.info('ADMIN', `Removed Pulse item ${pulseItemId} (report ${ctx.params.id}) by ${by}${suspendUser ? ', owner suspended' : ''}`);
         }
         ctx.body = { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {

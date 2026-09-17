@@ -182,6 +182,9 @@ export function initSchema() {
     // abuse_reports table predates this column the exec hits that index, fails, and the node does
     // not boot. Adding the column afterwards is too late — the exec has already thrown.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN status TEXT DEFAULT 'pending'`).run(); } catch { }
+    // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
+    // or trigger naming it compiles on already-live DBs.
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
 

@@ -224,3 +224,34 @@ export function ledgerLineLabels(entry: { direction: 'income' | 'spend'; counter
 export function signedBeans(n: number, direction: 'income' | 'spend'): string {
     return `${direction === 'income' ? '+' : '-'}${(Number(n) || 0).toFixed(2)} 🫘`;
 }
+
+/** Beans to 2 places with a sign, but never "-0.00" / "+0.00": anything that rounds to zero is plain "0.00". */
+function signedTotal(n: number, sign: '+' | '-'): string {
+    const cents = Math.round(Math.abs(Number(n) || 0) * 100);
+    return cents === 0 ? '0.00 🫘' : `${sign}${(cents / 100).toFixed(2)} 🫘`;
+}
+
+export interface PlSummaryText {
+    cameIn: string;
+    wentOut: string;
+    net: string;
+    netIsPositive: boolean;
+    /** Shown only when fees came off income, so the three totals add up. Same wording as the web. */
+    feeNote: string | null;
+}
+
+/** The P&L boxes on an enterprise page: "Came in", "Went out", "Net change" and the fee note. */
+export function plSummaryText(summary: { totalIncome?: number; totalSpend?: number; netChange?: number } | null | undefined): PlSummaryText {
+    const income = Number(summary?.totalIncome) || 0;
+    const spend = Number(summary?.totalSpend) || 0;
+    const net = Number(summary?.netChange) || 0;
+    // The node counts "came in" before the community fee, while net change is what the balance actually moved.
+    const fees = summary ? Math.round((income - spend - net) * 100) / 100 : 0;
+    return {
+        cameIn: signedTotal(income, '+'),
+        wentOut: signedTotal(spend, '-'),
+        net: signedTotal(net, net < 0 ? '-' : '+'),
+        netIsPositive: net >= 0,
+        feeNote: fees > 0 ? `Came in is before fees: ${fees.toFixed(2)} 🫘 in fees came off it.` : null,
+    };
+}

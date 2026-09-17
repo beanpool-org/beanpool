@@ -10,6 +10,7 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
+import { MESSAGE_REMOVED_EDIT_ERROR, THREAD_MESSAGE_EDIT_ERROR } from '../engine/messaging.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -201,7 +202,10 @@ router.post('/api/messages/edit', async (ctx) => {
         const msg = editMessage(messageId, actor as string, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
-        ctx.status = 400;
+        // Thread and removed messages are refused outright (403) so the client can say why;
+        // every other failure keeps its existing 400.
+        const refused = e?.message === THREAD_MESSAGE_EDIT_ERROR || e?.message === MESSAGE_REMOVED_EDIT_ERROR;
+        ctx.status = refused ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to edit message' };
     }
 });

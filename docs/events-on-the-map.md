@@ -1,690 +1,374 @@
-# Events on the Map — Research & Architecture Design Document
+# Events — design note
 
-> **Status: DESIGN DOCUMENT — Decision Ready.**
-> **Target Audience & Context:** Federated mutual-credit community platform (BeanPool) operating across regional and off-grid Australian communities (Mullumbimby, Bindarrabi, Castlemaine, East Gippsland).
-> **Accessibility Floor:** 320dp screen width, 1.3× font scale, Android 8 / API 26 minimum, intermittent/poor connectivity.
-> **Constraint:** Read-only analysis. Core map components (`Map.tsx`, `Map.web.tsx`, `UnifiedMapPin.tsx`, `MapPinTail.tsx`, `GlobalHeader.tsx`, `logo.png`) remain unmodified.
+Decisions made with Marty on 2026-09-17 and 2026-09-18 (23 of them, logged in
+`scratch/events-design/decisions.md`), turned into a buildable design and checked against the code on `main`
+at v1.2.19 (#857). This replaces the 2026-09-01 research draft, which proposed a separate table, a blurred pin
+with host approval, and delta-sync federation; each of those was overtaken by polls-as-a-post-type, the public
+enterprise pin with Approximate (#844), and the listings pull. The old text is in this branch's history.
 
----
-
-## Executive Summary & Core Architectural Decisions
-
-BeanPool's map today renders marketplace listings (offers and needs) and members. Extending the map to carry **events** transforms BeanPool from a transactional mutual-credit exchange into a true **bioregional community operating system**.
-
-Events differ from marketplace listings in one fundamental, physics-level dimension: **TIME**. A marketplace listing represents a persistent inventory state until fulfilled; an event represents a temporal window at a physical location. Adding events without temporal mechanics turns the map into an unreadable "pin soup."
-
-This document establishes the architectural, economic, and safety foundation for Events in BeanPool.
-
-### The Five Fundamental Decisions
-
-| # | Dimension | Decision | Why This Over Alternatives |
-|---|---|---|---|
-| **D1** | **Entity Model** | **New First-Class Entity (`community_events` & `event_attendees`)** | Overloading `posts` corrupts the escrow state machine, buyer/seller semantics, FTS indexes, and delta sync. Events have start/end times, host/co-host rosters, capacity, and RSVP states that have zero overlap with trade lifecycle. |
-| **D2** | **Recurrence** | **Single Concrete Events in v1; Horizon Expansion in v2. NO RFC 5545 (RRule).** | Arbitrary RRule engines drown decentralized platforms in timezone/DST bugs, exception tracking (`EXDATE`), and orphaned sync state. v1 provides single events + one-tap "Clone / Re-list". v2 generates forward rolling concrete rows up to 30 days ahead. |
-| **D3** | **Privacy Default** | **Fuzzed by Default (500m radius blur) for Residential/Private Venues; Exact Address Revealed on RSVP.** | A public event pin is a precise physical coordinate at a known time (frequently a private homestead or off-grid community). Revealing exact residential coordinates on unauthenticated PWAs or to unverified accounts creates a real-world physical safety hazard. Public venues (e.g. Community Gardens) opt-in to exact pins. |
-| **D4** | **Map UX & Noise** | **Segmented Layer Toggle (`Market` \| `Events`) + Temporal Quick-Chips (`Today` \| `Weekend` \| `All Upcoming`).** | Avoids multi-slider scrubbers that break at 320dp width. Maintains instant spatial context while eliminating pin soup. Event pins use a distinct purple/indigo badge geometry with category emojis. |
-| **D5** | **Federation & Reach** | **Bilateral Signed Delta Sync with Strict Local Default (`reach = 'local'`).** | Respects community boundary sovereignty. Mullumbimby working bees do not flood Bindarrabi's map unless explicitly published with `reach = 'peers'`. Cross-node RSVPs and ticketing reuse the established #104/#143 bilateral settlement engine. |
+Nothing here is built. Status: **design agreed, questions in §6 open, no build brief yet.**
 
 ---
 
-## 1. Grounded Audience Research: What "Events" Mean in Regional Australia
+## 1. What events are for, and what v1 is
 
-### 1.1 The Audience Profile & Context
+An event is a community gathering with a time and a place: a working bee, a repair café, a skill-share, a
+meeting. It is free. The point is people showing up. Today the only way to announce one is a chat message or
+an offer with a date typed into the description.
 
-BeanPool's users are not organizing corporate tech meetups or commercial nightlife. They live in regional hubs, permaculture valleys, transition towns, and remote intentional communities across Australia:
-- **Mullumbimby / Byron Hinterland (Bundjalung Country, NSW):** Permaculture hubs, flood recovery networks, seed savers, regenerative agriculture, natural beekeeping, ecovillages.
-- **Bindarrabi (Border Ranges / QLD-NSW border):** Remote off-grid intentional community on mountainous terrain, communal asset management, infrastructure working bees, solar/water maintenance.
-- **Castlemaine / Mount Alexander (Dja Dja Wurrung Country, VIC):** Active transition town, repair cafes, tool libraries, radical barter, community fruit harvesting, firewood working bees.
-- **East Gippsland (Gunaikurnai Country, VIC):** Remote bushfire-affected communities, agricultural recovery, machinery sharing, regional farmers' markets, seasonal muster gatherings.
+**What.** One post of a new type `event` with title, description, photo, start and end time, a map pin
+(required) plus a place name, and a **private note** shown only to people who tapped Going (gate code,
+parking, what to bring). No capacity limit. No Beans: paying helpers stays an enterprise Need with escrow,
+and an event may link to one. One-off only, with **Copy to a new date**; no repeat rules.
 
-### 1.2 The Real Event Taxonomy
+**Who.** Any member creates one. Tiers gate nothing. An enterprise hosts through a keeper, a group through
+a convenor, exactly as enterprise-authored and group-only posts work today. The card shows the host name.
 
-Interviews and observational research into regional Australian community organizing reveal eight core event archetypes:
+**Where it shows.** In the Market feed as a card, like polls. On the map as a pin with **Today / This
+weekend / Next 7 days** chips. Not in the Pulse and not on a host page in v1. The pin is exact by default with
+**Approximate (~100 m)** one tap away and the same plain warning enterprise pins use. Audience is the same
+choice as any post: this community by default, group-only, or shared to linked communities.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    BEANPOOL COMMUNITY EVENT ARCHETYPES                      │
-├──────────────────────┬──────────────────────┬───────────────────────────────┤
-│ 1. Working Bees      │ 2. Harvest & Swap    │ 3. Skill-Shares & Workshops   │
-│ (Permaculture, weed  │ (Excess citrus, seed │ (Cob building, fermentation,  │
-│ blitz, swale digging)│ swaps, plant starts) │ solar repair, scything)       │
-├──────────────────────┼──────────────────────┼───────────────────────────────┤
-│ 4. Repair Cafes      │ 5. Seasonal Feasts   │ 6. Community Assemblies       │
-│ (Tool fixes, small   │ (Solstice gatherings,│ (Commons governance, Landcare │
-│ engine maintenance)  │ community pizza oven)│ meetings, flood recovery)     │
-├──────────────────────┼──────────────────────┼───────────────────────────────┤
-│ 7. Ride-Shares       │ 8. Emergency Action  │                               │
-│ (Town runs, supply   │ (Sandbagging, fire   │                               │
-│ trips, carpooling)   │ prep, chainsaw crews)│                               │
-└──────────────────────┴──────────────────────┴───────────────────────────────┘
-```
+**RSVP.** Going or Interested, one tap, no host approval. The card shows the two counts and my status; the
+host sees the list.
 
-### 1.3 What Communities Complain About Today
+**Chat.** Every event gets a chat. Members are the host plus everyone marked Going; switching to Interested
+or Not going removes you. The private note is pinned at the top. The host can remove messages, like a keeper
+in an enterprise thread. Read-only when the event ends; gone with the event after 30 days.
 
-Permaculture and regional community organizers in Australia express persistent frustrations with existing digital platforms:
+**Lifecycle.** Cancel, or a change of time or place, pushes a notification to everyone marked Going (not
+Interested) and the card shows CANCELLED or UPDATED. When the event ends it drops off the map and feed; host
+and attendees can still open it for 30 days; then it is removed.
 
-1. **Facebook Groups & Meta Enclosure:**
-   - *Algorithmic Suppression:* Organic working bee posts are deprioritized in favor of boosted commercial content. Organizers report that 80% of group members never see a working bee post until 2 days *after* it occurred.
-   - *Account Refusal:* Privacy-conscious, off-grid, and radical community members refuse to create Facebook/Instagram accounts, fragmenting communication into disjointed SMS or Signal threads.
-   - *Security & Doxing:* Publishing a working bee on a private homestead in a public Facebook group exposes the host's residence to scraping, unregulated visitors, and surveillance.
-2. **Eventbrite / Meetup:**
-   - *Extractive Fees:* Meetup charges organizers ~$30–$40/month just to host a local group; Eventbrite extracts ticket fees and aggressively markets third-party corporate events to attendees.
-   - *Corporate UX:* Built for conference halls and ticket barcodes, not a seed swap or creek-clearing morning where attendees bring a plate to share.
-3. **WhatsApp / Signal Group Chaos:**
-   - *Zero Spatial/Temporal Structure:* Crucial event details get buried under 300 chat messages. There is no calendar view, no map pin, and no reliable RSVP headcount.
-4. **Poor Regional Connectivity:**
-   - Heavy web applications (like full JS single-page apps) fail to load over 3G/satellite connections (e.g. Starlink dropouts or patchy valley signal). Users need cached offline access to venue directions and host contacts.
+**Limits.** The existing report → admin removal flow, plus a cap on upcoming events per member
+(recommended 5; an enterprise or group is counted as its own author). No far-future limit.
 
-### 1.4 Map-First: What Works Better vs. What Works Worse
+**Rollout.** Server, phone app and web ship together in one release; nodes deploy after the app is in the
+store. Step 1 is events in the phone feed plus the web map. Step 2, its own PR, opens the protected native map
+files for the pin and chips.
 
-| Dimension | Map-First Advantage (BeanPool) | Map-First Vulnerability (Must Design Against) |
+---
+
+## 2. How it works, in the code
+
+### 2.1 Data
+
+**The post.** `posts.type` gains `'event'` next to `'offer' | 'need' | 'poll'`
+(`apps/server/src/engine/posts.ts:101`, `packages/beanpool-engine/src/posts.ts:34`). New columns, added the
+way the poll columns were (`apps/server/src/db/db.ts:357-358`: `ALTER TABLE ... ADD COLUMN` in a try, before
+`schema.sql` runs):
+
+| column | type | meaning |
 |---|---|---|
-| **Spatial Proximity** | **Superior.** Instantly answers: "What is happening along my valley/creek road this weekend?" Visualizes hyper-local clusters. | **Pin Soup.** Without temporal filtering, a recurring weekly market completely obscures a one-off flood-relief working bee at the same venue. |
-| **Discovery** | **Superior for Travelers & Neighbours.** Enables discovering a repair cafe or seed swap without needing prior social graph connections. | **The "Ghost Town" Map.** An empty map with no events for 30km makes the app feel dead, even if lively trade is occurring. |
-| **Discussion & Context** | **Worse than a feed if isolated.** A map pin cannot comfortably host a 50-comment discussion on who is bringing which tools. | Must pair the map pin directly with an integrated in-app event conversation thread. |
+| `event_start_at` | DATETIME | ISO UTC; rendered in the phone's local time |
+| `event_end_at` | DATETIME | ISO UTC; drives auto-hide and read-only chat |
+| `event_place_name` | TEXT | "The old bowls club" — the pin is `lat`/`lng`, which posts already have |
+| `event_private_note` | TEXT | shown only to Going and the host; never in a public listing |
+| `event_state` | TEXT | `'scheduled' \| 'updated' \| 'cancelled'`; what the card badge shows |
+| `event_conversation_id` | TEXT | the chat, see below |
 
----
+Everything else an event needs is already on `posts`: `title`, `description`, photos via `post_photos`,
+`lat`/`lng` with the range check, `audience_scope` / `target_group_id` for group-only, `reach` /
+`reach_peers`, `author_pubkey` + `created_by` for enterprise authoring, `search_keywords` and the
+`posts_fts` triggers, `status` and `active` for the lifecycle, `updated_at` for sync. Polls prove this shape:
+a non-trade, time-bound post with its own join table (`schema.sql:133-183`).
 
-## 2. Prior Art Analysis & Lessons Learned
-
-We analyzed centralized and decentralized event systems to extract structural lessons.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            PRIOR ART LANDSCAPE                              │
-│                                                                             │
-│  Centralized / Proprietary               Federated / Decentralized          │
-│  ├── Meetup                              ├── Mobilizon (Framasoft)          │
-│  ├── Facebook Events                     ├── Gancio (autistici.org)         │
-│  ├── Nextdoor                            └── Hylo (Bioregional Holochain)   │
-│  ├── Luma / Partiful                                                        │
-│  └── Karrot / Foodsharing                                                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 2.1 Deep Dive: Federated Architectural Analogues (Mobilizon & Gancio)
-
-#### A. Mobilizon (Framasoft — ActivityPub)
-* **What they built:** Open-source, federated event and group management software based on ActivityPub, developed by Framasoft as an ethical alternative to Facebook Events.
-* **What they got right:**
-  - Strong group identity and multi-host permissions.
-  - Granular privacy: public events, unlisted events, member-only events.
-  - Clean representation of event participation (`Join`, `Leave`, `Invite` activities).
-* **Where they struggled & lessons for BeanPool:**
-  - *Generic Social Protocol Mismatch:* Applying generic ActivityPub actor-relay models created severe federation redundancy (e.g. redundant `Create` and `Announce` activities causing duplicate items on remote peers).
-  - *No Mobile-First Offline Mode:* Mobilizon is a web-first desktop/responsive tool. It lacks offline-first SQLite state caching for remote field use.
-  - *Framasoft's Maintenance Pivot (2024):* Framasoft halted active feature development on Mobilizon, citing the heavy maintenance burden of complex federation relays and low adoption compared to Mastodon.
-  - **Key Lesson for BeanPool:** Avoid unbounded, multi-hop federated relays. BeanPool's direct, bilateral signed sync between known partner nodes (`sync.ts`) is dramatically more reliable, auditable, and resilient.
-
-#### B. Gancio (autistici.org — Anarchist Shared Agenda)
-* **What they built:** A lightweight, self-hosted, federated calendar and map designed specifically for local collectives, social centres, and activist groups.
-* **What they got right:**
-  - *Map + Agenda Cohesion:* Direct pairing of a spatial map with a clean date agenda.
-  - *Lightweight Simplicity:* Minimal dependencies, fast load times, anonymous submissions via admin approval queues.
-  - *Visual Density:* Colored dots and badges representing event density per day.
-* **What they lacked / abandoned:**
-  - *No Mutual Credit or Ticketing:* Purely an announcement broadcast board; cannot manage volunteer work commitments, tool deposits, or mutual-credit contributions.
-  - *No Location Fuzzing:* Either exact coordinates or none; lacks tiered address disclosure for sensitive home gatherings.
-  - **Key Lesson for BeanPool:** Keep the submission and map UI as frictionless and clean as Gancio, but back it with BeanPool's cryptographic identity, reputation, and mutual-credit ledger.
-
-### 2.2 Summary of Commercial & Community Platforms
-
-| Platform | Core Strength | Fatal Flaw for BeanPool's Context |
-|---|---|---|
-| **Hylo** | Bioregional mapping, relationship-first community directory. | Heavy web frontend, steep learning curve, non-trivial operational footprint. |
-| **Karrot** | Frictionless local food-saving and community pickup coordination. | Lacks formal event scheduling, ticketing, and governance tie-ins. |
-| **Luma / Partiful** | Slick mobile RSVP flows, viral SMS/contact book loops. | Centralized VC platforms; require SMS phone numbers; zero support for mutual credit or off-grid federation. |
-| **Trustroots** | Radical hospitality, gift economy, open-source location map. | Events are an afterthought; focused strictly on traveler hosting. |
-| **Open Collective** | Transparent collective budgeting and event expense tracking. | No spatial/map discovery; oriented around financial accounting rather than local gatherings. |
-
----
-
-## 3. Data Model & Architecture
-
-### 3.1 Entity Architecture Debate: New Table vs. Variant of `posts`
-
-A critical architectural fork is whether an event should be a new row type in the existing `posts` table (e.g. `type = 'event'`) or a dedicated entity table (`community_events`).
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    DATA MODEL ARCHITECTURAL COMPARISON                      │
-├──────────────────────────┬──────────────────────────────────────────────────┤
-│ Option A: Overload posts │ Option B: Dedicated community_events (RECOMMENDED)│
-├──────────────────────────┼──────────────────────────────────────────────────┤
-│ • Reuses lat/lng & photos│ • Clean relational schema; zero pollution of     │
-│ • Zero migration effort  │   marketplace queries (WHERE type IN ('offer'))  │
-│ ❌ Corrupts escrow logic │ • Dedicated indexes on (start_at, end_at)        │
-│ ❌ Nullable timestamp    │ • Clean event_attendees join table (multi-party) │
-│   pollution              │ • Dedicated tombstoning & 90-day pruner lifecycle│
-│ ❌ Single accepted_by    │ • Extensible co-hosts and location privacy rules │
-│   vs multi-party RSVP    │ • Direct integration with Treasury & The Pulse   │
-└──────────────────────────┴──────────────────────────────────────────────────┘
-```
-
-**Recommendation: Build `community_events` as a dedicated entity table.**
-Overloading `posts` creates severe architectural debt. The `posts` table is tightly coupled to 2-party trade escrow (`accepted_by`, `pending_transaction_id`, `price_type`, `cash_also_needed`). Events require multi-party RSVPs, capacity limits, start/end date ranges, timezone declarations, host/co-host pubkeys, and location privacy fuzzing.
-
-### 3.2 Proposed SQLite Schema
-
-Following the strict conventions established in `apps/server/src/db/schema.sql`, `creator_channels`, and `pulse_items`:
-1. Row mutation watermarks (`updated_at`) with automated touch triggers.
-2. Hard deletions scrub content and preserve minimal tombstones for delta sync.
-3. Keyset pagination indexes matching query sort orders.
+**RSVPs.** A small table on the `poll_votes` pattern (`schema.sql`, `poll_votes`: post id, voter, option,
+signature, created_at, primary key on post + voter):
 
 ```sql
--- ============================================================================
--- COMMUNITY EVENTS & ATTENDANCE
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS community_events (
-    id                  TEXT PRIMARY KEY,          -- 'evt_' + 12 random bytes, hex
-    organizer_pubkey    TEXT NOT NULL REFERENCES members(public_key),
-    co_hosts            TEXT,                      -- JSON array of member public_keys
-    title               TEXT NOT NULL,
-    description         TEXT NOT NULL,
-    category            TEXT NOT NULL CHECK (category IN (
-                            'working_bee', 'market', 'workshop', 'gathering',
-                            'repair_cafe', 'meeting', 'food_share', 'other'
-                        )),
-    
-    -- Temporal Specification (ISO-8601 UTC)
-    start_at            DATETIME NOT NULL,
-    end_at              DATETIME NOT NULL,
-    is_all_day          INTEGER NOT NULL DEFAULT 0,
-    timezone            TEXT NOT NULL DEFAULT 'Australia/Sydney', -- IANA tz identifier
-    
-    -- Spatial & Venue Information
-    lat                 REAL NOT NULL,
-    lng                 REAL NOT NULL,
-    location_name       TEXT NOT NULL,             -- e.g. "Mullumbimby Community Garden" or "Main Arm Valley Homestead"
-    address_hidden      INTEGER NOT NULL DEFAULT 1,-- 1 = Fuzzed on map, exact address revealed on RSVP / vouched
-    exact_address       TEXT,                      -- Private address, directions, or gate codes
-    
-    -- Capacity, Economics & Governance
-    capacity            INTEGER,                   -- NULL = unlimited
-    cost_beans          REAL NOT NULL DEFAULT 0.0 CHECK (cost_beans >= 0),
-    cost_cash_desc      TEXT,                      -- e.g. "$5 for wood turning consumables" (cash-at-door only)
-    treasury_pubkey     TEXT REFERENCES members(public_key), -- Linked Commons enterprise (docs/community-governance.md)
-    
-    -- Lifecycle & Status
-    status              TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published', 'cancelled', 'draft')),
-    cancellation_reason TEXT,
-    
-    -- Federation Scope (matches posts table #143 standard)
-    reach               TEXT NOT NULL DEFAULT 'local' CHECK (reach IN ('local', 'peers', 'everywhere')),
-    reach_peers         TEXT,                      -- JSON array of libp2p peer_ids when reach='peers'
-    origin_node         TEXT,                      -- libp2p peer_id of authoring node; NULL = authored locally
-    
-    -- Media & Keywords
-    photos              TEXT,                      -- JSON array of photo URIs
-    search_keywords     TEXT DEFAULT '',
-    
-    -- Watermarks & Tombstone Lifecycle
-    created_at          DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at          DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    deleted_at          DATETIME,
-    
-    CONSTRAINT event_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180),
-    CONSTRAINT event_time_check CHECK (end_at >= start_at)
+CREATE TABLE IF NOT EXISTS event_rsvps (
+    post_id     TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    status      TEXT NOT NULL CHECK (status IN ('going', 'interested')),
+    signature   TEXT NOT NULL,
+    updated_at  DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, member_pubkey)
 );
-
--- Indexes optimized for Map viewport queries, time filtering, and feed sorting
-CREATE INDEX IF NOT EXISTS idx_community_events_upcoming 
-    ON community_events(start_at ASC) 
-    WHERE deleted_at IS NULL AND status = 'published';
-
-CREATE INDEX IF NOT EXISTS idx_community_events_category_time 
-    ON community_events(category, start_at ASC) 
-    WHERE deleted_at IS NULL AND status = 'published';
-
-CREATE INDEX IF NOT EXISTS idx_community_events_spatial 
-    ON community_events(lat, lng) 
-    WHERE deleted_at IS NULL AND status = 'published';
-
-CREATE INDEX IF NOT EXISTS idx_community_events_organizer 
-    ON community_events(organizer_pubkey) 
-    WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_community_events_updated_at 
-    ON community_events(updated_at);
-
--- ============================================================================
--- EVENT ATTENDANCE & RSVPs
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS event_attendees (
-    event_id            TEXT NOT NULL REFERENCES community_events(id) ON DELETE CASCADE,
-    member_pubkey       TEXT NOT NULL REFERENCES members(public_key),
-    status              TEXT NOT NULL DEFAULT 'going' CHECK (status IN ('going', 'interested', 'cancelled', 'waitlist')),
-    guests_count        INTEGER NOT NULL DEFAULT 0 CHECK (guests_count >= 0),
-    beans_paid          REAL NOT NULL DEFAULT 0.0 CHECK (beans_paid >= 0),
-    note                TEXT,                      -- e.g. "Bringing a chainsaw and trailer"
-    created_at          DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at          DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (event_id, member_pubkey)
-);
-
-CREATE INDEX IF NOT EXISTS idx_event_attendees_member 
-    ON event_attendees(member_pubkey, status);
-
-CREATE INDEX IF NOT EXISTS idx_event_attendees_updated_at 
-    ON event_attendees(updated_at);
-
--- ============================================================================
--- WATERMARK TRIGGERS (Phase 2 Delta Sync Participation)
--- ============================================================================
-
-CREATE TRIGGER IF NOT EXISTS community_events_touch_updated_at
-AFTER UPDATE ON community_events
-FOR EACH ROW
-WHEN NEW.updated_at IS OLD.updated_at
-BEGIN
-    UPDATE community_events 
-       SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') 
-     WHERE id = NEW.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS event_attendees_touch_updated_at
-AFTER UPDATE ON event_attendees
-FOR EACH ROW
-WHEN NEW.updated_at IS OLD.updated_at
-BEGIN
-    UPDATE event_attendees 
-       SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') 
-     WHERE event_id = NEW.event_id AND member_pubkey = NEW.member_pubkey;
-END;
 ```
 
-### 3.3 Core TypeScript Definitions
+"Not going" is a delete, not a third value. `updated_at` rather than `created_at` because an RSVP changes,
+unlike a vote, and the sync import is last-write-wins on that column.
 
-```typescript
-export type EventCategory = 
-    | 'working_bee'
-    | 'market'
-    | 'workshop'
-    | 'gathering'
-    | 'repair_cafe'
-    | 'meeting'
-    | 'food_share'
-    | 'other';
+**The chat.** One row in `conversations` with a new `type = 'event_thread'`, created with the post, id equal
+to the post id, mirroring `ensureEnterpriseThread` (`apps/server/src/engine/enterprise-thread.ts:41-58`,
+which uses the enterprise pubkey as the conversation id). Messages go in `messages` as the enterprise thread
+stores them: base64 text with `nonce = 'plaintext-v1'` (`enterprise-thread.ts:175`), not the XChaCha20 DM
+scheme that binds ciphertext to a fixed participant set (`apps/server/src/engine/messaging.ts:126-133`). That
+is the only way membership can follow RSVPs and a host can remove a message the server can read. It also means
+the node operator can read event chat; the screen should say so in one line. Membership is written to
+`conversation_participants` in step with `event_rsvps` (§2.2) so the chat appears in the Talk list with unread
+counts, and the read and post handlers re-check the RSVP anyway.
 
-export type EventStatus = 'published' | 'cancelled' | 'draft';
-export type AttendeeStatus = 'going' | 'interested' | 'cancelled' | 'waitlist';
+**The private note** lives on the post row and is served by `rowToPost` only when the viewer is the host or
+has a `going` RSVP; every other reader gets the field omitted, including guests and the listings pull. It is
+also injected as the first, pinned item of the chat view by the client, not stored as a message, so an edit to
+the note never leaves a stale copy.
 
-export interface CommunityEvent {
-    id: string;
-    organizerPubkey: string;
-    coHosts: string[];
-    title: string;
-    description: string;
-    category: EventCategory;
-    startAt: string;       // ISO-8601 UTC
-    endAt: string;         // ISO-8601 UTC
-    isAllDay: boolean;
-    timezone: string;
-    lat: number;
-    lng: number;
-    locationName: string;
-    addressHidden: boolean;
-    exactAddress?: string | null;
-    capacity: number | null;
-    costBeans: number;
-    costCashDesc?: string | null;
-    treasuryPubkey?: string | null;
-    status: EventStatus;
-    cancellationReason?: string | null;
-    reach: 'local' | 'peers' | 'everywhere';
-    reachPeers?: string[];
-    originNode?: string | null;
-    photos: string[];
-    createdAt: string;
-    updatedAt: string;
-    deletedAt?: string | null;
-}
+### 2.2 Server rules
 
-export interface EventAttendee {
-    eventId: string;
-    memberPubkey: string;
-    status: AttendeeStatus;
-    guestsCount: number;
-    beansPaid: number;
-    note?: string | null;
-    createdAt: string;
-    updatedAt: string;
-}
+**Create** goes through `createPost` (`posts.ts:101`) with a `type === 'event'` branch beside the poll branch
+(`posts.ts:190-232`):
 
-export interface PublicEventCard extends Omit<CommunityEvent, 'exactAddress> {
-    organizerCallsign: string;
-    organizerAvatarUrl: string | null;
-    isOrganizerElder: boolean;
-    attendeeCount: number;
-    userRsvpStatus?: AttendeeStatus | null;
-    isLocationFuzzed: boolean;
-    exactAddress?: string | null; // Populated only if member is RSVP'd or event is public venue
-}
-```
+- Validate: `event_start_at` in the future, `event_end_at` after it, `lat`/`lng` present, place name ≤ 80
+  chars, private note ≤ 1000 chars. Photos validated by `validatePostPhotos` as for offers.
+- Force what polls force: `credits = 0`, `price_type = 'fixed'`, `repeatable = 0`, `cash_also_needed = 0`,
+  `category = 'community'`. Unlike polls, keep `lat`/`lng` and photos, and keep `reach` (see §2.4).
+- The **upcoming cap** runs inside the same transaction the poll rate limit uses (`posts.ts:243-251`):
+  count `type = 'event' AND status = 'active' AND author_pubkey = ?`; refuse at 5. An enterprise's events count
+  against the enterprise's pubkey, a group's against the convenor who authored them.
+- Create the `event_thread` conversation and add the author (or, for an enterprise, the acting keeper from
+  `created_by`) as the first participant.
+- No offer-first rule: `CONTRIBUTION_REQUIRED_ERROR` applies to needs only (`posts.ts:239`).
 
-### 3.4 The Recurrence Problem: Why RFC 5545 (RRule) is Rejected
+**Host.** The route already resolves the author: `assertActorEntitled` accepts the signed actor, or a keeper
+via `canOperateTreasury` (`apps/server/src/routes/marketplace.ts:37-56`); enterprise routes pass
+`createdBy: actor` (`apps/server/src/routes/treasury.ts:691`). Group hosting is `audienceScope: 'group'` +
+`targetGroupId`, as the native group-post screen sends it (`apps/native/app/group-post.tsx:224-225`), with
+the convenor-or-member check at `posts.ts:139-149`. "Host" for every host-only action below means: the author,
+any keeper of an enterprise author, or an active convenor of the target group. That is the same set
+`removePost` already trusts (`posts.ts:299-320`).
 
-A recurring pitfall in calendar design is attempting to implement full RFC 5545 (iCalendar RRule) recurrence.
+**Edit** goes through `updatePost` (`posts.ts:361`). Polls lock the question after votes; events do not lock.
+If `event_start_at`, `event_end_at`, `lat`/`lng` or the place name change, set `event_state = 'updated'` and
+notify Going. Title, description, photo and note changes are silent. Editing a cancelled or ended event is
+refused.
 
-```
-RFC 5545 Complexity Trap:
-  Recurrence Rules (FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=...)
-  + Exception Dates (EXDATE)
-  + Modified Single Instances (RECURRENCE-ID with overridden lat/lng or cancelled status)
-  + Daylight Savings Shifts (NSW vs QLD border time shifts across Mullum & Bindarrabi)
-  = ❌ Massive dependency overhead, sync desynchronization, and silent data drift across SQLite nodes.
-```
+**Cancel** is host-only: `event_state = 'cancelled'`, `active = 0`, `status = 'cancelled'`, notify Going,
+chat read-only. Same broadcast `post_removed` the existing remove path sends (`posts.ts:339`).
 
-**The BeanPool Recurrence Policy:**
-1. **v1 (Immediate Scope): Single Concrete Events with "Clone / Re-list".**
-   Organizers tap **"Clone Event"** to instantiate a new event with identical descriptions, coordinates, and categories, advancing the date by 1 week or 1 month.
-2. **v2 (Future Horizon): Finite Rolling Materialization.**
-   For verified recurring community fixtures (e.g. "Mullum Farmers Market every Friday 7am–11am"), the server instantiates **discrete, concrete rows** up to 30 days into the future. Each instance is a standard `community_events` row with an optional `parent_series_id`. If one date is rained out, the organizer simply marks that single concrete row `status = 'cancelled'`.
+**RSVP** is a new route `POST /api/marketplace/posts/:id/rsvp` beside `/vote`, calling an `rsvpEvent`
+function modelled on `votePoll` (`posts.ts:530-624`): active member, event active and not ended, group-only
+events require group membership (the same check as `posts.ts:555-561`), body `{ status: 'going' |
+'interested' | null }`. Upsert or delete the `event_rsvps` row; touch `posts.updated_at` so delta sync
+carries it (as `votePoll` does at `posts.ts:606-611`); then mirror membership: `going` inserts a
+`conversation_participants` row, anything else deletes it. The host never leaves the chat.
 
-### 3.5 Aging Out & Lifecycle Retention
+**Auto-hide at end.** Not a sweep. The feed and map queries in `getPosts` (`packages/beanpool-engine/src/posts.ts:293-307`)
+add `AND NOT (p.type = 'event' AND p.event_end_at <= now)` for the normal view, and the poll-style
+exception lets the host and RSVPd members fetch an ended event by id for 30 days. Polls are swept lazily only
+when someone creates a poll (`posts.ts:190`); events avoid the sweep entirely.
 
-Events naturally decay in relevance. The lifecycle model is:
-- **Active Discovery Query Window:**
-  `WHERE deleted_at IS NULL AND status = 'published' AND end_at >= datetime('now', '-6 hours')`
-- **Recent Past Window (30 Days):**
-  Past events remain visible on organizer/attendee profile histories and in the Commons archive for 30 days.
-- **Tombstone Pruning (90 Days):**
-  Similar to `prunePulseItems`, an automated background pruner runs monthly to tombstone events older than 90 days (`scrubEventRows`), clearing memory blobs and photo data while preserving the replication watermark.
+**30-day removal** is one job in the existing pulse scheduler tick (`apps/server/src/engine/pulse-resolver.ts:1962`),
+next to `prunePulseItems`: for events with `event_end_at` older than 30 days, delete `event_rsvps`, delete the
+chat's `messages` and `conversation_participants`, null `event_private_note`, and set `active = 0`,
+`status = 'completed'`. The post row stays, as every other post does (posts are never hard-deleted and carry
+no tombstones; `writeTombstone` is used for conversations, members, projects and friends only). The row is
+what keeps a replica consistent.
+
+**Notifications** use `dispatchPushNotification` (`apps/server/src/state-engine.ts:6245`). Recipients are
+`going` RSVPs minus the actor. Payload `{ screen: 'post', postId }`, which the phone already routes to
+`/post/:id` (`apps/native/services/push-notifications.ts:186-188`). Category `'marketplace'`: old apps have
+that Android channel and the `notify_marketplace` preference (`push-notifications.ts:111`,
+`state-engine.ts:6257`); a new category would fall through on every phone not yet updated.
+
+**Chat rules** reuse the enterprise-thread functions with an event flavour: post requires an RSVP of
+`going` or host, 2000-char cap and the frozen-member block as at `enterprise-thread.ts:121-140`; read requires
+the same (unlike the enterprise thread, whose read route is unauthenticated, `routes/treasury.ts:1400`); no
+edits, as `messaging.ts:276` already refuses for threads; no push per message, as `messaging.ts:183` already
+skips for threads. Read-only once `event_end_at` passes or the event is cancelled, refused with the same shape
+as `enterprise-thread.ts:135`. Host removal marks the row `type = 'removed'` and replaces the text with
+"removed by the host" (`enterprise-thread.ts:213-250`).
+
+### 2.3 Privacy
+
+- **Private note:** host and `going` only, enforced in `rowToPost`, never in the listings pull, never to
+  guests. It is where the gate code and exact meeting spot belong.
+- **Pin:** public like every post pin and every enterprise pin. Approximate is a client-side rounding to three
+  decimals (`packages/beanpool-core/src/geo.ts:9`; PWA `EnterpriseLocationPicker.tsx:124-131`) applied before
+  the coordinates are sent; the server stores what it gets. The event form reuses that picker and its warning
+  text.
+- **Audience:** `getPosts` already hides group-only posts from non-members and direct posts from third parties
+  (`packages/beanpool-engine/src/posts.ts:323-353`). An event inherits that. A group-only event's chat is
+  group-members-only by construction because only they can RSVP.
+- **Guests** (a PWA viewer with no identity) see public events and the pin, never counts by name, never the
+  note, and cannot RSVP; every write is a signed request (`apps/native/utils/crypto.ts:217-220`).
+- **RSVP list:** host sees names; everyone else sees counts. Attendees in the chat see each other's callsigns,
+  which they expect.
+
+### 2.4 Sync and federation
+
+**Delta sync** (backup and mirror replication) copies whole tables. `posts` and `poll_votes` are already
+exported (`packages/beanpool-engine/src/sync.ts:337, 586`) and imported (`apps/server/src/engine/sync.ts:845`).
+Registering `event_rsvps` means the same sites: export, import (last-write-wins on `updated_at`),
+`MAX_IMPORT_ROWS_PER_CATEGORY` (`sync.ts:292`), `clearReplicatedTables`
+(`apps/server/src/state-engine.ts:6107`), `getStateHash` (`packages/beanpool-engine/src/sync.ts:283`), and the
+replica consistency audit. The chat rows ride on `conversations` / `messages`, which replicate already. A backup
+replica therefore holds the private note and RSVPs, as it holds every DM ciphertext today; that is the backup
+model, not a leak.
+
+**Peer communities** see listings through the periodic pull, not delta sync
+(`apps/server/src/federation-listings.ts:72-91`): active, public, `reach != 'local'` posts, filtered by
+`reachAdmitsPeer`. The pull carries id, type, category, title, description, credits, price and author, and
+nothing else: no `lat`/`lng`, no photos, no dates. The receiving side refuses anything but `offer` and `need`
+(`federation-listings.ts:153`) and caches a text-only copy (`:185`). So a shared event would arrive at a peer as
+a title with no pin, no time, no RSVP and no chat. Decision 9 keeps the audience/reach choice; the code makes it
+nearly useless until the pull grows `eventStartAt`, `eventEndAt`, `eventPlaceName` and `lat`/`lng`. See §6 Q5.
+RSVPs and the note never cross nodes either way.
+
+### 2.5 Moderation
+
+Reporting already takes a post: `POST /api/reports` with `targetPostId`
+(`apps/server/src/routes/community.ts:1305`, `submitReport` at `state-engine.ts:4435`), from the phone's post
+screen (`apps/native/app/post/[id].tsx:387`) and the PWA (`apps/pwa/src/lib/api.ts:1195`). An admin acting on
+the report with `deletePost` calls `adminDeletePost` (`routes/admin.ts:1023-1027`, `posts.ts:674`), which
+sets `active = 0, status = 'cancelled'` and broadcasts `post_removed`. Events need one addition there: mark
+the chat read-only and notify Going that the event was removed. Chat messages are reported the way enterprise
+thread messages are (target = the author, reason text names the message).
+
+### 2.6 Old apps
+
+There is no per-request version or capability header today. Signed requests carry key, signature, timestamp
+and nonce only (`apps/native/utils/crypto.ts:217-220`). The node publishes `minAppVersion` in
+`/api/community/health` (`state-engine.ts:4966`) and the phone shows a banner it cannot dismiss when it is
+below the floor (`apps/native/components/GlobalHeader.tsx:268`); the PWA does the same (`apps/pwa/src/App.tsx:156`).
+That is a blunt instrument for operators, not a way to hide one post type.
+
+The phone pulls the whole feed with `GET /api/marketplace/posts?limit=1000&sync=true` and no type filter
+(`apps/native/services/pillar-sync.ts:274`) into a local `posts` table (`apps/native/utils/db.ts:228`) and
+renders anything that is not a poll as an offer/need tile (`apps/native/app/(tabs)/index.tsx:1344-1400`). The
+PWA map pins every non-poll post (`apps/pwa/src/pages/MapPage.tsx:673`). An event sent to a v1.2.33 app would
+show as a zero-Beans offer with no date, and its pin would be an offer pin.
+
+**Guard: events are opt-in on the list route.** `GET /api/marketplace/posts` omits `type = 'event'` unless
+the request says `types=offer,need,poll,event` (or `type=event`). New clients send it; every app in the store
+today does not, so they never receive an event row. The by-id fetch, the RSVP route and the chat routes are
+only reachable from screens that know events. Once every phone that matters is updated the parameter can
+become the default; the health payload's `minAppVersion` is the operator's lever if a straggler needs a nudge.
+No header change, no client detection, no server-side version table.
 
 ---
 
-## 4. Map Integration & Solving the Noise Problem
+## 3. Screens at 320dp and 1.3× font
 
-### 4.1 The 320dp Accessibility Floor Constraint
+Every layout is checked at the floor in memory `product-audience-small-screens`
+(`adb shell wm size 480x854 && wm density 240 && font_scale 1.30`). Row text gets `numberOfLines`; buttons
+`flexShrink: 0`; nothing wraps in the chip strip.
 
-BeanPool must render on narrow Android devices (320dp width) at 1.3× font scale. The map interface cannot support cluttered multi-row controls, wide sidebars, or complex floating scrubbers.
+**Chooser.** The phone's "Create New Post" sheet (`index.tsx:1760-1832`: Offer, Need, Community Poll, Cancel)
+gains a fourth row: 📅 **Event** — "A gathering with a time and a place". Offer and Need push to the protected
+map screen; Event opens a new `NewEventModal`, the way Poll opens `NewPollModal`, so the protected files are
+untouched. The PWA's form toggle (`MapPage.tsx:1056`, `'offer' | 'need' | 'poll'`) gains `'event'`.
 
-```
-┌───────────────────────────────────────────────────────────┐
-│ [GlobalHeader: BeanPool Vine Banner]                     │
-├───────────────────────────────────────────────────────────┤
-│ [Top Segmented Bar:  (🤝 Market)  |  (📅 Events)  | (All) ]│
-├───────────────────────────────────────────────────────────┤
-│ [Sub-Chips (Events Mode): (Today) (Weekend) (This Month) ]│
-│                                                           │
-│                      🗺️ MAP VIEW                           │
-│                                                           │
-│           [ 🟣 Working Bee ]                              │
-│                                    [ 📦 Offer ]           │
-│                    [ 🟣 (3) Market Cluster ]              │
-│                                                           │
-│                                                           │
-│ [FAB Pill: 🌙 | 🎯 | + | − ]               [+ ADD EVENT] │
-├───────────────────────────────────────────────────────────┤
-│ [Bottom Tab Bar: Market | Map | Chat | People | Commons ] │
-└───────────────────────────────────────────────────────────┘
-```
+**Create form**, one column, in this order: title; date and time, two rows "Starts" and "Ends", each a
+button that opens the native picker (`@react-native-community/datetimepicker`, already used in
+`propose-project.tsx`; on Android 8 it is the system dialog, date then time, which works with large fonts
+because it is the OS's own dialog; on the PWA `<input type="datetime-local">`); place name; the pin picker
+with Approximate and the warning, reused from enterprises; description; photo; "Note for people who are
+going" with the helper "Only people who tap Going see this"; audience (the existing control); host selector
+shown only when the member is a keeper or convenor ("Post as: me / Bindarrabi Hall / Repair group"). Copy to a
+new date opens this form pre-filled with the dates cleared.
 
-### 4.2 Map Layering & Temporal Filtering
-
-1. **Top Segmented Filter Bar:**
-   The existing `All | Offers | Needs | 🏷️ Category` filter bar in `MapScreen` is elevated to a primary mode switcher:
-   - **Market Mode (Default):** Shows Offers (Green `#10b981`) and Needs (Orange `#ea580c`).
-   - **Events Mode:** Shows Events (Purple/Indigo `#8b5cf6`), swapping the sub-chips to **Temporal Filters**:
-     `⚡ Today` | `🌿 This Weekend` | `📅 Next 7 Days` | `🏷️ Category`.
-   - **All Mode:** Shows both, with cluster pins dynamically displaying mixed color rings.
-2. **Temporal Quick-Chips (No Complex Slider):**
-   A slider widget fails usability tests at 320dp with touch targets < 48dp. Discrete, thumb-friendly chips provide instant temporal slicing:
-   - `Today`: `start_at <= date('now', 'localtime', '+1 day') AND end_at >= datetime('now')`
-   - `This Weekend`: Bounds between upcoming Friday 17:00 and Sunday 23:59 local node time.
-   - `Next 7 Days`: Rolling 7-day window.
-
-### 4.3 Pin Visual Geometry & Rasterization Pipeline
-
-Under `UnifiedMapPin.tsx`, BeanPool uses an off-screen rasterization engine (`react-native-view-shot` capturing SVGs to PNGs) to prevent Android native marker canvas tearing and ensure 60fps clustering.
-
-**The Event Pin Visual Contract:**
-- **Pin Head Shape:** Distinct **Hexagonal Shield** or **Badge Geometry** (differentiating from the teardrop circle used for marketplace listings).
-- **Brand Palette:** Deep Purple / Indigo background (`#7c3aed` to `#6366f1`) with a white inner circle.
-- **Glyph:** Event category emoji (e.g. 🐝 for Working Bee, 🔧 for Repair Cafe, 🍎 for Food Swap, 🎪 for Market).
-- **"Happening Today" Indicator:** A pulsing golden amber halo (`#f59e0b`) around events active within 12 hours.
+**Card** in the feed and the map preview, 320dp:
 
 ```
-Market Pin (Teardrop):            Event Pin (Hexagonal Badge):
-      ╭───────╮                         ╭─────────╮
-     │   📦   │                        ╱    🐝    ╲
-      ╰───┬───╯                        ╲         ╱
-          ▼                             ╰───┬───╯
-     Green (#10b981)                        ▼
-                                       Purple (#7c3aed)
+┌────────────────────────────────┐
+│ SAT 27 SEP · 9:00–12:00        │  ← date+time first, largest text
+│ Working bee at the hall        │
+│ 📍 Bindarrabi Hall · 2.4 km    │
+│ 👥 7 going · 3 interested      │
+│ [ Going ✓ ]  [ Interested ]    │  ← my status shown on the filled button
+└────────────────────────────────┘
 ```
 
-### 4.4 Co-Located Events & Cluster Resolution
+CANCELLED or UPDATED is a badge on the first line. Host name is on the detail, not the card. Distance uses
+the same "from my location" the map already computes.
 
-In regional towns, multiple events frequently occur at the same anchor venue (e.g. 3 different stalls and a workshop all at the *Mullumbimby Community Gardens* on Friday).
-- **Cluster Behavior:** The map clustering engine (`react-native-map-clustering`) groups co-located event pins.
-- **Multi-Event Preview Sheet:** Tapping a cluster of co-located events opens a **Horizontal Carousel Preview Card** at the bottom of the screen, allowing users to swipe through the events happening at that location without expanding overlapping pins.
+**Event detail** (phone: `/post/:id` learns to branch on `type === 'event'`, as it does for needs; PWA: the
+existing post modal at `MarketplacePage.tsx:724` gains an event branch beside the poll branch): photo, big
+date and time with "Add to my Going", place name with a "Show on map" link, description, host line, RSVP
+buttons, the private note in a shaded box when the viewer may see it, then "Open event chat (7)" and, for the
+host, "Who's going" and "Cancel event" / "Copy to a new date".
+
+**Chat entry.** The chat screen is the existing `/chat/:id` (event id), with the private note pinned as a
+non-scrolling card at the top and a one-line footer "Visible to the host and everyone going". After the end:
+"This event has ended. The chat is read-only." The Talk list shows it with the event title because the
+conversation row carries `name`.
+
+**Web map** (`MapPage.tsx`, not protected): a purple pin with a calendar glyph via the `L.divIcon` path
+enterprise pins use (`:825`); a chip strip **Today · This weekend · Next 7 days · All** above the map, filtering
+on `event_start_at`; cancelled and ended events never pin.
+
+**Native map** is step 2, its own PR: the pin variant in `UnifiedMapPin.tsx` (SVG → PNG through
+`buildVariantList`), the layer toggle and chips in `map.tsx`. Both are protected files
+(memory `protected-header-and-map`) and need Marty's explicit go before that PR is briefed.
 
 ---
 
-## 5. Safety & Privacy: A First-Class Architecture
+## 4. Build slices
 
-An event pin is fundamentally more privacy-sensitive than a marketplace listing: it broadcasts that a specific property owner will be at a specific location, or invites people directly onto private residential or off-grid land.
+Each is a normal PR against `main` under the one-hit release plan, reviewable on its own and shippable
+because the opt-in guard keeps old apps blind to events until they choose to see them.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       TIERED LOCATION PRIVACY MODEL                         │
-├──────────────────────────┬──────────────────────────────────────────────────┤
-│ Level 1: Public Venue    │ • Exact pin on map for all viewers.              │
-│ (Halls, Gardens, Parks)  │ • Full street address visible publicly.          │
-├──────────────────────────┼──────────────────────────────────────────────────┤
-│ Level 2: Fuzzed (DEFAULT)│ • Map pin randomly jittered within 500m radius.  │
-│ (Homesteads, Residences) │ • Street address HIDDEN on map and public feeds. │
-│                          │ • General area shown (e.g. "Main Arm, near Hall")│
-├──────────────────────────┼──────────────────────────────────────────────────┤
-│ Level 3: RSVP-Gated      │ • Exact address & gate code revealed ONLY after: │
-│ Disclosure               │   1. Member submits RSVP, AND                    │
-│                          │   2. Host confirms (or member is Elder-vouched)  │
-│                          │ • Delivered via encrypted in-app event DM thread.│
-└──────────────────────────┴──────────────────────────────────────────────────┘
-```
+| # | Slice | Size | Risk | Touches | Test |
+|---|---|---|---|---|---|
+| 1 | **Server: event post + RSVP + guard.** Type, columns, `event_rsvps`, create/edit/cancel/RSVP rules, cap, auto-hide, opt-in `types=` parameter, sync registration. | M | low | `engine/posts.ts`, `packages/beanpool-engine/src/posts.ts`, `db/db.ts`, `schema.sql`, `routes/marketplace.ts`, both `sync.ts`, `state-engine.ts` (hash, clear), `audit.ts` | Unit tests beside the poll tests: create/validate, cap at 5, RSVP upsert/delete, list omits events without `types=`, by-id after end for host and Going only, sync round-trip of `event_rsvps`. |
+| 2 | **PWA: create, card, detail, RSVP, note, map pin + chips.** | M | low | `MapPage.tsx`, `MarketplacePage.tsx`, new `EventCard.tsx`, `lib/api.ts` | Vitest for the card at 320px; manual: create with Approximate, RSVP flips counts, note hidden until Going, chips filter. |
+| 3 | **Native (no protected files): chooser row, `NewEventModal`, feed tile, detail with RSVP and note.** | M | medium: the feed screen is large | `index.tsx`, new `components/NewEventModal.tsx`, `app/post/[id].tsx`, `utils/db.ts` (send `types=`, cache columns) | Emulator at the floor: form with the Android 8 picker, tile, detail, RSVP. Old build still shows no events against the same node. |
+| 4 | **Event chat, server + both clients.** `event_thread` conversation, membership mirror, read/post/remove rules, read-only after end, pinned note. | M | medium: touches messaging | new `engine/event-thread.ts`, `routes/marketplace.ts`, `messaging.ts` (thread exemptions), `/chat/:id` on both clients | Unit: Going adds, Interested removes, host removal, read-only after end, non-member read refused. Manual: chat appears in Talk with unread. |
+| 5 | **Change and cancel notifications, Copy to a new date.** | S | low | `engine/posts.ts`, `state-engine.ts` (push), both create forms | Unit: time change notifies Going only; cancel sets state and read-only chat. Device: push arrives on the `marketplace` channel. |
+| 6 | **Moderation hook and 30-day scrub.** `adminDeletePost` event branch, scheduler job, replica consistency. | S | low | `engine/posts.ts`, `pulse-resolver.ts` scheduler, `audit.ts` | Unit: scrub deletes RSVPs, messages, note; keeps the row; hash matches on a replica. |
+| 7 | **Native map layer** (separate PR, after Marty opens the protected files). | M | high: protected, PNG pin pipeline | `map.tsx`, `UnifiedMapPin.tsx`, `Map.web.tsx` | Screenshot at the floor, pin variants regenerate, chips do not wrap. |
 
-### 5.1 The Default Must Be Fuzzed (`address_hidden = 1`)
-
-**Policy Rule:** Every event created on BeanPool defaults to `address_hidden = 1` unless the organizer explicitly checks *"This is a public venue (hall, park, shopfront)"*.
-
-*Why:* In regional Australia, many intentional communities, bush properties, and homesteads have private access roads, locked fire gates, and solar/water infrastructure that cannot accommodate unannounced drive-ins. Fuzzing by default protects community members from unvetted visitors and burglary risk while preserving spatial discovery.
-
-### 5.2 Unauthenticated PWA vs. Verified Member Gating
-
-1. **Unauthenticated PWA Visitors:**
-   - See fuzzed event pins with general suburb/valley labels.
-   - Exact coordinates and attendee rosters are stripped by the API endpoint (`GET /api/events/public-map`).
-2. **Authenticated Node Members:**
-   - Can view event descriptions, organizer trust profiles, and attendee counts.
-   - Tapping **"RSVP (Going)"** triggers the gated disclosure workflow.
-3. **Host Approval & Elder Auto-Unlock:**
-   - Hosts can configure *"Auto-reveal address to Elder-vouched members"* (`can_vouch` / `standing >= 50`).
-   - For unvouched or new members, the host receives an in-app notification to confirm the RSVP before the private address is released.
-
-### 5.3 Emergency Cancellation & Address Scrubbing
-
-If an event is cancelled (due to bushfire, flood, weather, or security concerns), the host taps **"Cancel Event"**:
-1. `status` flips to `'cancelled'` with an optional `cancellation_reason`.
-2. The exact address and coordinates are scrubbed from the active feed.
-3. An immediate high-priority push notification is dispatched to all RSVP'd attendees.
-4. The pin turns grey with a strikethrough banner on the map for 24 hours so attendees checking the map see the cancellation plainly.
+Order: 1 → 2 and 3 in parallel → 4 → 5 → 6 → store release → node deploy → 7. Full suite last, in CI.
 
 ---
 
-## 6. Federation Architecture & Cross-Node Sync
+## 5. Not in v1
 
-BeanPool's federation model connects independent SQLite community nodes (e.g. Mullumbimby, Bindarrabi, Castlemaine) via libp2p.
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    CROSS-NODE EVENT FEDERATION PIPELINE                     │
-│                                                                             │
-│   Mullumbimby Node (Author)                  Bindarrabi Node (Peer)         │
-│   ┌───────────────────────────┐              ┌───────────────────────────┐  │
-│   │ community_events (row)    │              │ community_events (replica)│  │
-│   │ reach = 'peers'           │              │ origin_node = 'mullum_id' │  │
-│   └─────────────┬─────────────┘              └─────────────▲─────────────┘  │
-│                 │ exportSyncState()                        │                │
-│                 │ (Signed Delta Payload)                   │                │
-│                 └──────────────────► libp2p ───────────────┘                │
-│                                 importRemoteState()                         │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 6.1 Visibility & Reach Filtering
-
-Events follow the exact reach model established in #143 for marketplace posts:
-- `reach = 'local'` (Default): The event replicates only to local backup mirrors; it is never broadcast to peer communities.
-- `reach = 'peers'`: The event replicates to explicitly selected partner nodes listed in `reach_peers` (e.g. Mullumbimby sharing a Permaculture Convergence with Bindarrabi and Nimbin).
-- `reach = 'everywhere'`: The event replicates to all authorized federation peers.
-
-### 6.2 Signed Delta Sync Registration (The Four Sites)
-
-Conforming to `CONTRACTS.md §2`, event replication must be registered across all four synchronization sites:
-
-1. **Type & Payload Definition:**
-   `SyncCommunityEvent` and `SyncEventAttendee` added to `packages/beanpool-engine/src/sync.ts`.
-2. **Delta Exporter:**
-   `exportSyncState` updated to select `WHERE updated_at >= :since` with tombstone inclusion.
-3. **Delta Importer:**
-   `importRemoteState` in `apps/server/src/engine/sync.ts` updated with:
-   - Max row batch guard (`MAX_IMPORT_ROWS_PER_CATEGORY = 250,000`).
-   - Prepared statement hoisted above the loop (preventing `better-sqlite3` recompilation overhead).
-   - Last-Write-Wins (LWW) conflict resolution: `WHERE excluded.updated_at > community_events.updated_at`.
-4. **Resync Cleanup:**
-   `clearReplicatedTables()` in `apps/server/src/state-engine.ts` updated to include `community_events` and `event_attendees`.
-
-### 6.3 State Convergence Checks
-
-To prevent silent replication divergence between nodes:
-- **`getStateHash` (`packages/beanpool-engine/src/sync.ts`):**
-  Hashes live event IDs (`WHERE deleted_at IS NULL AND status != 'cancelled'`).
-- **`getReplicaConsistency` (`packages/beanpool-engine/src/audit.ts`):**
-  Includes `community_events` and `event_attendees` in table row count comparisons.
-
-### 6.4 Cross-Node Economic Settlements for Events
-
-When a paid workshop charges Beans across nodes (e.g. a Bindarrabi member attending a Mullum ceramic firing workshop):
-- The ticket transaction executes via the existing **#104 Settlement Exchange** (`settlements` table).
-- The buyer's home node escrows the beans and issues a signed settlement receipt; the host's node credits the host's local balance and adjusts the inter-node energy balance (`bridge_bindarrabi`).
+Paid entry or tickets. Capacity limits and waitlists. Repeat rules or a materialiser (Copy to a new date
+only). Host approval of attendees. A Pulse "happening soon" strip. A host page listing its events. Calendar
+export or OAuth. QR check-in. Cross-node RSVPs. Reminder pushes before the start. Member-to-member invites.
+Federation of the pin, photo and dates (see Q5).
 
 ---
 
-## 7. Connections to Existing Subsystems
+## 6. Questions for Marty
 
-### 7.1 Integration with The Pulse (`apps/native/app/pulse.tsx`)
+Each is something the code forces that the 23 decisions do not settle. Recommendation first, then why.
 
-The Pulse is BeanPool's chronological community feed. Events must not live exclusively on the map; they should naturally surface in The Pulse as temporal activity cards.
+1. **Compatibility guard: opt-in `types=` parameter on the list route?** Recommend yes, as in §2.6.
+   Why: there is no version header today, and the phone pulls the whole feed unfiltered into a local cache
+   (`pillar-sync.ts:274`), so anything else means detecting old clients server-side.
 
-```
-Pulse Feed Integration:
-  [Pulse Screen]
-     ├── Creator Videos & Articles (Autolisted YouTube/RSS)
-     ├── Living Activity Waterfall (Trade completions, joins)
-     └── 🌟 UPCOMING EVENTS PIN (Sticky Carousel at Top of Pulse)
-           ├── "🐝 Working Bee — Tomorrow 9:00 AM @ Main Arm"
-           └── "🔧 Repair Cafe — This Saturday 10:00 AM @ Hall"
-```
+2. **Event chat stored server-readable (`plaintext-v1`, like the enterprise thread), not end-to-end like
+   DMs?** Recommend server-readable, with one line on the screen saying the node can read it.
+   Why: DM encryption binds ciphertext to a fixed conversation and participants (`messaging.ts:126-133`);
+   membership that follows RSVPs, a host removing messages and a pinned note all need the server to hold text.
 
-*Mechanics:*
-`GET /api/pulse/feed` is extended to inject upcoming events within the next 48 hours into the top hero slot of the feed, complete with an instant "Going" RSVP button.
+3. **Chat membership mirrored into `conversation_participants` as RSVPs change?** Recommend yes, plus an RSVP
+   re-check on every read and post.
+   Why: only participants rows put the chat in the Talk list with unread counts; the re-check is what makes
+   "Interested removes you" true even if the mirror lags.
 
-### 7.2 Integration with Commons & Community Governance (`docs/community-governance.md`)
+4. **Push category `marketplace` for event notifications in v1, not a new `events` category?** Recommend
+   `marketplace`.
+   Why: every phone in the store already has that Android channel and preference (`push-notifications.ts:111`);
+   a new category needs a client release before any phone hears it.
 
-Events provide the operational muscle for the Commons:
-1. **Enterprise Working Bees:**
-   A community enterprise (e.g. the 🥚 *Community Egg Flock* or 🚜 *Shared Tractor Co-op*) can author an event as a Treasury actor (`treasury_pubkey`).
-2. **Labor-for-Credit (Earned Credit):**
-   Members participating in designated Commons Working Bees can be awarded earned credit or have volunteer hours recorded directly to their trust profile (`members.earned_credit`), boosting their dynamic floor.
-3. **Surplus Funding:**
-   Ticket fees paid in Beans for community events can deposit directly into the sub-treasury of an enterprise or the root Commons pool.
+5. **Sharing to linked communities: keep the reach choice but force `local` in v1, or extend the listings pull
+   first?** Recommend force `local` for now, like polls (`posts.ts:229`), and grow the pull in a later slice.
+   Why: the pull carries no pin, photo or dates and refuses non-offer/need types
+   (`federation-listings.ts:72-91, 153`); a shared event today would land as a bare title.
 
-### 7.3 Navigation & Bottom Tab Bar Integrity
+6. **Upcoming cap: 5 per author, enterprise and group counted as their own author?** Recommend 5, enforced in
+   the create transaction like the poll limit (`posts.ts:243-251`).
+   Why: the number is yours to set; the mechanism has one precedent and it is that one.
 
-The native bottom navigation bar is strictly capped at **6 slots** (`Market`, `Map`, `Chat`, `People`, `Commons`, `Ledger`) to ensure compliance with the 320dp width + 1.3× font scale floor.
-- **Decision:** **DO NOT ADD A 7TH TAB.**
-- Events live natively as a first-class layer on the **Map tab**, with chronological previews in **The Pulse** and governance ties in the **Commons tab**.
+7. **After RSVPs exist, may the host still edit everything?** Recommend yes: time and place changes set
+   UPDATED and notify Going, other edits are silent.
+   Why: polls lock the question after votes (`posts.ts:369-383`); an event that could not move its start time
+   after the first RSVP would be cancelled and re-posted instead, losing the RSVPs.
 
----
+8. **"Removed after 30 days" as a scrub (RSVPs, chat, note deleted; the post row kept inactive), not a hard
+   delete?** Recommend scrub.
+   Why: no post is ever hard-deleted today and posts carry no tombstones; a hard delete would be the first, and
+   replicas would keep the row anyway.
 
-## 8. Phasing: Ruthless Scoping
+9. **Who counts as host for an enterprise- or group-hosted event: every keeper / every active convenor, or only
+   the member who posted it?** Recommend every keeper or convenor, matching `removePost` (`posts.ts:299-320`).
+   Why: the poster may be away on the day; the enterprise thread already lets any keeper moderate.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             PHASING ROADMAP                                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ PHASE 1: Minimal Viable Events (v1 — Ship Next Month)                       │
-│ • Single concrete events (published / cancelled)                            │
-│ • "Clone Event" button (manual recurrence)                                  │
-│ • Map Layer Switcher (Market vs Events) + Today/Weekend/7-Day chips        │
-│ • Hexagonal Purple Event Pin in UnifiedMapPin                               │
-│ • Location Fuzzing (500m radius blur) + RSVP-gated address reveal           │
-│ • Basic RSVP (Going / Interested) + attendee count                          │
-│ • Delta sync replication across nodes (reach = 'local' | 'peers')           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ PHASE 2: Feed & Governance Synergy (v2)                                     │
-│ • Sticky "Happening Soon" Hero Carousel on The Pulse                        │
-│ • Treasury Enterprise co-hosting & Commons earned-credit rewards            │
-│ • Finite 30-day rolling recurrence materialization                          │
-│ • Direct in-app Event Chat Thread auto-creation                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ PHASE 3: Advanced Ticketing & Settlements (v3)                              │
-│ • Cross-node Beans ticket escrow via #104 settlements                       │
-│ • Waitlist management & capacity automated cutoffs                          │
-│ • iCal / .ics calendar feed export for mobile device calendars              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### What is Ruthlessly EXCLUDED from v1:
-- ❌ **NO RFC 5545 RRule Parser:** No complex recurring calendar formulas.
-- ❌ **NO Multi-Tiered Ticket Classes:** No VIP vs General Admission pricing tiers.
-- ❌ **NO Third-Party Calendar OAuth Sync:** No bidirectional Google/Apple Calendar cloud syncing.
-- ❌ **NO QR Code Barcode Scanners:** Trust-based member check-in via attendee list.
-- ❌ **NO External Web Scrapers:** Events are authored natively by members.
-
----
-
-## 9. Risks & Non-Goals
-
-### 9.1 Explicit Non-Goals
-
-1. **BeanPool is NOT Eventbrite:** We do not optimize for commercial concerts, ticket surcharges, or massive spectator events.
-2. **BeanPool is NOT Facebook Events:** We do not use engagement algorithms, tracking pixels, or viral data harvesting.
-3. **BeanPool is NOT a Conference Management Suite:** No multi-track badges, sponsor booths, or webinar streaming integrations.
-
-### 9.2 Social & System Failure Modes and Mitigations
-
-| Failure Mode | The Social Reality | Technical & Architectural Mitigation |
-|---|---|---|
-| **The "Dead Calendar" Problem** | If only 2 events are posted per month, the map looks empty and members stop checking. | Map defaults to showing active **Marketplace Listings** (Offers & Needs), so the map is always vibrant and populated. Events layer over active trade. |
-| **Commercial Spam & Power-User Dominance** | A commercial yoga studio or cafe spams 40 recurring events, burying community working bees. | Rate limit unvouched accounts; limit active events per member (max 4 concurrent); allow Elder moderation and category filtering. |
-| **The "No-Show Ghost Town"** | 20 people click "Going" casually on a whim; 2 turn up to the working bee. | RSVPs require a real cryptographic signature. For limited-capacity workshops, organizers can attach a nominal Bean deposit (e.g. 5 beans refunded upon attendance). |
-| **Bushfire / Flood Misdirection** | An event is scheduled in a valley that experiences active flooding or fire threats. | Prominent host emergency cancellation button; push notifications broadcast to all attendees; fuzzed coordinates prevent strangers wandering into hazard zones. |
-
----
-
-## 10. Codebase Discoveries & Technical Notes for Marty
-
-During this research pass across `apps/native/` and `apps/server/`, several structural nuances in the existing codebase were documented:
-
-1. **Marker Bitmap Tearing on Android (`UnifiedMapPin.tsx`):**
-   The codebase solved Android marker re-render flashing by rendering SVGs in an off-screen container (`MapMarkerManager`), capturing them to temporary PNG files via `react-native-view-shot`, and passing static image URIs to `react-native-maps` `Marker`.
-   *Implication for Events:* Event pins **must** plug into `MapMarkerManager` and `buildVariantList` to pre-capture purple badge PNGs before rendering on Android.
-2. **Schema Migration Ordering in `apps/server/src/db/db.ts`:**
-   `db.ts` enforces that **all `ALTER TABLE ... ADD COLUMN` statements must execute BEFORE `db.exec(schemaSql)`**. If a new column (e.g. on `community_events`) is referenced in an index in `schema.sql`, placing the ALTER after `schema.sql` causes SQLite to abort with `no such column` on existing live databases.
-3. **`better-sqlite3` Statement Compilation in Sync (`sync.ts`):**
-   `better-sqlite3` compiles statements on every `db.prepare()` call. In `apps/server/src/engine/sync.ts`, statement preparation must remain strictly *outside* the import loop to prevent blocking the event loop during large snapshot syncs.
-4. **Header and Tab Layout Constraints (`apps/native/app/(tabs)/_layout.tsx`):**
-   The tab bar uses `neon-vines-banner.jpg` with a fixed height and `fontSize: 10` labels. Adding a 7th tab causes text truncation and touch-target overlap on 320dp test devices. The Map tab remains the sole spatial destination.
-5. **FTS5 Virtual Table Triggers (`posts_fts`):**
-   The search keyword expansion uses `synonymMap` from `@beanpool/core`. A dedicated `events_fts` virtual table with triggers mirroring `title`, `description`, `location_name`, and `search_keywords` will provide instant full-text search without regex scans.
-
----
-
-## Conclusion & Next Steps
-
-This design delivers a resilient, localized, and privacy-preserving foundation for Events in BeanPool. By treating Events as a first-class spatial and temporal entity, respecting off-grid community privacy, and integrating with the existing mutual-credit and federation engine, BeanPool can reliably empower regional communities to coordinate, gather, and thrive.
+10. **End time required, or optional with a default of start + 2 hours?** Recommend optional with the default.
+    Why: decision 5 names both fields; the picker on Android 8 is two dialogs per field, and most working
+    bees do not know when they will finish. The default keeps auto-hide and read-only chat working.

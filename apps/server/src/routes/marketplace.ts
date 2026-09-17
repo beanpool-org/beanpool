@@ -96,6 +96,8 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     ctx.body = { data: row.data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 
+const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
+
 router.get('/api/marketplace/posts', async (ctx) => {
     const id = ctx.query.id as string | undefined;
     const type = ctx.query.type as string | undefined;
@@ -151,9 +153,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
     // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
     // fetch is not guarded — only a screen that knows events can hold an event's id.
+    // The list is intersected with the known post types before it reaches SQL: each entry is a bound
+    // variable, so an unchecked list of tens of thousands would exceed SQLite's limit and 500 the route.
     const types = typeof ctx.query.types === 'string'
-        ? ctx.query.types.split(',').map(t => t.trim()).filter(Boolean)
+        ? KNOWN_POST_TYPES.filter(t => (ctx.query.types as string).split(',').some(q => q.trim() === t))
         : undefined;
+    if (types && types.length === 0) {
+        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter".
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = '[]';
+        return;
+    }
     const wantsEvents = type === 'event' || !!types?.includes('event');
     const excludeEvents = !id && !wantsEvents;
 
@@ -176,6 +187,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
         return;
     }
     if (!assertActorEntitled(ctx, authorPublicKey)) return;
+    // A keeper posting for an enterprise is recorded as the member who did it, as the enterprise routes do
+    // (routes/treasury.ts) — the web app's event form hosts through this route with "Post as" (events §3).
+    const actor = ctx.state?.actor as string | undefined;
+    const createdBy = actor && actor !== authorPublicKey ? actor : undefined;
     try {
         const post = createPost(
             type, category || 'other', title, description || '',
@@ -190,7 +205,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
             { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
-              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote }
+              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote, createdBy }
         );
         if (!post) {
             ctx.status = 400;

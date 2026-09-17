@@ -7,7 +7,8 @@
  *  4. Cap of 5 upcoming events per author, with member, enterprise and group pools separate.
  *  5. RSVP upsert (going ↔ interested) and delete (not going), refused on cancelled/ended/non-group-member.
  *  6. Private note: host and Going only; never in a broadcast.
- *  7. GET /api/marketplace/posts omits events without `types=` (also in sync mode); includes them with it.
+ *  7. GET /api/marketplace/posts omits events without `types=` (also in sync mode); includes them with it;
+ *     a types= list is intersected with the known types, so a very long one cannot 500.
  *  8. Ended events leave the feed; by id they stay readable to the host and Going only.
  *  9. Edit: time/place change marks UPDATED, other edits do not; convenor may edit; cancel via remove.
  * 10. Events cannot be traded.
@@ -229,6 +230,24 @@ async function main(): Promise<void> {
     assert(view(goer)!.eventRsvps === undefined && view(goer)!.goingCount === 1 && view(goer)!.interestedCount === 1,
         'everyone else sees counts, not names');
     const keeperEvent = getPosts(db, { authorPubkey: treasury, viewerPubkey: host, types: ['event'] })[0];
+
+    // The web app hosts for an enterprise through the list route with the enterprise as author: the keeper
+    // who did it is recorded as created_by, and a member who is not a keeper is refused.
+    const treasury2 = createTreasury('Hall Committee', AVATAR, 0).publicKey;
+    adminAssignTreasuryOperator(treasury2, goer, 'admin');
+    const createCtx = (actor: string, author: string) => ({
+        params: {}, state: { actor }, get: () => '', set: () => { },
+        requestBody: { type: 'event', title: 'Hall working bee', authorPublicKey: author, lat: -28.5, lng: 153.5, eventStartAt: inHours(30) },
+    });
+    let hostCtx: any = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(goer, treasury2));
+    const hostedRow = hostCtx.body?.post && db.prepare('SELECT author_pubkey, created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
+    assert(!!hostedRow && hostedRow.author_pubkey === treasury2 && hostedRow.created_by === goer,
+        'a keeper creating an event for their enterprise through the list route is recorded as created_by');
+    hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, treasury2));
+    assert(hostCtx.status === 403, 'a member who is not a keeper cannot host an event for the enterprise');
+    hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, stranger));
+    const ownRow = hostCtx.body?.post && db.prepare('SELECT created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
+    assert(!!ownRow && ownRow.created_by === null, "a member's own event has no created_by");
     assert(!!keeperEvent && Array.isArray(keeperEvent.eventRsvps), "a keeper is a host of the enterprise's event");
     const leaked = broadcasts.filter(b => b.post?.type === 'event' && (b.post.eventPrivateNote !== undefined || b.post.eventRsvps !== undefined || b.post.myRsvp !== undefined));
     assert(leaked.length === 0, 'no broadcast carries a private note, RSVP list or viewer status');
@@ -249,6 +268,21 @@ async function main(): Promise<void> {
     assert(onlyEvents.includes(ev.id) && !onlyEvents.includes(offer.id), 'type=event gets events only');
     const byId = await listIds(router, { id: ev.id }, goer);
     assert(byId.length === 1 && byId[0] === ev.id, 'a by-id fetch returns the event without types');
+    // A types= list is intersected with the four known post types before it reaches SQL, so a very long
+    // list cannot exceed SQLite's bound-variable limit and 500 the route.
+    let longCtx: any;
+    try {
+        longCtx = await dispatch(router, 'GET', '/api/marketplace/posts', listCtx({ types: `${'offer,'.repeat(40000)}event` }, goer));
+    } catch (e: any) {
+        longCtx = { status: 500, body: '[]', error: e?.message };
+    }
+    const longIds = longCtx.status === 200 ? (JSON.parse(longCtx.body) as any[]).map(p => p.id) : [];
+    assert(longCtx.status === 200 && longIds.includes(ev.id) && longIds.includes(offer.id),
+        `a types= list of 40,001 entries answers 200 with offers and events (got ${longCtx.status}${longCtx.error ? `: ${longCtx.error}` : ''})`);
+    const unknownOnly = await listIds(router, { types: 'bogus,nonsense' }, goer);
+    assert(unknownOnly.length === 0, 'a types= list of unknown types matches nothing, not everything');
+    const withJunk = await listIds(router, { types: 'bogus,event' }, goer);
+    assert(withJunk.includes(ev.id) && !withJunk.includes(offer.id), 'unknown entries are dropped and known ones kept');
 
     // ── 8. Auto-hide at end; by id after end ─────────────────────────────────────────────────
     console.log('\n--- 8. Ended events ---');

@@ -90,3 +90,48 @@ describe('MarketplacePage: the viewer balance is a member-only request', () => {
         await waitFor(() => expect(api.getBalance).toHaveBeenCalledTimes(1));
     });
 });
+
+describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, slice 2)', () => {
+    const HOUR = 60 * 60 * 1000;
+    const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
+    const event = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
+        id, type: 'event', category: 'community', title, description: 'Bring gloves', credits: 0, priceType: 'fixed',
+        status: 'active', active: true, authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: new Date().toISOString(),
+        lat: -28.55, lng: 153.5, eventStartAt: inHours(30), eventPlaceName: 'Bindarrabi Hall', eventState: 'scheduled',
+        goingCount: 7, interestedCount: 3, myRsvp: null, ...extra,
+    });
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([
+            ...posts,
+            event('ev-open', 'Working bee'),
+            event('ev-updated', 'Repair café', { eventState: 'updated' }),
+            event('ev-ended', 'Last week', { eventStartAt: inHours(-30), eventEndAt: inHours(-28) }),
+        ] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('asks the node for events, shows them as event cards, and leaves out ended ones', async () => {
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Working bee');
+        expect(api.getMarketplacePosts).toHaveBeenCalledWith(expect.objectContaining({ types: 'offer,need,poll,event' }));
+        const cards = screen.getAllByTestId('event-card');
+        expect(cards).toHaveLength(2);
+        expect(cards.some(c => c.textContent?.includes('UPDATED'))).toBe(true);
+        expect(screen.queryByText('Last week')).not.toBeInTheDocument();
+        expect(screen.getByText('Bicycle Repair')).toBeInTheDocument();
+    });
+
+    it('opens the event detail from the card, with the host line', async () => {
+        render(<MarketplacePage identity={identity} />);
+        const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
+        await act(async () => { open.click(); });
+        const detail = await screen.findByTestId('event-detail');
+        expect(detail).toHaveTextContent('Hosted by Hazel');
+        expect(detail).toHaveTextContent('Bindarrabi Hall');
+    });
+});

@@ -1,4 +1,4 @@
-import { render, waitFor, act } from '@testing-library/react';
+import { render, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { MapPage } from './MapPage';
@@ -44,6 +44,8 @@ vi.mock('leaflet', () => {
                     },
                     listeners,
                     addTo: vi.fn().mockReturnThis(),
+                    setLatLng: vi.fn(),
+                    remove: vi.fn(),
                     on: vi.fn((event: string, handler: (...args: any[]) => any) => {
                         listeners[event] = handler;
                     }),
@@ -353,5 +355,126 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(view!.getByTestId('map-preview-card')).toBeVisible();
         expect(view!.getByTestId('map-preview-card')).toHaveTextContent('A dozen eggs');
         expect(view!.getByTestId('map-new-post-panel')).toBeVisible();
+    });
+});
+
+describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
+    const HOUR = 60 * 60 * 1000;
+    const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
+    const ev = (id: string, title: string, startInHours: number, extra: Record<string, unknown> = {}) => ({
+        id, type: 'event', category: 'community', title, description: '', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true,
+        status: 'active', repeatable: false, lat: -28.55, lng: 153.5, eventStartAt: inHours(startInHours),
+        eventState: 'scheduled', goingCount: 2, interestedCount: 1, myRsvp: null, ...extra,
+    });
+    const offer = {
+        id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
+        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
+        lat: -28.5495, lng: 153.5005,
+    };
+    // Starts in a quarter of an hour, so it is inside "Next 7 days" whenever the suite runs.
+    const soon = ev('ev-soon', 'Repair café', 0.25);
+    const later = ev('ev-later', 'Spring working bee', 24 * 20);
+    const cancelled = ev('ev-cancelled', 'Called off', 2, { eventState: 'cancelled' });
+    const ended = ev('ev-ended', 'Already over', -5, { eventEndAt: inHours(-3) });
+
+    const eventPins = () => mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([offer, soon, later, cancelled, ended] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it('asks the node for events with types=, as old store apps do not', async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalledWith({ types: 'offer,need,poll,event' }));
+    });
+
+    it('pins open events with the purple calendar pin, never cancelled or ended ones, and keeps them off the offer pins', async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+        const titles = eventPins().map(m => m.opts.title);
+        expect(new Set(titles)).toEqual(new Set(['Event: Repair café', 'Event: Spring working bee']));
+        expect(eventPins()[0].opts.html).toContain('📅');
+        expect(eventPins()[0].opts.html).toContain('#7c3aed');
+        const offerPins = mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+        expect(offerPins.length).toBeGreaterThan(0);
+        expect(offerPins.every(m => !String(m.opts.html).includes('📅'))).toBe(true);
+    });
+
+    it('filters event pins with Today / This weekend / Next 7 days / All, in one row', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        const chips = await view!.findByTestId('event-window-chips');
+        expect(chips.className).toContain('flex-nowrap');
+        expect(chips.className).toContain('overflow-x-auto');
+        const buttons = Array.from(chips.querySelectorAll('button'));
+        expect(buttons.map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', '📅 All']);
+        for (const b of buttons) expect(b.className).toContain('whitespace-nowrap');
+
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'Next 7 days' })); });
+        expect(eventPins().map(m => m.opts.title)).toEqual(['Event: Repair café']);
+        // The chips never touch offers.
+        expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true);
+
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(view!.getByRole('button', { name: '📅 All' })); });
+        expect(eventPins().length).toBe(2);
+    });
+
+    it('opens the event card when an event pin is tapped', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(eventPins().length).toBe(2));
+        const pin = eventPins().find(m => m.opts.title === 'Event: Spring working bee')!;
+        act(() => { pin.listeners['click']?.(); });
+        const preview = await view!.findByTestId('map-preview-card');
+        expect(within(preview).getByTestId('event-card')).toHaveTextContent('Spring working bee');
+        expect(within(preview).getByTestId('event-card')).toHaveTextContent('2 going · 1 interested');
+    });
+
+    it('creates an event with a dropped pin rounded by Approximate', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const onNavigate = vi.fn();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost onNavigate={onNavigate} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '📅 Event' })); });
+
+        fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+        fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+        fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'Bindarrabi Hall' } });
+        fireEvent.change(within(panel).getByLabelText('Note for people who are going'), { target: { value: 'Gate code 1234' } });
+        expect(within(panel).getByText('Only people who tap Going see this.')).toBeInTheDocument();
+        expect(within(panel).getByTestId('event-location-visibility')).toHaveTextContent("Anyone who opens this node's map will see this spot.");
+
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const mapResults = vi.mocked(L.map).mock.results;
+        const map = mapResults[mapResults.length - 1].value as any;
+        const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
+
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '📅 Create Event' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        const body = create.mock.calls[0][0];
+        expect(body).toMatchObject({
+            type: 'event', category: 'community', credits: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
+            lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
+            eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+        });
+        expect(body).not.toHaveProperty('eventEndAt');
+        expect(body).not.toHaveProperty('reach');
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-new');
     });
 });

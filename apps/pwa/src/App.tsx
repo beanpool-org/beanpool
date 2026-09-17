@@ -114,6 +114,9 @@ export function App() {
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
+    // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
+    const [focusMapPostId, setFocusMapPostId] = useState<string | null>(null);
+    const clearFocusMapPost = useCallback(() => setFocusMapPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
@@ -183,6 +186,11 @@ export function App() {
             setActiveTab('map');
             setOpenNewPost(true);
             setOpenNewPostGroupId(contextId);
+            return;
+        }
+        if (tab === 'map-event') {
+            setActiveTab('map');
+            if (contextId) setFocusMapPostId(contextId);
             return;
         }
         if (tab === 'map') {
@@ -708,6 +716,8 @@ export function App() {
                                         onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
                                         isMember={isGuest === null ? null : !isGuest}
                                         covered={!!openTreasuryPubkey || !!openProfilePubkey}
+                                        focusPostId={focusMapPostId}
+                                        onFocusPostHandled={clearFocusMapPost}
                                     />
                                 </Suspense>
                             )}

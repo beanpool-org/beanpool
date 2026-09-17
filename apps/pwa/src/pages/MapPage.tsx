@@ -32,6 +32,9 @@ import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { EventCard } from '../components/EventCard';
+import { approximateLocation } from '@beanpool/core';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventInWindow, isEventOpen, localInputToIso, type EventWindow } from '../lib/events';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -65,9 +68,16 @@ interface Props {
      * hidden — not closed — while covered: Back brings them back with the draft intact.
      */
     covered?: boolean;
+    /** An event opened from its detail with "Show on map": centre on it and show its card. */
+    focusPostId?: string | null;
+    onFocusPostHandled?: () => void;
 }
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false }: Props) {
+/** Event form limits, as the node enforces them (docs/events-on-the-map.md §2.2). */
+const EVENT_PLACE_NAME_MAX = 80;
+const EVENT_PRIVATE_NOTE_MAX = 1000;
+
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -82,7 +92,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [targetGroupId, setTargetGroupId] = useState<string>('');
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
-    const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll'>('need');
+    const [newPostType, setNewPostType] = useState<'offer' | 'need' | 'poll' | 'event'>('need');
+    // Events (docs/events-on-the-map.md §3). Start and end hold <input type="datetime-local"> values.
+    const [eventStart, setEventStart] = useState('');
+    const [eventEnd, setEventEnd] = useState('');
+    const [eventPlaceName, setEventPlaceName] = useState('');
+    const [eventNote, setEventNote] = useState('');
+    const [postApproximate, setPostApproximate] = useState(false);
+    // Who hosts: 'me', `ent:<enterprise pubkey>` for a keeper, or `group:<id>` for a convenor.
+    const [eventHost, setEventHost] = useState('me');
+    const [keeperOf, setKeeperOf] = useState<string[]>([]);
+    const [keeperNames, setKeeperNames] = useState<Record<string, string>>({});
+    const [eventWindow, setEventWindow] = useState<EventWindow>('all');
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     const [newPostCategory, setNewPostCategory] = useState('general');
@@ -162,6 +184,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 if (cancelled) return;
                 const blocked = !!b.isBlockedFromTrading;
                 setBlockedFromTrading(blocked);
+                setKeeperOf(Array.isArray(b.keeperOf) ? b.keeperOf : []);
                 if (blocked) setNewPostType('offer');
             })
             .catch(() => {});
@@ -169,6 +192,22 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }, [identity.publicKey, canLoadBalance]);
 
     const needBlocked = blockedFromTrading && newPostType === 'need';
+
+    // Names for the "Post as" choices, fetched only when a keeper opens the event form.
+    useEffect(() => {
+        if (newPostType !== 'event' || keeperOf.length === 0 || Object.keys(keeperNames).length > 0) return;
+        let cancelled = false;
+        getTreasuries()
+            .then(res => {
+                if (cancelled) return;
+                const names: Record<string, string> = {};
+                for (const t of res?.treasuries || []) if (keeperOf.includes(t.publicKey)) names[t.publicKey] = t.name;
+                setKeeperNames(names);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [newPostType, keeperOf, keeperNames]);
+    const convenorGroups = userGroups.filter(g => g.viewerRole === 'convenor');
 
     // #143 step 4 — which communities a listing could be aimed at. Fetched once; failure is silent and
     // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
@@ -352,6 +391,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             true,
             (latlng) => {
                 setUserMarker(map, latlng);
+                setUserLocation({ lat: latlng.lat, lng: latlng.lng });
                 setLocating(false);
             },
             () => {
@@ -402,7 +442,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
                 const [pinsRes, localData] = await Promise.all([
                     getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
-                    getMarketplacePosts(),
+                    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them.
+                    getMarketplacePosts({ types: CLIENT_POST_TYPES }),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
                 let allPosts: MarketplacePost[] = [...localData];
@@ -418,7 +459,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         const remoteResults = await Promise.allSettled(
                             peersToFetch.map(async (n: any) => {
                                 const remotePosts = await getRemotePosts(n.publicUrl);
-                                return remotePosts.map((p: any) => ({ ...p, _remoteNode: n.publicUrl, _remoteCallsign: n.callsign }));
+                                // Events are this community only in v1 (§2.4).
+                                return remotePosts.filter((p: any) => p.type !== 'event').map((p: any) => ({ ...p, _remoteNode: n.publicUrl, _remoteCallsign: n.callsign }));
                             })
                         );
                         for (const result of remoteResults) {
@@ -490,7 +532,77 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }, [refreshPosts]);
 
     // Create a new post from the map
+    function resetEventForm() {
+        setEventStart('');
+        setEventEnd('');
+        setEventPlaceName('');
+        setEventNote('');
+        setEventHost('me');
+        setPostApproximate(false);
+    }
+
+    async function handleCreateEvent() {
+        const errors = new Set<string>();
+        const startIso = localInputToIso(eventStart);
+        const endIso = localInputToIso(eventEnd);
+        if (!newPostTitle.trim()) errors.add('title');
+        if (!startIso || Date.parse(startIso) <= Date.now()) errors.add('event_start');
+        if (eventEnd && (!endIso || !startIso || Date.parse(endIso) <= Date.parse(startIso))) errors.add('event_end');
+        if (postLat == null || postLng == null) errors.add('location');
+        if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
+        if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
+        setValidationErrors(errors);
+        if (errors.size > 0) return;
+
+        const hostEnterprise = eventHost.startsWith('ent:') ? eventHost.slice(4) : null;
+        setPosting(true);
+        try {
+            const res = await createMarketplacePost({
+                type: 'event',
+                category: 'community',
+                title: newPostTitle.trim(),
+                description: newPostDescription.trim(),
+                credits: 0,
+                priceType: 'fixed',
+                authorPublicKey: hostEnterprise || identity.publicKey || '',
+                repeatable: false,
+                lat: postLat!,
+                lng: postLng!,
+                ...(newPostPhotos.length > 0 ? { photos: newPostPhotos } : {}),
+                audienceScope,
+                ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
+                eventStartAt: startIso!,
+                ...(endIso ? { eventEndAt: endIso } : {}),
+                ...(eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
+                ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
+            });
+            setNewPostTitle('');
+            setNewPostDescription('');
+            setNewPostPhotos([]);
+            resetEventForm();
+            setAudienceScope('public');
+            setTargetGroupId('');
+            setPostLat(null);
+            setPostLng(null);
+            setPinDropMode(false);
+            if (pinDropMarkerRef.current) {
+                pinDropMarkerRef.current.remove();
+                pinDropMarkerRef.current = null;
+            }
+            setShowNewPost(false);
+            refreshPosts();
+            if (onNavigate) onNavigate('marketplace', res?.post?.id);
+        } catch (e: any) {
+            alert(e.message || 'Failed to create the event.');
+        }
+        setPosting(false);
+    }
+
     async function handleCreatePost() {
+        if (newPostType === 'event') {
+            await handleCreateEvent();
+            return;
+        }
         if (newPostType === 'poll') {
             const errors = new Set<string>();
             if (!newPostTitle.trim()) errors.add('title');
@@ -612,6 +724,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             (latlng) => {
                 setPostLat(Math.round(latlng.lat * 10000) / 10000);
                 setPostLng(Math.round(latlng.lng * 10000) / 10000);
+                setPostApproximate(false);
                 setPinDropMode(false);
                 placePreviewPin(latlng.lat, latlng.lng);
             },
@@ -626,10 +739,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPinDropMode(true);
         setPostLat(null);
         setPostLng(null);
+        setPostApproximate(false);
         if (pinDropMarkerRef.current) {
             pinDropMarkerRef.current.remove();
             pinDropMarkerRef.current = null;
         }
+    }
+
+    // One tap rounds the pin to roughly 100 m before it is sent, as for enterprise pins (§2.3).
+    function approximatePin() {
+        if (postLat == null || postLng == null) return;
+        const approx = approximateLocation(postLat, postLng);
+        setPostLat(approx.lat);
+        setPostLng(approx.lng);
+        setPostApproximate(true);
+        placePreviewPin(approx.lat, approx.lng);
     }
 
     // Place a preview pin on the map
@@ -673,6 +797,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             const lng = Math.round(e.latlng.lng * 10000) / 10000;
             setPostLat(lat);
             setPostLng(lng);
+            setPostApproximate(false);
             placePreviewPin(lat, lng);
         }
         map.on('click', onMapClick);
@@ -685,7 +810,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         markersRef.current.clearLayers();
 
         posts
-            .filter(post => post.type !== 'poll' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+            .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
             .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
@@ -775,6 +900,49 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             marker.addTo(markersRef.current!);
         });
 
+        // Event pins (docs/events-on-the-map.md §3): purple with a calendar glyph, filtered by the chips.
+        // Cancelled and ended events never pin.
+        posts
+            .filter(post => post.type === 'event' && post.lat != null && post.lng != null
+                && eventInWindow(post, eventWindow)
+                && !(post as any)._remoteNode
+                && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+            .forEach(post => {
+                const html = `
+                <div style="position: relative; width: 40px; height: 48px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));">
+                    <div style="
+                        width: 40px; height: 40px; border-radius: 50%;
+                        background: ${POST_TYPE_COLORS.event}; border: 2.5px solid #ffffff;
+                        display: flex; align-items: center; justify-content: center;
+                        box-sizing: border-box; z-index: 2; position: relative;
+                    ">
+                        <span style="font-size: 20px; line-height: 1; padding-bottom: 1px;">📅</span>
+                    </div>
+                    <div style="
+                        position: absolute; bottom: 0; width: 0; height: 0;
+                        border-left: 6px solid transparent;
+                        border-right: 6px solid transparent;
+                        border-top: 10px solid ${POST_TYPE_COLORS.event};
+                        z-index: 1;
+                    "></div>
+                </div>`;
+                const icon = L.divIcon({
+                    className: 'custom-event-pin hover:scale-110 transition-transform origin-bottom',
+                    html,
+                    iconSize: [40, 48],
+                    iconAnchor: [20, 48],
+                });
+                const label = `Event: ${post.title}`;
+                const marker = L.marker([post.lat!, post.lng!], { icon, title: label, alt: label });
+                marker.on('click', () => {
+                    setPreviewPost(post);
+                    if (mapRef.current) {
+                        mapRef.current.setView([post.lat!, post.lng!], mapRef.current.getZoom(), { animate: true });
+                    }
+                });
+                marker.addTo(markersRef.current!);
+            });
+
         // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)
         const escapeHtml = (str: string) =>
             str.replace(/[&<>"']/g, (m) => ({
@@ -859,7 +1027,117 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
                 marker.addTo(markersRef.current!);
             });
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, eventWindow]);
+
+    // "Show on map" from an event's detail: centre on it and open its card once it has loaded.
+    useEffect(() => {
+        if (!focusPostId) return;
+        const target = posts.find(p => p.id === focusPostId);
+        if (!target) return;
+        if (target.lat != null && target.lng != null && mapRef.current) {
+            mapRef.current.setView([target.lat, target.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 16));
+        }
+        setEventWindow('all');
+        setPreviewPost(target);
+        onFocusPostHandled?.();
+    }, [focusPostId, posts, onFocusPostHandled]);
+
+    const hasOpenEvents = posts.some(p => p.type === 'event' && isEventOpen(p) && !(p as any)._remoteNode);
+
+    // Shared by the offer/need and event forms.
+    function renderLocationPicker() {
+        return (
+            <>
+            <div className="flex gap-2 mb-2">
+                <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
+                    validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
+                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                }`}>
+                    <span className="text-xl leading-none">📍</span> My location
+                </button>
+                <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
+                    validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
+                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                }`}>
+                    <span className="text-xl leading-none">📌</span> Drop a pin
+                </button>
+            </div>
+            {pinDropMode && postLat == null && (
+                <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
+                    Tap the map to place your pin
+                </p>
+            )}
+            {postLat != null && postLng != null && (
+                <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
+                    ✓ Location set
+                </p>
+            )}
+            </>
+        );
+    }
+
+    function renderPhotoPicker(required: boolean) {
+        return (
+            <div className="mb-5">
+                <div className="flex gap-2 flex-wrap items-center">
+                    {newPostPhotos.map((photo, i) => (
+                        <div key={i} className="relative">
+                            <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                            <button
+                                onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
+                                aria-label="Remove photo"
+                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+                    {newPostPhotos.length < 5 && (
+                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
+                            📷
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                        const img = new Image();
+                                        img.onload = () => {
+                                            const canvas = document.createElement('canvas');
+                                            const MAX = 800;
+                                            let w = img.width, h = img.height;
+                                            if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
+                                            else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
+                                            canvas.width = w; canvas.height = h;
+                                            canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+                                            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                                            setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
+                                        };
+                                        img.src = reader.result as string;
+                                    };
+                                    reader.readAsDataURL(file);
+                                    e.target.value = '';
+                                }}
+                            />
+                        </label>
+                    )}
+                </div>
+                <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${required && validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
+                    {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? (required ? '(at least 1 required)' : '(optional)') : ''}
+                </p>
+            </div>
+        );
+    }
+
+    const submitDisabled = newPostType === 'event'
+        ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
+        : newPostType === 'poll'
+            ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
+            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0);
+
 
     return (
         <>
@@ -915,6 +1193,36 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
             {/* Map container */}
             <div ref={mapContainer} className="w-full h-full" />
+
+            {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
+                that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
+                community has an upcoming event. */}
+            {/* Hidden while composing: at 320px the New Post panel leaves only a strip of map to drop a pin in. */}
+            {hasOpenEvents && !showNewPost && (
+                <div
+                    data-testid="event-window-chips"
+                    role="group"
+                    aria-label="Show events"
+                    className="absolute top-[4.25rem] md:top-3 left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain"
+                    style={{ scrollbarWidth: 'none' }}
+                >
+                    {EVENT_WINDOWS.map(w => (
+                        <button
+                            key={w.id}
+                            type="button"
+                            aria-pressed={eventWindow === w.id}
+                            onClick={() => { setEventWindow(w.id); setPreviewPost(null); }}
+                            className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
+                                eventWindow === w.id
+                                    ? 'bg-violet-700 border-violet-700 text-white'
+                                    : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                            }`}
+                        >
+                            {w.id === 'all' ? '📅 All' : w.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* FAB Pill - Bottom Left (avoids header overlap) */}
             <div className="absolute bottom-[6.5rem] left-3 flex flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden">
@@ -981,8 +1289,40 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             )}
         </div>
 
-        {/* Map Preview Card */}
-        {previewPost && (
+        {/* Map Preview Card — an event shows its own card (§3) */}
+        {previewPost && previewPost.type === 'event' && (
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
+                <div className="m-3 pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
+                    <EventCard
+                        post={previewPost}
+                        identity={identity}
+                        distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
+                            ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
+                            : null}
+                        onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                        onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
+                    />
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                            className="flex-1 min-h-[48px] rounded-xl border-none font-bold text-white text-sm bg-violet-700 hover:bg-violet-800"
+                        >
+                            View Details
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPreviewPost(null)}
+                            aria-label="Close preview"
+                            className="flex-shrink-0 min-h-[48px] min-w-[48px] rounded-xl bg-black/5 dark:bg-white/10 border-none text-sm font-extrabold text-gray-600 dark:text-gray-300"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        {previewPost && previewPost.type !== 'event' && (
             <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
@@ -1053,6 +1393,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">New Post</span>
                     <button onClick={() => {
                         setShowNewPost(false);
+                        setPostApproximate(false);
                         setAudienceScope('public');
                         setTargetGroupId('');
                         setPinDropMode(false);
@@ -1068,8 +1409,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </div>
 
                 {/* Type toggle */}
-                <div className="flex gap-2 mb-4">
-                    {(['offer', 'need', 'poll'] as const).map(t => (
+                <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mb-4">
+                    {(['offer', 'need', 'poll', 'event'] as const).map(t => (
                         <button
                             key={t}
                             type="button"
@@ -1077,11 +1418,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setNewPostType(t); setValidationErrors(new Set()); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
-                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
                             }`}
                         >
-                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : '🗳️ Poll'}
+                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? '📅 Event' : '🗳️ Poll'}
                         </button>
                     ))}
                 </div>
@@ -1095,7 +1436,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <button
                             type="button"
                             aria-pressed={audienceScope === 'public'}
-                            onClick={() => { setAudienceScope('public'); setTargetGroupId(''); }}
+                            onClick={() => { setAudienceScope('public'); setTargetGroupId(''); if (eventHost.startsWith('group:')) setEventHost('me'); }}
                             className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                                 audienceScope === 'public'
                                     ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
@@ -1165,7 +1506,148 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     )}
                 </div>
 
-                {newPostType === 'poll' ? (
+                {newPostType === 'event' ? (
+                    <div className="space-y-4 mb-4">
+                        {(keeperOf.length > 0 || convenorGroups.length > 0) && (
+                            <div>
+                                <label htmlFor="event-host" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Post as</label>
+                                <select
+                                    id="event-host"
+                                    value={eventHost}
+                                    onChange={e => {
+                                        const v = e.target.value;
+                                        setEventHost(v);
+                                        if (v.startsWith('group:')) {
+                                            setAudienceScope('group');
+                                            setTargetGroupId(v.slice(6));
+                                        }
+                                    }}
+                                    className="w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 appearance-auto cursor-pointer"
+                                >
+                                    <option value="me">Me</option>
+                                    {keeperOf.map(pk => (
+                                        <option key={pk} value={`ent:${pk}`}>{keeperNames[pk] || `Enterprise ${pk.slice(0, 6)}`}</option>
+                                    ))}
+                                    {convenorGroups.map(g => (
+                                        <option key={g.id} value={`group:${g.id}`}>{g.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div>
+                            <label htmlFor="event-title" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">What's happening</label>
+                            <input
+                                id="event-title"
+                                placeholder="Working bee at the hall"
+                                value={newPostTitle}
+                                onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="event-start" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Starts</label>
+                            <input
+                                id="event-start"
+                                type="datetime-local"
+                                value={eventStart}
+                                onChange={e => { setEventStart(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_start'); return n; }); }}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_start') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
+                            />
+                            {validationErrors.has('event_start') && (
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">Pick a start time in the future.</p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label htmlFor="event-end" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Ends (optional, 2 hours after start if blank)</label>
+                            <input
+                                id="event-end"
+                                type="datetime-local"
+                                value={eventEnd}
+                                onChange={e => { setEventEnd(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_end'); return n; }); }}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_end') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
+                            />
+                            {validationErrors.has('event_end') && (
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">The end must be after the start.</p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label htmlFor="event-place" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Place name</label>
+                            <input
+                                id="event-place"
+                                placeholder="The old bowls club"
+                                maxLength={EVENT_PLACE_NAME_MAX}
+                                value={eventPlaceName}
+                                onChange={e => { setEventPlaceName(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_place'); return n; }); }}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('event_place') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
+                            />
+                        </div>
+
+                        <div>
+                            {renderLocationPicker()}
+                            {/* The pin is public like every post and enterprise pin; Approximate is one tap away with the
+                                same plain warning enterprise pins carry (§1, §2.3). Exact details go in the note. */}
+                            <div
+                                data-testid="event-location-visibility"
+                                className="p-2.5 rounded-lg bg-terra-50 dark:bg-terra-950/40 border border-terra-200 dark:border-terra-800/60 text-xs text-terra-800 dark:text-terra-200 space-y-1.5"
+                            >
+                                <p className="font-semibold text-terra-900 dark:text-terra-100 m-0">
+                                    Anyone who opens this node&apos;s map will see this spot.
+                                </p>
+                                <p className="text-[12px] text-nature-700 dark:text-nature-300 m-0">
+                                    If it&apos;s at someone&apos;s house, use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m, and put the exact spot in the note for people who are going.
+                                </p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={approximatePin}
+                                        disabled={postLat == null || postLng == null}
+                                        aria-pressed={postApproximate}
+                                        className="min-h-[48px] px-3 py-1 rounded-md bg-terra-100 dark:bg-terra-900/40 hover:bg-terra-200 dark:hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-sm font-semibold text-terra-700 dark:text-terra-300 border border-terra-300 dark:border-terra-700/60 transition-colors"
+                                    >
+                                        Approximate (~100m)
+                                    </button>
+                                    {postApproximate && (
+                                        <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[11px] font-semibold border border-terra-300 dark:border-terra-700/50">
+                                            ~100m
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label htmlFor="event-description" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Description (optional)</label>
+                            <textarea
+                                id="event-description"
+                                placeholder="What to expect, who it's for…"
+                                value={newPostDescription}
+                                onChange={e => setNewPostDescription(e.target.value)}
+                                rows={3}
+                                className="w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 resize-y"
+                            />
+                        </div>
+
+                        {renderPhotoPicker(false)}
+
+                        <div>
+                            <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Note for people who are going</label>
+                            <textarea
+                                id="event-note"
+                                placeholder="Gate code, parking, what to bring"
+                                maxLength={EVENT_PRIVATE_NOTE_MAX}
+                                value={eventNote}
+                                onChange={e => { setEventNote(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_note'); return n; }); }}
+                                rows={2}
+                                className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all resize-y ${validationErrors.has('event_note') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
+                            />
+                            <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see this.</p>
+                        </div>
+                    </div>
+                ) : newPostType === 'poll' ? (
                     <div className="space-y-4 mb-4">
                         <div>
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
@@ -1300,31 +1782,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             ))}
                         </select>
 
-                        {/* Location picker */}
-                        <div className="flex gap-2 mb-2">
-                            <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
-                                validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                                : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
-                            }`}>
-                                <span className="text-xl leading-none">📍</span> My location
-                            </button>
-                            <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
-                                validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                                : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
-                            }`}>
-                                <span className="text-xl leading-none">📌</span> Drop a pin
-                            </button>
-                        </div>
-                        {pinDropMode && postLat == null && (
-                            <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
-                                Tap the map to place your pin
-                            </p>
-                        )}
-                        {postLat != null && postLng != null && (
-                            <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
-                                ✓ Location set
-                            </p>
-                        )}
+                        {renderLocationPicker()}
 
                         {/* Title + Credits */}
                         <div className="flex gap-2 mb-3">
@@ -1500,77 +1958,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             }`}
                         />
 
-                        {/* Photos */}
-                        <div className="mb-5">
-                            <div className="flex gap-2 flex-wrap items-center">
-                                {newPostPhotos.map((photo, i) => (
-                                    <div key={i} className="relative">
-                                        <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
-                                        <button
-                                            onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
-                                            aria-label="Remove photo"
-                                            className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ))}
-                                {newPostPhotos.length < 5 && (
-                                    <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
-                                        📷
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (!file) return;
-                                                const reader = new FileReader();
-                                                reader.onload = () => {
-                                                    const img = new Image();
-                                                    img.onload = () => {
-                                                        const canvas = document.createElement('canvas');
-                                                        const MAX = 800;
-                                                        let w = img.width, h = img.height;
-                                                        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; } }
-                                                        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; } }
-                                                        canvas.width = w; canvas.height = h;
-                                                        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-                                                        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                                                        setNewPostPhotos(prev => [...prev.slice(0, 4), dataUrl]);
-                                                    };
-                                                    img.src = reader.result as string;
-                                                };
-                                                reader.readAsDataURL(file);
-                                                e.target.value = '';
-                                            }}
-                                        />
-                                    </label>
-                                )}
-                            </div>
-                            <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
-                                {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? '(at least 1 required)' : ''}
-                            </p>
-                        </div>
+                        {renderPhotoPicker(true)}
                     </>
                 )}
 
                 <button
                     onClick={handleCreatePost}
-                    disabled={
-                        newPostType === 'poll'
-                            ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-                            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0)
-                    }
-                    className={`w-full p-3 rounded-xl font-semibold transition-all ${
-                        (newPostType === 'poll'
-                            ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-                            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0))
+                    disabled={submitDisabled}
+                    className={`w-full p-3 min-h-[48px] rounded-xl font-semibold transition-all ${
+                        submitDisabled
                             ? 'bg-oat-200 text-oat-500 cursor-not-allowed'
-                            : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
+                            : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : newPostType === 'event' ? 'bg-violet-700 hover:bg-violet-800 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >
                     {posting ? 'Posting...' :
+                     newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : '📅 Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
                      needBlocked ? '🔵 List an Offer first to post Needs' :
                      postLat == null ? '📍 Map location required' :

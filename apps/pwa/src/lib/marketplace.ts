@@ -28,12 +28,13 @@ export const MARKETPLACE_CATEGORIES_BY_ID = new Map(
     MARKETPLACE_CATEGORIES.map(c => [c.id as string, c])
 );
 
-export type PostType = 'offer' | 'need' | 'poll';
+export type PostType = 'offer' | 'need' | 'poll' | 'event';
 
 export const POST_TYPE_COLORS = {
     offer: '#10b981',  // Sage Green (Emerald-500)
     need: '#d97757',  // Soft Terracotta
     poll: '#8b5cf6',  // Purple / Violet
+    event: '#7c3aed', // Deep violet — the event pin (docs/events-on-the-map.md §3)
 } as const;
 
 export interface PollOption {

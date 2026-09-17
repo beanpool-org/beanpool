@@ -616,7 +616,7 @@ export default function ProjectsScreen() {
                                 onRefresh={loadData}
                                 onOpenPropose={() => {
                                     if (!canProposeDecision) {
-                                        Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
                                         return;
                                     }
                                     if (hasOpenDecision) {
@@ -824,7 +824,7 @@ export default function ProjectsScreen() {
                     }
                     if (activeSection === 'decide') {
                         if (!canProposeDecision) {
-                            Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                            Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
                             return;
                         }
                         if (hasOpenDecision) {

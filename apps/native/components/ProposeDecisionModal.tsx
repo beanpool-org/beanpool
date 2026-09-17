@@ -606,7 +606,7 @@ export function ProposeDecisionModal({
                         <View style={styles.noBondNotice}>
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
-                                <Text style={{ fontWeight: '700' }}>No bond required.</Text> Gated by your earned trade standing (earnedCredit &gt; 0). Open for 7 days. Closes and executes automatically.
+                                <Text style={{ fontWeight: '700' }}>No bond required.</Text> Open to anyone who has completed a trade. Open for 7 days. Closes and executes automatically.
                             </Text>
                         </View>
 

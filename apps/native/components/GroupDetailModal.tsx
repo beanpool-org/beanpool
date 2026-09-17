@@ -408,14 +408,18 @@ export function GroupDetailModal({
         }
     };
 
-    const handleRemoveMember = async (memberPubkey: string, callsign?: string) => {
+    // Declining a join request goes through the same API as removing a member, but the dialog must say which one
+    // it is: a decline titled "Remove Member" read as throwing out an existing member.
+    const handleRemoveMember = async (memberPubkey: string, callsign?: string, kind: 'remove' | 'decline' = 'remove') => {
+        const who = callsign || (kind === 'decline' ? 'this person' : 'this member');
+        const decline = kind === 'decline';
         Alert.alert(
-            'Remove Member',
-            `Remove ${callsign || 'this member'} from ${groupData.name}?`,
+            decline ? 'Decline Request' : 'Remove Member',
+            decline ? `Decline ${who}'s request to join ${groupData.name}?` : `Remove ${who} from ${groupData.name}?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Remove',
+                    text: decline ? 'Decline' : 'Remove',
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
@@ -425,7 +429,10 @@ export function GroupDetailModal({
                             await loadDetails();
                             if (onMembershipChanged) onMembershipChanged();
                         } catch (e: any) {
-                            Alert.alert('Removal Failed', e.message || 'Failed to remove member');
+                            Alert.alert(
+                                decline ? 'Decline Failed' : 'Removal Failed',
+                                e.message || (decline ? 'Failed to decline the request' : 'Failed to remove member'),
+                            );
                         } finally {
                             setActionLoading(false);
                         }
@@ -617,7 +624,7 @@ export function GroupDetailModal({
                                                         accessibilityLabel={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
                                                         disabled={actionLoading}
                                                         style={[styles.declineBtn, actionLoading && { opacity: 0.6 }]}
-                                                        onPress={() => handleRemoveMember(p.memberPubkey, p.callsign)}
+                                                        onPress={() => handleRemoveMember(p.memberPubkey, p.callsign, 'decline')}
                                                     >
                                                         <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
                                                     </Pressable>

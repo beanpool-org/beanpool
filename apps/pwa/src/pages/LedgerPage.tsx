@@ -21,6 +21,11 @@ import { onSyncActivity } from '../lib/sync';
 interface Props {
     identity: BeanPoolIdentity;
     onNavigate?: (tab: string, contextId?: string) => void;
+    /**
+     * False for a guest — a local key the node has no member for. The node answers "Member not found"
+     * for its balance, so a guest's balance is not fetched and no error is shown. Omitted means a member.
+     */
+    isMember?: boolean;
 }
 
 // Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
@@ -52,7 +57,12 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember }: Props) {
+    const viewerIsMember = isMember !== false;
+    // App learns guest status after mount, so a member-style refresh can still be in flight when this
+    // flips to false; its failure must not put an error in front of the guest.
+    const viewerIsMemberRef = useRef(viewerIsMember);
+    viewerIsMemberRef.current = viewerIsMember;
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
@@ -111,6 +121,13 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     }, []);
 
     const refresh = useCallback(async () => {
+        if (!viewerIsMember) {
+            // Same approach as the enterprise page: a guest has no balance on the node, so don't ask.
+            setError(null);
+            setLoading(false);
+            lastRefreshTimeRef.current = Date.now();
+            return;
+        }
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             try {
@@ -137,7 +154,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
-                setError(e.message || 'Failed to load');
+                if (viewerIsMemberRef.current) setError(e.message || 'Failed to load');
                 throw e;
             } finally {
                 setLoading(false);
@@ -146,7 +163,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [identity.publicKey]);
+    }, [identity.publicKey, viewerIsMember]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -430,13 +447,15 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
                     {/* ── Selected-level detail ── */}
                     <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
-                        <div className="flex items-center gap-3 mb-4">
+                        {/* Wraps: at 320px with 1.3x text the level name and badge ran 22px past the card and
+                            dragged the whole Ledger page sideways. */}
+                        <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
                             <span className="text-3xl leading-none">{sel.emoji}</span>
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-[7rem]">
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
                                 {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
                             </span>
                         </div>
@@ -498,19 +517,19 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     )}
 
                     {/* What builds trust: value traded, a diverse circle of partners, and reputation */}
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 shadow-sm">
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-1.5 sm:gap-3" data-testid="trust-builders">
                             {[
                                 { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: '#10b981' },
                                 { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
                                 { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (
-                                <div key={a.label} className="p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
+                                <div key={a.label} className="min-w-0 px-1.5 py-2 sm:p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
                                     <div>
                                         <span className="text-xl">{a.icon}</span>
                                         <div className="text-lg font-black text-nature-950 dark:text-white mt-1 leading-none">{a.big}</div>
-                                        <div className="text-[9px] font-bold text-nature-400 uppercase tracking-wider mt-1">{a.label}</div>
+                                        <div className="text-[9px] font-bold text-nature-400 uppercase sm:tracking-wider mt-1 [overflow-wrap:anywhere]">{a.label}</div>
                                     </div>
                                     <div className="mt-3">
                                         <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full overflow-hidden">

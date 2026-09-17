@@ -724,7 +724,7 @@ export function App() {
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
+                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />}
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}

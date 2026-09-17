@@ -111,6 +111,7 @@ export default function TreasuryDetailScreen() {
         keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
         keepersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
         keeperChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface.app, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default },
+        keeperChipSuspended: { opacity: 0.6 },
         keeperCallsign: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
         leadKeeperBadge: { backgroundColor: colors.feedback.warning.bg, color: colors.feedback.warning.fg, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', textTransform: 'uppercase', letterSpacing: 0.5 },
         keeperBadge: { backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
@@ -243,7 +244,7 @@ export default function TreasuryDetailScreen() {
                     const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
                     const mine: string[] = Array.isArray(b?.keeperOf) ? b.keeperOf : [];
-                    const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
+                    const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
                     setIsKeeperOfThis(mine.includes(treasuryKey) || inKeepers);
                 } else {
                     setIsKeeperOfThis(false);
@@ -862,10 +863,18 @@ export default function TreasuryDetailScreen() {
                                     {detail.keepers.map((k: any) => {
                                         const isLead = k.role === 'lead';
                                         const pk = k.publicKey || k.pubkey || k.memberPubkey;
+                                        // Suspended keepers are shown, not hidden: they still count as keepers of this
+                                        // enterprise, but cannot act until the suspension is lifted.
+                                        const isSuspended = !!k.suspended;
                                         return (
-                                            <View key={pk} style={styles.keeperChip}>
-                                                <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
+                                            <View
+                                                key={pk}
+                                                style={[styles.keeperChip, isSuspended && styles.keeperChipSuspended]}
+                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? 'lead keeper' : 'keeper'}, suspended` : undefined}
+                                            >
+                                                <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
                                                 <Text style={styles.keeperCallsign}>{k.callsign}</Text>
+                                                {isSuspended && <Text style={styles.keeperBadge}>Suspended</Text>}
                                                 <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
                                                     {isLead ? 'Lead keeper' : 'Keeper'}
                                                 </Text>
@@ -1350,7 +1359,7 @@ export default function TreasuryDetailScreen() {
                             </Text>
                             <ScrollView style={{ maxHeight: 240, marginBottom: 16 }}>
                                 {(detail?.keepers || [])
-                                    .filter((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity?.leadPubkey)
+                                    .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity?.leadPubkey)
                                     .map((k: any) => {
                                         const pk = k.publicKey || k.pubkey || k.memberPubkey;
                                         return (

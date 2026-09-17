@@ -2025,6 +2025,12 @@ export function canAdministerTreasury(publicKey: string, treasuryPubkey: string)
  * Authority predicate for enterprise lead-level governance (docs/the-commons.md §2.2, §2.3).
  * Matches the authority predicate initiateWindUp and finaliseWindUp use:
  * the lead keeper, the sole keeper, or a node admin.
+ *
+ * The ACTOR must be active with the operator switch on. The sole-keeper COUNT is every binding, suspended
+ * keepers included: a suspended keeper keeps their row (adminSetOperator, the suspend_member Decision), a
+ * removed one does not. Counting only active keepers would let a community's suspension of the lead turn
+ * the remaining keeper into a "sole keeper" who could approve keepers and wind the enterprise up alone
+ * (PR #838 B1).
  */
 export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey: string): boolean {
     if (isAdminPubkey(actorPubkey)) return true;
@@ -2032,13 +2038,8 @@ export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey:
     if (!mem || mem.status !== 'active' || mem.can_operate !== 1) return false;
     const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
     if (!op) return false;
-    const activeOpCount = (db.prepare(`
-        SELECT COUNT(*) as c
-        FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).get(enterprisePubkey) as any)?.c ?? 0;
-    const isSoleKeeper = activeOpCount === 1;
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = opCount === 1;
     const isLead = op.role === 'lead';
     return isLead || isSoleKeeper;
 }
@@ -2059,7 +2060,9 @@ export function keeperOf(publicKey: string): string[] {
 /**
  * Who keeps this enterprise? Public — stewardship is transparent to members by design
  * (docs/community-governance.md), so a community can see who is accountable for what.
- * Suspended keepers (can_operate=0) are excluded: they cannot act, so listing them would misinform.
+ * Suspended keepers (operator switch off, or account not active) are listed with `suspended: true` rather
+ * than hidden: they still count toward "sole keeper" (isLeadOrSoleKeeperOrAdmin), so hiding them would
+ * show one keeper while the server says there are two. They cannot act.
  */
 export function treasuryKeepers(treasuryPubkey: string): Array<{
     publicKey: string;
@@ -2069,12 +2072,14 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     role: string;
     backing: number;
     lastActiveAt: string | null;
+    suspended: boolean;
 }> {
     return (db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at
+        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+               m.can_operate, m.status
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND COALESCE(m.can_operate, 0) = 1
+        WHERE o.treasury_pubkey = ?
         ORDER BY o.granted_at
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
@@ -2088,6 +2093,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
         lastActiveAt: r.last_active_at || r.joined_at || null,
+        suspended: r.can_operate !== 1 || r.status !== 'active',
     }));
 }
 

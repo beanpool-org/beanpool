@@ -353,6 +353,68 @@ async function main() {
     db.prepare("UPDATE members SET status = 'active', can_operate = 1 WHERE public_key = ?").run(lead1.pubKeyHex);
     assert(isLeadOrSoleKeeperOrAdmin(ent1, lead1.pubKeyHex) === true, 'Active lead keeper with can_operate=1 retains authority');
 
+    // 1.11 (PR #838 B1) Suspending the lead does not make the other keeper "sole". A suspended keeper keeps
+    // their binding, so the count stays at two: the remaining keeper can neither approve keepers nor
+    // initiate or finalise a wind-up without a Decision. Both suspension paths: the admin operator switch
+    // and an executed suspend_member Decision.
+    const checkSuspendedLeadScenario = (label: string, suspend: (leadPubkey: string) => void) => {
+        const { publicKey: ent } = createTreasury(`B1${label}Enterprise`, 'avatarB1', 0);
+        const lead = makeIdentity(`B1${label}Lead`, 30);
+        const other = makeIdentity(`B1${label}Other`, 30);
+        adminAssignTreasuryOperator(ent, lead.pubKeyHex, 'admin', 0);
+        db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(ent, lead.pubKeyHex);
+        adminAssignTreasuryOperator(ent, other.pubKeyHex, 'admin', 0);
+        const applicant = makeIdentity(`B1${label}Applicant`, 10);
+        const pendingReq = requestToJoinEnterprise(ent, applicant.pubKeyHex, 0);
+
+        suspend(lead.pubKeyHex);
+
+        assert(hasBinding(ent, lead.pubKeyHex), `B1 ${label}: suspended lead keeps their binding`);
+        assert(isLeadOrSoleKeeperOrAdmin(ent, lead.pubKeyHex) === false, `B1 ${label}: suspended lead has no authority`);
+        assert(isLeadOrSoleKeeperOrAdmin(ent, other.pubKeyHex) === false, `B1 ${label}: remaining keeper is not treated as sole keeper`);
+        expectThrow(() => approveKeeperRequest(pendingReq.id, other.pubKeyHex),
+            'Only the lead keeper, sole keeper, or admin', `B1 ${label}: remaining keeper cannot approve a keeper`);
+        expectThrow(() => initiateWindUp(ent, other.pubKeyHex),
+            'Only the lead keeper may initiate wind-up', `B1 ${label}: remaining keeper cannot initiate a wind-up`);
+
+        // A wind-up the lead started before being suspended, past its grace period.
+        db.prepare("UPDATE members SET status = 'winding_up', wind_up_initiated_at = ?, wind_up_initiated_by = ? WHERE public_key = ?")
+            .run(new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(), lead.pubKeyHex, ent);
+        expectThrow(() => finaliseWindUp(ent, other.pubKeyHex),
+            'Only the lead keeper may finalise wind-up', `B1 ${label}: remaining keeper cannot finalise a wind-up`);
+        assert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(ent) as any).status === 'winding_up',
+            `B1 ${label}: enterprise was not wound up`);
+
+        const listed = treasuryKeepers(ent) as Array<{ publicKey: string; suspended?: boolean }>;
+        assert(listed.length === 2, `B1 ${label}: keeper list still shows both keepers`);
+        assert(listed.find(k => k.publicKey === lead.pubKeyHex)?.suspended === true, `B1 ${label}: suspended lead is flagged suspended`);
+        assert(listed.find(k => k.publicKey === other.pubKeyHex)?.suspended === false, `B1 ${label}: remaining keeper is not flagged suspended`);
+    };
+
+    checkSuspendedLeadScenario('AdminSwitch', (leadPubkey) => adminSetOperator(leadPubkey, false));
+
+    checkSuspendedLeadScenario('Decision', (leadPubkey) => {
+        const decision = createDecision({
+            authorPubkey: admin.pubKeyHex,
+            title: 'Suspend the lead keeper',
+            description: 'B1 regression',
+            touches: 'member',
+            effect: 'suspend_member',
+            subject: leadPubkey,
+        });
+        const quorum = getQuorumRequired({ effect: 'suspend_member', touches: 'member' });
+        for (let i = 0; i < quorum; i++) {
+            const voter = makeIdentity(`B1Voter${i}`);
+            const vote = castDecisionVote(decision.id, voter.pubKeyHex, true);
+            assert(vote.success, `B1 Decision: voter ${i} vote accepted`);
+        }
+        db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(decision.id);
+        tickDecisions();
+        assert(getDecision(decision.id)!.status === 'executed', 'B1 Decision: suspend_member Decision executed');
+        assert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(leadPubkey) as any).status === 'disabled',
+            'B1 Decision: lead is disabled by the Decision');
+    });
+
     // =========================================================================
     // FEATURE 2: LEAD SUCCESSION WITHOUT AN ADMIN (§2.3)
     // =========================================================================

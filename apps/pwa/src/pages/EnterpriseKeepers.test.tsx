@@ -84,6 +84,35 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         expect(screen.queryByText(/steward/i)).not.toBeInTheDocument();
     });
 
+    it('shows a suspended keeper labelled as suspended instead of hiding them (PR #838 B1)', async () => {
+        const mockTreasury = {
+            publicKey: 'enterprise-eggs-pubkey',
+            name: 'Community Eggs',
+            status: 'active',
+            paused: false,
+            balance: 100,
+            keepers: [
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50, suspended: true },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0, suspended: false },
+            ],
+            posts: [],
+            flow: [],
+        };
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
+
+        render(
+            <TreasuryDetailPage
+                identity={mockApplicantIdentity}
+                pubkey="enterprise-eggs-pubkey"
+                onBack={vi.fn()}
+            />
+        );
+
+        expect(await screen.findByText(/Accountable Keepers \(2\)/i)).toBeInTheDocument();
+        expect(screen.getByText('Alice')).toBeInTheDocument();
+        expect(screen.getAllByText('Suspended')).toHaveLength(1);
+    });
+
     it('renders single control "Back this enterprise with your standing: 0 … <available>" and submits join request', async () => {
         const mockTreasury = {
             publicKey: 'enterprise-eggs-pubkey',

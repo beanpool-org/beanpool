@@ -269,7 +269,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
             if (identity?.publicKey) {
                 const b: BalanceInfo = await getBalance(identity.publicKey);
                 const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
+                const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
                 setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
             } else {
                 setIsKeeperOfThis(false);
@@ -1513,7 +1513,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                             >
                                                 <option value="">Select an active keeper…</option>
                                                 {keepers
-                                                    .filter((k: any) => (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity.leadPubkey)
+                                                    .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity.leadPubkey)
                                                     .map((k: any) => {
                                                         const pk = k.publicKey || k.pubkey || k.memberPubkey;
                                                         return (
@@ -1622,13 +1622,21 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => {
                                         const isLead = k.role === 'lead';
+                                        // Suspended keepers are shown, not hidden: they still count as keepers of this
+                                        // enterprise, but cannot act until the suspension is lifted.
+                                        const isSuspended = !!k.suspended;
                                         return (
                                             <div
                                                 key={k.publicKey || k.pubkey || k.memberPubkey}
-                                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200"
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 ${isSuspended ? 'opacity-60' : ''}`}
                                             >
                                                 <span aria-hidden="true">👤</span>
                                                 <span>{k.callsign}</span>
+                                                {isSuspended && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                        Suspended
+                                                    </span>
+                                                )}
                                                 {isLead ? (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
                                                         Lead keeper

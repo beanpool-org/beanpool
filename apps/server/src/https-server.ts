@@ -939,7 +939,9 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Body identity fields that name someone other than the signer on purpose (targetPubkey, to_pubkey,
     // memberPubkey, sellerPublicKey, oldPubkey, friend_pubkey, targetPeerPubkey, ...). Lower-cased key.
-    const OTHER_ENTITY_IDENTITY_FIELD = /^(target|old|to|invited|friend|seller|member)(peer)?_?(pubkey|publickey|public_key)$/;
+    // `candidate` is the keeper proposed as lead in POST /api/enterprise/:treasury/succession/propose, who is
+    // never the proposer; without it every succession proposal over HTTP was refused as a spoof.
+    const OTHER_ENTITY_IDENTITY_FIELD = /^(target|old|to|invited|friend|seller|member|candidate)(peer)?_?(pubkey|publickey|public_key)$/;
 
     // Cryptographic Signature Verification Middleware
     async function requireSignature(ctx: Koa.Context, next: Koa.Next) {

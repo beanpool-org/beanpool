@@ -362,13 +362,21 @@ async function main() {
     {
         const lead = seedMember('quietlead');
         const k1 = seedMember('successorA');
+        const k2 = seedMember('successorB');
         const ent = createTreasury(`Quiet Orchard ${lead.pub.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pub }).publicKey;
         adminAssignTreasuryOperator(ent, k1.pub, 'admin');
+        adminAssignTreasuryOperator(ent, k2.pub, 'admin');
         const longAgo = new Date(Date.now() - 35 * 86400000).toISOString();
         db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(longAgo, lead.pub);
-        const proposalId = crypto.randomUUID();
-        db.prepare(`INSERT INTO enterprise_succession_proposals (id, enterprise_pubkey, lead_pubkey, candidate_pubkey, proposer_pubkey, status)
-                    VALUES (?, ?, ?, ?, ?, 'active')`).run(proposalId, ent, lead.pub, k1.pub, k1.pub);
+
+        // A keeper proposes ANOTHER keeper as lead over signed HTTP. candidatePubkey is not the signer, so
+        // the spoof check must not treat it as an impersonation.
+        const proposed = await send('POST', `/api/enterprise/${ent}/succession/propose`, { candidatePubkey: k2.pub }, k1);
+        assert(proposed.status === 200 && proposed.json?.success, `a keeper proposes another keeper as lead over signed HTTP (got ${proposed.status} ${proposed.json?.error})`);
+        const proposalRow = db.prepare("SELECT id, candidate_pubkey FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'").get(ent) as any;
+        assert(proposalRow?.candidate_pubkey === k2.pub, 'the proposal is recorded for the named candidate');
+        const proposalId: string = proposalRow?.id;
+        db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(longAgo, lead.pub);
 
         // A paper ticket the lead signed three weeks ago, redeemed today by someone else.
         const payload = JSON.stringify({ i: lead.pub, t: Date.now() - 21 * 86400000 });

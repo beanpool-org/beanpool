@@ -84,7 +84,8 @@ coverage that does not exist.
 
 - **`apps/server`**: every `src/test-*.ts` must be registered in the suite list in
   `scripts/test-all.sh` **in the same PR**. There is a guard that fails for unregistered
-  suites; do not work around it.
+  suites; do not work around it. The list is a bash array with one name per line: add yours
+  on its own line beside a related suite, not at the end (see the #740 entry below).
 - **vitest packages**: the package must have a `"test"` script for `turbo run test` to see
   it. `apps/native` and `apps/pwa` have one. **`apps/manager` does not** — it already holds
   three test files that have never run. Do not add manager tests until that script exists.
@@ -262,7 +263,7 @@ intentional; do not open PRs or issues attempting to alter them:
 ### 2026-09-13 — Scout: members-holiday test coverage (#740) — LANDED AFTER REBASE
 - **Category:** MERGE CONFLICT, RECURRING
 - **Claim:** Missing coverage for holiday-mode member behaviour.
-- **Why not to re-file:** The suite landed. Recording the conflict because it is now the third time: `scripts/test-all.sh` keeps its entire suite list on **one line inside a `bash -c '...'` block**, so any two PRs that register a new suite in the same batch conflict with each other. #740 collided with #751. When filing a new suite, expect to rebase that single line, and never introduce an apostrophe anywhere in that block — it breaks the whole script with an error that points at EOF.
+- **Why not to re-file:** The suite landed. Recording the conflict because it is now the third time: `scripts/test-all.sh` used to keep its entire suite list on one line inside a single-quoted `bash -c` block, so any two PRs that registered a new suite in the same batch conflicted with each other. #740 collided with #751. **Since #843 the lists are bash arrays with one suite name per line** (`SUITES=(` … `)`, plus `SETTLEMENT_ON_SUITES=(` for the settlement-on variants). When filing a new suite, add it on its own line **beside a related suite, not at the end of the array** — two PRs that both append after the same last line still conflict, while insertions at different points merge cleanly. The arrays are still inside the single-quoted `bash -c` block, so never introduce an apostrophe anywhere in it, comments included — it breaks the whole script with an error that points at EOF. `scripts/check-suite-registration.sh` reads these arrays, so keep exactly one name per line.
 
 ### 2026-09-14 — Sentinel: reaction metadata TypeError DoS (#760) — LANDED, CLAIM WAS REAL
 - **Category:** REAL VULNERABILITY

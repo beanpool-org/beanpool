@@ -314,8 +314,8 @@ run_federation_suites() {
     # once would leave half the route untested, and it is the half that moves value: the purchase route can
     # debit a member, and the commission route can draw on the Commons pot.
     #
-    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is inside `bash -c '...'`, so one in a
-    # comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
+    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is one single-quoted bash -c string, so one
+    # in a comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
     SETTLEMENT_ON_SUITES=(
       test-federation-purchase-route
       test-federation-commission

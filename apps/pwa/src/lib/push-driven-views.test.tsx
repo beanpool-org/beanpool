@@ -52,6 +52,10 @@ vi.mock('./api', async (importOriginal) => {
         getGroups: vi.fn(async () => []),
         getTreasuries: vi.fn(async () => []),
         getEnterpriseStatuses: vi.fn(async () => ({})),
+        // MapPage's refreshPosts awaits this alongside getMarketplacePosts. Unmocked, `...actual` sent a real
+        // signed fetch that settles on wall-clock I/O, which fake timers cannot advance — under CI load the
+        // first refresh was still in flight when the broadcast arrived, so the broadcast coalesced into it.
+        getEnterpriseMapPins: vi.fn(async () => ({ enterprises: [] })),
     };
 });
 

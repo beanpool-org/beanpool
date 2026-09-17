@@ -33,6 +33,7 @@ import {
     fetchPulseFeed,
     isOfficialSource,
     mutePulseItem,
+    reportPulseItem,
     type PulseFeedItem,
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
@@ -163,6 +164,11 @@ export default function PulseScreen() {
         if (cat === selectedCategory) return;
         void Haptics.selectionAsync().catch(() => {});
         setSelectedCategory(cat);
+    };
+
+    const handleReport = async (item: PulseFeedItem, reason: string) => {
+        await reportPulseItem(item, reason, identity);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     };
 
     const handleMute = async (itemId: string) => {
@@ -430,6 +436,7 @@ export default function PulseScreen() {
                             item={item}
                             currentPubkey={identity?.publicKey}
                             onMute={handleMute}
+                            onReport={handleReport}
                         />
                     )}
                     contentContainerStyle={styles.listContent}

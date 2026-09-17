@@ -12,6 +12,8 @@ import {
     fetchPulseFeed,
     getFixturePulseFeed,
     mutePulseItem,
+    reportPulseItem,
+    canReportPulseItem,
     formatRelativeTime,
     PULSE_FIXTURE_ITEMS,
     type PulseFeedItem,
@@ -242,5 +244,50 @@ describe('pulse utility (native)', () => {
 
             await expect(mutePulseItem('item_1', true, mockIdentity)).rejects.toThrow('Not your item to mute');
         });
+    });
+});
+
+describe('reporting a Pulse item (native)', () => {
+    const identity = { publicKey: 'viewer-pub', privateKey: 'viewer-priv' } as any;
+    const item = {
+        id: 'item_abc', ownerPubkey: 'owner-pub', callsign: 'Kayla', avatarUrl: null, platform: 'youtube',
+        category: 'craft', url: 'https://youtube.com/watch?v=abc', title: 'Clip', thumbnailUrl: null,
+        publishedAt: null, source: 'manual', isVerified: false,
+    } as PulseFeedItem;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(anchorUrl).mockResolvedValue('https://test.beanpool.org');
+    });
+
+    it('offers Report only for a signed-in viewer on an item that is not theirs', () => {
+        expect(canReportPulseItem(item, 'viewer-pub')).toBe(true);
+        expect(canReportPulseItem(item, 'owner-pub')).toBe(false);
+        expect(canReportPulseItem(item, null)).toBe(false);
+        expect(canReportPulseItem({ ...item, id: 'item_fix_1' }, 'viewer-pub')).toBe(false);
+    });
+
+    it('sends a signed report naming the Pulse item and its owner', async () => {
+        vi.mocked(signedPost).mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) } as any);
+        const res = await reportPulseItem(item, 'Offensive content', identity);
+        expect(res.success).toBe(true);
+        expect(signedPost).toHaveBeenCalledWith(
+            'https://test.beanpool.org',
+            '/api/reports',
+            { reporterPubkey: 'viewer-pub', targetPubkey: 'owner-pub', targetPulseItemId: 'item_abc', reason: 'Offensive content' },
+            identity,
+        );
+    });
+
+    it("surfaces the node's refusal", async () => {
+        vi.mocked(signedPost).mockResolvedValueOnce({
+            ok: false, status: 404, json: async () => ({ error: 'not_found', message: 'That Pulse item no longer exists.' }),
+        } as any);
+        await expect(reportPulseItem(item, 'Spam or scam', identity)).rejects.toThrow('That Pulse item no longer exists.');
+    });
+
+    it('requires an identity', async () => {
+        await expect(reportPulseItem(item, 'Spam or scam', null)).rejects.toThrow(/Identity required/);
+        expect(signedPost).not.toHaveBeenCalled();
     });
 });

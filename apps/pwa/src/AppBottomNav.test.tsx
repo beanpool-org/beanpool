@@ -87,9 +87,16 @@ vi.mock('./pages/ProjectsPage', () => ({
 }));
 
 vi.mock('./pages/SettingsPage', () => ({
-    SettingsPage: ({ onBack }: { onBack: () => void }) => (
-        <button onClick={onBack}>← Back</button>
+    SettingsPage: ({ onBack, onReRunSetup }: { onBack: () => void; onReRunSetup?: () => void }) => (
+        <>
+            <button onClick={onBack}>← Back</button>
+            <button onClick={onReRunSetup}>Re-run setup</button>
+        </>
     ),
+}));
+
+vi.mock('./components/ProfileSetup', () => ({
+    ProfileSetup: () => <div>Profile setup</div>,
 }));
 
 describe('App mobile bottom nav dynamic visibility & CSS variable regression (#791 / #792)', () => {
@@ -265,5 +272,20 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
         expect(wrapper.style.zIndex).toBe(nav.style.zIndex);
         expect(header.compareDocumentPosition(wrapper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(wrapper.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('draws profile setup above both the header and the bottom nav, so its last step\'s Back is tappable', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+        const header = mobileHeader();
+        fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Re-run setup' }));
+
+        const setup = await screen.findByTestId('profile-setup-overlay');
+        const nav = screen.getByTestId('mobile-bottom-nav');
+        expect(Number(setup.style.zIndex)).toBeGreaterThan(Number(header.style.zIndex));
+        expect(Number(setup.style.zIndex)).toBeGreaterThan(Number(nav.style.zIndex));
     });
 });

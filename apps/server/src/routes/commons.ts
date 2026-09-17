@@ -38,8 +38,13 @@ router.get('/api/commons/projects', async (ctx) => {
 
 router.post('/api/commons/projects', async (ctx) => {
     const { proposerPubkey, title, description, requestedAmount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || !title || !requestedAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!title || !requestedAmount) {
         ctx.status = 400;
         ctx.body = { error: 'proposerPubkey, title, and requestedAmount are required' };
         return;
@@ -55,8 +60,12 @@ router.post('/api/commons/projects', async (ctx) => {
 
 router.post('/api/commons/projects/update', async (ctx) => {
     const { proposerPubkey, projectId, title, description, requestedAmount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || typeof actor !== 'string') return ctx.throw(400, 'Invalid pubkey');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!projectId || !title || !requestedAmount) return ctx.throw(400, 'Missing fields');
     
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
@@ -68,8 +77,12 @@ router.post('/api/commons/projects/update', async (ctx) => {
 
 router.post('/api/commons/projects/delete', async (ctx) => {
     const { proposerPubkey, projectId } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || typeof actor !== 'string') return ctx.throw(400, 'Invalid pubkey');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!projectId) return ctx.throw(400, 'Missing projectId');
     
     const success = deleteProject(actor, projectId);
@@ -81,8 +94,13 @@ router.post('/api/commons/projects/delete', async (ctx) => {
 
 router.post('/api/commons/vote', async (ctx) => {
     const { voterPubkey, projectId, voteCount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || voterPubkey;
-    if (!actor || !projectId) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!projectId) {
         ctx.status = 400;
         ctx.body = { error: 'voterPubkey and projectId are required' };
         return;
@@ -218,8 +236,13 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
 
 router.post('/api/crowdfund/projects', async (ctx) => {
     const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!actor || !title || !goalAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
         return;
@@ -258,8 +281,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
 
 router.post('/api/crowdfund/projects/update', async (ctx) => {
     const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!id || !actor || !title || !goalAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!id || !title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'id, creatorPubkey, title, and goalAmount are required' };
         return;
@@ -301,8 +329,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
 router.post('/api/crowdfund/projects/delete', async (ctx) => {
     const { id, creatorPubkey } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!id || !actor) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!id) {
         ctx.status = 400;
         ctx.body = { error: 'id and creatorPubkey are required' };
         return;
@@ -321,13 +354,18 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
 router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     const projectId = ctx.params.id;
     const { fromPubkey, amount, memo } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || fromPubkey;
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     const parsedAmount = Number(amount);
     
     // SECURITY (SRV-8): require a positive, finite amount. A negative parsedAmount
     // is truthy and previously slipped past `!parsedAmount`, relying on the
     // transactions CHECK(amount > 0) to abort mid-transaction.
-    if (!actor || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
         ctx.body = { error: 'fromPubkey and a positive amount are required' };
         return;

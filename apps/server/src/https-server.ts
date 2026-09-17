@@ -511,6 +511,35 @@ function untrackConnection(ws: any) {
     }
 }
 
+/**
+ * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
+ * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
+ * toggles) compares the path as sent. Those two views must never disagree about what a request is, so a
+ * path that is canonical only once case is ignored is refused before any of them run:
+ *   - the `/api` or `/ws` prefix itself is not lowercase; or
+ *   - the path reaches a route only by ignoring case.
+ * Route PARAMETERS keep their case — a mixed-case callsign or id still matches, because only the literal
+ * part of a route differs between the two regexps.
+ */
+const caseSensitiveRouteRegexps = new WeakMap<Router.Layer, RegExp>();
+function isNonCanonicalPath(router: Router, requestPath: string): boolean {
+    const lower = requestPath.toLowerCase();
+    if (lower === requestPath) return false;
+    for (const prefix of ['/api', '/ws']) {
+        if ((lower === prefix || lower.startsWith(prefix + '/')) && !requestPath.startsWith(prefix)) return true;
+    }
+    for (const layer of router.stack) {
+        if (layer.methods.length === 0 || !layer.match(requestPath)) continue;
+        let exact = caseSensitiveRouteRegexps.get(layer);
+        if (!exact) {
+            exact = new RegExp(layer.regexp.source, layer.regexp.flags.replace('i', ''));
+            caseSensitiveRouteRegexps.set(layer, exact);
+        }
+        if (!exact.test(requestPath)) return true;
+    }
+    return false;
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
@@ -537,12 +566,25 @@ export async function startHttpsServer(port: number): Promise<void> {
         // evaluated by browsers during HTML document navigation or iframe embedding.
         // They are omitted on API routes and WebSocket paths to eliminate protocol overhead (~450 bytes)
         // on JSON fetch and 304 responses, while ensuring HTML documents and static assets retain them.
-        const isApiOrWs = ctx.path === '/api' || ctx.path.startsWith('/api/') || ctx.path === '/ws' || ctx.path.startsWith('/ws/');
+        const lowerPath = ctx.path.toLowerCase();
+        const isApiOrWs = lowerPath === '/api' || lowerPath.startsWith('/api/') || lowerPath === '/ws' || lowerPath.startsWith('/ws/');
         if (!isApiOrWs) {
             ctx.set('X-Frame-Options', 'DENY');
             ctx.set('X-XSS-Protection', '1; mode=block');
             // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
             ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
+        }
+        await next();
+    });
+
+    // Fail closed on a path that only matches once case is ignored — see isNonCanonicalPath. 404 rather
+    // than 401: nothing lives at that spelling, and a signature would not change that, so 401 would
+    // misdirect a client into signing a request that can never succeed.
+    app.use(async (ctx, next) => {
+        if (isNonCanonicalPath(router, ctx.path)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Not found' };
+            return;
         }
         await next();
     });
@@ -589,7 +631,7 @@ export async function startHttpsServer(port: number): Promise<void> {
 
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            const normalizedPath = path.posix.normalize(ctx.path).replace(/\/+$/, '') || '/';
+            const normalizedPath = path.posix.normalize(ctx.path.toLowerCase()).replace(/\/+$/, '') || '/';
             if (
                 normalizedPath === '/settings' ||
                 normalizedPath.startsWith('/settings/') ||
@@ -628,27 +670,30 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
 
         // 3. Subsystem Feature Toggles Interceptors
-        if (!gwConfig.features?.marketplace && ctx.path.startsWith('/api/marketplace')) {
+        // What a check PROTECTS is matched ignoring case; what it EXEMPTS is matched as sent, so a
+        // differently-cased spelling can only ever be treated more strictly.
+        const lowerPath = ctx.path.toLowerCase();
+        if (!gwConfig.features?.marketplace && lowerPath.startsWith('/api/marketplace')) {
             ctx.status = 503;
             ctx.body = { error: 'Marketplace feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.messaging && ctx.path.startsWith('/api/messaging')) {
+        if (!gwConfig.features?.messaging && lowerPath.startsWith('/api/messaging')) {
             ctx.status = 503;
             ctx.body = { error: 'Messaging feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.federation && ctx.path.startsWith('/api/federation')) {
+        if (!gwConfig.features?.federation && lowerPath.startsWith('/api/federation')) {
             ctx.status = 503;
             ctx.body = { error: 'Federation feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.invites && (ctx.path.startsWith('/api/invite') || ctx.path.startsWith('/api/community/invite'))) {
+        if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite'))) {
             ctx.status = 503;
             ctx.body = { error: 'Invites feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.servePwa && (ctx.path === '/' || ctx.path.startsWith('/app') || ctx.path.endsWith('.html'))) {
+        if (!gwConfig.features?.servePwa && (ctx.path === '/' || lowerPath.startsWith('/app') || lowerPath.endsWith('.html'))) {
             // The invite trampoline (`/?invite=`) is plain HTML served by this
             // server (NOT the PWA), and invites must work even on headless nodes
             // — so exempt it. It renders native-app-only there (no web escape
@@ -690,7 +735,8 @@ export async function startHttpsServer(port: number): Promise<void> {
     // Administrative In-Memory Rate Limiter Middleware
     const adminRateLimits = new Map<string, number[]>();
     app.use(async (ctx, next) => {
-        if (ctx.path.startsWith('/api/local/') || ctx.path.startsWith('/api/admin/')) {
+        const lowerPath = ctx.path.toLowerCase();
+        if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
@@ -750,7 +796,7 @@ export async function startHttpsServer(port: number): Promise<void> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                const routeLimit = routeBodyLimit(ctx.path);
+                const routeLimit = routeBodyLimit(ctx.path.toLowerCase());
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
@@ -797,11 +843,16 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Cryptographic Signature Verification Middleware
     async function requireSignature(ctx: Koa.Context, next: Koa.Next) {
-        const isMutatingApi = (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') && ctx.path.startsWith('/api/');
+        // Whether a request NEEDS a signature is decided ignoring case, matching how the router dispatches
+        // it. The exemptions below (bypass list, public reads) stay exact-match, so a differently-cased
+        // spelling can only ever be held to the stricter rule. isNonCanonicalPath refuses such spellings
+        // earlier; this keeps the middleware correct on its own.
+        const isApiPath = ctx.path.toLowerCase().startsWith('/api/');
+        const isMutatingApi = (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') && isApiPath;
         // SRV-2/SRV-4: gated reads require the same signature as writes when
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
         // unless it is on the public allowlist.
-        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && ctx.path.startsWith('/api/') && !isPublicRead(ctx.path);
+        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && isApiPath && !isPublicRead(ctx.path);
         const isBypassed =
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||

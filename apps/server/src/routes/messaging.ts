@@ -192,14 +192,19 @@ router.post('/api/messages/edit', async (ctx) => {
     const { messageId, ciphertext, nonce } = (ctx as any).requestBody || {};
     // The author is the verified request signer (ctx.state.actor) — not a client-supplied
     // field — so nobody can edit someone else's message.
-    const actor = ctx.state.actor || (ctx as any).requestBody?.authorPubkey;
-    if (!messageId || !ciphertext || !nonce || !actor) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || !ciphertext || !nonce) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, ciphertext, and nonce are required' };
         return;
     }
     try {
-        const msg = editMessage(messageId, actor as string, ciphertext, nonce);
+        const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
         // Thread and removed messages are refused outright (403) so the client can say why;
@@ -230,11 +235,16 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
-    const actor = (ctx.state.actor as string | undefined) || (ctx as any).requestBody?.pubkey;
+    const actor = ctx.state.actor as string | undefined;
     const { conversationId } = (ctx as any).requestBody || {};
-    if (!actor || !conversationId) {
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!conversationId) {
         ctx.status = 400;
-        ctx.body = { error: 'Missing pubkey or conversationId' };
+        ctx.body = { error: 'Missing conversationId' };
         return;
     }
     const conv = getConversation(conversationId);
@@ -280,8 +290,13 @@ router.get('/api/messages/:conversationId', async (ctx) => {
 
 router.post('/api/messages/react', async (ctx) => {
     const { messageId, authorPubkey, emoji } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || authorPubkey;
-    if (!messageId || !actor || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };
         return;

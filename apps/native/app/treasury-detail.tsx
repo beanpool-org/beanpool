@@ -7,7 +7,13 @@ import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'exp
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { getTreasuryDetail, getBalance, treasurySweep, treasuryApprove, treasuryComplete, treasuryReject, treasuryPledge, reportAbuse, deleteCrowdfundProjectApi, getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage } from '../utils/db';
+import {
+    getTreasuryDetail, getBalance, treasurySweep, treasuryApprove,
+    treasuryComplete, treasuryReject, treasuryPledge, reportAbuse,
+    deleteCrowdfundProjectApi, requestToJoinEnterprise, approveKeeperRequest,
+    declineKeeperRequest, proposeEnterpriseSuccession, voteEnterpriseSuccession,
+    getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage
+} from '../utils/db';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -50,6 +56,15 @@ export default function TreasuryDetailScreen() {
     const [reportReason, setReportReason] = useState('');
     const [reporting, setReporting] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+
+    // Keeper Join Request State
+    const [joinBackingPledge, setJoinBackingPledge] = useState('0');
+    const [submittingJoin, setSubmittingJoin] = useState(false);
+    const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+
+    // Lead Succession State
+    const [submittingSuccession, setSubmittingSuccession] = useState(false);
+    const [showCandidatePicker, setShowCandidatePicker] = useState(false);
 
     // Enterprise Discussion Thread State
     const [threadMessages, setThreadMessages] = useState<any[]>([]);
@@ -96,8 +111,55 @@ export default function TreasuryDetailScreen() {
         keepersLabel: { fontSize: 10, fontWeight: '800', color: colors.text.secondary, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
         keepersList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
         keeperChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surface.app, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border.default },
+        keeperChipSuspended: { opacity: 0.6 },
         keeperCallsign: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
-        keeperRole: { fontSize: 11, color: colors.text.secondary },
+        leadKeeperBadge: { backgroundColor: colors.feedback.warning.bg, color: colors.feedback.warning.fg, fontSize: 10, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', textTransform: 'uppercase', letterSpacing: 0.5 },
+        keeperBadge: { backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 10, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+        backingText: { fontSize: 11, fontWeight: '700', color: colors.brand.primary },
+
+        // Join Request Section
+        joinCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        joinTitle: { fontSize: 13, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
+        joinDesc: { fontSize: 12, color: colors.text.secondary, lineHeight: 18, marginBottom: 12 },
+        joinInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+        joinInput: { width: 80, height: 44, backgroundColor: colors.surface.app, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
+        joinAvailableText: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, flex: 1 },
+        joinButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        joinButtonDisabled: { opacity: 0.5 },
+        joinButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
+        pendingRequestBanner: { backgroundColor: colors.brand.tint, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.brand.primary, marginBottom: 16 },
+        pendingRequestTitle: { fontSize: 12, fontWeight: '800', color: colors.brand.primary, marginBottom: 2 },
+        pendingRequestText: { fontSize: 12, color: colors.brand.primary },
+
+        // Pending Requests Review (for Lead / Sole / Admin)
+        requestsCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
+        requestsTitle: { fontSize: 12, fontWeight: '800', color: colors.feedback.warning.fg, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+        requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        requestInfo: { flex: 1 },
+        requestCallsign: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        requestBacking: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        requestBtnRow: { flexDirection: 'row', gap: 8 },
+        approveBtn: { backgroundColor: colors.brand.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+        approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 12 },
+        declineBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
+        declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 12 },
+
+        // Lead Succession
+        successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
+        successionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid },
+        successionText: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginBottom: 12 },
+        successionVoteBox: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 8 },
+        successionCandidateText: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        successionVotesText: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
+        voteBtn: { backgroundColor: colors.feedback.warning.solid, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+        voteBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
+        votedBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginTop: 4 },
+        proposeBtn: { backgroundColor: colors.brand.primary, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+        proposeBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
+        candidateOption: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border.default, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        candidateOptionText: { fontSize: 15, fontWeight: '600', color: colors.text.heading },
+
 
         balanceCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
@@ -169,24 +231,30 @@ export default function TreasuryDetailScreen() {
     const load = useCallback(() => {
         let active = true;
         setLoading(true);
-        if (treasuryKey) {
-            getTreasuryDetail(treasuryKey)
-                .then((d) => { if (active) { setDetail(d); setLoading(false); } })
-                .catch(() => { if (active) setLoading(false); });
-        } else {
-            setLoading(false);
-        }
-        loadIdentity().then((id: any) => {
-            if (!active) return;
-            setIdentity(id);
-            if (id?.publicKey) {
-                getBalance(id.publicKey).then((b: any) => {
+        (async () => {
+            try {
+                const [d, id] = await Promise.all([
+                    treasuryKey ? getTreasuryDetail(treasuryKey) : Promise.resolve(null),
+                    loadIdentity()
+                ]);
+                if (!active) return;
+                if (d) setDetail(d);
+                setIdentity(id);
+                if (id?.publicKey && treasuryKey) {
+                    const b: any = await getBalance(id.publicKey).catch(() => ({}));
                     if (!active) return;
-                    const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                    setIsKeeperOfThis(!!treasuryKey && mine.includes(treasuryKey));
-                }).catch(() => {});
+                    const mine: string[] = Array.isArray(b?.keeperOf) ? b.keeperOf : [];
+                    const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === id.publicKey);
+                    setIsKeeperOfThis(mine.includes(treasuryKey) || inKeepers);
+                } else {
+                    setIsKeeperOfThis(false);
+                }
+            } catch {
+                // handle error
+            } finally {
+                if (active) setLoading(false);
             }
-        });
+        })();
         loadThread();
         return () => { active = false; };
     }, [treasuryKey]);
@@ -254,6 +322,16 @@ export default function TreasuryDetailScreen() {
     const name = detail?.name || nameParam || 'Community Enterprise';
     const avatar = detail?.avatar || avatarParam;
 
+    const availableToBack = detail?.availableToBack ?? 0;
+    const isLeadOrSoleKeeperOrAdmin = !!detail?.isLeadOrSoleKeeperOrAdmin;
+    const keeperRequests: any[] = detail?.keeperRequests || [];
+    const myPendingRequest = detail?.myPendingRequest || null;
+    const leadInactivity = detail?.leadInactivity || null;
+    const successionInfo = detail?.succession || null;
+    const activeProposal = successionInfo?.proposals?.find((p: any) => p.status === 'active') || null;
+    const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
+
+
     const handleSweep = async () => {
         if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
@@ -269,6 +347,101 @@ export default function TreasuryDetailScreen() {
             Alert.alert('Sweep failed', e.message || 'Could not sweep to the Commons.');
         } finally {
             setSweeping(false);
+        }
+    };
+
+    const handleJoinRequest = async () => {
+        if (!treasuryKey || submittingJoin) return;
+        const available = detail?.availableToBack ?? 0;
+        const amt = Number(joinBackingPledge);
+        if (isNaN(amt) || amt < 0) {
+            Alert.alert('Invalid Backing', 'Please enter 0 or a positive number of standing beans.');
+            return;
+        }
+        if (amt > available) {
+            Alert.alert('Exceeds Available Standing', `You have ${available} Beans of standing available to back this enterprise.`);
+            return;
+        }
+        setSubmittingJoin(true);
+        try {
+            await requestToJoinEnterprise(treasuryKey, amt);
+            Alert.alert('Request Submitted 🌱', `Your request to join as a keeper with ${amt} 🫘 backing has been submitted for review.`);
+            load();
+        } catch (e: any) {
+            Alert.alert('Request Failed', e.message || 'Could not submit keeper request.');
+        } finally {
+            setSubmittingJoin(false);
+        }
+    };
+
+    const handleApproveRequest = async (requestId: string) => {
+        if (!treasuryKey || processingRequestId) return;
+        setProcessingRequestId(requestId);
+        try {
+            await approveKeeperRequest(treasuryKey, requestId);
+            Alert.alert('Request Approved 🌱', 'Member is now a keeper of this enterprise.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Approval Failed', e.message || 'Could not approve keeper request.');
+        } finally {
+            setProcessingRequestId(null);
+        }
+    };
+
+    const handleDeclineRequest = async (requestId: string) => {
+        if (!treasuryKey || processingRequestId) return;
+        setProcessingRequestId(requestId);
+        try {
+            await declineKeeperRequest(treasuryKey, requestId);
+            Alert.alert('Request Declined', 'Keeper request has been declined.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Decline Failed', e.message || 'Could not decline keeper request.');
+        } finally {
+            setProcessingRequestId(null);
+        }
+    };
+
+    const handleProposeSuccession = async (candidatePubkey: string) => {
+        if (!treasuryKey || submittingSuccession) return;
+        setSubmittingSuccession(true);
+        try {
+            const res: any = await proposeEnterpriseSuccession(treasuryKey, candidatePubkey);
+            const leadMoved = res?.executed ?? res?.leadMoved ?? false;
+            const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
+            const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
+            if (leadMoved) {
+                Alert.alert('Succession Passed 🌱', 'Lead keeper role has been transferred.');
+            } else {
+                Alert.alert('Succession Proposed 🌱', `Proposal submitted (${votesCount} of ${votesRequired} votes recorded).`);
+            }
+            setShowCandidatePicker(false);
+            load();
+        } catch (e: any) {
+            Alert.alert('Proposal Failed', e.message || 'Could not propose lead succession.');
+        } finally {
+            setSubmittingSuccession(false);
+        }
+    };
+
+    const handleVoteSuccession = async (proposalId: string) => {
+        if (!treasuryKey || submittingSuccession) return;
+        setSubmittingSuccession(true);
+        try {
+            const res: any = await voteEnterpriseSuccession(treasuryKey, proposalId);
+            const leadMoved = res?.executed ?? res?.leadMoved ?? false;
+            const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
+            const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
+            if (leadMoved) {
+                Alert.alert('Succession Passed 🌱', 'Your vote was recorded and the lead keeper role has been transferred!');
+            } else {
+                Alert.alert('Vote Registered 🌱', `Vote recorded (${votesCount} of ${votesRequired} votes).`);
+            }
+            load();
+        } catch (e: any) {
+            Alert.alert('Vote Failed', e.message || 'Could not vote on succession.');
+        } finally {
+            setSubmittingSuccession(false);
         }
     };
 
@@ -528,18 +701,189 @@ export default function TreasuryDetailScreen() {
                             );
                         })()}
 
+                        {/* Pending Keeper Requests (for Lead / Sole Keeper / Admin) */}
+                        {isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
+                            <View style={styles.requestsCard}>
+                                <Text style={styles.requestsTitle}>PENDING KEEPER REQUESTS ({keeperRequests.length})</Text>
+                                {keeperRequests.map((req: any) => (
+                                    <View key={req.id} style={styles.requestRow}>
+                                        <View style={styles.requestInfo}>
+                                            <Text style={styles.requestCallsign}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
+                                            <Text style={styles.requestBacking}>
+                                                Backing pledge: {req.pledgedBacking} 🫘
+                                            </Text>
+                                        </View>
+                                        <View style={styles.requestBtnRow}>
+                                            <Pressable
+                                                style={[styles.approveBtn, processingRequestId === req.id && { opacity: 0.6 }]}
+                                                disabled={processingRequestId === req.id}
+                                                onPress={() => handleApproveRequest(req.id)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Approve keeper request"
+                                            >
+                                                {processingRequestId === req.id ? (
+                                                    <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                ) : (
+                                                    <Text style={styles.approveBtnText}>Approve</Text>
+                                                )}
+                                            </Pressable>
+                                            <Pressable
+                                                style={[styles.declineBtn, processingRequestId === req.id && { opacity: 0.6 }]}
+                                                disabled={processingRequestId === req.id}
+                                                onPress={() => handleDeclineRequest(req.id)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Decline keeper request"
+                                            >
+                                                <Text style={styles.declineBtnText}>Decline</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
+                        {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
+                            <View style={styles.successionCard}>
+                                <View style={styles.successionHeader}>
+                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.solid} />
+                                    <Text style={styles.successionTitle}>
+                                        LEAD KEEPER INACTIVE ({Math.floor(leadInactivity.daysInactive)} DAYS)
+                                    </Text>
+                                </View>
+                                <Text style={styles.successionText}>
+                                    The lead keeper ({leadInactivity.leadCallsign}) has recorded no node activity for 30+ days. A strict majority of the other keepers can move the lead role to an active keeper. If the lead returns before completion, the proposal is cancelled automatically.
+                                </Text>
+
+                                {activeProposal ? (
+                                    <View style={styles.successionVoteBox}>
+                                        <Text style={styles.successionCandidateText}>
+                                            Succession Proposal: Elect {activeProposal.candidateCallsign} as lead keeper
+                                        </Text>
+                                        <Text style={styles.successionVotesText}>
+                                            Votes: {activeProposal.votesCount} of {activeProposal.requiredVotes ?? activeProposal.votesRequired ?? 0} required (strict majority of {activeProposal.totalEligible ?? 'other'} other keepers)
+                                        </Text>
+                                        {isEligibleSuccessor && (
+                                            activeProposal.votes?.some((v: any) => (v.voterPubkey || v.voter_pubkey) === identity?.publicKey) ? (
+                                                <Text style={styles.votedBadge}>✓ You voted to approve this succession</Text>
+                                            ) : (
+                                                <Pressable
+                                                    style={[styles.voteBtn, submittingSuccession && { opacity: 0.6 }]}
+                                                    disabled={submittingSuccession}
+                                                    onPress={() => handleVoteSuccession(activeProposal.id)}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Vote to elect ${activeProposal.candidateCallsign} as lead keeper`}
+                                                >
+                                                    {submittingSuccession ? (
+                                                        <ActivityIndicator size="small" color={colors.text.inverse} />
+                                                    ) : (
+                                                        <Text style={styles.voteBtnText}>
+                                                            Vote to elect {activeProposal.candidateCallsign} as lead keeper
+                                                        </Text>
+                                                    )}
+                                                </Pressable>
+                                            )
+                                        )}
+                                    </View>
+                                ) : isEligibleSuccessor ? (
+                                    <Pressable
+                                        style={[styles.proposeBtn, submittingSuccession && { opacity: 0.6 }]}
+                                        disabled={submittingSuccession}
+                                        onPress={() => setShowCandidatePicker(true)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Propose Active Keeper as Lead"
+                                    >
+                                        <Text style={styles.proposeBtnText}>Propose Active Keeper as Lead</Text>
+                                    </Pressable>
+                                ) : null}
+                            </View>
+                        )}
+
+                        {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
+                        {identity && !isKeeperOfThis && detail?.status !== 'completed' && (
+                            myPendingRequest ? (
+                                <View style={styles.pendingRequestBanner}>
+                                    <Text style={styles.pendingRequestTitle}>⏳ KEEPER REQUEST PENDING</Text>
+                                    <Text style={styles.pendingRequestText}>
+                                        You asked to join this enterprise with {myPendingRequest.pledgedBacking} 🫘 of backing standing. Awaiting review by the lead keeper.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View style={styles.joinCard}>
+                                    <Text style={styles.joinTitle}>🤝 ASK TO JOIN AS A KEEPER</Text>
+                                    <Text style={styles.joinDesc}>
+                                        Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.
+                                    </Text>
+
+                                    <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>
+                                        Back this enterprise with your standing: 0 … {availableToBack}
+                                    </Text>
+                                    <View style={styles.joinInputRow}>
+                                        <TextInput
+                                            style={styles.joinInput}
+                                            value={joinBackingPledge}
+                                            onChangeText={(t) => {
+                                                const raw = Math.floor(Number(t) || 0);
+                                                const clamped = Math.max(0, Math.min(availableToBack, raw));
+                                                setJoinBackingPledge(isNaN(raw) ? '0' : String(clamped));
+                                            }}
+                                            keyboardType="numeric"
+                                            accessibilityLabel={`Back this enterprise with your standing: 0 to ${availableToBack}`}
+                                        />
+                                        <Text style={styles.joinAvailableText}>
+                                            / {availableToBack} 🫘 available
+                                        </Text>
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: colors.text.muted, marginBottom: 12 }}>
+                                        A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.
+                                    </Text>
+
+                                    <Pressable
+                                        style={[styles.joinButton, (submittingJoin || Number(joinBackingPledge) > availableToBack) && styles.joinButtonDisabled]}
+                                        disabled={submittingJoin || Number(joinBackingPledge) > availableToBack}
+                                        onPress={handleJoinRequest}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Request to join as keeper"
+                                    >
+                                        {submittingJoin ? (
+                                            <ActivityIndicator size="small" color={colors.text.inverse} />
+                                        ) : (
+                                            <Text style={styles.joinButtonText}>Request to join as keeper</Text>
+                                        )}
+                                    </Pressable>
+                                </View>
+                            )
+                        )}
+
                         {/* Accountable Keepers */}
                         {detail?.keepers && detail.keepers.length > 0 && (
                             <View style={styles.keepersCard}>
                                 <Text style={styles.keepersLabel}>ACCOUNTABLE KEEPERS ({detail.keepers.length})</Text>
                                 <View style={styles.keepersList}>
-                                    {detail.keepers.map((k: any) => (
-                                        <View key={k.publicKey || k.pubkey} style={styles.keeperChip}>
-                                            <MaterialCommunityIcons name="shield-account" size={14} color={colors.brand.primary} />
-                                            <Text style={styles.keeperCallsign}>{k.callsign}</Text>
-                                            <Text style={styles.keeperRole}>({k.role || 'keeper'})</Text>
-                                        </View>
-                                    ))}
+                                    {detail.keepers.map((k: any) => {
+                                        const isLead = k.role === 'lead';
+                                        const pk = k.publicKey || k.pubkey || k.memberPubkey;
+                                        // Suspended keepers are shown, not hidden: they still count as keepers of this
+                                        // enterprise, but cannot act until the suspension is lifted.
+                                        const isSuspended = !!k.suspended;
+                                        return (
+                                            <View
+                                                key={pk}
+                                                style={[styles.keeperChip, isSuspended && styles.keeperChipSuspended]}
+                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? 'lead keeper' : 'keeper'}, suspended` : undefined}
+                                            >
+                                                <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
+                                                <Text style={styles.keeperCallsign}>{k.callsign}</Text>
+                                                {isSuspended && <Text style={styles.keeperBadge}>Suspended</Text>}
+                                                <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
+                                                    {isLead ? 'Lead keeper' : 'Keeper'}
+                                                </Text>
+                                                {Number(k.backing) > 0 && (
+                                                    <Text style={styles.backingText}>+{k.backing} 🫘</Text>
+                                                )}
+                                            </View>
+                                        );
+                                    })}
                                 </View>
                             </View>
                         )}
@@ -998,6 +1342,49 @@ export default function TreasuryDetailScreen() {
                                     <Text style={{ color: colors.text.inverse, fontWeight: '800' }}>Release Payment</Text>
                                 </Pressable>
                             </View>
+                        </View>
+                    </View>
+                </Modal>
+            )}
+
+            {showCandidatePicker && (
+                <Modal visible transparent animationType="fade" onRequestClose={() => setShowCandidatePicker(false)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                        <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, borderWidth: 1, borderColor: colors.border.default }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
+                                Propose Lead Keeper
+                            </Text>
+                            <Text style={{ fontSize: 13, color: colors.text.secondary, marginBottom: 14 }}>
+                                Select an active keeper to move the lead role to:
+                            </Text>
+                            <ScrollView style={{ maxHeight: 240, marginBottom: 16 }}>
+                                {(detail?.keepers || [])
+                                    .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity?.leadPubkey)
+                                    .map((k: any) => {
+                                        const pk = k.publicKey || k.pubkey || k.memberPubkey;
+                                        return (
+                                            <Pressable
+                                                key={pk}
+                                                style={styles.candidateOption}
+                                                onPress={() => handleProposeSuccession(pk)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={`Propose ${k.callsign} as lead keeper`}
+                                            >
+                                                <Text style={styles.candidateOptionText}>
+                                                    {k.callsign} {pk === identity?.publicKey ? '(yourself)' : ''}
+                                                </Text>
+                                                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
+                                            </Pressable>
+                                        );
+                                    })}
+                            </ScrollView>
+                            <Pressable
+                                style={{ height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.default }}
+                                onPress={() => setShowCandidatePicker(false)}
+                                accessibilityRole="button"
+                            >
+                                <Text style={{ color: colors.text.body, fontWeight: '700' }}>Cancel</Text>
+                            </Pressable>
                         </View>
                     </View>
                 </Modal>

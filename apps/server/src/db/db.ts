@@ -484,6 +484,22 @@ export function initSchema() {
         }
     } catch { }
 
+    // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
+    // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only
+    // from unverified body fields, so most members have NULL here — on deploy every long-standing lead
+    // would be instantly eligible, and in a two-keeper enterprise the other keeper could take the lead at
+    // once. Stamp the NULLs with this migration's run time so every lead gets a full 30 days of verified
+    // activity recording first. Runs once (node_config marker), so a later boot extends nobody.
+    try {
+        const alreadyBackfilled = db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_backfill_last_active_at_v1'").get();
+        if (!alreadyBackfilled) {
+            db.transaction(() => {
+                db.prepare(`UPDATE members SET last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE last_active_at IS NULL`).run();
+                db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('migration_backfill_last_active_at_v1', '1')").run();
+            })();
+        }
+    } catch { }
+
     // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
     try {
         db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();

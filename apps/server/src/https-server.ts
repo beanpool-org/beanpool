@@ -821,11 +821,6 @@ export async function startHttpsServer(port: number): Promise<void> {
                     // survived. test-request-body.ts asserts it over real HTTP instead — same
                     // reasoning as test-keeper-http.ts, and the same trap as #143.
                     (ctx.request as any).body = parsed;
-
-                    const sender = parsed.publicKey || parsed.authorPublicKey || parsed.buyerPublicKey || parsed.from || parsed.memberPublicKey || parsed.voterPublicKey;
-                    if (sender && typeof sender === 'string' && sender.length >= 32) {
-                        recordActivity(sender);
-                    }
                 } catch (e: any) {
                     // A2-10: an over-limit body is rejected outright (413) instead of
                     // silently continuing with an empty body — and we stop here so no
@@ -996,6 +991,12 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.status = 403;
             ctx.body = { error: 'Signature validation failed' };
             return;
+        }
+
+        // Activity (the lead-succession "gone quiet" signal) is recorded from the VERIFIED signer only, never
+        // from a body field — an unsigned request naming the lead must not stamp them active (PR #838 B2).
+        if (ctx.state.actor && (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE')) {
+            try { recordActivity(ctx.state.actor); } catch (e: any) { console.warn('[Activity] could not record:', e?.message || e); }
         }
 
         await next();

@@ -1928,6 +1928,43 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
     }
 }
 
+// Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+}
+
+export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending') {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch { return null; }
+}
+
+export async function approveKeeperRequest(treasury: string, requestId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`, {});
+}
+
+export async function declineKeeperRequest(treasury: string, requestId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/decline`, {});
+}
+
+export async function getEnterpriseSuccession(treasury: string) {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/succession`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch { return null; }
+}
+
+export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, {});
+}
+
 export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: any[]; readOnly: boolean } | null> {
     try {
         const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);

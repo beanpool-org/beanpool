@@ -1195,14 +1195,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             <div ref={mapContainer} className="w-full h-full" />
 
             {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
-                that scrolls sideways rather than wraps, so it holds at 320px with large text. Shown once this
+                that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
                 community has an upcoming event. */}
-            {hasOpenEvents && (
+            {/* Hidden while composing: at 320px the New Post panel leaves only a strip of map to drop a pin in. */}
+            {hasOpenEvents && !showNewPost && (
                 <div
                     data-testid="event-window-chips"
                     role="group"
                     aria-label="Show events"
-                    className="absolute top-[4.25rem] md:top-3 left-0 right-0 z-[100] px-3 flex flex-nowrap gap-2 overflow-x-auto pointer-events-none"
+                    className="absolute top-[4.25rem] md:top-3 left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain"
                     style={{ scrollbarWidth: 'none' }}
                 >
                     {EVENT_WINDOWS.map(w => (
@@ -1211,7 +1212,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             type="button"
                             aria-pressed={eventWindow === w.id}
                             onClick={() => { setEventWindow(w.id); setPreviewPost(null); }}
-                            className={`pointer-events-auto flex-shrink-0 whitespace-nowrap min-h-[44px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
+                            className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
                                 eventWindow === w.id
                                     ? 'bg-violet-700 border-violet-700 text-white'
                                     : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'

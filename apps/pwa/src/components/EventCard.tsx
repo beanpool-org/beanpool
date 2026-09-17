@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { rsvpEvent, removeMarketplacePost, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { formatDistance, formatEventWhen, isEventOpen } from '../lib/events';
+import { eventWhenParts, formatDistance, formatEventWhen, isEventOpen } from '../lib/events';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -85,7 +85,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                 aria-pressed={mine}
                 disabled={!canRsvp || busy !== null}
                 onClick={(e) => { e.stopPropagation(); tap(status); }}
-                className={`flex-1 min-w-0 min-h-[48px] px-2 rounded-xl border text-sm font-extrabold truncate transition-colors disabled:opacity-60 ${
+                className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1 rounded-xl border text-sm font-extrabold leading-tight break-words transition-colors disabled:opacity-60 ${
                     mine
                         ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
                         : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50 dark:bg-nature-900 dark:border-violet-800 dark:text-violet-200'
@@ -100,6 +100,28 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
             {btn('going', 'Going')}
             {btn('interested', 'Interested')}
         </div>
+    );
+}
+
+/**
+ * The date, the time and the CANCELLED / UPDATED badge on the first line, never cut off and never overlapping:
+ * each is a whole piece, and at 320px with large text the next piece moves down a line instead of being
+ * truncated, because the time is the one thing on the card nobody can do without.
+ */
+function EventWhen({ post, className, testId }: { post: MarketplacePost; className: string; testId?: string }) {
+    const parts = eventWhenParts(post);
+    return (
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 w-full">
+            <span data-testid={testId} aria-label={formatEventWhen(post)} className={`contents ${className}`}>
+                {parts && (
+                    <>
+                        <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
+                        <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
+                    </>
+                )}
+            </span>
+            <StateBadge post={post} />
+        </span>
     );
 }
 
@@ -130,12 +152,7 @@ export function EventCard({ post, identity, distanceKm, onOpen, onRsvpChange }: 
                 aria-label={`Open event: ${p.title}`}
                 className="w-full min-w-0 text-left bg-transparent border-0 p-0 flex flex-col gap-1 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg"
             >
-                <span className="flex items-center gap-2 min-w-0 w-full">
-                    <span data-testid="event-when" className="flex-1 min-w-0 truncate text-lg font-black text-violet-800 dark:text-violet-200 leading-tight">
-                        {formatEventWhen(p)}
-                    </span>
-                    <StateBadge post={p} />
-                </span>
+                <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 <span className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
                     {p.title}
                 </span>
@@ -197,17 +214,14 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 <img src={p.photos[0]} alt={p.title} className="w-full max-h-56 object-cover bg-nature-100 dark:bg-nature-900" />
             )}
             <div className="p-4 flex flex-col gap-3">
-                <div className="flex items-start gap-2 min-w-0">
-                    <h2 className="flex-1 min-w-0 m-0 text-2xl font-black text-violet-800 dark:text-violet-200 leading-tight break-words">
-                        {formatEventWhen(p)}
-                    </h2>
-                    <StateBadge post={p} />
-                </div>
+                <h2 className="m-0 min-w-0">
+                    <EventWhen post={p} className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
+                </h2>
                 <h3 className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
 
                 {(p.eventPlaceName || p.lat != null) && (
-                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                        <span className="flex-1 min-w-0 truncate text-sm font-semibold text-nature-700 dark:text-nature-300">
+                    <div className="flex flex-col items-start gap-1 min-w-0">
+                        <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
                             📍 {[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || 'On the map'}
                         </span>
                         {onShowOnMap && p.lat != null && p.lng != null && (
@@ -231,7 +245,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     <button
                         type="button"
                         onClick={() => onOpenProfile?.(p.authorPublicKey)}
-                        className="bg-transparent border-0 p-0 font-bold text-nature-900 dark:text-white underline decoration-dotted cursor-pointer"
+                        className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words"
                     >
                         {hostName}
                     </button>

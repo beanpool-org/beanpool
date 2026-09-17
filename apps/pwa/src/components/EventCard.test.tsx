@@ -35,16 +35,20 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
         renderAt320(<EventCard post={baseEvent} identity={identity} distanceKm={2.4} />);
         const card = screen.getByTestId('event-card');
         const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
-        expect(lines[0].textContent).toBe('SAT 28 SEP · 9:00–12:00');
+        expect(lines[0].textContent).toBe('SAT 28 SEP ·9:00–12:00');
+        expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('SAT 28 SEP · 9:00–12:00');
+        expect(lines[0].className).toMatch(/flex-wrap/);
         expect(lines[1].textContent).toBe(baseEvent.title);
         expect(lines[2].textContent).toBe('📍 Bindarrabi Hall · 2.4 km');
         expect(lines[3].textContent).toBe('👥 7 going · 3 interested');
 
         const when = screen.getByTestId('event-when');
-        expect(when.className).toContain('text-lg');
-        // Every row gives way before the card does: nothing may push it past 320px.
-        expect(when.className).toMatch(/truncate/);
-        expect(when.className).toMatch(/min-w-0/);
+        // The time is never cut off: day and time are whole pieces, in the largest text, that wrap onto a
+        // second line if they must.
+        expect(Array.from(when.children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className), /text-lg/.test(c.className)])).toEqual([
+            ['SAT 28 SEP ·', true, true], ['9:00–12:00', true, true],
+        ]);
+        // Every other row gives way before the card does: nothing may push it past 320px.
         for (const line of Array.from(lines).slice(1)) expect((line as HTMLElement).className).toMatch(/truncate/);
         expect(card.className).toMatch(/min-w-0/);
         expect(card.className).toMatch(/overflow-hidden/);
@@ -90,7 +94,8 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     it('marks UPDATED and CANCELLED on the first line; a cancelled event cannot be RSVPd', () => {
         const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, eventState: 'updated' }} identity={identity} />);
         expect(screen.getByTestId('event-state-badge')).toHaveTextContent('UPDATED');
-        expect(screen.getByTestId('event-state-badge').className).toContain('flex-shrink-0');
+        // On the first line with the date, as one more piece of the wrapping row, so it never covers the time.
+        expect(screen.getByTestId('event-state-badge').parentElement).toBe(screen.getByTestId('event-when').parentElement);
         unmount();
         renderAt320(<EventCard post={{ ...baseEvent, eventState: 'cancelled' }} identity={identity} />);
         expect(screen.getByTestId('event-state-badge')).toHaveTextContent('CANCELLED');

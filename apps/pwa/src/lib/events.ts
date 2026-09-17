@@ -34,15 +34,24 @@ export function eventEndMs(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEn
     return post.eventStartAt ? Date.parse(post.eventStartAt) + EVENT_DEFAULT_DURATION_MS : NaN;
 }
 
+/**
+ * The two halves of an event's time, each kept whole when a narrow card wraps: ["SAT 27 SEP", "9:00–12:00"],
+ * or ["SAT 27 SEP 22:00", "SUN 28 SEP 2:00"] across midnight.
+ */
+export function eventWhenParts(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt'>): { first: string; second: string; sep: string } | null {
+    if (!post.eventStartAt) return null;
+    const start = new Date(post.eventStartAt);
+    if (Number.isNaN(start.getTime())) return null;
+    const end = new Date(eventEndMs(post));
+    if (Number.isNaN(end.getTime())) return { first: day(start), second: time(start), sep: ' · ' };
+    if (sameLocalDay(start, end)) return { first: day(start), second: `${time(start)}–${time(end)}`, sep: ' · ' };
+    return { first: `${day(start)} ${time(start)}`, second: `${day(end)} ${time(end)}`, sep: ' – ' };
+}
+
 /** "SAT 27 SEP · 9:00–12:00", or "SAT 27 SEP 22:00 – SUN 28 SEP 2:00" across midnight. */
 export function formatEventWhen(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt'>): string {
-    if (!post.eventStartAt) return '';
-    const start = new Date(post.eventStartAt);
-    if (Number.isNaN(start.getTime())) return '';
-    const end = new Date(eventEndMs(post));
-    if (Number.isNaN(end.getTime())) return `${day(start)} · ${time(start)}`;
-    if (sameLocalDay(start, end)) return `${day(start)} · ${time(start)}–${time(end)}`;
-    return `${day(start)} ${time(start)} – ${day(end)} ${time(end)}`;
+    const parts = eventWhenParts(post);
+    return parts ? `${parts.first}${parts.sep}${parts.second}` : '';
 }
 
 /** True while an event can still be joined: not cancelled, not removed, not over. */

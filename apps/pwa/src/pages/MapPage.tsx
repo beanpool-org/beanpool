@@ -34,7 +34,7 @@ import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
 import { approximateLocation } from '@beanpool/core';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventInWindow, isEventOpen, localInputToIso, type EventWindow } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventInWindow, isEventOpen, localInputToIso, type EventWindow } from '../lib/events';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -71,13 +71,19 @@ interface Props {
     /** An event opened from its detail with "Show on map": centre on it and show its card. */
     focusPostId?: string | null;
     onFocusPostHandled?: () => void;
+    /**
+     * "Copy to a new date" from an event's host panel (docs/events-on-the-map.md §3, slice 5): open the event
+     * form filled from this event, with Starts and Ends blank.
+     */
+    copyEventPostId?: string | null;
+    onCopyEventHandled?: () => void;
 }
 
 /** Event form limits, as the node enforces them (docs/events-on-the-map.md §2.2). */
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -104,6 +110,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [keeperOf, setKeeperOf] = useState<string[]>([]);
     const [keeperNames, setKeeperNames] = useState<Record<string, string>>({});
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
+    /** True while the event form holds a copy of an existing event, so the form can say what did not come with it. */
+    const [eventIsCopy, setEventIsCopy] = useState(false);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
@@ -539,6 +547,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setEventNote('');
         setEventHost('me');
         setPostApproximate(false);
+        setEventIsCopy(false);
     }
 
     async function handleCreateEvent() {
@@ -1029,6 +1038,58 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             });
     }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, eventWindow]);
 
+    // "Copy to a new date": fetch the event signed and fill the form from it. Fetched rather than taken from
+    // `posts`, because the copy is most useful once the event has already run — and an event that has ended is
+    // out of the feed list, readable only by id, and only to its host and the people who were going (§2.2).
+    // Everything carries over except the two dates and the photo (see buildEventCopy).
+    // Each id is handled once, by a ref rather than by clearing the prop first: clearing it up front would
+    // change this effect's deps and cancel the fetch it had only just started. The parent is told when the
+    // form is filled, not when the tap arrived.
+    const handledCopyId = useRef<string | null>(null);
+    useEffect(() => {
+        if (!copyEventPostId || handledCopyId.current === copyEventPostId) return;
+        const id = copyEventPostId;
+        handledCopyId.current = id;
+        (async () => {
+            let source: MarketplacePost | undefined;
+            try {
+                source = (await getMarketplacePosts({ id, types: CLIENT_POST_TYPES }))[0];
+            } catch {
+                source = posts.find(p => p.id === id);
+            }
+            onCopyEventHandled?.();
+            if (!source || source.type !== 'event') {
+                alert('That event could not be loaded, so there is nothing to copy.');
+                return;
+            }
+            const copy = buildEventCopy(source, identity?.publicKey);
+            setNewPostType('event');
+            setNewPostTitle(copy.title);
+            setNewPostDescription(copy.description);
+            setNewPostPhotos([]);
+            setEventStart('');
+            setEventEnd('');
+            setEventPlaceName(copy.placeName);
+            setEventNote(copy.privateNote);
+            setEventHost(copy.enterprisePubkey ? `ent:${copy.enterprisePubkey}` : copy.groupId ? `group:${copy.groupId}` : 'me');
+            setAudienceScope(copy.groupId ? 'group' : 'public');
+            setTargetGroupId(copy.groupId ?? '');
+            setPostLat(copy.lat);
+            setPostLng(copy.lng);
+            setPostApproximate(false);
+            setPinDropMode(false);
+            setValidationErrors(new Set());
+            setEventIsCopy(true);
+            if (copy.lat != null && copy.lng != null) {
+                placePreviewPin(copy.lat, copy.lng);
+                mapRef.current?.setView([copy.lat, copy.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 15));
+            }
+            setShowNewPost(true);
+        })();
+        // `posts` is only a fallback for an offline fetch; it is deliberately not a dependency here, because
+        // re-running on every poll would reopen the form.
+    }, [copyEventPostId, identity?.publicKey, onCopyEventHandled]);
+
     // "Show on map" from an event's detail: centre on it and open its card once it has loaded.
     useEffect(() => {
         if (!focusPostId) return;
@@ -1390,7 +1451,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">
-                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">New Post</span>
+                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventIsCopy ? 'Copy Event' : 'New Post'}</span>
                     <button onClick={() => {
                         setShowNewPost(false);
                         setPostApproximate(false);
@@ -1399,6 +1460,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setPinDropMode(false);
                         setPostLat(null);
                         setPostLng(null);
+                        setEventIsCopy(false);
                         if (pinDropMarkerRef.current) {
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
@@ -1415,7 +1477,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             key={t}
                             type="button"
                             aria-pressed={newPostType === t}
-                            onClick={() => { setNewPostType(t); setValidationErrors(new Set()); }}
+                            onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
@@ -1508,6 +1570,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                 {newPostType === 'event' ? (
                     <div className="space-y-4 mb-4">
+                        {eventIsCopy && (
+                            <p data-testid="event-copy-hint" className="m-0 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
+                                Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.
+                            </p>
+                        )}
                         {(keeperOf.length > 0 || convenorGroups.length > 0) && (
                             <div>
                                 <label htmlFor="event-host" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Post as</label>

@@ -478,3 +478,73 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-new');
     });
 });
+
+describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
+    const pastEvent: any = {
+        id: 'ev-past', type: 'event', category: 'community', title: 'Working bee at the hall',
+        description: 'Clearing the back garden', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'user-alice-pubkey', authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z',
+        active: true, status: 'active', repeatable: false, lat: -28.55, lng: 153.5,
+        eventStartAt: '2026-09-05T23:00:00.000Z', eventEndAt: '2026-09-06T02:00:00.000Z',
+        eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234', eventState: 'scheduled',
+        audienceScope: 'public',
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        // The feed list has no ended event in it; the by-id read is what finds one (§2.2).
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) =>
+            (filter?.id === 'ev-past' ? [pastEvent] : []) as any);
+    });
+
+    it('opens the event form filled from the event, with both dates blank', async () => {
+        const onCopyEventHandled = vi.fn();
+        let view: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(
+                <MapPage
+                    identity={mockIdentity}
+                    copyEventPostId="ev-past"
+                    onCopyEventHandled={onCopyEventHandled}
+                />
+            );
+        });
+
+        await waitFor(() => expect(view!.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view!.getByTestId('map-new-post-panel');
+
+        expect((within(panel).getByLabelText(/What's happening/i) as HTMLInputElement).value).toBe('Working bee at the hall');
+        expect((within(panel).getByLabelText(/^Description/i) as HTMLTextAreaElement).value).toBe('Clearing the back garden');
+        expect((within(panel).getByLabelText(/Place name/i) as HTMLInputElement).value).toBe('Bindarrabi Hall');
+        expect((within(panel).getByLabelText(/Note for people who are going/i) as HTMLTextAreaElement).value).toBe('Gate code 1234');
+
+        // The two things the host is here to re-pick.
+        expect((within(panel).getByLabelText(/^Starts/i) as HTMLInputElement).value).toBe('');
+        expect((within(panel).getByLabelText(/^Ends/i) as HTMLInputElement).value).toBe('');
+
+        // The pin came with it, and the form says what did not.
+        expect(within(panel).getByTestId('event-copy-hint').textContent).toMatch(/photo is not copied/i);
+        expect(api.getMarketplacePosts).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-past' }));
+        expect(onCopyEventHandled).toHaveBeenCalled();
+    });
+
+    it('cannot be submitted until a date is picked — the node would refuse a past start anyway', async () => {
+        let view: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} copyEventPostId="ev-past" onCopyEventHandled={vi.fn()} />);
+        });
+        await waitFor(() => expect(view!.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view!.getByTestId('map-new-post-panel');
+        // The pin and the title came across, so the button names the one thing still missing.
+        const post = within(panel).getByRole('button', { name: /Add a title and start time/i }) as HTMLButtonElement;
+        expect(post.disabled).toBe(true);
+    });
+});

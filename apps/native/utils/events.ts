@@ -115,6 +115,58 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
     return { ok: true, draft };
 }
 
+// ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
+
+/**
+ * What "Copy to a new date" carries into NewEventModal. One-off events plus this is the whole of repeats in
+ * v1: there are no repeat rules and no materialiser (§5).
+ *
+ * The dates are NOT here, on purpose — the form opens with Starts and Ends blank, because picking the new date
+ * is the one thing the host is here to do, and a prefilled old date is the one value that must never be
+ * submitted by accident.
+ *
+ * The photo is not carried either: the node serves an event's photos as URLs and create takes image data, so
+ * a copy would post a broken reference. The form says so and the host re-adds it if they want one.
+ */
+export interface EventCopy {
+    title: string;
+    description: string;
+    placeName: string;
+    lat: number | null;
+    lng: number | null;
+    privateNote: string;
+    /** The enterprise that hosts it, when the viewer is a keeper rather than the author; else null. */
+    enterprisePubkey: string | null;
+    /** The group a group-only event belongs to; null for a whole-community event. */
+    groupId: string | null;
+}
+
+/**
+ * Only a host sees the Copy button, and a host is the author, a keeper of an enterprise author, or an active
+ * convenor of the target group. So for a group-only event the copy is posted to the same group, and for any
+ * other event whose author is not the viewer the author can only be an enterprise the viewer keeps.
+ *
+ * `eventPrivateNote` reaches the phone only for the host and for people marked Going, so a copy made by
+ * anyone else simply carries no note — there is nothing to leak here. Accepts a server row (camelCase) or the
+ * phone's cached row (snake_case), because the event screen paints from the cache first.
+ */
+export function buildEventCopy(post: any, viewerPubkey?: string | null): EventCopy {
+    const scope = post?.audienceScope ?? post?.audience_scope;
+    const groupId = scope === 'group' ? (post?.targetGroupId ?? post?.target_group_id ?? null) : null;
+    const author = post?.authorPublicKey ?? post?.author_pubkey ?? null;
+    const num = (v: any) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+    return {
+        title: post?.title || '',
+        description: post?.description || '',
+        placeName: post?.eventPlaceName ?? post?.event_place_name ?? '',
+        lat: num(post?.lat),
+        lng: num(post?.lng),
+        privateNote: post?.eventPrivateNote ?? post?.event_private_note ?? '',
+        enterprisePubkey: !groupId && author && viewerPubkey && author !== viewerPubkey ? author : null,
+        groupId,
+    };
+}
+
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 

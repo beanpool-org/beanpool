@@ -183,9 +183,14 @@ interface EventDetailProps {
     onCancelled?: () => void;
     /** Opens the event's chat — the host and everyone Going (docs/events-on-the-map.md §3). */
     onOpenChat?: (post: MarketplacePost) => void;
+    /**
+     * Host only: open the create form filled from this event with the dates blank (§3, slice 5). This is the
+     * whole of repeats in v1 — there are no repeat rules (§5).
+     */
+    onCopyToNewDate?: (post: MarketplacePost) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onOpenChat }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onOpenChat, onCopyToNewDate }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
@@ -298,6 +303,16 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                     </li>
                                 ))}
                             </ul>
+                        )}
+                        {onCopyToNewDate && (
+                            <button
+                                type="button"
+                                data-testid="event-copy-to-new-date"
+                                onClick={() => onCopyToNewDate(p)}
+                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent"
+                            >
+                                📅 Copy to a new date
+                            </button>
                         )}
                         {open && (
                             <button

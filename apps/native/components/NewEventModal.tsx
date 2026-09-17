@@ -30,6 +30,7 @@ import { HAS_MAPS_KEY } from '../utils/maps';
 import {
     buildEventDraft, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
+    type EventCopy,
 } from '../utils/events';
 import { EVENT_ACCENT } from './EventCard';
 
@@ -43,9 +44,14 @@ interface NewEventModalProps {
     visible: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    /**
+     * "Copy to a new date" (§3, slice 5): open the form filled from an event that already ran, with Starts and
+     * Ends blank. This is the whole of repeats in v1 — no rules, no materialiser (§5).
+     */
+    prefill?: EventCopy | null;
 }
 
-export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProps) {
+export function NewEventModal({ visible, onClose, onSuccess, prefill }: NewEventModalProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -65,6 +71,10 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
     const [note, setNote] = useState('');
     const [audienceGroupId, setAudienceGroupId] = useState<string | null>(null);
     const [hostKey, setHostKey] = useState('me');
+    // The host a copy names, held separately so the copy is posted by the same enterprise or group even if the
+    // member submits before fetchGroups/getTreasuries have answered and filled the real "Post as" list.
+    const [copiedHost, setCopiedHost] = useState<HostOption | null>(null);
+    const [isCopy, setIsCopy] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     // Android shows the OS dialog twice (date, then time); iOS shows one inline datetime spinner.
@@ -110,14 +120,46 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
         ...enterprises.map(e => ({ key: `ent:${e.publicKey}`, label: e.name, authorPubkey: e.publicKey, groupId: null })),
         ...memberGroups.filter(g => g.convenor).map(g => ({ key: `grp:${g.id}`, label: g.name, authorPubkey: identity?.publicKey || '', groupId: g.id })),
     ];
-    const host = hostOptions.find(h => h.key === hostKey) || hostOptions[0];
+    const host = hostOptions.find(h => h.key === hostKey) || copiedHost || hostOptions[0];
     // A group host posts to that group only.
     const effectiveAudience = host.groupId ?? audienceGroupId;
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
+        setCopiedHost(null); setIsCopy(false);
     };
+
+    // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
+    // written over by a re-render. Everything carries over EXCEPT the two dates — picking the new date is the
+    // one thing this screen is open for — and the photo, which the node serves as a URL that create cannot take.
+    const appliedPrefill = useRef<EventCopy | null>(null);
+    useEffect(() => {
+        if (!visible) { appliedPrefill.current = null; return; }
+        if (!prefill || appliedPrefill.current === prefill) return;
+        appliedPrefill.current = prefill;
+        setIsCopy(true);
+        setTitle(prefill.title);
+        setDescription(prefill.description);
+        setPlaceName(prefill.placeName);
+        setNote(prefill.privateNote);
+        setStart(null); setEnd(null); setPicker(null); setPhoto(null);
+        setApproximate(false);
+        setAudienceGroupId(prefill.groupId);
+        const copied: HostOption | null = prefill.enterprisePubkey
+            ? { key: `ent:${prefill.enterprisePubkey}`, label: 'Enterprise', authorPubkey: prefill.enterprisePubkey, groupId: null }
+            : prefill.groupId
+                ? { key: `grp:${prefill.groupId}`, label: 'Group', authorPubkey: identity?.publicKey || '', groupId: prefill.groupId }
+                : null;
+        setCopiedHost(copied);
+        setHostKey(copied?.key ?? 'me');
+        if (prefill.lat != null && prefill.lng != null) {
+            setPin({ lat: prefill.lat, lng: prefill.lng });
+            centreMap(prefill.lat, prefill.lng);
+        } else {
+            setPin(null);
+        }
+    }, [visible, prefill, identity?.publicKey]);
 
     const openPicker = (field: Field) => {
         Keyboard.dismiss();
@@ -305,7 +347,7 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
                         <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
                             <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle} numberOfLines={1}>New Event</Text>
+                        <Text style={styles.headerTitle} numberOfLines={1}>{isCopy ? 'Copy Event' : 'New Event'}</Text>
                         <Pressable
                             onPress={handleCreate}
                             disabled={submitting}
@@ -332,6 +374,11 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
                             />
                         </View>
 
+                        {isCopy && (
+                            <Text style={styles.copyNote}>
+                                Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.
+                            </Text>
+                        )}
                         {dateRow('start', 'STARTS *', start, 'Pick a date and time')}
                         {dateRow('end', 'ENDS (OPTIONAL)', end, start ? `2 hours after start (${formatPickerValue(defaultEventEnd(start)).split(', ')[1]})` : '2 hours after start if blank')}
 
@@ -357,6 +404,7 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
                                         provider={PROVIDER_DEFAULT}
                                         ref={mapRef}
                                         initialRegion={DEFAULT_REGION}
+                                        onMapReady={() => { if (pin) centreMap(pin.lat, pin.lng); }}
                                         onPress={(e) => placePin(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)}
                                         toolbarEnabled={false}
                                     >
@@ -510,6 +558,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         mapFallback: { justifyContent: 'center', alignItems: 'center', padding: 16 },
         helper: { fontSize: 12, color: colors.text.secondary, marginTop: 6, lineHeight: 16 },
+        copyNote: {
+            fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12,
+            padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle,
+        },
         pinActions: { flexDirection: 'row', marginTop: 8 },
         secondaryBtn: {
             minHeight: 48, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1,

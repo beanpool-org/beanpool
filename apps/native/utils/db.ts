@@ -4738,12 +4738,21 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
 
 
 
+/**
+ * A member's listings, for the profile screen.
+ *
+ * Events are left out. A profile's Listings section is a list of trades — a type badge, a bean amount and
+ * Need styling — and an event has no price, so it rendered as "EVENT · 0 beans" once the phone started
+ * caching events (slice 3). The web profile never shows one either: it asks the node with no `types=`, and
+ * events are opt-in on that route (docs/events-on-the-map.md §2.6). A host page listing its events is
+ * explicitly not in v1 (§1, §5); when it arrives it gets an events section of its own, date first.
+ */
 export async function getMemberPosts(pubkey: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     const rows = await database.getAllAsync<any>(`
         SELECT * FROM posts
-        WHERE author_pubkey = ? AND status = 'active'
+        WHERE author_pubkey = ? AND status = 'active' AND COALESCE(type, '') != 'event'
         ORDER BY created_at DESC
     `, [pubkey]);
 

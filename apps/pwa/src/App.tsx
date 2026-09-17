@@ -117,6 +117,10 @@ export function App() {
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
     const [focusMapPostId, setFocusMapPostId] = useState<string | null>(null);
     const clearFocusMapPost = useCallback(() => setFocusMapPostId(null), []);
+    // "Copy to a new date" from an event's host panel: the map owns the event create form, so the event id
+    // travels there and MapPage fetches it signed (which is what carries the private note to its host).
+    const [copyEventPostId, setCopyEventPostId] = useState<string | null>(null);
+    const clearCopyEventPost = useCallback(() => setCopyEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
@@ -191,6 +195,11 @@ export function App() {
         if (tab === 'map-event') {
             setActiveTab('map');
             if (contextId) setFocusMapPostId(contextId);
+            return;
+        }
+        if (tab === 'map-copy-event') {
+            setActiveTab('map');
+            if (contextId) setCopyEventPostId(contextId);
             return;
         }
         if (tab === 'map') {
@@ -718,6 +727,8 @@ export function App() {
                                         covered={!!openTreasuryPubkey || !!openProfilePubkey}
                                         focusPostId={focusMapPostId}
                                         onFocusPostHandled={clearFocusMapPost}
+                                        copyEventPostId={copyEventPostId}
+                                        onCopyEventHandled={clearCopyEventPost}
                                     />
                                 </Suspense>
                             )}

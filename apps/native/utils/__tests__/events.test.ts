@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    buildEventDraft, defaultEventEnd, formatEventWhen, formatPickerValue, isEventInFeed, eventBadge,
+    buildEventDraft, buildEventCopy, defaultEventEnd, formatEventWhen, formatPickerValue, isEventInFeed, eventBadge,
     nextRsvp, applyRsvp, formatDistance, eventCacheColumns, approximatePin, rsvpSignedMessage,
     EVENT_TYPES_QUERY, type EventFormInput,
 } from '../events';
@@ -162,5 +162,102 @@ describe('events: cache columns', () => {
             goingCount: 7, interestedCount: 3, eventPrivateNote: 'secret', myRsvp: 'going',
         })).toEqual(['s', 'e', 'Hall', 'updated', 7, 3]);
         expect(eventCacheColumns({ type: 'offer', eventStartAt: 's' })).toEqual([null, null, null, null, 0, 0]);
+    });
+});
+
+describe('Copy to a new date', () => {
+    // The node's shape (camelCase); the phone's cached row (snake_case) is covered below, because the event
+    // screen paints from the cache before the signed fetch lands.
+    const server = {
+        id: 'ev-1', type: 'event', title: 'Working bee at the hall', description: 'Bring gloves',
+        eventStartAt: '2026-09-26T09:00:00.000Z', eventEndAt: '2026-09-26T12:00:00.000Z',
+        eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
+        lat: -28.55, lng: 153.49, authorPublicKey: 'host', audienceScope: 'public',
+    };
+
+    it('carries everything the host typed last time', () => {
+        const copy = buildEventCopy(server, 'host');
+        expect(copy.title).toBe('Working bee at the hall');
+        expect(copy.description).toBe('Bring gloves');
+        expect(copy.placeName).toBe('Bindarrabi Hall');
+        expect(copy.privateNote).toBe('Gate code 1234');
+        expect(copy.lat).toBe(-28.55);
+        expect(copy.lng).toBe(153.49);
+    });
+
+    it('never carries a date — picking the new one is the whole point', () => {
+        const copy = buildEventCopy(server, 'host') as unknown as Record<string, unknown>;
+        expect(Object.keys(copy).some(k => /start|end|date/i.test(k))).toBe(false);
+    });
+
+    it("reads the phone's cached row too", () => {
+        const cached = {
+            id: 'ev-1', type: 'event', title: 'Working bee', description: '',
+            event_place_name: 'The old bowls club', event_private_note: 'Back gate',
+            lat: '-28.61', lng: '153.51', author_pubkey: 'host', audience_scope: 'public',
+        };
+        const copy = buildEventCopy(cached, 'host');
+        expect(copy.placeName).toBe('The old bowls club');
+        expect(copy.privateNote).toBe('Back gate');
+        expect(copy.lat).toBe(-28.61);
+        expect(copy.lng).toBe(153.51);
+    });
+
+    it('a member copying their own event posts as themselves', () => {
+        expect(buildEventCopy(server, 'host').enterprisePubkey).toBeNull();
+        expect(buildEventCopy(server, 'host').groupId).toBeNull();
+    });
+
+    it('a keeper copying an enterprise event keeps the enterprise as the host', () => {
+        const copy = buildEventCopy({ ...server, authorPublicKey: 'enterprise-pk' }, 'keeper-pk');
+        expect(copy.enterprisePubkey).toBe('enterprise-pk');
+        expect(copy.groupId).toBeNull();
+    });
+
+    it('a group-only event is copied back to the same group, not to an enterprise', () => {
+        const copy = buildEventCopy(
+            { ...server, audienceScope: 'group', targetGroupId: 'grp-1', authorPublicKey: 'convenor-a' },
+            'convenor-b',
+        );
+        expect(copy.groupId).toBe('grp-1');
+        expect(copy.enterprisePubkey).toBeNull();
+    });
+
+    it('carries no note when the node did not send one', () => {
+        const { eventPrivateNote: _drop, ...noNote } = server;
+        expect(buildEventCopy(noNote, 'host').privateNote).toBe('');
+    });
+
+    it('survives an event with no pin or place name', () => {
+        const copy = buildEventCopy({ ...server, lat: null, lng: null, eventPlaceName: undefined }, 'host');
+        expect(copy.lat).toBeNull();
+        expect(copy.lng).toBeNull();
+        expect(copy.placeName).toBe('');
+    });
+
+    it('the copy still passes the create form check once a future date is picked', () => {
+        const copy = buildEventCopy(server, 'host');
+        const built = buildEventDraft({
+            title: copy.title, description: copy.description, placeName: copy.placeName,
+            lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
+            audienceGroupId: copy.groupId, authorPubkey: copy.enterprisePubkey ?? 'host',
+            start: new Date(2026, 9, 24, 9, 0), end: null,
+        }, new Date(2026, 8, 20, 8, 0));
+        expect(built.ok).toBe(true);
+        if (built.ok) {
+            expect(built.draft.eventPlaceName).toBe('Bindarrabi Hall');
+            expect(built.draft.eventPrivateNote).toBe('Gate code 1234');
+            expect(built.draft.reach).toBe('local');
+        }
+    });
+
+    it('a copy with no date picked is refused, the same as any other new event', () => {
+        const copy = buildEventCopy(server, 'host');
+        const built = buildEventDraft({
+            title: copy.title, description: copy.description, placeName: copy.placeName,
+            lat: copy.lat, lng: copy.lng, privateNote: copy.privateNote,
+            audienceGroupId: copy.groupId, authorPubkey: 'host', start: null, end: null,
+        }, new Date(2026, 8, 20, 8, 0));
+        expect(built.ok).toBe(false);
     });
 });

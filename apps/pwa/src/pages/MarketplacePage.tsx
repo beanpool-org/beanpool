@@ -756,6 +756,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             : null}
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
                         onOpenChat={(p) => onNavigate?.('messages', p.id)}
+                        onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
                         onOpenProfile={onOpenProfile}
                         onChange={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
                         onCancelled={() => { setSelectedPost(null); refresh().catch(() => {}); }}

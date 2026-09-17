@@ -25,12 +25,28 @@ export interface MessagingCallbacks {
     registerVisitor?: RegisterVisitorFn;
 }
 
+/**
+ * An expected refusal: bad input, or a member not allowed to do this. Routes answer these with `status` (4xx)
+ * and the message. Anything else thrown from a messaging path is a server fault (a locked database, a driver
+ * error) and must surface as 5xx, so clients retry instead of dropping the message (#672).
+ */
+export class MessagingError extends Error {
+    status: number;
+    code?: string;
+    constructor(message: string, status = 400, code?: string) {
+        super(message);
+        this.name = 'MessagingError';
+        this.status = status;
+        this.code = code;
+    }
+}
+
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
-    if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (!member) throw new MessagingError('Member not found');
+    if (member.status === 'disabled') throw new MessagingError('Account is disabled');
+    if (member.status === 'pruned') throw new MessagingError('Account has been pruned');
 }
 
 export function createConversation(
@@ -157,7 +173,7 @@ export function sendMessage(
                     timestamp: existing.timestamp
                 };
             }
-            throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
+            throw new MessagingError('Message id already exists', 409, 'ID_CONFLICT');
         }
     }
 
@@ -265,19 +281,21 @@ export function editMessage(
 ): Message {
     assertMemberActive(authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new Error('Message not found');
-    if (row.author_pubkey !== authorPubkey) throw new Error('Only the author can edit a message');
-    if (row.type === 'system') throw new Error('System messages cannot be edited');
+    if (!row) throw new MessagingError('Message not found');
+    if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
+    if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
     // A keeper-removed message is a tombstone: never editable, by any route.
-    if (row.type === 'removed') throw new Error(MESSAGE_REMOVED_EDIT_ERROR);
+    if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
     // Enterprise discussion-thread messages are not editable. This route has no size bound
     // and knows nothing of thread moderation or a wound-up enterprise's read-only thread.
+    // Fails closed: a message whose conversation row is missing cannot be shown to be outside a thread.
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
-    if (conv?.type === 'enterprise_thread') throw new Error(THREAD_MESSAGE_EDIT_ERROR);
+    if (!conv) throw new MessagingError('Conversation not found', 404);
+    if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
-        throw new Error('Messages can only be edited within 15 minutes of sending');
+        throw new MessagingError('Messages can only be edited within 15 minutes of sending');
     }
 
     const editedAt = new Date().toISOString();

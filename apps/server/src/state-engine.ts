@@ -7,7 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -2065,9 +2065,13 @@ export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey:
  */
 export function keeperOf(publicKey: string): string[] {
     if (!canOperate(publicKey)) return [];
-    return (db.prepare(
-        "SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?"
-    ).all(publicKey) as any[]).map(r => r.treasury_pubkey);
+    // Same account-status rule as canOperateTreasury: a keeper a Decision suspended keeps their binding but
+    // cannot act, so the client must not be told they operate anything (#845 follow-up).
+    return (db.prepare(`
+        SELECT o.treasury_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND m.status = 'active'
+    `).all(publicKey) as any[]).map(r => r.treasury_pubkey);
 }
 
 /**
@@ -5589,6 +5593,8 @@ export function createProject(proposerPubkey: string, title: string, description
     // poison the grant + conservation math). The upper bound on what can actually
     // be funded is enforced at round close by deductFromCommons (≤ commons balance).
     if (!member || !title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return null;
+    // A project proposal creates an enterprise the proposer leads, so the enterprise-creation rules apply.
+    if (member.status !== 'active') throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     // Checked before any write: a member whose operator switch an admin turned off must not get it back by proposing.
     if (isOperatorSwitchedOff(proposerPubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
 

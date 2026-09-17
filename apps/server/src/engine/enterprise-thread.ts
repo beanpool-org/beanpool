@@ -62,7 +62,8 @@ export function ensureEnterpriseThread(enterprisePubkey: string): Conversation {
     }
     let conv = getConversation(db, enterprisePubkey);
     if (!conv) {
-        const createdAt = enterprise.joined_at || new Date().toISOString();
+        // Now, not joined_at: the delta backup exporter cursors conversations on created_at (#837 review).
+        const createdAt = new Date().toISOString();
         db.prepare(`
             INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
             VALUES (?, 'enterprise_thread', ?, ?, ?)

@@ -937,6 +937,12 @@ export async function startHttpsServer(port: number): Promise<void> {
         await next();
     });
 
+    // Body identity fields that name someone other than the signer on purpose (targetPubkey, to_pubkey,
+    // memberPubkey, sellerPublicKey, oldPubkey, friend_pubkey, targetPeerPubkey, ...). Lower-cased key.
+    // `candidate` is the keeper proposed as lead in POST /api/enterprise/:treasury/succession/propose, who is
+    // never the proposer; without it every succession proposal over HTTP was refused as a spoof.
+    const OTHER_ENTITY_IDENTITY_FIELD = /^(target|old|to|invited|friend|seller|member|candidate)(peer)?_?(pubkey|publickey|public_key)$/;
+
     // Cryptographic Signature Verification Middleware
     async function requireSignature(ctx: Koa.Context, next: Koa.Next) {
         // Whether a request NEEDS a signature is decided ignoring case, matching how the router dispatches
@@ -956,7 +962,6 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path.startsWith('/api/pair/') ||
             ctx.path.startsWith('/api/pricing-guide/admin/') ||
             ctx.path.startsWith('/api/pricing-guide/reports') ||
-            ctx.path === '/api/pricing-guide/report' ||
             ctx.path === '/api/invite/redeem' ||
             ctx.path === '/api/invite/redeem-offline' ||
             ctx.path === '/api/recovery/sso/github-exchange';
@@ -964,11 +969,14 @@ export async function startHttpsServer(port: number): Promise<void> {
         if (isBypassed) {
             return await next();
         }
+        // Writes that may be anonymous: an unsigned request passes through with no actor, but signature
+        // headers, when sent, are verified like any other write so the route can trust ctx.state.actor.
+        const isOptionallySignedWrite = ctx.path === '/api/pricing-guide/report';
 
         const pubKeyHex = ctx.get('X-Public-Key');
         const signatureBase64 = ctx.get('X-Signature');
 
-        if (!isMutatingApi && !isGatedRead) {
+        if ((!isMutatingApi && !isGatedRead) || isOptionallySignedWrite) {
             // Optional read auth: if signature headers are provided, verify them to populate ctx.state.actor
             if (!pubKeyHex || !signatureBase64) {
                 return await next();
@@ -1069,9 +1077,10 @@ export async function startHttpsServer(port: number): Promise<void> {
             for (const [key, value] of Object.entries(body)) {
                 const k = key.toLowerCase();
                 const isIdentityField = k.endsWith('pubkey') || k.endsWith('publickey') || k === 'from' || k === 'createdby';
-                const isOtherEntity = k.startsWith('target') || k.startsWith('old') || k.startsWith('to')
-                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller')
-                    || k.startsWith('member');
+                // Whole-name match, not a prefix: `startsWith('to')` also exempted e.g. `tokenPubkey`, and
+                // `startsWith('member')` any `member…Pubkey`, so a future route reading such a field as the actor
+                // would have been spoofable (#841 review).
+                const isOtherEntity = OTHER_ENTITY_IDENTITY_FIELD.test(k);
                 
                 if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== pubKeyHex) {
                     // A2-13: don't name the field in the client-facing error — leaking

@@ -51,9 +51,9 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         const reportType = body.reportType;
         const rawComment = typeof body.comment === 'string' ? body.comment.trim() : '';
         const comment = rawComment ? rawComment.slice(0, 500) : undefined;
-        const reporterPubkey = typeof body.reporterPubkey === 'string' && /^[0-9a-fA-F]{64}$/.test(body.reporterPubkey)
-            ? body.reporterPubkey
-            : undefined;
+        // Reports may be anonymous. When signed, the reporter is the verified signer; a body
+        // `reporterPubkey` is never trusted (the signature middleware refuses one that differs).
+        const reporterPubkey = (ctx.state as any)?.actor as string | undefined;
 
         if (!itemId || !reportType || !['too_high', 'too_low', 'other'].includes(reportType)) {
             ctx.status = 400;

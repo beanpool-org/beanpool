@@ -461,11 +461,13 @@ export function initSchema() {
     db.exec(schemaSql);
 
     // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
+    // created_at is when the row is written, not the enterprise's joined_at: the delta backup exporter cursors
+    // conversations on created_at, so a back-dated row would never reach a replica (#837 review).
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);`); } catch { }
     try {
         db.prepare(`
             INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
-            SELECT public_key, 'enterprise_thread', callsign, public_key, COALESCE(joined_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            SELECT public_key, 'enterprise_thread', callsign, public_key, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
             FROM members
             WHERE is_treasury = 1
         `).run();
@@ -1163,6 +1165,14 @@ export function isOperatorSwitchedOff(memberPubkey: string): boolean {
     return !!row && row.has_binding === 1 && row.can_operate !== 1;
 }
 
+export const INACTIVE_MEMBER_CREATE_ERROR = 'Only active community members can create an enterprise or a project';
+
+/** Is this member's account active? Missing rows and every other status (disabled, suspended, pruned) are not. */
+export function isMemberActive(memberPubkey: string): boolean {
+    const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(memberPubkey) as any;
+    return !!row && (row.status || 'active') === 'active';
+}
+
 export const OPERATOR_SWITCHED_OFF_CREATE_ERROR =
     'Your operator access is switched off by a node admin, so you cannot create an enterprise or a project';
 
@@ -1189,6 +1199,7 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();

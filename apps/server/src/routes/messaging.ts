@@ -10,7 +10,7 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MESSAGE_REMOVED_EDIT_ERROR, THREAD_MESSAGE_EDIT_ERROR } from '../engine/messaging.js';
+import { MessagingError } from '../engine/messaging.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -31,6 +31,22 @@ const MAX_CONVERSATION_PARTICIPANTS = 50;
 /** Ed25519 public keys are 64 hex characters; 128 leaves room without allowing a
  *  megabyte of text to reach the members lookup. */
 const MAX_PARTICIPANT_KEY_LENGTH = 128;
+
+/**
+ * Answer a thrown messaging error. An expected refusal (MessagingError) keeps its 4xx and message. Anything
+ * else is a server fault: 500 with a generic message, logged here, so clients retry rather than treat a
+ * locked database as a permanent refusal, and driver text is never echoed (#672).
+ */
+function respondToMessagingError(ctx: any, e: unknown, what: string): void {
+    if (e instanceof MessagingError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message };
+        return;
+    }
+    console.error(`[Messaging] ${what} failed unexpectedly:`, (e as any)?.message || e);
+    ctx.status = 500;
+    ctx.body = { error: `Could not ${what} because of a server problem. Please try again.` };
+}
 
 router.post('/api/messages/conversation', async (ctx) => {
     const { type, participants, createdBy, name, postId } = (ctx as any).requestBody || {};
@@ -94,8 +110,7 @@ router.post('/api/messages/conversation', async (ctx) => {
         }
         ctx.body = { success: true, conversation: conv };
     } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to create conversation' };
+        respondToMessagingError(ctx, e, 'create the conversation');
     }
 });
 
@@ -127,13 +142,7 @@ router.post('/api/messages/send', async (ctx) => {
     try {
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
     } catch (e: any) {
-        if (e?.code === 'ID_CONFLICT') {
-            ctx.status = 409;
-            ctx.body = { error: 'Message id already exists' };
-            return;
-        }
-        ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to send message' };
+        respondToMessagingError(ctx, e, 'send the message');
         return;
     }
     if (!msg) {
@@ -207,11 +216,8 @@ router.post('/api/messages/edit', async (ctx) => {
         const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
-        // Thread and removed messages are refused outright (403) so the client can say why;
-        // every other failure keeps its existing 400.
-        const refused = e?.message === THREAD_MESSAGE_EDIT_ERROR || e?.message === MESSAGE_REMOVED_EDIT_ERROR;
-        ctx.status = refused ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to edit message' };
+        // Thread and removed messages are refused outright (403) so the client can say why.
+        respondToMessagingError(ctx, e, 'edit the message');
     }
 });
 
@@ -310,8 +316,7 @@ router.post('/api/messages/react', async (ctx) => {
         }
         ctx.body = { success: true, metadata: result.metadata };
     } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to toggle reaction' };
+        respondToMessagingError(ctx, e, 'update the reaction');
     }
 });
 

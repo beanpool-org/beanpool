@@ -41,6 +41,8 @@ import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
 import { WebSocketServer } from 'ws';
+import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
@@ -551,10 +553,91 @@ function isNonCanonicalPath(router: Router, requestPath: string): boolean {
     return false;
 }
 
+// Both listeners take upgrades: the HTTPS server for direct and LAN clients, and the plain HTTP
+// server because the Cloudflare tunnel's origin is http://beanpool-node:8080. Before this was shared,
+// upgrades on 8080 fell through to Koa and got a 404, so tunnel-mode nodes had no live updates.
+// One handler and one WebSocketServer pair means /ws and /ws/logs get the same auth, client
+// tracking and heartbeat whichever port the socket arrived on.
+export type UpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
+
+function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
+    return async (req, socket, head) => {
+        const reqUrl = req.url || '';
+        const parsedUrl = new URL(reqUrl, 'https://localhost');
+        const pathname = parsedUrl.pathname;
+
+        if (pathname === '/ws') {
+            // SRV-4: require a member-signed connect token when enforcement is on.
+            if (ENFORCE_WS_AUTH && !verifyWsConnect(pathname, parsedUrl.searchParams)) {
+                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+            wss.handleUpgrade(req, socket, head, (ws: any) => {
+                ws.isAlive = true;
+                ws.on('pong', () => { ws.isAlive = true; });
+                // A2-20: tag the socket with its authenticated member (present only
+                // under ENFORCE_WS_AUTH, where verifyWsConnect validated this pubkey's
+                // signature) so broadcast() can scope sensitive events to the parties.
+                ws._memberPubkey = ENFORCE_WS_AUTH ? (parsedUrl.searchParams.get('pubkey') || null) : null;
+
+                addWsClient(ws);
+                trackConnection(ws, 'sync', req);
+                ws.on('close', () => {
+                    removeWsClient(ws);
+                    untrackConnection(ws);
+                });
+                ws.on('error', () => {
+                    removeWsClient(ws);
+                    untrackConnection(ws);
+                });
+            });
+        } else if (pathname === '/ws/logs') {
+            const auth = parsedUrl.searchParams.get('auth');
+            const ticket = parsedUrl.searchParams.get('ticket');
+            const config = getLocalConfig();
+            let authorized = false;
+
+            if (ticket && isValidWsTicket(ticket)) {
+                authorized = true;
+            } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
+                logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
+                authorized = true;
+            }
+
+            if (!authorized) {
+                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+            logsWss.handleUpgrade(req, socket, head, (ws: any) => {
+                ws.isAlive = true;
+                ws.on('pong', () => { ws.isAlive = true; });
+
+                addLogClient(ws);
+                trackConnection(ws, 'admin', req);
+                ws.on('close', () => {
+                    removeLogClient(ws);
+                    untrackConnection(ws);
+                });
+                ws.on('error', () => {
+                    removeLogClient(ws);
+                    untrackConnection(ws);
+                });
+            });
+        } else {
+            socket.destroy();
+        }
+    };
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
 export function getKoaApp(): Koa | null { return _koaApp; }
+// Same for WebSocket upgrades. Null until startHttpsServer runs (index.ts starts HTTP first).
+let _upgradeHandler: UpgradeHandler | null = null;
+export function getUpgradeHandler(): UpgradeHandler | null { return _upgradeHandler; }
 
 export async function startHttpsServer(port: number): Promise<void> {
     const app = new Koa();
@@ -1157,78 +1240,12 @@ export async function startHttpsServer(port: number): Promise<void> {
     return new Promise((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
 
-        // WebSocket upgrade handler
+        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler)
         const wss = new WebSocketServer({ noServer: true });
         const logsWss = new WebSocketServer({ noServer: true });
-
-        server.on('upgrade', async (req, socket, head) => {
-            const reqUrl = req.url || '';
-            const parsedUrl = new URL(reqUrl, 'https://localhost');
-            const pathname = parsedUrl.pathname;
-
-            if (pathname === '/ws') {
-                // SRV-4: require a member-signed connect token when enforcement is on.
-                if (ENFORCE_WS_AUTH && !verifyWsConnect(pathname, parsedUrl.searchParams)) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-                wss.handleUpgrade(req, socket, head, (ws: any) => {
-                    ws.isAlive = true;
-                    ws.on('pong', () => { ws.isAlive = true; });
-                    // A2-20: tag the socket with its authenticated member (present only
-                    // under ENFORCE_WS_AUTH, where verifyWsConnect validated this pubkey's
-                    // signature) so broadcast() can scope sensitive events to the parties.
-                    ws._memberPubkey = ENFORCE_WS_AUTH ? (parsedUrl.searchParams.get('pubkey') || null) : null;
-
-                    addWsClient(ws);
-                    trackConnection(ws, 'sync', req);
-                    ws.on('close', () => {
-                        removeWsClient(ws);
-                        untrackConnection(ws);
-                    });
-                    ws.on('error', () => {
-                        removeWsClient(ws);
-                        untrackConnection(ws);
-                    });
-                });
-            } else if (pathname === '/ws/logs') {
-                const auth = parsedUrl.searchParams.get('auth');
-                const ticket = parsedUrl.searchParams.get('ticket');
-                const config = getLocalConfig();
-                let authorized = false;
-
-                if (ticket && isValidWsTicket(ticket)) {
-                    authorized = true;
-                } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
-                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                    authorized = true;
-                }
-
-                if (!authorized) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-                logsWss.handleUpgrade(req, socket, head, (ws: any) => {
-                    ws.isAlive = true;
-                    ws.on('pong', () => { ws.isAlive = true; });
-
-                    addLogClient(ws);
-                    trackConnection(ws, 'admin', req);
-                    ws.on('close', () => {
-                        removeLogClient(ws);
-                        untrackConnection(ws);
-                    });
-                    ws.on('error', () => {
-                        removeLogClient(ws);
-                        untrackConnection(ws);
-                    });
-                });
-            } else {
-                socket.destroy();
-            }
-        });
+        const handleUpgrade = createUpgradeHandler(wss, logsWss);
+        _upgradeHandler = handleUpgrade;
+        server.on('upgrade', handleUpgrade);
 
         // Setup 60-second ping/pong heartbeat to clean up dead/ghost connections
         const heartbeatInterval = setInterval(() => {

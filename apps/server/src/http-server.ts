@@ -7,12 +7,13 @@
  * Endpoints:
  *   GET /         — Redirect to HTTPS landing page (public) or trust bootstrap (LAN)
  *   GET /trust    — Downloads the Root CA certificate (.pem)  [LAN only]
+ *   /ws, /ws/logs — WebSocket upgrades, handed to the HTTPS server's handler (same auth)
  */
 
 import Koa from 'koa';
 import Router from '@koa/router';
 import { getCaCertPem, isUsingLetsEncrypt } from './services/tls.js';
-import { getKoaApp } from './https-server.js';
+import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import QRCode from 'qrcode';
 
 export async function startHttpServer(port: number): Promise<void> {
@@ -189,9 +190,21 @@ export async function startHttpServer(port: number): Promise<void> {
     app.use(router.allowedMethods());
 
     return new Promise((resolve) => {
-        app.listen(port, () => {
+        const server = app.listen(port, () => {
             console.log(`🔓 HTTP → HTTPS redirect listening on http://0.0.0.0:${port}`);
             resolve();
+        });
+
+        // The Cloudflare tunnel's origin is this port, so live-update sockets arrive here. Without a
+        // listener Node hands the upgrade to Koa as a plain request, which 404s. Looked up per request
+        // because index.ts starts this server before the HTTPS one exists.
+        server.on('upgrade', (req, socket, head) => {
+            const handleUpgrade = getUpgradeHandler();
+            if (!handleUpgrade) {
+                socket.destroy();
+                return;
+            }
+            handleUpgrade(req, socket, head);
         });
     });
 }

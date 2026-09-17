@@ -183,6 +183,7 @@ run_federation_suites() {
       test-sso
       test-daily-pulse
       test-pairing-relay
+      test-pairing-routes
       test-pricing-guide
       test-pricing-aggregator-lifecycle
       test-activity-feed

@@ -178,7 +178,9 @@ export default function ProposeProjectModal() {
                         <TextInput
                             accessibilityLabel="Enterprise name or project title"
                             style={[styles.input, fieldBorder('title')]}
-                            placeholder="e.g. Community Tool Shed or Shade House"
+                            // Short enough for one line at 320dp + 1.3x: Android wraps a long placeholder inside a
+                            // one-line input and clips the second line.
+                            placeholder="e.g. Community Tool Shed"
                             placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={(v) => { setTitle(v); if (validationErrors.has('title')) { const n = new Set(validationErrors); n.delete('title'); setValidationErrors(n); } }}

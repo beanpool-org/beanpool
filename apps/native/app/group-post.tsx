@@ -301,7 +301,8 @@ export default function GroupPostScreen() {
                             style={[styles.input, errors.has('title') && styles.fieldError]}
                             value={title}
                             onChangeText={(t) => { setTitle(t); clearError('title'); }}
-                            placeholder={type === 'offer' ? 'e.g. Garden tools lending, Workshop space' : 'e.g. Help moving soil, Extra pallets'}
+                            // One line at 320dp + 1.3x: a longer placeholder wraps and its second line is clipped on Android.
+                            placeholder={type === 'offer' ? 'e.g. Garden tools lending' : 'e.g. Help moving soil'}
                             placeholderTextColor={colors.text.muted}
                             maxLength={80}
                         />

@@ -11,6 +11,7 @@ import {
     getConversations, getConversationMessages, createConversationApi,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi, getMembers,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
+    getEventChat,
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
 import { encodePlaintext, decodePlaintext, encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from '../lib/e2e-crypto';
@@ -21,6 +22,7 @@ import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { ReportModal } from '../components/ReportModal';
+import { EventChat } from '../components/EventChat';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -354,12 +356,27 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 if (!conv) {
                     conv = result.conversations.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
                 }
-                if (!conv && openConversationId.length >= 32) {
+                // Only a public key can start a DM. An event chat is opened by the event's id, which is a
+                // UUID, and a host who has not tapped Going has no conversation row yet — opening one must
+                // never create a DM with a stranger named by an id (docs/events-on-the-map.md §3).
+                if (!conv && /^[0-9a-f]{64}$/i.test(openConversationId)) {
                     try {
                         const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
                         conv = created.conversation;
                         await loadConversations();
                     } catch { /* offline or failed */ }
+                } else if (!conv) {
+                    try {
+                        const chat = await getEventChat(openConversationId);
+                        conv = {
+                            id: openConversationId,
+                            type: 'event_thread',
+                            name: chat.title,
+                            participants: [],
+                            createdBy: '',
+                            createdAt: new Date().toISOString(),
+                        };
+                    } catch { /* not an event chat this member may open */ }
                 }
                 if (conv) {
                     setActiveConv(conv);
@@ -633,6 +650,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function getConversationTitle(conv: Conversation): string {
+        // An event chat is named after its event, which is why the conversation row carries `name`.
+        if (conv.type === 'event_thread') return conv.name || 'Event chat';
         if (conv.type === 'group') return conv.name || 'Group';
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
@@ -777,6 +796,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // Pre-compute O(1) message lookup map for message rendering performance in large chat threads.
     const messagesById = new Map(messages.map(m => [m.id, m]));
+
+    // An event chat is its own screen: the pinned note, the host's Remove, the read-only banner after the
+    // event ends and the node-readable notice (docs/events-on-the-map.md §3). None of the DM machinery
+    // below — E2E decryption, edits, reactions, deal actions — applies to it.
+    if (activeConv && activeConv.type === 'event_thread') {
+        return (
+            <EventChat
+                postId={activeConv.id}
+                identity={identity}
+                onBack={() => {
+                    setActiveConv(null);
+                    loadConversations();
+                }}
+            />
+        );
+    }
 
     // Chat view
     if (activeConv) {

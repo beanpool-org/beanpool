@@ -755,6 +755,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
                             : null}
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
+                        onOpenChat={(p) => onNavigate?.('messages', p.id)}
                         onOpenProfile={onOpenProfile}
                         onChange={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
                         onCancelled={() => { setSelectedPost(null); refresh().catch(() => {}); }}

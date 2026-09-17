@@ -250,7 +250,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             onClick={() => {
                                 if (activeSection === 'decide') {
                                     if (!canProposeDecision) {
-                                        alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        alert('You can propose a Decision once you have completed a trade.');
                                         return;
                                     }
                                     if (hasOpenDecision) {
@@ -387,7 +387,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         onRefresh={fetchEnterprises}
                         onOpenPropose={() => {
                             if (!canProposeDecision) {
-                                alert('Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                alert('You can propose a Decision once you have completed a trade.');
                                 return;
                             }
                             if (hasOpenDecision) {

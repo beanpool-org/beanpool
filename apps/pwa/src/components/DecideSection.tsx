@@ -182,11 +182,11 @@ export function DecideSection({
                                 <span className="text-xs text-nature-400 font-medium">No bond required</span>
                             </div>
                             <p className="text-nature-400 text-xs sm:text-sm mt-1 max-w-xl">
-                                Binding decisions execute automatically upon passing (§3.7). Gated by your earned trade standing (earnedCredit &gt; 0).
+                                Binding decisions execute automatically upon passing (§3.7). Open to anyone who has completed a trade.
                             </p>
                             {!canPropose && (
                                 <p className="text-amber-400 text-xs font-semibold mt-1">
-                                    ⚠️ Requires earned trade standing (earnedCredit &gt; 0). Complete a trade to unlock.
+                                    ⚠️ You can propose once you have completed a trade.
                                 </p>
                             )}
                             {canPropose && hasOpenDecision && (

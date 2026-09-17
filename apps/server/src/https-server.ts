@@ -312,9 +312,23 @@ interface ActiveConnectionInfo {
 
 const activeConnections = new Map<string, ActiveConnectionInfo>();
 
+/** Loopback or a private-network peer: where cloudflared or a local proxy reaches the node from
+ *  (the docker network is RFC 1918). A client on the public internet never has one of these. */
+function isProxyPeer(addr: string | undefined): boolean {
+    if (!addr) return false;
+    const a = addr.startsWith('::ffff:') ? addr.slice(7) : addr;
+    if (a === '::1' || /^(fc|fd)[0-9a-f]{2}:/i.test(a)) return true;
+    const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(a);
+    if (!m) return false;
+    const [o1, o2] = [Number(m[1]), Number(m[2])];
+    return o1 === 127 || o1 === 10 || (o1 === 172 && o2 >= 16 && o2 <= 31) || (o1 === 192 && o2 === 168);
+}
+
+/** The connection label on the admin dashboard. X-Forwarded-For is honoured only from a proxy peer,
+ *  so a direct-mode client cannot write its own label. A label, not an auth decision. */
 function getIpAddress(req: import('node:http').IncomingMessage): string {
     const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
+    if (forwarded && isProxyPeer(req.socket.remoteAddress)) {
         return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
     }
     return req.socket.remoteAddress || 'unknown';

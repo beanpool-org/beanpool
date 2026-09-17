@@ -233,8 +233,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     return (
         <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: 'var(--bottom-nav-offset)' }}>
-            {/* Header */}
-            <header className="sticky top-0 z-40 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex flex-col gap-3">
+            {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
+                on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list. */}
+            <header className="bg-nature-900 px-4 pt-4 pb-3 flex flex-col gap-3">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -288,8 +289,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 </div>
+            </header>
 
-                {/* Section Switcher: Decide vs Enterprises vs Groups */}
+            {/* Section Switcher: Decide vs Enterprises vs Groups — the one sticky row */}
+            <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
                     <button
                         onClick={() => setActiveSection('decide')}
@@ -330,7 +333,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <span>Groups</span>
                     </button>
                 </div>
+            </div>
 
+            {/* Filters scroll away with the content */}
+            <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
                 {/* Filter Controls: All / Ongoing / Bounded */}
                 {activeSection === 'enterprises' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1">
@@ -377,7 +383,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 )}
-            </header>
+            </div>
 
             {activeSection === 'decide' ? (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">

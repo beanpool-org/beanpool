@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
@@ -287,5 +287,31 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
 
         // Live offers count
         expect(screen.getByText(/1 live offer/i)).toBeInTheDocument();
+    });
+});
+
+describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('pins only the section tabs; the title, pool cards and filter chips scroll away with the list', async () => {
+        const { container } = render(<ProjectsPage identity={backerIdentity} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        });
+
+        const stickies = Array.from(container.querySelectorAll('.sticky'));
+        expect(stickies).toHaveLength(1);
+        const tabs = stickies[0] as HTMLElement;
+        expect(tabs).toHaveAttribute('data-testid', 'commons-section-tabs');
+        expect(within(tabs).getByText('Decide')).toBeInTheDocument();
+        expect(within(tabs).getByText('Enterprises')).toBeInTheDocument();
+        expect(within(tabs).getByText('Groups')).toBeInTheDocument();
+
+        for (const text of ['The Commons', 'Commons Pool', 'My Governance Credits', 'All Enterprises', 'Bounded Projects']) {
+            expect(screen.getByText(text).closest('.sticky')).toBeNull();
+        }
     });
 });

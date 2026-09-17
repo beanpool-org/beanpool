@@ -105,3 +105,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `OnboardingModule` component in `apps/manager/src/components/modules/OnboardingModule.tsx` was untested.
 **Learning:** Testing `OnboardingModule` required mocking `fetchOnboardingFunnel` to verify initial loading, error states, funnel step rendering with percentages/notes, day window toggles (7/30/90 days), and node selection callbacks.
 **Action:** Check remaining module components in `apps/manager/src/components/modules/` for unit test coverage gaps.
+
+## 2026-09-11 - [manager tests] generateOfflineQrUrl unit tests
+**Gap:** `generateOfflineQrUrl` in `apps/manager/src/lib/qr.ts` was untested.
+**Learning:** `QRCode.create('')` throws when supplied an empty string, causing `generateOfflineQrUrl` to return `''` in its try/catch block. Mocking `QRCode.create` with `vi.spyOn` allowed testing both valid SVG data URL rendering and error recovery.
+**Action:** Identify remaining utility functions in `apps/manager/src/lib/` (e.g. `geo.ts`) or UI components for future unit test coverage.

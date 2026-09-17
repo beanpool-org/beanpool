@@ -4,7 +4,7 @@ import type { TreasurySummary } from './db';
  * What an enterprise card on the Commons list says about the enterprise's state.
  *
  * Mirrors the PWA's ProjectsPage card so a paused or winding-up enterprise reads the same on both
- * clients: a state badge (Paused / Winding up / Closed) beside the lifecycle badge, and a meta line
+ * clients: a state badge (Paused / Winding up / Closed), and a meta line
  * that names the state instead of a live-offer count nobody can buy from. Everything comes from the
  * /api/treasuries list row — no per-card detail fetch.
  */
@@ -15,6 +15,12 @@ export type EnterpriseKindBadge = 'funded' | 'project' | 'ongoing';
 export interface EnterpriseCardStatus {
     stateBadge: EnterpriseStateBadge;
     kindBadge: EnterpriseKindBadge;
+    /**
+     * False while a state badge shows, unless the project is funded. "WINDING UP" beside "ONGOING" read as a
+     * contradiction, and at 320dp + 1.3x text the two badges wrap onto two lines. The avatar (🏛️ / 🌱) still
+     * shows the type; FUNDED stays because "Closed · Funded" is news, not a contradiction.
+     */
+    showKindBadge: boolean;
     hasGoal: boolean;
     isFunded: boolean;
     currentRaised: number;
@@ -50,5 +56,7 @@ export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
     const keeperCount = item.keepers?.length ?? 0;
     const keeperText = keeperCount > 0 ? ` · ${keeperCount} keeper${keeperCount === 1 ? '' : 's'}` : '';
 
-    return { stateBadge, kindBadge, hasGoal, isFunded, currentRaised, meta: stateText + keeperText };
+    const showKindBadge = stateBadge === null || kindBadge === 'funded';
+
+    return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, currentRaised, meta: stateText + keeperText };
 }

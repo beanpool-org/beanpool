@@ -300,7 +300,7 @@ export default function ProjectsScreen() {
     }, [enterprises, filter, sortBy]);
 
     const renderItem = ({ item }: { item: TreasurySummary }) => {
-        const { stateBadge, kindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
+        const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
         const daysRemaining = getDaysRemaining(item.deadlineAt);
@@ -346,7 +346,7 @@ export default function ProjectsScreen() {
                                     <Text style={styles.badgeClosedText} numberOfLines={1}>CLOSED</Text>
                                 </View>
                             )}
-                            {kindBadge === 'funded' ? (
+                            {!showKindBadge ? null : kindBadge === 'funded' ? (
                                 <View style={[styles.badge, styles.badgeFunded]}>
                                     <Text style={styles.badgeFundedText} numberOfLines={1}>🎉 FUNDED</Text>
                                 </View>

@@ -9,6 +9,8 @@
  * 4. Legitimate actors acting for themselves succeed.
  * 5. Legitimate keepers acting for their enterprise succeed.
  * 6. Critical routes (/transactions/approve, /transactions/complete) fail closed on identity spoofing.
+ * 7. A keeper suspended by a community Decision (status 'disabled', operator switch untouched) can no
+ *    longer list, edit, pause or remove offers as the enterprise; an unsuspended keeper still can.
  */
 
 import assert from 'node:assert';
@@ -16,7 +18,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator,
-    createPost, requestPost, transfer
+    createPost, requestPost, transfer, setUserStatusRow, canOperateTreasury,
 } from './state-engine.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 
@@ -228,6 +230,77 @@ async function testMarketplaceActorAuth() {
         };
         await dispatch(router, 'POST', '/api/marketplace/posts/remove', ctx);
         check(ctx.body?.success === true, 'Authorized keeper Bob can remove post for CommunityFarm');
+    }
+
+    // ── 8. A keeper suspended by a community Decision no longer acts as the enterprise ──
+    // A suspend_member Decision sets members.status = 'disabled' through setUserStatusRow and leaves
+    // can_operate and the treasury_operators binding in place. Acting as the enterprise must still stop.
+    {
+        const carol = makeMember('carol');
+        transfer('genesis', carol, 100, 'seed', 'direct', true);
+        adminAssignTreasuryOperator(treasury, carol, 'admin');
+
+        const beforeCtx: any = {
+            requestBody: { type: 'offer', title: 'Farm eggs', authorPublicKey: treasury, credits: 5 },
+            state: { actor: carol }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts', beforeCtx);
+        check(beforeCtx.body?.success === true, 'Unsuspended keeper Carol can list an offer for CommunityFarm');
+        const farmOffer = beforeCtx.body.post.id as string;
+
+        setUserStatusRow(carol, 'disabled');
+        const carolRow = db.prepare('SELECT status, can_operate FROM members WHERE public_key = ?').get(carol) as any;
+        check(carolRow.status === 'disabled' && carolRow.can_operate === 1, 'Decision-suspended Carol is disabled with her operator switch still on');
+
+        const listCtx: any = {
+            requestBody: { type: 'offer', title: 'Suspended farm offer', authorPublicKey: treasury, credits: 5 },
+            state: { actor: carol }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts', listCtx);
+        check(listCtx.status === 403, `Decision-suspended keeper cannot list an offer for the enterprise (got ${listCtx.status})`);
+
+        const editCtx: any = {
+            requestBody: { id: farmOffer, authorPublicKey: treasury, title: 'Hijacked eggs' },
+            state: { actor: carol }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/update', editCtx);
+        check(editCtx.status === 403, `Decision-suspended keeper cannot edit the enterprise offer (got ${editCtx.status})`);
+        const titleNow = (db.prepare('SELECT title FROM posts WHERE id = ?').get(farmOffer) as any).title;
+        check(titleNow === 'Farm eggs', 'Enterprise offer title is unchanged');
+
+        const pauseCtx: any = {
+            requestBody: { postId: farmOffer, authorPublicKey: treasury },
+            state: { actor: carol }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/pause', pauseCtx);
+        check(pauseCtx.status === 403, `Decision-suspended keeper cannot pause the enterprise offer (got ${pauseCtx.status})`);
+
+        const removeCtx: any = {
+            requestBody: { id: farmOffer, authorPublicKey: treasury },
+            state: { actor: carol }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/remove', removeCtx);
+        check(removeCtx.status === 403, `Decision-suspended keeper cannot remove the enterprise offer (got ${removeCtx.status})`);
+
+        check(canOperateTreasury(carol, treasury) === false, 'Decision-suspended Carol cannot operate CommunityFarm');
+
+        // Bob, an ordinary keeper of the same enterprise, is unaffected.
+        const bobEditCtx: any = {
+            requestBody: { id: farmOffer, authorPublicKey: treasury, title: 'Farm eggs (dozen)' },
+            state: { actor: bob }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts/update', bobEditCtx);
+        check(bobEditCtx.body?.success === true, `Unsuspended keeper Bob can still edit the enterprise offer (got ${bobEditCtx.status} ${bobEditCtx.body?.error})`);
+        const bobListCtx: any = {
+            requestBody: { type: 'offer', title: 'Farm honey', authorPublicKey: treasury, credits: 5 },
+            state: { actor: bob }
+        };
+        await dispatch(router, 'POST', '/api/marketplace/posts', bobListCtx);
+        check(bobListCtx.body?.success === true, 'Unsuspended keeper Bob can still list an offer for CommunityFarm');
+
+        // Lifting the suspension restores the existing binding.
+        setUserStatusRow(carol, 'active');
+        check(canOperateTreasury(carol, treasury) === true, 'Unsuspending Carol restores her authority over CommunityFarm');
     }
 
     console.log(`\nAll ${passed}/${run} checks passed.`);

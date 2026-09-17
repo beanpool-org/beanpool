@@ -1999,12 +1999,20 @@ export function canOperate(publicKey: string): boolean {
  *
  * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
  * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
+ *
+ * The actor's account must also be 'active'. A suspend_member Decision sets status = 'disabled' and
+ * leaves can_operate and the binding alone, so without this a keeper the community suspended could
+ * still list, edit and pay out as the enterprise. Checked here rather than in canOperate(), whose other
+ * callers (getBalance, keeperOf) only drive what the client shows; admin moderation goes through
+ * canAdministerTreasury, which returns before reaching this.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
     if (!canOperate(publicKey)) return false;
-    const row = db.prepare(
-        "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
-    ).get(publicKey, treasuryPubkey);
+    const row = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+    `).get(publicKey, treasuryPubkey);
     return !!row;
 }
 

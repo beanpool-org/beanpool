@@ -230,6 +230,24 @@ async function main(): Promise<void> {
     assert(view(goer)!.eventRsvps === undefined && view(goer)!.goingCount === 1 && view(goer)!.interestedCount === 1,
         'everyone else sees counts, not names');
     const keeperEvent = getPosts(db, { authorPubkey: treasury, viewerPubkey: host, types: ['event'] })[0];
+
+    // The web app hosts for an enterprise through the list route with the enterprise as author: the keeper
+    // who did it is recorded as created_by, and a member who is not a keeper is refused.
+    const treasury2 = createTreasury('Hall Committee', AVATAR, 0).publicKey;
+    adminAssignTreasuryOperator(treasury2, goer, 'admin');
+    const createCtx = (actor: string, author: string) => ({
+        params: {}, state: { actor }, get: () => '', set: () => { },
+        requestBody: { type: 'event', title: 'Hall working bee', authorPublicKey: author, lat: -28.5, lng: 153.5, eventStartAt: inHours(30) },
+    });
+    let hostCtx: any = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(goer, treasury2));
+    const hostedRow = hostCtx.body?.post && db.prepare('SELECT author_pubkey, created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
+    assert(!!hostedRow && hostedRow.author_pubkey === treasury2 && hostedRow.created_by === goer,
+        'a keeper creating an event for their enterprise through the list route is recorded as created_by');
+    hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, treasury2));
+    assert(hostCtx.status === 403, 'a member who is not a keeper cannot host an event for the enterprise');
+    hostCtx = await dispatch(router, 'POST', '/api/marketplace/posts', createCtx(stranger, stranger));
+    const ownRow = hostCtx.body?.post && db.prepare('SELECT created_by FROM posts WHERE id = ?').get(hostCtx.body.post.id) as any;
+    assert(!!ownRow && ownRow.created_by === null, "a member's own event has no created_by");
     assert(!!keeperEvent && Array.isArray(keeperEvent.eventRsvps), "a keeper is a host of the enterprise's event");
     const leaked = broadcasts.filter(b => b.post?.type === 'event' && (b.post.eventPrivateNote !== undefined || b.post.eventRsvps !== undefined || b.post.myRsvp !== undefined));
     assert(leaked.length === 0, 'no broadcast carries a private note, RSVP list or viewer status');

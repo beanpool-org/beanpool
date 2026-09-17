@@ -187,6 +187,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
         return;
     }
     if (!assertActorEntitled(ctx, authorPublicKey)) return;
+    // A keeper posting for an enterprise is recorded as the member who did it, as the enterprise routes do
+    // (routes/treasury.ts) — the web app's event form hosts through this route with "Post as" (events §3).
+    const actor = ctx.state?.actor as string | undefined;
+    const createdBy = actor && actor !== authorPublicKey ? actor : undefined;
     try {
         const post = createPost(
             type, category || 'other', title, description || '',
@@ -201,7 +205,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
             { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
-              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote }
+              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote, createdBy }
         );
         if (!post) {
             ctx.status = 400;

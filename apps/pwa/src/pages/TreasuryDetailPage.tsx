@@ -6,6 +6,9 @@ import {
     deleteCrowdfundProject,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp,
     getEnterpriseLedger, type EnterpriseLedgerResponse,
+    requestToJoinEnterprise, approveKeeperRequest, declineKeeperRequest,
+    proposeEnterpriseSuccession, voteEnterpriseSuccession,
+    type KeeperRequestItem, type SuccessionProposalItem,
     type BalanceInfo,
     getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     type EnterpriseThreadMessage
@@ -86,6 +89,144 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [posting, setPosting] = useState(false);
     const [postError, setPostError] = useState<string | null>(null);
 
+    // Keeper Join Request State
+    const [joinBackingPledge, setJoinBackingPledge] = useState<number>(0);
+    const [submittingJoinRequest, setSubmittingJoinRequest] = useState(false);
+    const [requestProcessingId, setRequestProcessingId] = useState<string | null>(null);
+
+    // Succession Proposal State
+    const [selectedSuccessionCandidate, setSelectedSuccessionCandidate] = useState<string>('');
+    const [submittingSuccession, setSubmittingSuccession] = useState(false);
+
+    const handleJoinRequest = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (submittingJoinRequest) return;
+        try {
+            setSubmittingJoinRequest(true);
+            setActionFeedback(null);
+            await requestToJoinEnterprise(pubkey, Number(joinBackingPledge));
+            setActionFeedback({
+                type: 'success',
+                message: `Join request submitted with ${joinBackingPledge} 🫘 backing pledge. Awaiting lead keeper review.`
+            });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({
+                type: 'error',
+                message: err.message || 'Failed to submit join request.'
+            });
+        } finally {
+            setSubmittingJoinRequest(false);
+        }
+    };
+
+    const handleApproveRequest = async (requestId: string) => {
+        if (requestProcessingId) return;
+        try {
+            setRequestProcessingId(requestId);
+            setActionFeedback(null);
+            const res = await approveKeeperRequest(pubkey, requestId);
+            setActionFeedback({
+                type: 'success',
+                message: `Approved keeper request with ${res.backing ?? 0} 🫘 backing.`
+            });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({
+                type: 'error',
+                message: err.message || 'Failed to approve keeper request.'
+            });
+        } finally {
+            setRequestProcessingId(null);
+        }
+    };
+
+    const handleDeclineRequest = async (requestId: string) => {
+        if (requestProcessingId) return;
+        try {
+            setRequestProcessingId(requestId);
+            setActionFeedback(null);
+            await declineKeeperRequest(pubkey, requestId);
+            setActionFeedback({
+                type: 'success',
+                message: 'Declined keeper request.'
+            });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({
+                type: 'error',
+                message: err.message || 'Failed to decline keeper request.'
+            });
+        } finally {
+            setRequestProcessingId(null);
+        }
+    };
+
+    const handleProposeSuccession = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (submittingSuccession || !selectedSuccessionCandidate) return;
+        try {
+            setSubmittingSuccession(true);
+            setActionFeedback(null);
+            const res: any = await proposeEnterpriseSuccession(pubkey, selectedSuccessionCandidate);
+            const passed = res.executed ?? res.leadMoved ?? false;
+            if (passed) {
+                setActionFeedback({
+                    type: 'success',
+                    message: 'Succession passed! Lead role moved to candidate.'
+                });
+            } else {
+                const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
+                const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
+                setActionFeedback({
+                    type: 'success',
+                    message: `Succession proposal submitted (${count} of ${req} votes). Awaiting other keepers.`
+                });
+            }
+            setSelectedSuccessionCandidate('');
+            await load();
+        } catch (err: any) {
+            setActionFeedback({
+                type: 'error',
+                message: err.message || 'Failed to propose lead succession.'
+            });
+        } finally {
+            setSubmittingSuccession(false);
+        }
+    };
+
+    const handleVoteSuccession = async (proposalId: string) => {
+        if (submittingSuccession) return;
+        try {
+            setSubmittingSuccession(true);
+            setActionFeedback(null);
+            const res: any = await voteEnterpriseSuccession(pubkey, proposalId);
+            const passed = res.executed ?? res.leadMoved ?? false;
+            if (passed) {
+                setActionFeedback({
+                    type: 'success',
+                    message: 'Succession vote registered and passed! Lead role has been transferred.'
+                });
+            } else {
+                const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
+                const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
+                setActionFeedback({
+                    type: 'success',
+                    message: `Succession vote registered (${count} of ${req} votes).`
+                });
+            }
+            await load();
+        } catch (err: any) {
+            setActionFeedback({
+                type: 'error',
+                message: err.message || 'Failed to vote on succession.'
+            });
+        } finally {
+            setSubmittingSuccession(false);
+        }
+    };
+
+
     const handlePledge = async (e: React.FormEvent) => {
         e.preventDefault();
         if (pledging) return;
@@ -128,7 +269,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
             if (identity?.publicKey) {
                 const b: BalanceInfo = await getBalance(identity.publicKey);
                 const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
-                setIsKeeperOfThis(mine.includes(pubkey));
+                const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
+                setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
             } else {
                 setIsKeeperOfThis(false);
             }
@@ -531,6 +673,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const initiatorKeeper = detail?.keepers?.find((k: any) => k.publicKey === detail?.windUpInitiatedBy);
     const initiatorName = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : 'a keeper');
     const keeperCount = detail?.keepers?.length || 1;
+
+    const availableToBack = detail?.availableToBack ?? 0;
+    const isLeadOrSoleKeeperOrAdmin = !!detail?.isLeadOrSoleKeeperOrAdmin;
+    const keeperRequests: KeeperRequestItem[] = detail?.keeperRequests || [];
+    const myPendingRequest: KeeperRequestItem | null = detail?.myPendingRequest || null;
+    const leadInactivity = detail?.leadInactivity || null;
+    const successionInfo = detail?.succession || null;
+    const activeProposal: SuccessionProposalItem | null =
+        successionInfo?.proposals?.find((p: any) => p.status === 'active') || null;
+    const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
+
 
     return (
         <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
@@ -1254,6 +1407,212 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                             </div>
                         )}
 
+                        {/* Pending Keeper Requests (for Lead Keeper / Sole Keeper / Admin) */}
+                        {isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
+                            <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-4 shadow-sm">
+                                <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                                    <span aria-hidden="true">📬</span>
+                                    <span>Pending Keeper Requests ({keeperRequests.length})</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {keeperRequests.map((req) => (
+                                        <div
+                                            key={req.id}
+                                            className="bg-white dark:bg-nature-900 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                        >
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="text-base" aria-hidden="true">👤</span>
+                                                <div>
+                                                    <div className="text-xs font-bold text-nature-900 dark:text-white">
+                                                        {req.callsign || `${req.memberPubkey.slice(0, 8)}…`}
+                                                    </div>
+                                                    <div className="text-[11px] text-nature-500 dark:text-nature-400">
+                                                        Backing pledge: <span className="font-bold text-emerald-600 dark:text-emerald-400">{req.pledgedBacking} 🫘</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                                                <button
+                                                    type="button"
+                                                    disabled={requestProcessingId === req.id}
+                                                    onClick={() => handleApproveRequest(req.id)}
+                                                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
+                                                >
+                                                    {requestProcessingId === req.id ? 'Approving…' : 'Approve'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={requestProcessingId === req.id}
+                                                    onClick={() => handleDeclineRequest(req.id)}
+                                                    className="px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-semibold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[36px]"
+                                                >
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Lead Succession Panel (when lead has no activity for 30+ days) */}
+                        {Boolean(leadInactivity?.isEligible ?? (leadInactivity as any)?.isEligibleForSuccession) && (
+                            <div className="bg-amber-50/60 dark:bg-amber-950/30 border-2 border-amber-500/50 rounded-2xl p-5 space-y-4 shadow-sm">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="text-xl" aria-hidden="true">⚠️</span>
+                                    <div>
+                                        <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                                            Lead Keeper Inactive ({Math.floor(leadInactivity.daysInactive)} days)
+                                        </div>
+                                        <p className="text-xs text-amber-900 dark:text-amber-200 mt-1 leading-relaxed">
+                                            The lead keeper ({leadInactivity.leadCallsign}) has recorded no node activity for 30+ days.
+                                            A strict majority of the other keepers can move the lead role to an active keeper.
+                                            If the lead returns before completion, the proposal is cancelled automatically.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {activeProposal ? (
+                                    <div className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
+                                        <div className="text-xs font-bold text-nature-900 dark:text-white">
+                                            Active Succession Proposal: Move lead role to <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span>
+                                        </div>
+                                        <div className="text-xs text-nature-600 dark:text-nature-400">
+                                            Votes: <strong className="font-extrabold text-nature-900 dark:text-white">{activeProposal.votesCount}</strong> of <strong className="font-extrabold text-nature-900 dark:text-white">{activeProposal.requiredVotes ?? activeProposal.votesRequired ?? 0}</strong> required (strict majority of {activeProposal.totalEligible ?? 'other'} other keepers)
+                                        </div>
+                                        {isEligibleSuccessor && (
+                                            <div>
+                                                {activeProposal.votes?.some((v: any) => v.voterPubkey === identity?.publicKey) ? (
+                                                    <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                                        <span aria-hidden="true">✓</span>
+                                                        <span>You voted to approve this succession</span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        disabled={submittingSuccession}
+                                                        onClick={() => handleVoteSuccession(activeProposal.id)}
+                                                        className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+                                                    >
+                                                        {submittingSuccession ? 'Registering vote…' : `Vote to elect ${activeProposal.candidateCallsign} as lead keeper`}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : isEligibleSuccessor ? (
+                                    <form onSubmit={handleProposeSuccession} className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
+                                        <div className="text-xs font-bold text-nature-800 dark:text-nature-200">
+                                            Propose an Active Keeper as Lead
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                            <select
+                                                value={selectedSuccessionCandidate}
+                                                onChange={(e) => setSelectedSuccessionCandidate(e.target.value)}
+                                                className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[44px]"
+                                            >
+                                                <option value="">Select an active keeper…</option>
+                                                {keepers
+                                                    .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity.leadPubkey)
+                                                    .map((k: any) => {
+                                                        const pk = k.publicKey || k.pubkey || k.memberPubkey;
+                                                        return (
+                                                            <option key={pk} value={pk}>
+                                                                {k.callsign} {pk === identity?.publicKey ? '(yourself)' : ''}
+                                                            </option>
+                                                        );
+                                                    })}
+                                            </select>
+                                            <button
+                                                type="submit"
+                                                disabled={submittingSuccession || !selectedSuccessionCandidate}
+                                                className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
+                                            >
+                                                {submittingSuccession ? 'Proposing…' : 'Propose Lead'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
+                        {identity && !isKeeperOfThis && detail.status !== 'completed' && (
+                            myPendingRequest ? (
+                                <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
+                                    <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
+                                        <span aria-hidden="true">⏳</span>
+                                        <span>Keeper Request Pending</span>
+                                    </div>
+                                    <p className="text-xs text-sky-900 dark:text-sky-200 leading-relaxed">
+                                        You asked to join this enterprise with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
+                                        Awaiting review by the lead keeper.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4">
+                                    <div>
+                                        <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
+                                            <span aria-hidden="true">🤝</span>
+                                            <span>Ask to Join as a Keeper</span>
+                                        </div>
+                                        <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
+                                            Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.
+                                        </p>
+                                    </div>
+
+                                    <form onSubmit={handleJoinRequest} className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label htmlFor="join-backing-input" className="block text-xs font-bold text-nature-800 dark:text-nature-200">
+                                                Back this enterprise with your standing: 0 … {availableToBack}
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    id="join-backing-input"
+                                                    type="number"
+                                                    min={0}
+                                                    max={availableToBack}
+                                                    step={1}
+                                                    value={joinBackingPledge}
+                                                    onChange={(e) => {
+                                                        const raw = Math.floor(Number(e.target.value) || 0);
+                                                        const val = Math.max(0, Math.min(availableToBack, raw));
+                                                        setJoinBackingPledge(val);
+                                                    }}
+                                                    className="w-24 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-sm font-bold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                />
+                                                <input
+                                                    type="range"
+                                                    aria-label={`Back this enterprise with your standing: 0 to ${availableToBack}`}
+                                                    min={0}
+                                                    max={availableToBack}
+                                                    step={1}
+                                                    value={joinBackingPledge}
+                                                    onChange={(e) => setJoinBackingPledge(Number(e.target.value))}
+                                                    disabled={availableToBack === 0}
+                                                    className="flex-1 accent-emerald-600 disabled:opacity-40"
+                                                />
+                                                <span className="text-xs font-extrabold text-nature-700 dark:text-nature-300 w-16 text-right">
+                                                    {joinBackingPledge} 🫘
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-nature-500 dark:text-nature-400">
+                                                A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={submittingJoinRequest}
+                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+                                        >
+                                            {submittingJoinRequest ? 'Submitting request…' : 'Request to join as keeper'}
+                                        </button>
+                                    </form>
+                                </div>
+                            )
+                        )}
+
                         {/* Keepers transparency */}
                         {keepers.length > 0 && (
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
@@ -1261,15 +1620,40 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                     Accountable Keepers ({keepers.length})
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    {keepers.map((k: any) => (
-                                        <div
-                                            key={k.publicKey || k.pubkey}
-                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200"
-                                        >
-                                            <span aria-hidden="true">👤</span>
-                                            <span>{k.callsign}</span>
-                                        </div>
-                                    ))}
+                                    {keepers.map((k: any) => {
+                                        const isLead = k.role === 'lead';
+                                        // Suspended keepers are shown, not hidden: they still count as keepers of this
+                                        // enterprise, but cannot act until the suspension is lifted.
+                                        const isSuspended = !!k.suspended;
+                                        return (
+                                            <div
+                                                key={k.publicKey || k.pubkey || k.memberPubkey}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 ${isSuspended ? 'opacity-60' : ''}`}
+                                            >
+                                                <span aria-hidden="true">👤</span>
+                                                <span>{k.callsign}</span>
+                                                {isSuspended && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                        Suspended
+                                                    </span>
+                                                )}
+                                                {isLead ? (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                                                        Lead keeper
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                        Keeper
+                                                    </span>
+                                                )}
+                                                {Number(k.backing) > 0 && (
+                                                    <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">
+                                                        +{k.backing} 🫘
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

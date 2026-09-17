@@ -870,10 +870,10 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
 
 router.post('/api/profile/update', async (ctx) => {
     const { avatar, bio, contact, callsign, archetype } = (ctx as any).requestBody || {};
-    const activeKey = ctx.state.actor || (ctx as any).requestBody?.publicKey;
+    const activeKey = ctx.state.actor as string | undefined;
     if (!activeKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'publicKey is required' };
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
     // Funnel: step 2. Asked before the write — afterwards there is no telling a first
@@ -1098,14 +1098,30 @@ router.post('/api/profile/unvouch', async (ctx) => {
 });
 
 router.post('/api/ledger/transfer', async (ctx) => {
-    const { to, amount, memo } = (ctx as any).requestBody || {};
-    const from = ctx.state.actor || (ctx as any).requestBody?.from;
+    const { to, amount, memo, from: bodyFrom } = (ctx as any).requestBody || {};
+    // The sender is the authenticated signer, and only that. The signature middleware sets both the actor
+    // and authSig; requiring them to agree here keeps this route fail-closed on its own, rather than
+    // trusting that every path to it was authenticated. transfer() cannot carry this check itself: its
+    // internal callers legitimately move value the signer does not own (escrow payouts, offboarding gifts,
+    // settlement holds, wage claims).
+    const from = ctx.state.actor as string | undefined;
+    const authSigner = (ctx.state as any).authSig?.signer as string | undefined;
+    if (!from || authSigner !== from) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (bodyFrom !== undefined && bodyFrom !== from) {
+        ctx.status = 403;
+        ctx.body = { error: 'from must match the signing key' };
+        return;
+    }
     const parsedAmount = Number(amount);
     // SECURITY (SRV-8): require a positive, finite amount at the route. Don't
     // rely solely on transfer()'s internal guard / the transactions CHECK.
-    if (!from || !to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
-        ctx.body = { error: 'from, to, and a positive amount are required' };
+        ctx.body = { error: 'to and a positive amount are required' };
         return;
     }
 
@@ -1163,7 +1179,12 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or token' };
         return;
     }
-    const activeKey = ctx.state.actor || publicKey;
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     const success = registerPushToken(activeKey, token, platform || 'ios');
     ctx.body = { success };
 });
@@ -1175,7 +1196,12 @@ router.delete('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey' };
         return;
     }
-    const activeKey = ctx.state.actor || publicKey;
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     const success = removePushToken(activeKey, token);
     ctx.body = { success };
 });
@@ -1204,7 +1230,12 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or preferences' };
         return;
     }
-    const activeKey = ctx.state.actor || publicKey;
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     const success = setMemberPreferences(activeKey, preferences);
     ctx.body = { success };
 });
@@ -1273,8 +1304,13 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 
 router.post('/api/reports', async (ctx) => {
     const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
-    const activeReporter = ctx.state.actor || reporterPubkey;
-    if (!activeReporter || !targetPubkey || typeof reason !== 'string' || !reason.trim()) {
+    const activeReporter = ctx.state.actor as string | undefined;
+    if (!activeReporter) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
         return;
@@ -1297,8 +1333,13 @@ router.get('/api/friends/:publicKey', async (ctx) => {
 
 router.post('/api/friends/add', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    const activeOwner = ctx.state.actor || ownerPubkey;
-    if (!activeOwner || !friendPubkey) {
+    const activeOwner = ctx.state.actor as string | undefined;
+    if (!activeOwner) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
@@ -1314,8 +1355,13 @@ router.post('/api/friends/add', async (ctx) => {
 
 router.post('/api/friends/remove', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    const activeOwner = ctx.state.actor || ownerPubkey;
-    if (!activeOwner || !friendPubkey) {
+    const activeOwner = ctx.state.actor as string | undefined;
+    if (!activeOwner) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;

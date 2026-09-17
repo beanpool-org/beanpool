@@ -13,6 +13,24 @@ import { bumpMembersVersion } from './versions.js';
  */
 export function recordActivity(publicKey: string): void {
     db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    try {
+        const activeProps = db.prepare(
+            "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
+        ).all(publicKey) as any[];
+        if (activeProps.length > 0) {
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'").run(publicKey);
+            for (const p of activeProps) {
+                (globalThis as any).broadcast?.({
+                    type: 'enterprise_succession_cancelled',
+                    proposalId: p.id,
+                    enterprisePubkey: p.enterprise_pubkey,
+                    leadPubkey: publicKey
+                });
+            }
+        }
+    } catch {
+        // Safe to ignore if table does not exist in isolated db test
+    }
 }
 
 /**

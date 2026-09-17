@@ -1281,3 +1281,44 @@ CREATE TABLE IF NOT EXISTS invalidated_keys (
     rekeyed_to     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_invalidated_keys_rekeyed_to ON invalidated_keys(rekeyed_to);
+
+-- 27. Enterprise Keepers: Join Requests & Lead Succession (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+-- Ask-to-join request flow with explicit backing pledge (0 .. available).
+CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
+    id                TEXT PRIMARY KEY,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
+    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    decided_at        DATETIME,
+    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_keeper_requests_enterprise ON enterprise_keeper_requests(enterprise_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_keeper_requests_member ON enterprise_keeper_requests(member_pubkey, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_keeper_requests_pending_unique
+ON enterprise_keeper_requests(enterprise_pubkey, member_pubkey)
+WHERE status = 'pending';
+
+-- Lead succession when lead records no node activity for 30 days.
+CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
+    id                TEXT PRIMARY KEY,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    lead_pubkey       TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
+    candidate_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
+    proposer_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
+    status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'passed', 'cancelled')),
+    created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    executed_at       DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_succession_proposals_active_unique
+ON enterprise_succession_proposals(enterprise_pubkey)
+WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS enterprise_succession_votes (
+    proposal_id       TEXT NOT NULL REFERENCES enterprise_succession_proposals(id) ON DELETE CASCADE,
+    voter_pubkey      TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    voted_at          DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (proposal_id, voter_pubkey)
+);

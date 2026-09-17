@@ -30,7 +30,7 @@
 #     for t in a b c; do ... tsx "src/$t.ts"     ← a short inline batch loop
 #     tsx src/test-name.ts                       ← the env-flag variants
 #
-# Both are matched below. Prose is not.
+# All three shapes are matched below. Prose is not.
 #
 # It also flags the reverse — a registered name with no file — which is how a typo in the list
 # turns into a suite that quietly never runs.

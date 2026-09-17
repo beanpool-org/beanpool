@@ -885,7 +885,9 @@ export default function PostDetailModal() {
                 <View style={{ width: 68 }} />
             </View>
 
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
             <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
                 {/* Type + Category Badge */}
                 <View style={styles.typeBadgeRow}>
@@ -1791,7 +1793,9 @@ export default function PostDetailModal() {
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>➕ Create an Offer</Text>
                             </Pressable>
-                            <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { marginTop: 10 }]} onPress={() => setShowContributionRequired(false)}>
+                            {/* flex: 0 — editCancelBtn is flex: 1 for the row layouts; in this column it squashed the
+                                button to ~30dp and hid the label. */}
+                            <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { flex: 0, marginTop: 10, minHeight: 48 }]} onPress={() => setShowContributionRequired(false)}>
                                 <Text style={styles.editCancelBtnText}>Not now</Text>
                             </Pressable>
                         </Pressable>

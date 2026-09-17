@@ -255,7 +255,9 @@ export default function GroupPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     {/* Unmistakable Scope Banner */}
                     <View style={styles.audienceBanner}>
@@ -299,7 +301,8 @@ export default function GroupPostScreen() {
                             style={[styles.input, errors.has('title') && styles.fieldError]}
                             value={title}
                             onChangeText={(t) => { setTitle(t); clearError('title'); }}
-                            placeholder={type === 'offer' ? 'e.g. Garden tools lending, Workshop space' : 'e.g. Help moving soil, Extra pallets'}
+                            // One line at 320dp + 1.3x: a longer placeholder wraps and its second line is clipped on Android.
+                            placeholder={type === 'offer' ? 'e.g. Garden tools lending' : 'e.g. Help moving soil'}
                             placeholderTextColor={colors.text.muted}
                             maxLength={80}
                         />
@@ -381,21 +384,24 @@ export default function GroupPostScreen() {
                         </View>
                     </Pressable>
                 </ScrollView>
-            </KeyboardAvoidingView>
 
-            <View style={styles.footer}>
-                <Pressable
-                    style={styles.submitBtn}
-                    onPress={handleSubmit}
-                    disabled={submitting}
-                >
-                    {submitting ? (
-                        <ActivityIndicator color={colors.text.inverse} />
-                    ) : (
-                        <Text style={styles.submitBtnText}>Post to {groupName}</Text>
-                    )}
-                </Pressable>
-            </View>
+                {/* Inside the KeyboardAvoidingView (as on treasury-post) so the Post button rides above the keyboard
+                    instead of being hidden behind it while typing. */}
+                <View style={styles.footer}>
+                    <Pressable
+                        style={styles.submitBtn}
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                        accessibilityRole="button"
+                    >
+                        {submitting ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.submitBtnText} numberOfLines={1}>Post to {groupName}</Text>
+                        )}
+                    </Pressable>
+                </View>
+            </KeyboardAvoidingView>
 
             <CategoryPickerSheet
                 visible={showCategoryPicker}

@@ -19,7 +19,7 @@ import {
 import {
     seasonBanner, seasonControls, anySeasonControl, pauseConfirmText, RESUME_CONFIRM_TEXT, windUpConfirmText,
     windUpDeficitText, cancelWindUpConfirmText, finaliseWindUpConfirmText, postingBlockedText,
-    LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, type LedgerPeriod
+    LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, plSummaryText, type LedgerPeriod
 } from '../utils/enterprise-season';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
@@ -293,6 +293,7 @@ export default function TreasuryDetailScreen() {
         plBox: { flex: 1, minWidth: 0, borderRadius: 12, padding: 10, borderWidth: 1 },
         plBoxLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
         plBoxValue: { fontSize: 16, fontWeight: '900', marginTop: 3 },
+        plFeeNote: { fontSize: 12, color: colors.text.muted, marginBottom: 10 },
         ledgerRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border.default, gap: 2 },
         ledgerLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
         ledgerWhat: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: '700', color: colors.text.heading },
@@ -1411,29 +1412,34 @@ export default function TreasuryDetailScreen() {
                                 })}
                             </View>
 
-                            <View style={styles.plSummaryRow}>
-                                <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
-                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1}>Came in</Text>
-                                    <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                        +{(ledger?.summary?.totalIncome ?? 0).toFixed(2)} 🫘
-                                    </Text>
-                                </View>
-                                <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
-                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1}>Went out</Text>
-                                    <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                        -{(ledger?.summary?.totalSpend ?? 0).toFixed(2)} 🫘
-                                    </Text>
-                                </View>
-                            </View>
                             {(() => {
-                                const net = ledger?.summary?.netChange ?? 0;
+                                const pl = plSummaryText(ledger?.summary);
                                 return (
-                                    <View style={[styles.plBox, { flex: 0, marginBottom: 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
-                                        <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1}>Net change</Text>
-                                        <Text style={[styles.plBoxValue, { color: net >= 0 ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                            {net >= 0 ? '+' : ''}{net.toFixed(2)} 🫘
-                                        </Text>
-                                    </View>
+                                    <>
+                                        <View style={styles.plSummaryRow}>
+                                            <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
+                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1}>Came in</Text>
+                                                <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                    {pl.cameIn}
+                                                </Text>
+                                            </View>
+                                            <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
+                                                <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1}>Went out</Text>
+                                                <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                    {pl.wentOut}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <View style={[styles.plBox, { flex: 0, marginBottom: pl.feeNote ? 6 : 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
+                                            <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1}>Net change</Text>
+                                            <Text style={[styles.plBoxValue, { color: pl.netIsPositive ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                {pl.net}
+                                            </Text>
+                                        </View>
+                                        {pl.feeNote && (
+                                            <Text style={styles.plFeeNote}>{pl.feeNote}</Text>
+                                        )}
+                                    </>
                                 );
                             })()}
 

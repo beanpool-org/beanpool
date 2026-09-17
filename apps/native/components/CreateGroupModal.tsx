@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { createGroupApi, type GroupCategory, type JoinPolicy, type GroupItem } from '../utils/db';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
+import { submitCreateGroup } from '../utils/create-group-submit';
 
 interface CreateGroupModalProps {
     isOpen: boolean;
@@ -195,32 +196,29 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     }));
 
     const handleSubmit = async () => {
-        // An Alert opened over a raised keyboard leaves phantom keyboard-height padding behind.
-        await KeyboardController.dismiss();
-        if (!name.trim() || name.trim().length < 2) {
-            Alert.alert('Invalid Name', 'Group name must be at least 2 characters long.');
-            return;
-        }
-
-        setSubmitting(true);
-        try {
-            const group = await createGroupApi({
-                name: name.trim(),
+        // submitCreateGroup sets submitting BEFORE the keyboard dismiss and bounds that wait: inside this Modal on
+        // Android 8–10 KeyboardController.dismiss() may never resolve, and an unbounded await made Create do nothing.
+        // The dismiss still comes first so an Alert is not opened over a raised keyboard (phantom padding).
+        await submitCreateGroup({
+            name,
+            dismissKeyboard: () => KeyboardController.dismiss(),
+            setSubmitting,
+            create: (trimmedName) => createGroupApi({
+                name: trimmedName,
                 description: description.trim() || undefined,
                 category,
                 joinPolicy,
-            });
-
-            hapticSuccess();
-            onCreated(group);
-            setName('');
-            setDescription('');
-            onClose();
-        } catch (e: any) {
-            Alert.alert('Creation Failed', e.message || 'Failed to create group');
-        } finally {
-            setSubmitting(false);
-        }
+            }),
+            onCreated: (group) => {
+                hapticSuccess();
+                onCreated(group);
+                setName('');
+                setDescription('');
+                onClose();
+            },
+            onInvalidName: () => Alert.alert('Invalid Name', 'Group name must be at least 2 characters long.'),
+            onError: (e: any) => Alert.alert('Creation Failed', e?.message || 'Failed to create group'),
+        });
     };
 
     return (

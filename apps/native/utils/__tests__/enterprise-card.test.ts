@@ -31,6 +31,19 @@ describe('enterpriseCardStatus — what the Commons card says', () => {
         expect(s.meta).toBe('Completed · Closed');
     });
 
+    it('a state badge hides the lifecycle badge, so WINDING UP never sits beside ONGOING', () => {
+        expect(enterpriseCardStatus(base).showKindBadge).toBe(true);
+        expect(enterpriseCardStatus({ ...base, paused: true }).showKindBadge).toBe(false);
+        expect(enterpriseCardStatus({ ...base, status: 'winding_up' }).showKindBadge).toBe(false);
+        expect(enterpriseCardStatus({ ...base, lifecycle: 'bounded', status: 'completed' }).showKindBadge).toBe(false);
+    });
+
+    it('FUNDED still shows beside a state badge', () => {
+        const s = enterpriseCardStatus({ ...base, goalAmount: 100, currentAmount: 100, status: 'completed' });
+        expect(s.stateBadge).toBe('closed');
+        expect(s.showKindBadge).toBe(true);
+    });
+
     it('a bounded lifecycle with no goal still reads as a project', () => {
         expect(enterpriseCardStatus({ ...base, lifecycle: 'bounded' }).kindBadge).toBe('project');
     });

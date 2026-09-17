@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Image, Share, Linking, Platform, Keyboard, AppState, Modal } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Image, Share, Linking, Platform, AppState, Modal } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Clipboard from 'expo-clipboard';
 import { useIdentity } from '../IdentityContext';
 import * as SecureStore from 'expo-secure-store';
@@ -60,7 +60,6 @@ function getDatabaseFilePaths(dbFilename: string): string[] {
 export default function SettingsScreen() {
     const { theme, colors, toggleTheme, lightPalette, setLightPalette } = useTheme();
     const { identity, setIdentity } = useIdentity();
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: theme === 'dark' ? colors.surface.app : palette.grayAlt100 },
@@ -274,11 +273,6 @@ export default function SettingsScreen() {
         // ─── Archetype Card ───
     }));
 
-    useEffect(() => {
-        const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
-        const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-        return () => { showSub.remove(); hideSub.remove(); };
-    }, []);
     const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection'>('menu');
 
     // --- Protection state ---
@@ -1335,12 +1329,14 @@ export default function SettingsScreen() {
 
 
     return (
-        <KeyboardAvoidingView 
-            style={{ flex: 1 }} 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={88}
+        // KeyboardAwareScrollView scrolls the focused field (e.g. Edit Profile → Bio) above the keyboard and adds
+        // the keyboard's height as bottom space itself. The old KeyboardAvoidingView did nothing on Android
+        // (behavior undefined) and the extra bottom padding let the page scroll, but nothing moved the field into view.
+        <KeyboardAwareScrollView
+            style={styles.container}
+            contentContainerStyle={[styles.content, { paddingBottom: 48 }]}
+            bottomOffset={16}
         >
-            <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48 }]}>
             {/* ─── Identity Dashboard Card ─── */}
             <View style={styles.identityCard}>
                 <View style={styles.identityInner}>
@@ -2655,8 +2651,7 @@ export default function SettingsScreen() {
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
             />
-            </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
     );
 }
 

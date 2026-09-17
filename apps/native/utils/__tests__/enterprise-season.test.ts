@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     seasonBanner, seasonControls, anySeasonControl, pauseConfirmText, windUpConfirmText, windUpDeficitText,
     cancelWindUpConfirmText, finaliseWindUpConfirmText, postingBlockedText, ledgerSince, ledgerLineLabels,
-    formatPauseDate, heldCredit, signedBeans,
+    formatPauseDate, heldCredit, signedBeans, plSummaryText,
 } from '../enterprise-season';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -73,6 +73,18 @@ describe('state banners every member sees', () => {
         const over = seasonBanner(enterprise({ status: 'winding_up', windUpInitiatedAt: new Date(NOW - 8 * DAY).toISOString(), windUpInitiatedBy: 'lead' }), NOW);
         expect(over?.headline).toBe('Winding up (0 days left · started by Rosa)');
         expect(over?.kind === 'winding_up' && over.graceEndedNote).toBe('The 7-day grace period has elapsed. Ready to be finalised.');
+    });
+
+    it('winding up: never more days left than the 7-day grace period', () => {
+        const at = (ms: number) => seasonBanner(enterprise({ status: 'winding_up', windUpInitiatedBy: 'lead', windUpGraceEndsAt: new Date(NOW + ms).toISOString() }), NOW);
+        // Just started, phone clock a few seconds behind the server: ceil would say 8.
+        expect(at(7 * DAY + 5000)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(7 * DAY)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(7 * DAY - 1)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(6 * DAY)?.headline).toBe('Winding up (6 days left · started by Rosa)');
+        // Derived from windUpInitiatedAt a moment in the phone's future.
+        const fromStart = seasonBanner(enterprise({ status: 'winding_up', windUpInitiatedBy: 'lead', windUpInitiatedAt: new Date(NOW + 3000).toISOString() }), NOW);
+        expect(fromStart?.headline).toBe('Winding up (7 days left · started by Rosa)');
     });
 
     it('completed wins over a stale paused flag', () => {
@@ -175,6 +187,32 @@ describe('P&L helpers', () => {
         expect(ledgerLineLabels({ direction: 'spend', counterpartyName: '', memo: '' })).toEqual({ flow: 'Went out', with: 'Member', what: 'Transfer' });
         expect(signedBeans(12, 'income')).toBe('+12.00 🫘');
         expect(signedBeans(3.5, 'spend')).toBe('-3.50 🫘');
+    });
+
+    it('P&L totals: an empty period and zero spend read 0.00, never -0.00', () => {
+        const empty = plSummaryText({ totalIncome: 0, totalSpend: 0, netChange: 0 });
+        expect(empty).toEqual({ cameIn: '0.00 🫘', wentOut: '0.00 🫘', net: '0.00 🫘', netIsPositive: true, feeNote: null });
+        expect(plSummaryText(null)).toEqual(empty);
+        expect(plSummaryText(undefined).wentOut).toBe('0.00 🫘');
+        // Float dust that rounds to zero is still zero.
+        expect(plSummaryText({ totalIncome: 0, totalSpend: 0.001, netChange: -0.001 }).net).toBe('0.00 🫘');
+        const spent = plSummaryText({ totalIncome: 0, totalSpend: 3.5, netChange: -3.5 });
+        expect(spent.wentOut).toBe('-3.50 🫘');
+        expect(spent.net).toBe('-3.50 🫘');
+        expect(spent.netIsPositive).toBe(false);
+    });
+
+    it('P&L fee note: shown only when income − spend − net > 0, with the fee amount', () => {
+        // The Community Eggs screen: 36.00 came in, nothing went out, balance moved 35.82.
+        const eggs = plSummaryText({ totalIncome: 36, totalSpend: 0, netChange: 35.82 });
+        expect(eggs.cameIn).toBe('+36.00 🫘');
+        expect(eggs.wentOut).toBe('0.00 🫘');
+        expect(eggs.net).toBe('+35.82 🫘');
+        expect(eggs.feeNote).toBe('Came in is before fees: 0.18 🫘 in fees came off it.');
+        expect(plSummaryText({ totalIncome: 36, totalSpend: 10, netChange: 26 }).feeNote).toBeNull();
+        expect(plSummaryText({ totalIncome: 36, totalSpend: 10, netChange: 26.5 }).feeNote).toBeNull();
+        // Float noise below a cent does not produce a "0.00 in fees" note.
+        expect(plSummaryText({ totalIncome: 0.3, totalSpend: 0.1, netChange: 0.2 }).feeNote).toBeNull();
     });
 
     it('formatting edge cases', () => {

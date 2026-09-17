@@ -300,7 +300,7 @@ export default function ProjectsScreen() {
     }, [enterprises, filter, sortBy]);
 
     const renderItem = ({ item }: { item: TreasurySummary }) => {
-        const { stateBadge, kindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
+        const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
         const daysRemaining = getDaysRemaining(item.deadlineAt);
@@ -346,7 +346,7 @@ export default function ProjectsScreen() {
                                     <Text style={styles.badgeClosedText} numberOfLines={1}>CLOSED</Text>
                                 </View>
                             )}
-                            {kindBadge === 'funded' ? (
+                            {!showKindBadge ? null : kindBadge === 'funded' ? (
                                 <View style={[styles.badge, styles.badgeFunded]}>
                                     <Text style={styles.badgeFundedText} numberOfLines={1}>🎉 FUNDED</Text>
                                 </View>
@@ -616,7 +616,7 @@ export default function ProjectsScreen() {
                                 onRefresh={loadData}
                                 onOpenPropose={() => {
                                     if (!canProposeDecision) {
-                                        Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                        Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
                                         return;
                                     }
                                     if (hasOpenDecision) {
@@ -824,7 +824,7 @@ export default function ProjectsScreen() {
                     }
                     if (activeSection === 'decide') {
                         if (!canProposeDecision) {
-                            Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                            Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
                             return;
                         }
                         if (hasOpenDecision) {

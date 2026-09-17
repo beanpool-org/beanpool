@@ -168,7 +168,9 @@ export function redeemOfflineTicket(
             db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for) VALUES (?, ?, ?, ?)`).run(codeHash, inviterPubkey, createdAt, intendedFor || null);
         }
 
-        recordActivity(inviterPubkey);
+        // No recordActivity(inviterPubkey): the joiner redeems the ticket, possibly weeks after the inviter
+        // signed it and without the inviter present. Stamping the inviter active would reset lead-succession
+        // inactivity and cancel a succession vote on a lead who did nothing (#838 review).
 
         const member = registerMemberInternal(broadcast, joinerPublicKey, callsign, inviterPubkey, codeHash);
         if (!member) {

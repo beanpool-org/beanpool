@@ -1313,6 +1313,9 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
     executed_at       DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
+-- recordActivity looks up a lead's active proposals on every signed write.
+CREATE INDEX IF NOT EXISTS idx_succession_lead_active ON enterprise_succession_proposals(lead_pubkey)
+WHERE status = 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_succession_proposals_active_unique
 ON enterprise_succession_proposals(enterprise_pubkey)
 WHERE status = 'active';

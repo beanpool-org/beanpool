@@ -17,7 +17,7 @@ import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
-    isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR,
+    isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, isMemberActive, INACTIVE_MEMBER_CREATE_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -49,6 +49,11 @@ router.post('/api/commons/projects', async (ctx) => {
     if (!title || !requestedAmount) {
         ctx.status = 400;
         ctx.body = { error: 'proposerPubkey, title, and requestedAmount are required' };
+        return;
+    }
+    if (!isMemberActive(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INACTIVE_MEMBER_CREATE_ERROR };
         return;
     }
     if (isOperatorSwitchedOff(actor)) {
@@ -155,7 +160,8 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     if (!decision) return ctx.throw(404, 'Decision not found');
     const tally = tallyDecision(decision.id);
     const votes = getDecisionVotes(decision.id);
-    const actor = (ctx.state as any)?.actor || (ctx.query?.voterPubkey as string);
+    // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
+    const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     ctx.body = { decision, tally, votes, voiceCredits };
 });
@@ -285,6 +291,11 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     }
 
     const projectId = id || crypto.randomUUID();
+    if (!isMemberActive(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INACTIVE_MEMBER_CREATE_ERROR };
+        return;
+    }
     if (isOperatorSwitchedOff(actor)) {
         ctx.status = 403;
         ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };

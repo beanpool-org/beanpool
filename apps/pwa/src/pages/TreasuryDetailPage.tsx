@@ -711,9 +711,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         successionInfo?.proposals?.find((p: any) => p.status === 'active') || null;
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
-    // Map pin: only this enterprise's ACTIVE keepers, and never on a closed enterprise. Stricter than
-    // isKeeperOfThis on purpose — keeperOf checks the operator switch but not account status, so a suspended
-    // keeper can still appear there; the keepers list marks them suspended.
+    // Map pin: only this enterprise's ACTIVE keepers, and never on a closed enterprise. The keepers list marks
+    // suspended keepers; keeperOf also leaves them out now (it checks account status as well as the switch), so
+    // this matches isKeeperOfThis for a current node and stays strict against an older one.
     const isActiveKeeperOfThis = !!identity?.publicKey && Array.isArray(detail?.keepers) && detail.keepers.some(
         (k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey
     );

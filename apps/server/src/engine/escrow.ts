@@ -31,7 +31,7 @@ export interface EscrowCallbacks {
     getBalance: (publicKey: string) => any;
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
-    canOperateTreasury?: (operator: string, treasury: string) => boolean;
+    canOperateTreasury: (operator: string, treasury: string) => boolean;
     conservingTransaction: <T>(fn: () => T) => T;
     processDeferredWageClaims?: (enterprisePubkey: string) => number;
     sweepEnterpriseCeiling?: (enterprisePubkey: string) => number;
@@ -57,6 +57,17 @@ export function recordDeferredWageClaim(
         VALUES (?, ?, ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(id, enterprisePubkey, keeperPubkey, postId || null, transactionId || null, amount);
     return id;
+}
+
+/**
+ * May this signer act for this enterprise in a deal? Only canOperateTreasury answers that: it applies the
+ * operator switch and the signer's account status as well as the binding. There is no fallback to a bare
+ * treasury_operators lookup, which would let a suspended or switched-off keeper approve and pay out; without
+ * the callback the answer is no.
+ */
+function signerKeepsEnterprise(cb: EscrowCallbacks, signer: string, enterprisePubkey: string): boolean {
+    if (typeof cb.canOperateTreasury !== 'function') return false;
+    return cb.canOperateTreasury(signer, enterprisePubkey);
 }
 
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
@@ -321,9 +332,7 @@ export function approvePostRequest(
             err.statusCode = 401;
             throw err;
         }
-        const isKeeper = cb.canOperateTreasury
-            ? cb.canOperateTreasury(opts.authSigner, row.buyer_pubkey)
-            : Boolean(db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?").get(opts.authSigner, row.buyer_pubkey));
+        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
         if (!isKeeper) {
             const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
             err.status = 403;
@@ -683,9 +692,7 @@ export function completePostTransaction(
             err.statusCode = 401;
             throw err;
         }
-        const isKeeper = cb.canOperateTreasury
-            ? cb.canOperateTreasury(opts.authSigner, row.buyer_pubkey)
-            : Boolean(db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?").get(opts.authSigner, row.buyer_pubkey));
+        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
         if (!isKeeper) {
             const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
             err.status = 403;

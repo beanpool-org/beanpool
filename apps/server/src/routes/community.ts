@@ -679,8 +679,9 @@ router.post('/api/local/reset', async (ctx) => {
 // ===================== COMMUNITY API (PUBLIC) =====================
 
 router.get('/api/community/info', async (ctx) => {
-    const pubkey = (ctx.headers['x-public-key'] as string) || (ctx.query.publicKey as string);
-    ctx.body = getCommunityInfo(pubkey);
+    // The per-member transaction count is only for the verified signer. An unverified X-Public-Key header
+    // or ?publicKey= gets the node-wide figures, like any anonymous caller.
+    ctx.body = getCommunityInfo(ctx.state.actor as string | undefined);
 });
 
 router.get('/api/community/health', async (ctx) => {
@@ -979,13 +980,11 @@ router.post('/api/member/re-enroll', async (ctx) => {
 
 router.get('/api/profile/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
-    // SRV-3: friends-only contact visibility must key off the CRYPTOGRAPHICALLY
-    // VERIFIED requester (ctx.state.actor, set once the read is signed), not a
-    // spoofable `?requester=` query param — otherwise anyone could pass a known
-    // friend's pubkey to reveal hidden contact details. The query param remains
-    // only as a pre-enforcement fallback; once ENFORCE_READ_AUTH is on, gated
-    // profile reads are signed and the verified actor always wins.
-    const requester = (ctx.state.actor as string | undefined) || (ctx.query.requester as string | undefined);
+    // SRV-3: friends-only contact visibility keys off the CRYPTOGRAPHICALLY VERIFIED
+    // requester (ctx.state.actor, set once the read is signed) and nothing else. A
+    // `?requester=` query param is ignored, with or without ENFORCE_READ_AUTH:
+    // otherwise anyone could pass a known friend's pubkey to reveal hidden contact details.
+    const requester = ctx.state.actor as string | undefined;
     const profile = getProfile(publicKey, requester);
     if (!profile) {
         ctx.status = 404;

@@ -26,7 +26,7 @@
  * Same db-as-param shape the @beanpool/engine extraction already uses.
  */
 
-import { db } from './db/db.js';
+import { db, raiseCreatorOperatorSwitch } from './db/db.js';
 import { bridgeAccountId, ensureBridgeAccount, getEnergyBalance } from './federation-bridge.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap } from './connector-manager.js';
 import { logger } from './logger.js';
@@ -95,7 +95,7 @@ export function ensureFederationLink(
                 db.transaction(() => {
                     db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
                                 VALUES (?, ?, 'keeper', 'admin')`).run(existing.treasuryPubkey, operatorPubkey);
-                    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(operatorPubkey);
+                    raiseCreatorOperatorSwitch(operatorPubkey, existing.treasuryPubkey);
                 })();
             }
         }
@@ -139,7 +139,9 @@ export function ensureFederationLink(
         if (op) {
             db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
                         VALUES (?, ?, 'keeper', 'system')`).run(created.publicKey, op);
-            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(op);
+            // First binding only: a link created at boot or on peer connect must never switch back on a
+            // member whose operator access an admin turned off (#845).
+            raiseCreatorOperatorSwitch(op, created.publicKey);
         }
     })();
 

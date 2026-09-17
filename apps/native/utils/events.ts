@@ -231,6 +231,66 @@ export function isEventInFeed(post: any, nowMs: number = Date.now()): boolean {
     return !isEventEnded(post, nowMs);
 }
 
+// ===================== THE MAP'S DATE CHIPS (docs/events-on-the-map.md §3) =====================
+
+/**
+ * The windows the map's date chips cover, same as the web map's. They appear only while the Events pill is
+ * on, which is what keeps the filter row short at 320dp + 1.3x text.
+ */
+export type EventWindow = 'all' | 'today' | 'weekend' | 'week';
+
+export const EVENT_WINDOWS: ReadonlyArray<{ id: EventWindow; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'today', label: 'Today' },
+    { id: 'weekend', label: 'This weekend' },
+    { id: 'week', label: 'Next 7 days' },
+] as const;
+
+function startOfLocalDay(ms: number): Date {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
+/**
+ * The [from, to) span a chip covers, in local time. Today runs to midnight; This weekend is Saturday 00:00
+ * to Monday 00:00 of this week (the current one on a Saturday or Sunday); Next 7 days is now plus seven
+ * days. Mirrors the web app's `eventWindowRange` so the same event lands under the same chip on both.
+ */
+export function eventWindowRange(window: EventWindow, nowMs: number = Date.now()): { from: number; to: number } {
+    const today = startOfLocalDay(nowMs);
+    if (window === 'today') {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        return { from: nowMs, to: tomorrow.getTime() };
+    }
+    if (window === 'weekend') {
+        const dow = today.getDay(); // 0 Sunday … 6 Saturday
+        const saturday = new Date(today);
+        saturday.setDate(today.getDate() + (dow === 0 ? -1 : 6 - dow));
+        const monday = new Date(saturday);
+        monday.setDate(saturday.getDate() + 2);
+        return { from: Math.max(nowMs, saturday.getTime()), to: monday.getTime() };
+    }
+    if (window === 'week') {
+        return { from: nowMs, to: nowMs + 7 * 24 * 60 * 60 * 1000 };
+    }
+    return { from: nowMs, to: Number.POSITIVE_INFINITY };
+}
+
+/**
+ * Whether an event belongs on the map under a chip: it is still in the feed at all — an event that has
+ * ended or been cancelled never pins (§2.2) — and it overlaps the chip's span.
+ */
+export function eventInWindow(post: any, window: EventWindow, nowMs: number = Date.now()): boolean {
+    if (!isEventInFeed(post, nowMs)) return false;
+    const startIso = post?.event_start_at ?? post?.eventStartAt;
+    const start = startIso ? Date.parse(startIso) : NaN;
+    if (!Number.isFinite(start)) return false;
+    const { from, to } = eventWindowRange(window, nowMs);
+    return start < to && eventEndMs(post) > from;
+}
+
 /** CANCELLED / UPDATED badge on the card's first line; nothing for a scheduled event. */
 export function eventBadge(post: any): 'CANCELLED' | 'UPDATED' | null {
     const s = eventStateOf(post);

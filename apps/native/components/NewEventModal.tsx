@@ -49,9 +49,15 @@ interface NewEventModalProps {
      * Ends blank. This is the whole of repeats in v1 — no rules, no materialiser (§5).
      */
     prefill?: EventCopy | null;
+    /**
+     * A pin the member had already dropped on the map before opening this form, carried in as the event's
+     * place. Not the same thing as `prefill`, which titles the sheet "Copy Event" — this is a plain new
+     * event that starts with its location known.
+     */
+    initialPin?: { lat: number; lng: number } | null;
 }
 
-export function NewEventModal({ visible, onClose, onSuccess, prefill }: NewEventModalProps) {
+export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin }: NewEventModalProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -105,13 +111,17 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill }: NewEvent
             })
             .catch(() => {});
         // Centre the pin map on the member only if they have already allowed location; never prompt here.
-        Location.getForegroundPermissionsAsync()
-            .then(async ({ status }) => {
-                if (status !== 'granted') return;
-                const last = await Location.getLastKnownPositionAsync();
-                if (!cancelled && last) centreMap(last.coords.latitude, last.coords.longitude);
-            })
-            .catch(() => {});
+        // A carried-in pin wins: it is a place the member has just chosen, and recentring on their own
+        // position would quietly drag the map off it.
+        if (!initialPin) {
+            Location.getForegroundPermissionsAsync()
+                .then(async ({ status }) => {
+                    if (status !== 'granted') return;
+                    const last = await Location.getLastKnownPositionAsync();
+                    if (!cancelled && last) centreMap(last.coords.latitude, last.coords.longitude);
+                })
+                .catch(() => {});
+        }
         return () => { cancelled = true; };
     }, [visible, identity?.publicKey]);
 
@@ -160,6 +170,17 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill }: NewEvent
             setPin(null);
         }
     }, [visible, prefill, identity?.publicKey]);
+
+    // A pin the member dropped on the map before tapping + carries in as the place, once per opening so a
+    // later move of the pin is not written over by a re-render. A copy brings its own pin, so it wins.
+    const appliedInitialPin = useRef(false);
+    useEffect(() => {
+        if (!visible) { appliedInitialPin.current = false; return; }
+        if (prefill || appliedInitialPin.current || !initialPin) return;
+        appliedInitialPin.current = true;
+        setPin({ lat: initialPin.lat, lng: initialPin.lng });
+        centreMap(initialPin.lat, initialPin.lng);
+    }, [visible, prefill, initialPin]);
 
     const openPicker = (field: Field) => {
         Keyboard.dismiss();

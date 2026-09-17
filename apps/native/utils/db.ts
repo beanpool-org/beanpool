@@ -2616,6 +2616,8 @@ export async function syncMessages(publicKey: string) {
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
                                    localMembersCount === 0;
 
+        // Separate 10s budgets: one shared controller let a slow conversations response use up the
+        // directory fetch's time too, so it was aborted by us rather than by the network.
         const controller1 = new AbortController();
         const timeout1 = setTimeout(() => controller1.abort(), 10000);
         
@@ -2627,16 +2629,19 @@ export async function syncMessages(publicKey: string) {
             clearTimeout(timeout1);
             return;
         }
+        clearTimeout(timeout1);
 
         let dirRes = null;
+        const dirController = new AbortController();
+        const dirTimeout = setTimeout(() => dirController.abort(), 10000);
         if (shouldFetchMembers) {
             try {
-                dirRes = await signedGet('/api/members', { signal: controller1.signal });
+                dirRes = await signedGet('/api/members', { signal: dirController.signal });
             } catch (e) {
                 console.warn('[DB] members fetch failed:', e);
             }
         }
-        clearTimeout(timeout1);
+        clearTimeout(dirTimeout);
         
         if (dirRes && dirRes.ok) {
             try {

@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, type GroupItem } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
-import { requestSync } from '../../services/pillar-sync';
+import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { CategoryPickerSheet } from '../../components/CategoryPickerSheet';
@@ -727,11 +727,33 @@ export default function MarketScreen() {
     // still exists (clearDB drops the table but not the AsyncStorage cursor), which
     // showed a false "No items found". The spinner is dismissed only when posts
     // actually load (list becomes non-empty) or a pillar sync completes this session.
-    useEffect(() => {
-        let active = true;
-        const timer = setTimeout(() => { if (active) setSyncTimedOut(true); }, 12000);
-        return () => { active = false; clearTimeout(timer); };
+    //
+    // "Having trouble connecting" is a verdict, so it waits for one: after 12s it shows only if no
+    // sync is queued or running, or once a sync cycle actually ends in failure. A first sync that is
+    // still downloading on a slow connection keeps the loader (it used to flash the banner, then
+    // the listings arrived a moment later). A real failure — offline, node down, a request timing
+    // out — still ends the cycle unsuccessfully and shows the banner.
+    const syncWaitElapsedRef = useRef(false);
+    const syncWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const armSyncWait = React.useCallback(() => {
+        syncWaitElapsedRef.current = false;
+        setSyncTimedOut(false);
+        if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
+        syncWaitTimerRef.current = setTimeout(() => {
+            syncWaitElapsedRef.current = true;
+            if (!isPillarSyncActive()) setSyncTimedOut(true);
+        }, 12000);
     }, []);
+    useEffect(() => {
+        armSyncWait();
+        const endedSub = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, (e?: { success?: boolean }) => {
+            if (syncWaitElapsedRef.current && !e?.success) setSyncTimedOut(true);
+        });
+        return () => {
+            endedSub.remove();
+            if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
+        };
+    }, [armSyncWait]);
 
     // Debounced FTS5 server search
     useEffect(() => {
@@ -1672,7 +1694,7 @@ export default function MarketScreen() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
-                                onPress={() => { setSyncTimedOut(false); requestSync(); setTimeout(() => setSyncTimedOut(true), 12000); }}
+                                onPress={() => { armSyncWait(); requestSync(); }}
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>
                             </Pressable>

@@ -137,6 +137,17 @@ async function discoverAnchor(): Promise<string | null> {
 
 let isSyncing = false;
 
+/** DeviceEventEmitter event fired when a performSync cycle ends, with `{ success: boolean }`. */
+export const PILLAR_SYNC_ENDED = 'pillar_sync_ended';
+
+/**
+ * True while a sync is queued (debounce window) or running. The market uses it so a sync that is
+ * still downloading on a slow connection is not reported as "trouble connecting".
+ */
+export function isPillarSyncActive(): boolean {
+    return isSyncing || syncPromise !== null || debounceTimeoutId !== null;
+}
+
 /**
  * Perform the delta-only sync.
  * Returns immediately if hashes match (0 bytes transferred).
@@ -260,10 +271,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
         const postsSyncParam = postsIsIncremental ? lastSyncParam : '';
 
-        const postsController = new AbortController();
-        const balanceController = new AbortController();
-        const postsTimeout = setTimeout(() => postsController.abort(), 30000); // Extended for heavy initial payloads
-        const balanceTimeout = setTimeout(() => balanceController.abort(), 30000);
+        // Each request gets its own 30s budget (extended for heavy initial payloads), started when
+        // THAT request starts. Two controllers armed at the top of the cycle used to be shared by
+        // every fetch below, so on a slow connection a 29s posts download spent the whole budget and
+        // balance, members, projects and both transaction fetches were aborted by us within a second
+        // (measured on the emulator, 2026-09-18) — the market then waited for another full cycle.
+        const timeouts = requestTimeouts();
 
         // Tables whose change-status was already decided from the RAW response text
         // this cycle — the stringify gate before applyDelta must not re-hash them.
@@ -274,11 +287,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
-                signal: postsController.signal
+                signal: timeouts.signal(30000)
             });
             if (!postsRes.ok) {
-                clearTimeout(postsTimeout);
-                clearTimeout(balanceTimeout);
+                timeouts.clear();
                 result.durationMs = Date.now() - startTime;
                 result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
@@ -288,8 +300,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length : 'non-array'} posts from server`);
             }
         } catch (e: any) {
-            clearTimeout(postsTimeout);
-            clearTimeout(balanceTimeout);
+            timeouts.clear();
             result.durationMs = Date.now() - startTime;
             result.errorMessage = `Posts fetch exception: ${e.message || e}`;
             return result;
@@ -336,7 +347,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    signal: balanceController.signal
+                    signal: timeouts.signal(30000)
                 });
                 if (balanceRes.ok) {
                     const balData = await balanceRes.json();
@@ -357,7 +368,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const directoryRes = await fetch(`${anchorUrl}/api/members`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    signal: postsController.signal
+                    signal: timeouts.signal(30000)
                 });
                 if (directoryRes && directoryRes.ok) {
                     const dirData = await parseIfChanged(directoryRes, anchorUrl, 'members', rawGated);
@@ -385,7 +396,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    signal: postsController.signal
+                    signal: timeouts.signal(30000)
                 });
                 if (deltaRes && deltaRes.ok) {
                     // Separate fingerprint key from the full directory (different payload
@@ -408,7 +419,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
-                signal: postsController.signal
+                signal: timeouts.signal(30000)
             });
             if (projectsRes && projectsRes.ok) {
                 const projData = await projectsRes.json();
@@ -431,7 +442,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    signal: balanceController.signal
+                    signal: timeouts.signal(30000)
                 });
                 if (txRes && txRes.ok) {
                     const txData = await parseIfChanged(txRes, anchorUrl, 'transactions', rawGated);
@@ -450,7 +461,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
-                    signal: postsController.signal
+                    signal: timeouts.signal(30000)
                 });
                 if (mkptxRes && mkptxRes.ok) {
                     // The heaviest payload of the sync (measured 9.8MB with embedded
@@ -509,8 +520,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             }
         }
 
-        clearTimeout(postsTimeout);
-        clearTimeout(balanceTimeout);
+        timeouts.clear();
 
         // Abort if the user switched communities while this sync was in flight:
         // everything fetched belongs to `anchorUrl`, and applying it now would
@@ -609,6 +619,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         return result;
     } finally {
         isSyncing = false;
+        // Every finished cycle, success or not, so a screen waiting on the first sync can tell
+        // "still working on a slow connection" from "this cycle failed". Emitted after isSyncing
+        // is cleared.
+        try {
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit(PILLAR_SYNC_ENDED, { success: result.success });
+        } catch (e) {}
     }
 }
 
@@ -671,6 +688,26 @@ async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: strin
     _lastAppliedFingerprints[key] = fp;
     rawGated?.add(table);
     return JSON.parse(raw);
+}
+
+/**
+ * Per-request abort timers for one sync cycle. A timer starts when its request starts and is left
+ * running until `clear()`, so it also bounds reading that request's body; firing after the request
+ * has finished aborts nothing.
+ */
+function requestTimeouts() {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    return {
+        signal(ms: number): AbortSignal {
+            const controller = new AbortController();
+            timers.push(setTimeout(() => controller.abort(), ms));
+            return controller.signal;
+        },
+        clear() {
+            timers.forEach(clearTimeout);
+            timers.length = 0;
+        },
+    };
 }
 
 let syncPromise: Promise<SyncResult> | null = null;

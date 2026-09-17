@@ -125,3 +125,52 @@ export function localInputToIso(value: string): string | null {
     const ms = new Date(value).getTime();
     return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
+
+// ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
+
+/**
+ * What "Copy to a new date" carries into the create form. One-off events plus this is the whole of repeats in
+ * v1: there are no repeat rules and no materialiser (§5).
+ *
+ * The dates are NOT here, on purpose — the form opens with Starts and Ends blank, because picking the new date
+ * is the one thing the host is here to do, and a prefilled old date is the one value that must never be
+ * submitted by accident.
+ *
+ * The photo is not carried either: the node serves an event's photos as URLs and create takes image data, so
+ * a copy would post a broken reference. The form says so and the host re-adds it if they want one.
+ */
+export interface EventCopy {
+    title: string;
+    description: string;
+    placeName: string;
+    lat: number | null;
+    lng: number | null;
+    privateNote: string;
+    /** The enterprise that hosts it, when the viewer is a keeper rather than the author; else null. */
+    enterprisePubkey: string | null;
+    /** The group a group-only event belongs to; null for a whole-community event. */
+    groupId: string | null;
+}
+
+/**
+ * Only a host sees the Copy button, and a host is the author, a keeper of an enterprise author, or an active
+ * convenor of the target group. So for a group-only event the copy is posted to the same group, and for any
+ * other event whose author is not the viewer the author can only be an enterprise the viewer keeps.
+ *
+ * `eventPrivateNote` reaches the client only for the host and for people marked Going, so a copy made by
+ * anyone else simply carries no note — there is nothing to leak here.
+ */
+export function buildEventCopy(post: MarketplacePost, viewerPubkey?: string | null): EventCopy {
+    const groupId = post.audienceScope === 'group' ? (post.targetGroupId ?? null) : null;
+    const author = post.authorPublicKey || null;
+    return {
+        title: post.title || '',
+        description: post.description || '',
+        placeName: post.eventPlaceName || '',
+        lat: post.lat ?? null,
+        lng: post.lng ?? null,
+        privateNote: post.eventPrivateNote || '',
+        enterprisePubkey: !groupId && author && viewerPubkey && author !== viewerPubkey ? author : null,
+        groupId,
+    };
+}

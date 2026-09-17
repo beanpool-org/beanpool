@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eventInWindow, eventWindowRange, formatDistance, formatEventWhen, isEventOpen, localInputToIso } from './events';
+import { buildEventCopy, eventInWindow, eventWindowRange, formatDistance, formatEventWhen, isEventOpen, localInputToIso } from './events';
 import type { MarketplacePost } from './api';
 
 // Local-time constructors keep these independent of the machine's time zone.
@@ -97,5 +97,66 @@ describe('small helpers', () => {
     it('turns a datetime-local value into ISO UTC', () => {
         expect(localInputToIso('')).toBeNull();
         expect(localInputToIso('2026-09-26T09:00')).toBe(new Date(at(2026, 9, 26, 9)).toISOString());
+    });
+});
+
+describe('Copy to a new date', () => {
+    const base = event(at(2026, 9, 26, 9), at(2026, 9, 26, 12), {
+        title: 'Working bee at the hall',
+        description: 'Bring gloves',
+        eventPlaceName: 'Bindarrabi Hall',
+        eventPrivateNote: 'Gate code 1234',
+        lat: -28.55,
+        lng: 153.49,
+        authorPublicKey: 'host',
+    });
+
+    it('carries everything the host typed last time', () => {
+        const copy = buildEventCopy(base, 'host');
+        expect(copy.title).toBe('Working bee at the hall');
+        expect(copy.description).toBe('Bring gloves');
+        expect(copy.placeName).toBe('Bindarrabi Hall');
+        expect(copy.privateNote).toBe('Gate code 1234');
+        expect(copy.lat).toBe(-28.55);
+        expect(copy.lng).toBe(153.49);
+    });
+
+    it('never carries a date — picking the new one is the whole point', () => {
+        const copy = buildEventCopy(base, 'host') as unknown as Record<string, unknown>;
+        expect(copy.eventStartAt).toBeUndefined();
+        expect(copy.eventEndAt).toBeUndefined();
+        expect(Object.keys(copy).some(k => /start|end|date/i.test(k))).toBe(false);
+    });
+
+    it('a member copying their own event posts as themselves', () => {
+        expect(buildEventCopy(base, 'host').enterprisePubkey).toBeNull();
+        expect(buildEventCopy(base, 'host').groupId).toBeNull();
+    });
+
+    it('a keeper copying an enterprise event keeps the enterprise as the host', () => {
+        const copy = buildEventCopy({ ...base, authorPublicKey: 'enterprise-pk' }, 'keeper-pk');
+        expect(copy.enterprisePubkey).toBe('enterprise-pk');
+        expect(copy.groupId).toBeNull();
+    });
+
+    it('a group-only event is copied back to the same group, not to an enterprise', () => {
+        const copy = buildEventCopy(
+            { ...base, audienceScope: 'group', targetGroupId: 'grp-1', authorPublicKey: 'convenor-a' },
+            'convenor-b',
+        );
+        expect(copy.groupId).toBe('grp-1');
+        expect(copy.enterprisePubkey).toBeNull();
+    });
+
+    it('carries no note when the node did not send one (nobody but a host or Going gets it)', () => {
+        const { eventPrivateNote: _drop, ...noNote } = base;
+        expect(buildEventCopy(noNote as MarketplacePost, 'host').privateNote).toBe('');
+    });
+
+    it('survives an event with no pin or place name', () => {
+        const copy = buildEventCopy({ ...base, lat: undefined, lng: undefined, eventPlaceName: undefined } as MarketplacePost, 'host');
+        expect(copy.lat).toBeNull();
+        expect(copy.lng).toBeNull();
+        expect(copy.placeName).toBe('');
     });
 });

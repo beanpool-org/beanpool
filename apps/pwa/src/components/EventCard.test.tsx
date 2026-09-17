@@ -164,3 +164,38 @@ describe('EventDetail', () => {
         expect(onShowOnMap).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-1' }));
     });
 });
+
+describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
+    const hosted: any = {
+        ...baseEvent, myRsvp: null, eventPrivateNote: 'Gate code 1234',
+        eventRsvps: [{ memberPubkey: 'b', memberCallsign: 'Bo', status: 'going', updatedAt: '' }],
+    };
+
+    it('is offered to the host, next to Cancel event', () => {
+        const onCopy = vi.fn();
+        render(<EventDetail post={hosted} identity={identity} onCopyToNewDate={onCopy} />);
+        const panel = screen.getByTestId('event-host-panel');
+        fireEvent.click(within(panel).getByTestId('event-copy-to-new-date'));
+        expect(onCopy).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-1' }));
+    });
+
+    it('is offered on an event that has already finished — which is when a host wants it', () => {
+        const finished = { ...hosted, eventStartAt: new Date(2020, 0, 1, 9).toISOString(), eventEndAt: new Date(2020, 0, 1, 11).toISOString() };
+        render(<EventDetail post={finished} identity={identity} onCopyToNewDate={vi.fn()} />);
+        const panel = screen.getByTestId('event-host-panel');
+        expect(within(panel).getByTestId('event-copy-to-new-date')).toBeTruthy();
+        // Cancel is gone once it is over; Copy is not.
+        expect(within(panel).queryByRole('button', { name: 'Cancel event' })).toBeNull();
+    });
+
+    it('is not offered to anyone but the host', () => {
+        render(<EventDetail post={baseEvent} identity={identity} onCopyToNewDate={vi.fn()} />);
+        expect(screen.queryByTestId('event-copy-to-new-date')).toBeNull();
+    });
+
+    it('keeps a 48px target and does not overflow at 320px', () => {
+        renderAt320(<EventDetail post={hosted} identity={identity} onCopyToNewDate={vi.fn()} />);
+        const btn = screen.getByTestId('event-copy-to-new-date');
+        expect(btn.className).toMatch(/min-h-\[48px\]/);
+    });
+});

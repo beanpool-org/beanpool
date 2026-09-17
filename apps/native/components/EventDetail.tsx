@@ -8,8 +8,9 @@
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
  * lives in component state and is never written to the phone's cache.
  *
- * The event chat (slice 4) is one tap from here, for the host and anyone Going. Not here yet: Copy to a new
- * date (slice 5). "Show on map" opens the phone's maps app, because the in-app map layer for events is the
+ * The event chat (slice 4) is one tap from here, for the host and anyone Going. A host can also cancel, or
+ * copy the event to a new date (slice 5) — that opens NewEventModal filled from this event with the dates
+ * blank. "Show on map" opens the phone's maps app, because the in-app map layer for events is the
  * protected-files slice 7.
  */
 
@@ -23,10 +24,11 @@ import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse } from '../utils/d
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
+import { NewEventModal } from './NewEventModal';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
-    canOpenEventChat, eventChatEntryLabel,
-    type EventRsvpStatus, type RsvpCounts,
+    canOpenEventChat, eventChatEntryLabel, buildEventCopy,
+    type EventRsvpStatus, type RsvpCounts, type EventCopy,
 } from '../utils/events';
 
 interface EventDetailProps {
@@ -53,6 +55,9 @@ export function EventDetail({ post }: EventDetailProps) {
     const [pending, setPending] = useState<EventRsvpStatus | null>(null);
     const [showRsvps, setShowRsvps] = useState(false);
     const [cancelling, setCancelling] = useState(false);
+    // Non-null while the copy form is open; holding the draft rather than a boolean means NewEventModal
+    // applies it once, on the opening it was built for.
+    const [copyDraft, setCopyDraft] = useState<EventCopy | null>(null);
 
     const load = useCallback(async () => {
         try {
@@ -268,6 +273,14 @@ export function EventDetail({ post }: EventDetailProps) {
                                     <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>
                                 </View>
                             )))}
+                        <Pressable
+                            onPress={() => setCopyDraft(buildEventCopy(p, identity?.publicKey))}
+                            style={styles.copyBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Copy to a new date"
+                        >
+                            <Text style={styles.copyText} numberOfLines={1}>📅 Copy to a new date</Text>
+                        </Pressable>
                         {!closed && (
                             <Pressable
                                 onPress={cancelEvent}
@@ -289,6 +302,13 @@ export function EventDetail({ post }: EventDetailProps) {
                     </Pressable>
                 )}
             </ScrollView>
+
+            <NewEventModal
+                visible={!!copyDraft}
+                prefill={copyDraft}
+                onClose={() => setCopyDraft(null)}
+                onSuccess={() => { setCopyDraft(null); goBack(); }}
+            />
         </View>
     );
 }
@@ -352,6 +372,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpListRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border.default },
         rsvpName: { flex: 1, fontSize: 14, color: colors.text.body },
         rsvpStatus: { fontSize: 13, fontWeight: '700', color: EVENT_ACCENT, flexShrink: 0 },
+        copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
+        copyText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         cancelBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.solid },
         reportBtn: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },

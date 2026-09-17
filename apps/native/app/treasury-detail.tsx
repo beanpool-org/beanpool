@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
 
@@ -134,15 +134,17 @@ export default function TreasuryDetailScreen() {
         // Pending Requests Review (for Lead / Sole / Admin)
         requestsCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
         requestsTitle: { fontSize: 12, fontWeight: '800', color: colors.feedback.warning.fg, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
-        requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        requestInfo: { flex: 1 },
+        // Name and pledge stacked above a full-width button row: side by side, the two buttons left the name
+        // ~65dp at 320dp + 1.3x font, breaking it mid-word and wrapping the pledge onto three lines.
+        requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        requestInfo: { marginBottom: 10 },
         requestCallsign: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         requestBacking: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
-        approveBtn: { backgroundColor: colors.brand.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-        approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 12 },
-        declineBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
-        declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 12 },
+        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 12, borderRadius: 8 },
+        approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
+        declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
+        declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 13 },
 
         // Lead Succession
         successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
@@ -179,9 +181,11 @@ export default function TreasuryDetailScreen() {
         opBtnRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.primary, paddingVertical: 12, borderRadius: 12 },
         opBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
-        sweepRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-        sweepInput: { flex: 1, height: 46, backgroundColor: colors.surface.card, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
-        sweepBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.brand.primary, paddingHorizontal: 14, height: 46, borderRadius: 12, justifyContent: 'center' },
+        // Field above button, each full width: side by side at 320dp the field was ~100dp and cut its
+        // placeholder to "Sweep s".
+        sweepRow: { gap: 8 },
+        sweepInput: { height: 48, backgroundColor: colors.surface.card, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
+        sweepBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.brand.primary, paddingHorizontal: 14, height: 48, borderRadius: 12, justifyContent: 'center' },
         sweepBtnDisabled: { opacity: 0.4 },
         sweepBtnText: { color: colors.brand.primary, fontWeight: '800', fontSize: 13 },
         opHint: { fontSize: 12, color: colors.brand.primary, marginTop: 10, lineHeight: 17 },
@@ -213,16 +217,17 @@ export default function TreasuryDetailScreen() {
         threadMsgRow: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         threadMsgAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface.subtle },
         threadMsgContent: { flex: 1, minWidth: 0 },
-        threadMsgMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
-        threadMsgAuthor: { fontSize: 12, fontWeight: '700', color: colors.text.heading },
-        threadMsgTime: { fontSize: 10, color: colors.text.muted },
+        threadMsgMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+        threadMsgAuthor: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: colors.text.heading },
+        threadMsgTime: { flexShrink: 0, fontSize: 10, color: colors.text.muted },
         threadMsgText: { fontSize: 13, color: colors.text.body, lineHeight: 18 },
         threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
         threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
-        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 42, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
-        threadSendBtn: { height: 42, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
+        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
         threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
-        threadRemoveBtn: { padding: 4, marginLeft: 4 },
+        // A real 48x48dp target (was ~22x23). hitSlop cannot stand in: Android drops touches outside the parent row.
+        threadRemoveBtn: { width: 48, height: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
 
         emptyNote: { fontSize: 13, color: colors.text.muted, fontStyle: 'italic', paddingVertical: 12 },
         centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -290,7 +295,9 @@ export default function TreasuryDetailScreen() {
         }
     };
 
-    const handleRemoveThreadMessage = (messageId: string) => {
+    const handleRemoveThreadMessage = async (messageId: string) => {
+        // The trash button keeps the keyboard up (keyboardShouldPersistTaps); an Alert over it leaves phantom padding.
+        await KeyboardController.dismiss();
         Alert.alert(
             'Remove Message',
             'Are you sure you want to remove this message? It will show as "removed by a keeper".',
@@ -607,7 +614,9 @@ export default function TreasuryDetailScreen() {
                     <Text style={styles.emptyNote}>Couldn't load this enterprise. Check your connection.</Text>
                 </View>
             ) : (
-                <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+                    {/* No keyboardVerticalOffset: keyboard-controller measures this view's absolute frame, so the old
+                        64 was added on top and left ~64dp of blank space above the keyboard. */}
                     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         {/* Identity */}
                         <View style={styles.identityRow}>
@@ -708,8 +717,8 @@ export default function TreasuryDetailScreen() {
                                 {keeperRequests.map((req: any) => (
                                     <View key={req.id} style={styles.requestRow}>
                                         <View style={styles.requestInfo}>
-                                            <Text style={styles.requestCallsign}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
-                                            <Text style={styles.requestBacking}>
+                                            <Text style={styles.requestCallsign} numberOfLines={2}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
+                                            <Text style={styles.requestBacking} numberOfLines={1}>
                                                 Backing pledge: {req.pledgedBacking} 🫘
                                             </Text>
                                         </View>
@@ -724,7 +733,7 @@ export default function TreasuryDetailScreen() {
                                                 {processingRequestId === req.id ? (
                                                     <ActivityIndicator size="small" color={colors.text.inverse} />
                                                 ) : (
-                                                    <Text style={styles.approveBtnText}>Approve</Text>
+                                                    <Text style={styles.approveBtnText} numberOfLines={1}>Approve</Text>
                                                 )}
                                             </Pressable>
                                             <Pressable
@@ -734,7 +743,7 @@ export default function TreasuryDetailScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="Decline keeper request"
                                             >
-                                                <Text style={styles.declineBtnText}>Decline</Text>
+                                                <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -981,11 +990,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={sweeping || balance <= 0}
                                         onPress={handleSweep}
                                         accessibilityRole="button"
+                                        accessibilityLabel="Sweep to the Commons"
                                     >
                                         {sweeping ? <ActivityIndicator color={colors.brand.primary} /> : (
                                             <>
                                                 <MaterialCommunityIcons name="bank-transfer-out" size={16} color={colors.brand.primary} />
-                                                <Text style={styles.sweepBtnText}>To Commons</Text>
+                                                <Text style={styles.sweepBtnText} numberOfLines={1}>To Commons</Text>
                                             </>
                                         )}
                                     </Pressable>
@@ -1179,12 +1189,11 @@ export default function TreasuryDetailScreen() {
                                             <View style={styles.threadMsgContent}>
                                                 <View style={styles.threadMsgMeta}>
                                                     <Text style={styles.threadMsgAuthor} numberOfLines={1}>{authorName}</Text>
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                        <Text style={styles.threadMsgTime}>{formatTime(m.timestamp)}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                                                        <Text style={styles.threadMsgTime} numberOfLines={1}>{formatTime(m.timestamp)}</Text>
                                                         {isKeeperOfThis && !isRemoved && (
                                                             <Pressable
                                                                 style={styles.threadRemoveBtn}
-                                                                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                                                 onPress={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 accessibilityRole="button"
@@ -1194,7 +1203,7 @@ export default function TreasuryDetailScreen() {
                                                                 {threadRemovingId === m.id ? (
                                                                     <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
                                                                 ) : (
-                                                                    <MaterialCommunityIcons name="trash-can-outline" size={14} color={colors.feedback.danger.solid} />
+                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.solid} />
                                                                 )}
                                                             </Pressable>
                                                         )}

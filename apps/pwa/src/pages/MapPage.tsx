@@ -1086,8 +1086,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             }
             setShowNewPost(true);
         })();
-        // `posts` is only a fallback for an offline fetch; re-running on every poll would reopen the form.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // `posts` is only a fallback for an offline fetch; it is deliberately not a dependency here, because
+        // re-running on every poll would reopen the form.
     }, [copyEventPostId, identity?.publicKey, onCopyEventHandled]);
 
     // "Show on map" from an event's detail: centre on it and open its card once it has loaded.

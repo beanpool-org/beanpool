@@ -158,6 +158,12 @@ export function sendMessage(
 
     if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) return null;
 
+    // An event chat is written through POST /api/marketplace/posts/:id/chat/message, which re-checks the
+    // RSVP, applies the 2000-character cap and refuses once the event has ended or been cancelled. The
+    // participants mirror alone is not authority to post (docs/events-on-the-map.md §2.2).
+    const targetConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
+    if (targetConv?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_SEND_ERROR, 403);
+
     if (clientId) {
         const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
         if (existing) {
@@ -195,8 +201,8 @@ export function sendMessage(
 
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
-    const convRow = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
-    if (convRow?.type !== 'enterprise_thread') {
+    // Node-readable threads never push per message; a DM does.
+    if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
         const senderMember = getMember(db, authorPubkey) as any;
         const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
         cb.dispatchPushNotification(
@@ -225,6 +231,11 @@ export function toggleMessageReaction(
     if (!participants.some((p: any) => p.public_key === authorPubkey)) {
         return null;
     }
+
+    // An event chat carries text the host can remove and nothing else, and it is read-only once the event
+    // ends — a reaction would be a write this route cannot rule on.
+    const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
+    if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
 
     let metadata: any = {};
     if (row.metadata) {
@@ -271,6 +282,9 @@ export function toggleMessageReaction(
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 export const MESSAGE_REMOVED_EDIT_ERROR = 'A message removed by a keeper cannot be edited';
 export const THREAD_MESSAGE_EDIT_ERROR = 'Messages in an enterprise discussion thread cannot be edited';
+export const EVENT_THREAD_EDIT_ERROR = 'Messages in an event chat cannot be edited';
+export const EVENT_THREAD_SEND_ERROR = 'Post to an event chat through the event, not this route';
+export const EVENT_THREAD_REACT_ERROR = 'Reactions are not part of an event chat';
 
 export function editMessage(
     cb: MessagingCallbacks,
@@ -292,6 +306,9 @@ export function editMessage(
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
+    // An event chat is moderated by its host and goes read-only when the event ends; this route knows
+    // neither, so it refuses (docs/events-on-the-map.md §2.2).
+    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {

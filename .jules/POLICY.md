@@ -387,3 +387,22 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Verified:** the server reads `x-admin-secret` **nowhere**, and `buildAdminHeaders` already sends
   `X-Admin-Password` plus `X-Admin-2FA-Session`. Removing it stops the admin password being
   transmitted twice in two different headers — less credential surface for no behaviour change.
+### 2026-09-18 — Shield: manifest usesCleartextTraffic=false (#872) — CLOSED, DELIBERATE DECISION
+- **Category:** RE-RAISED DELIBERATE DECISION
+- **Claim:** the Android manifest allows cleartext traffic, so it should set `usesCleartextTraffic=false`.
+- **Why not to re-file:** BeanPool nodes are self-hosted, and a community's node is often reached on a LAN
+  or by bare IP over http. `normalizeNodeUrl` (apps/native/utils/node-url.ts) deliberately returns `http://`
+  for IPv4 and localhost; the settings placeholder is `e.g. http://192.168.1.55`. The protection already
+  exists one layer up: `shouldBlockCleartextNodeUrl` (#778, registered 2026-09-15) blocks plaintext to
+  public hosts while LAN sync keeps working. Flipping the manifest flag would break every LAN and direct-IP
+  node connection in release builds.
+- **Standing rule:** any cleartext finding against the native app must first say what happens to a member
+  whose node is `http://192.168.x.x`.
+
+### 2026-09-18 — Vault: 2FA session token in member wizards (#875) — LANDED, CLAIM WRONG, DIFF USEFUL
+- **Category:** PHANTOM CLAIM, REAL CLEANUP
+- **Claim:** the member wizards don't forward the 2FA session token.
+- **Verified:** false — all five helpers already call `buildAdminHeaders(adminPassword, tfaToken)`, which
+  sends `X-Admin-2FA-Session`. What the diff really does is drop the legacy `x-admin-secret` header, the
+  same cleanup registered for #834 on 2026-09-17. Merged on that basis, not the headline.
+- **Still open:** three more sites send the legacy header (apps/manager/src/lib/node-client.ts ~1417, ~1453, ~1488).

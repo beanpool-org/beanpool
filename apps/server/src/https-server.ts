@@ -293,7 +293,9 @@ function clampLimit(v: unknown, def = 50): number {
 }
 function clampOffset(v: unknown): number {
     const n = Math.floor(Number(v));
-    return Number.isFinite(n) && n > 0 ? n : 0;
+    // Capped at MAX_SAFE_INTEGER: a finite but huge offset (?offset=1e300) cannot bind as a SQLite integer and
+    // was a 500. Past the cap the page is simply empty.
+    return Number.isFinite(n) && n > 0 ? Math.min(n, Number.MAX_SAFE_INTEGER) : 0;
 }
 
 interface ActiveConnectionInfo {

@@ -10,6 +10,7 @@ import {
     Alert
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchGroupDetails,
@@ -49,6 +50,7 @@ export function GroupDetailModal({
     const [members, setMembers] = useState<GroupMemberItem[]>([]);
     const [groupData, setGroupData] = useState<GroupItem | null>(group);
     const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+    const insets = useSafeAreaInsets();
 
     const loadDetails = useCallback(async () => {
         if (!group?.id) return;
@@ -84,7 +86,6 @@ export function GroupDetailModal({
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
             maxHeight: '90%',
-            paddingBottom: 32,
         },
         header: {
             flexDirection: 'row',
@@ -105,8 +106,11 @@ export function GroupDetailModal({
         closeBtn: {
             padding: 4,
         },
+        // Padding on contentContainerStyle, not the ScrollView's style: on Android, padding on the
+        // ScrollView itself is outside the scroll range, which cut "Leave Group" off at the bottom.
         content: {
             padding: 20,
+            paddingBottom: 28,
         },
         badgeRow: {
             flexDirection: 'row',
@@ -171,20 +175,20 @@ export function GroupDetailModal({
         },
         memberInfo: {
             flex: 1,
+            minWidth: 0,
             marginLeft: 12,
+            marginRight: 4,
         },
         memberCallsign: {
             fontSize: 14,
             fontWeight: '700',
             color: colors.text.heading,
         },
-        memberRoleText: {
-            fontSize: 12,
-            color: colors.text.muted,
-            marginTop: 2,
-            textTransform: 'capitalize',
-        },
+        // The role badge sits under the name (it replaces a plain-text role line that said the same
+        // thing), so the name keeps the row's width instead of breaking mid-word beside it.
         roleBadge: {
+            alignSelf: 'flex-start',
+            marginTop: 4,
             paddingHorizontal: 8,
             paddingVertical: 3,
             borderRadius: 8,
@@ -222,18 +226,25 @@ export function GroupDetailModal({
             textTransform: 'uppercase',
             letterSpacing: 0.5,
         },
+        // Name on its own line, Approve / Decline on a row beneath: side by side, the two buttons
+        // left ~50dp and covered the requester's name at 320dp.
         pendingItem: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
             paddingVertical: 8,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border.default,
         },
+        pendingActions: {
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 8,
+        },
         approveBtn: {
+            flex: 1,
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
             backgroundColor: colors.brand.primary,
             paddingHorizontal: 12,
-            paddingVertical: 6,
             borderRadius: 8,
         },
         approveBtnText: {
@@ -242,12 +253,14 @@ export function GroupDetailModal({
             fontWeight: '800',
         },
         declineBtn: {
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            flex: 1,
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 12,
             borderRadius: 8,
             borderWidth: 1,
             borderColor: colors.feedback.danger.solid,
-            marginLeft: 6,
         },
         declineBtnText: {
             color: colors.feedback.danger.solid,
@@ -264,13 +277,16 @@ export function GroupDetailModal({
         postBtn: {
             backgroundColor: colors.brand.primary,
             borderRadius: 14,
-            paddingVertical: 13,
+            minHeight: 48,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
             alignItems: 'center',
             justifyContent: 'center',
             flexDirection: 'row',
             gap: 6,
         },
         postBtnText: {
+            flexShrink: 1,
             color: colors.text.inverse,
             fontSize: 15,
             fontWeight: '800',
@@ -278,7 +294,9 @@ export function GroupDetailModal({
         joinBtn: {
             backgroundColor: colors.brand.primary,
             borderRadius: 14,
-            paddingVertical: 13,
+            minHeight: 48,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -293,6 +311,7 @@ export function GroupDetailModal({
         leaveBtn: {
             backgroundColor: colors.surface.subtle,
             borderRadius: 14,
+            minHeight: 48,
             paddingVertical: 12,
             alignItems: 'center',
             justifyContent: 'center',
@@ -304,10 +323,14 @@ export function GroupDetailModal({
             fontSize: 14,
             fontWeight: '700',
         },
+        // 48dp tap targets: Role was ~44x28 and remove ~30x22.
         manageBtn: {
+            minWidth: 48,
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
             paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 6,
+            borderRadius: 8,
             borderWidth: 1,
             borderColor: colors.border.default,
             marginLeft: 6,
@@ -493,15 +516,21 @@ export function GroupDetailModal({
             onRequestClose={onClose}
         >
             <View style={styles.backdrop}>
-                <View style={styles.sheet}>
+                <View style={[styles.sheet, { paddingBottom: insets.bottom }]}>
                     <View style={styles.header}>
                         <Text style={styles.title} numberOfLines={1}>{groupData.name}</Text>
-                        <Pressable style={styles.closeBtn} onPress={onClose}>
+                        <Pressable
+                            style={styles.closeBtn}
+                            onPress={onClose}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close group details"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
                             <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
                         </Pressable>
                     </View>
 
-                    <ScrollView style={styles.content}>
+                    <ScrollView contentContainerStyle={styles.content}>
                         <View style={styles.badgeRow}>
                             <View style={styles.pill}>
                                 <MaterialCommunityIcons name="tag-outline" size={14} color={colors.text.secondary} />
@@ -537,9 +566,11 @@ export function GroupDetailModal({
                                 
                                 {/* Join Policy Setter */}
                                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <Text style={{ fontSize: 13, color: colors.text.secondary }}>Join Policy: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text></Text>
+                                    <Text style={{ flex: 1, marginRight: 8, fontSize: 13, color: colors.text.secondary }}>Join Policy: <Text style={{ fontWeight: '700', color: colors.text.heading }}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text></Text>
                                     <Pressable
                                         style={styles.manageBtn}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Change join policy"
                                         onPress={() => {
                                             Alert.alert(
                                                 'Set Join Policy',
@@ -565,13 +596,13 @@ export function GroupDetailModal({
                                         </Text>
                                         {pendingMembers.map(p => (
                                             <View key={p.memberPubkey} style={styles.pendingItem}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                                     <MemberAvatar avatarUrl={p.avatarUrl} pubkey={p.memberPubkey} callsign={p.callsign || '?'} size={28} />
-                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.heading, marginLeft: 8 }}>
+                                                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: colors.text.heading, marginLeft: 8 }} numberOfLines={1}>
                                                         {p.callsign || p.memberPubkey.slice(0, 10)}
                                                     </Text>
                                                 </View>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                <View style={styles.pendingActions}>
                                                     <Pressable
                                                         accessibilityRole="button"
                                                         accessibilityLabel={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
@@ -579,7 +610,7 @@ export function GroupDetailModal({
                                                         style={[styles.approveBtn, actionLoading && { opacity: 0.6 }]}
                                                         onPress={() => handleApprove(p.memberPubkey)}
                                                     >
-                                                        <Text style={styles.approveBtnText}>Approve</Text>
+                                                        <Text style={styles.approveBtnText} numberOfLines={1}>Approve</Text>
                                                     </Pressable>
                                                     <Pressable
                                                         accessibilityRole="button"
@@ -588,7 +619,7 @@ export function GroupDetailModal({
                                                         style={[styles.declineBtn, actionLoading && { opacity: 0.6 }]}
                                                         onPress={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                     >
-                                                        <Text style={styles.declineBtnText}>Decline</Text>
+                                                        <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -611,31 +642,32 @@ export function GroupDetailModal({
                                     <View key={m.memberPubkey} style={styles.memberRow}>
                                         <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
                                         <View style={styles.memberInfo}>
-                                            <Text style={styles.memberCallsign}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)} {m.memberPubkey === myPubkey && '(You)'}
+                                            <Text style={styles.memberCallsign} numberOfLines={1}>
+                                                {m.callsign || m.memberPubkey.slice(0, 10)}{m.memberPubkey === myPubkey ? ' (You)' : ''}
                                             </Text>
-                                            <Text style={styles.memberRoleText}>
-                                                {m.role}
-                                            </Text>
-                                        </View>
-                                        <View style={[styles.roleBadge, isUserConvenor && styles.roleBadgeConvenor]}>
-                                            <Text style={[styles.roleBadgeText, isUserConvenor && styles.roleBadgeConvenorText]}>
-                                                {m.role.toUpperCase()}
-                                            </Text>
+                                            <View style={[styles.roleBadge, isUserConvenor && styles.roleBadgeConvenor]}>
+                                                <Text style={[styles.roleBadgeText, isUserConvenor && styles.roleBadgeConvenorText]} numberOfLines={1}>
+                                                    {m.role.toUpperCase()}
+                                                </Text>
+                                            </View>
                                         </View>
                                         {isConvenor && m.memberPubkey !== myPubkey && (
-                                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
                                                 <Pressable
                                                     style={styles.manageBtn}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
                                                     onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
                                                 >
-                                                    <Text style={styles.manageBtnText}>Role</Text>
+                                                    <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
                                                 </Pressable>
                                                 <Pressable
                                                     style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
                                                     onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                 >
-                                                    <MaterialCommunityIcons name="close" size={12} color={colors.feedback.danger.solid} />
+                                                    <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
                                                 </Pressable>
                                             </View>
                                         )}
@@ -648,20 +680,22 @@ export function GroupDetailModal({
                             {isMember && onPostToGroup && (
                                 <Pressable
                                     style={styles.postBtn}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Post to ${groupData.name}`}
                                     onPress={() => {
                                         onClose();
                                         onPostToGroup(groupData);
                                     }}
                                 >
-                                    <MaterialCommunityIcons name="pencil" size={18} color={colors.text.inverse} />
-                                    <Text style={styles.postBtnText}>Post to {groupData.name}</Text>
+                                    <MaterialCommunityIcons name="pencil" size={18} color={colors.text.inverse} style={{ flexShrink: 0 }} />
+                                    <Text style={styles.postBtnText} numberOfLines={1}>Post to {groupData.name}</Text>
                                 </Pressable>
                             )}
 
                             {actionLoading ? (
                                 <ActivityIndicator size="small" color={colors.brand.primary} />
                             ) : isMember ? (
-                                <Pressable style={styles.leaveBtn} onPress={handleLeave}>
+                                <Pressable style={styles.leaveBtn} onPress={handleLeave} accessibilityRole="button">
                                     <Text style={styles.leaveBtnText}>Leave Group</Text>
                                 </Pressable>
                             ) : isPending ? (

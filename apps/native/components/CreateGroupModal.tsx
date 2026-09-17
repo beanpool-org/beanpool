@@ -10,9 +10,10 @@ import {
     Alert,
     ActivityIndicator,
 } from 'react-native';
-// RN's own KeyboardAvoidingView does nothing under Android edge-to-edge, and this is a real RN
-// <Modal> (its own native window), so it needs its own KeyboardProvider as well.
-import { KeyboardAvoidingView, KeyboardController, KeyboardProvider, useKeyboardState } from 'react-native-keyboard-controller';
+// RN's own KeyboardAvoidingView does nothing under Android edge-to-edge. No nested KeyboardProvider
+// inside this <Modal>: on the emulator it left the root provider suspended after the sheet closed,
+// so the chat composer stayed under the keyboard; the root provider lifts this sheet on its own.
+import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -229,145 +230,143 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             transparent
             onRequestClose={onClose}
         >
-            <KeyboardProvider>
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={styles.backdrop}
-                >
-                    <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 0 : insets.bottom }]}>
-                        <View style={styles.header}>
-                            <Text style={styles.title}>Create a Group</Text>
-                            <Pressable
-                                style={styles.closeBtn}
-                                onPress={onClose}
-                                accessibilityRole="button"
-                                accessibilityLabel="Close create group modal"
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
-                            </Pressable>
+            <KeyboardAvoidingView
+                behavior="padding"
+                style={styles.backdrop}
+            >
+                <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 0 : insets.bottom }]}>
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Create a Group</Text>
+                        <Pressable
+                            style={styles.closeBtn}
+                            onPress={onClose}
+                            accessibilityRole="button"
+                            accessibilityLabel="Close create group modal"
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <MaterialCommunityIcons name="close" size={22} color={colors.text.muted} />
+                        </Pressable>
+                    </View>
+
+                    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                        <View style={styles.infoNotice}>
+                            <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
+                            <Text style={styles.infoNoticeText}>
+                                A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.
+                            </Text>
                         </View>
 
-                        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-                            <View style={styles.infoNotice}>
-                                <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
-                                <Text style={styles.infoNoticeText}>
-                                    A group is a place to talk to some people rather than everyone. It does not hold beans and does not confer trust or voting standing.
-                                </Text>
-                            </View>
+                        <Text style={styles.fieldLabel}>Group Name *</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
+                            placeholderTextColor={colors.text.muted}
+                            value={name}
+                            onChangeText={setName}
+                            maxLength={60}
+                        />
 
-                            <Text style={styles.fieldLabel}>Group Name *</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Bindarrabi Garden Crew, Solar Guild"
-                                placeholderTextColor={colors.text.muted}
-                                value={name}
-                                onChangeText={setName}
-                                maxLength={60}
-                            />
+                        <Text style={styles.fieldLabel}>Purpose / Description</Text>
+                        <TextInput
+                            style={[styles.input, styles.textArea]}
+                            placeholder="What does this group discuss or coordinate?"
+                            placeholderTextColor={colors.text.muted}
+                            value={description}
+                            onChangeText={setDescription}
+                            multiline
+                            maxLength={300}
+                        />
 
-                            <Text style={styles.fieldLabel}>Purpose / Description</Text>
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                placeholder="What does this group discuss or coordinate?"
-                                placeholderTextColor={colors.text.muted}
-                                value={description}
-                                onChangeText={setDescription}
-                                multiline
-                                maxLength={300}
-                            />
+                        <Text style={styles.fieldLabel}>Category</Text>
+                        <View style={styles.optionRow}>
+                            {CATEGORIES.map(cat => {
+                                const selected = category === cat.key;
+                                return (
+                                    <Pressable
+                                        key={cat.key}
+                                        style={[styles.optionCard, selected && styles.optionCardActive]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`${cat.label}, ${cat.desc}`}
+                                        accessibilityState={{ selected }}
+                                        onPress={() => {
+                                            hapticTick();
+                                            setCategory(cat.key);
+                                        }}
+                                    >
+                                        <View style={styles.optionIconWrap}>
+                                            <MaterialCommunityIcons
+                                                name={cat.icon as any}
+                                                size={20}
+                                                color={selected ? colors.brand.primary : colors.text.secondary}
+                                            />
+                                        </View>
+                                        <View style={styles.optionTextWrap}>
+                                            <Text style={styles.optionLabel}>{cat.label}</Text>
+                                            <Text style={styles.optionDesc}>{cat.desc}</Text>
+                                        </View>
+                                        {selected && (
+                                            <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
 
-                            <Text style={styles.fieldLabel}>Category</Text>
-                            <View style={styles.optionRow}>
-                                {CATEGORIES.map(cat => {
-                                    const selected = category === cat.key;
-                                    return (
-                                        <Pressable
-                                            key={cat.key}
-                                            style={[styles.optionCard, selected && styles.optionCardActive]}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={`${cat.label}, ${cat.desc}`}
-                                            accessibilityState={{ selected }}
-                                            onPress={() => {
-                                                hapticTick();
-                                                setCategory(cat.key);
-                                            }}
-                                        >
-                                            <View style={styles.optionIconWrap}>
-                                                <MaterialCommunityIcons
-                                                    name={cat.icon as any}
-                                                    size={20}
-                                                    color={selected ? colors.brand.primary : colors.text.secondary}
-                                                />
-                                            </View>
-                                            <View style={styles.optionTextWrap}>
-                                                <Text style={styles.optionLabel}>{cat.label}</Text>
-                                                <Text style={styles.optionDesc}>{cat.desc}</Text>
-                                            </View>
-                                            {selected && (
-                                                <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
-                                            )}
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
+                        <Text style={styles.fieldLabel}>Join Policy</Text>
+                        <View style={styles.optionRow}>
+                            {JOIN_POLICIES.map(pol => {
+                                const selected = joinPolicy === pol.key;
+                                return (
+                                    <Pressable
+                                        key={pol.key}
+                                        style={[styles.optionCard, selected && styles.optionCardActive]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`${pol.label}, ${pol.desc}`}
+                                        accessibilityState={{ selected }}
+                                        onPress={() => {
+                                            hapticTick();
+                                            setJoinPolicy(pol.key);
+                                        }}
+                                    >
+                                        <View style={styles.optionIconWrap}>
+                                            <MaterialCommunityIcons
+                                                name={pol.icon as any}
+                                                size={20}
+                                                color={selected ? colors.brand.primary : colors.text.secondary}
+                                            />
+                                        </View>
+                                        <View style={styles.optionTextWrap}>
+                                            <Text style={styles.optionLabel}>{pol.label}</Text>
+                                            <Text style={styles.optionDesc}>{pol.desc}</Text>
+                                        </View>
+                                        {selected && (
+                                            <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
+                                        )}
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
 
-                            <Text style={styles.fieldLabel}>Join Policy</Text>
-                            <View style={styles.optionRow}>
-                                {JOIN_POLICIES.map(pol => {
-                                    const selected = joinPolicy === pol.key;
-                                    return (
-                                        <Pressable
-                                            key={pol.key}
-                                            style={[styles.optionCard, selected && styles.optionCardActive]}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={`${pol.label}, ${pol.desc}`}
-                                            accessibilityState={{ selected }}
-                                            onPress={() => {
-                                                hapticTick();
-                                                setJoinPolicy(pol.key);
-                                            }}
-                                        >
-                                            <View style={styles.optionIconWrap}>
-                                                <MaterialCommunityIcons
-                                                    name={pol.icon as any}
-                                                    size={20}
-                                                    color={selected ? colors.brand.primary : colors.text.secondary}
-                                                />
-                                            </View>
-                                            <View style={styles.optionTextWrap}>
-                                                <Text style={styles.optionLabel}>{pol.label}</Text>
-                                                <Text style={styles.optionDesc}>{pol.desc}</Text>
-                                            </View>
-                                            {selected && (
-                                                <MaterialCommunityIcons name="check-circle" size={20} color={colors.brand.primary} />
-                                            )}
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
-
-                            <Pressable
-                                style={[styles.createBtn, (!name.trim() || submitting) && styles.createBtnDisabled]}
-                                onPress={handleSubmit}
-                                disabled={!name.trim() || submitting}
-                                accessibilityRole="button"
-                                accessibilityLabel={submitting ? "Creating group..." : "Create Group. You become its convenor."}
-                                accessibilityState={{ disabled: !name.trim() || submitting, busy: submitting }}
-                            >
-                                {submitting ? (
-                                    <ActivityIndicator size="small" color={colors.text.inverse} />
-                                ) : (
-                                    <>
-                                        <Text style={styles.createBtnText} numberOfLines={1}>Create Group</Text>
-                                        <Text style={styles.createBtnSubtext} numberOfLines={1}>You become its convenor</Text>
-                                    </>
-                                )}
-                            </Pressable>
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </KeyboardProvider>
+                        <Pressable
+                            style={[styles.createBtn, (!name.trim() || submitting) && styles.createBtnDisabled]}
+                            onPress={handleSubmit}
+                            disabled={!name.trim() || submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? "Creating group..." : "Create Group. You become its convenor."}
+                            accessibilityState={{ disabled: !name.trim() || submitting, busy: submitting }}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator size="small" color={colors.text.inverse} />
+                            ) : (
+                                <>
+                                    <Text style={styles.createBtnText} numberOfLines={1}>Create Group</Text>
+                                    <Text style={styles.createBtnSubtext} numberOfLines={1}>You become its convenor</Text>
+                                </>
+                            )}
+                        </Pressable>
+                    </ScrollView>
+                </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }

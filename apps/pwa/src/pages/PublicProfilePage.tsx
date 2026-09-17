@@ -211,14 +211,14 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             {/* z-[110]: above the mobile app header (App.tsx, zIndex 100). This page carries its own Back bar,
                 and at z-50 that bar sat under the header where Back could not be tapped. */}
             {/* Header */}
-            <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between z-10">
+            <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between gap-2 z-10">
                 <button onClick={onBack} className="text-nature-500 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                     Back
                 </button>
-                <div className="font-bold text-nature-900 dark:text-white text-lg">{isSelf ? 'My Profile' : 'Trust Profile'}</div>
+                <div className="min-w-0 text-center font-bold text-nature-900 dark:text-white text-lg">{isSelf ? 'My Profile' : 'Trust Profile'}</div>
                 {isSelf ? (
                     <button 
                         onClick={onEditProfile}

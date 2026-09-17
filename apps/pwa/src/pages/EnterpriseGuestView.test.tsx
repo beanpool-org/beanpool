@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
@@ -138,5 +138,105 @@ describe('Enterprise page for a guest', () => {
         expect(screen.getByText('Back this initiative')).toBeInTheDocument();
         expect(screen.getByText('Ask to Join as a Keeper')).toBeInTheDocument();
         expect(await screen.findByLabelText('Message the enterprise')).toBeInTheDocument();
+    });
+});
+
+describe('Enterprise page at 320px with 1.3x text', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getBalance').mockRejectedValue(new Error('Member not found'));
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(ledger as any);
+        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: {}, messages: [], readOnly: true } as any);
+    });
+
+    it('falls back to the no-avatar placeholder when the avatar image fails to load', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({ ...bakery, avatar: '/uploads/avatars/missing.png' });
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
+        const img = screen.getByRole('img', { name: 'Community Bakery' });
+        expect(screen.queryByTestId('enterprise-avatar-placeholder')).not.toBeInTheDocument();
+
+        fireEvent.error(img);
+
+        expect(await screen.findByTestId('enterprise-avatar-placeholder')).toHaveTextContent('🌱');
+        expect(screen.queryByRole('img', { name: 'Community Bakery' })).not.toBeInTheDocument();
+    });
+
+    it('lets the enterprise name wrap instead of truncating it', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(bakery);
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        const heading = await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
+        expect(heading).not.toHaveClass('truncate');
+        expect(heading).toHaveClass('line-clamp-2');
+    });
+
+    it('stacks each P&L transaction below sm instead of a six-column table that scrolls sideways', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(bakery);
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
+            ...ledger,
+            summary: { totalIncome: 36, totalSpend: 0, netChange: 35.82, startingBalance: 0, endingBalance: 35.82, transactionCount: 3 },
+            entries: [0, 1, 2].map(i => ({
+                id: `tx-${i}`, timestamp: '2026-07-27T00:06:00.000Z', direction: 'income', amount: 12, fee: 0.06, netAmount: 11.94,
+                counterparty: 'escrow_p', counterpartyName: 'Escrow: 1 dozen eggs', memo: 'Escrow payment: 1 dozen eggs',
+                runningBalance: [11.94, 23.88, 35.82][i], authSigner: null,
+            })),
+        } as any);
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        const region = await screen.findByRole('region', { name: 'Enterprise ledger transactions' });
+        // Only sm and up may scroll sideways; the table has no minimum width below sm.
+        expect(region).not.toHaveClass('overflow-x-auto');
+        expect(region).toHaveClass('sm:overflow-x-auto');
+        const table = region.querySelector('table')!;
+        expect(table).toHaveClass('block', 'sm:table', 'sm:min-w-[500px]');
+        expect(table).not.toHaveClass('min-w-[500px]');
+        expect(region.querySelector('thead')).toHaveClass('hidden', 'sm:table-header-group');
+
+        const rows = screen.getAllByTestId('ledger-entry');
+        expect(rows).toHaveLength(3);
+        for (const row of rows) {
+            expect(row).toHaveClass('grid', 'sm:table-row');
+            // The empty "went out" cell of an income row is not drawn in the stacked layout.
+            const cells = row.querySelectorAll('td');
+            expect(cells[4]).toHaveClass('hidden', 'sm:table-cell');
+            expect(cells[3]).toHaveTextContent('+12.00 🫘');
+        }
+    });
+
+    it('explains the gap between came in and net change: came in is before fees', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(bakery);
+        vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
+            ...ledger,
+            summary: { totalIncome: 36, totalSpend: 0, netChange: 35.82, startingBalance: 0, endingBalance: 35.82, transactionCount: 3 },
+        } as any);
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        expect(await screen.findByTestId('ledger-fee-note')).toHaveTextContent('Came in is before fees: 0.18 🫘 in fees came off it.');
+        // Nothing went out: no "-0.00".
+        expect(screen.queryByText(/-0\.00/)).not.toBeInTheDocument();
+        expect(screen.getByText('Went out').nextElementSibling).toHaveTextContent('0.00 🫘');
+    });
+
+    it('shows no fee note when the summary already adds up', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(bakery);
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        await screen.findByText('Income & Spend (P&L)');
+        await screen.findByText('No transactions recorded for this period.');
+        expect(screen.queryByTestId('ledger-fee-note')).not.toBeInTheDocument();
+    });
+
+    it('drops the balance tiles to one column when two would not fit "Uncapped"', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({ ...bakery, workingCapitalCeiling: null });
+        render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
+
+        await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
+        const tiles = screen.getByTestId('enterprise-balance-tiles');
+        expect(tiles).toHaveTextContent('Uncapped');
+        // rem-based minimum, so the switch follows the phone's text size as well as its width.
+        expect(tiles).toHaveClass('grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]');
+        expect(tiles).not.toHaveClass('grid-cols-2');
     });
 });

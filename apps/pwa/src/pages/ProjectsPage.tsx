@@ -23,6 +23,8 @@ interface Props {
 
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate }: Props) {
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
+    // Avatar URLs that failed to load; those cards show the no-avatar placeholder instead of alt text.
+    const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -516,7 +518,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             const progress = Math.min(100, (currentRaised / goal) * 100);
                             const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
                             const daysRemaining = getDaysRemaining(t.deadlineAt);
-                            const avatarSrc = resolveAvatarUrl(t.avatar || t.avatarUrl);
+                            const resolvedAvatar = resolveAvatarUrl(t.avatar || t.avatarUrl);
+                            const avatarSrc = resolvedAvatar && !failedAvatars.has(resolvedAvatar) ? resolvedAvatar : null;
 
                             return (
                             <div
@@ -537,7 +540,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     <div className="flex items-start gap-3">
                                         <div className="w-12 h-12 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center overflow-hidden shrink-0 text-xl font-bold text-emerald-400">
                                             {avatarSrc ? (
-                                                <img src={avatarSrc} alt={t.name} className="w-full h-full object-cover" />
+                                                <img
+                                                    src={avatarSrc}
+                                                    alt={t.name}
+                                                    onError={() => setFailedAvatars(prev => new Set(prev).add(avatarSrc))}
+                                                    className="w-full h-full object-cover"
+                                                />
                                             ) : (
                                                 <span>🌱</span>
                                             )}

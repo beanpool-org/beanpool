@@ -228,6 +228,7 @@ run_federation_suites() {
       test-backup-hardening
       test-backup-topology
       test-cash-also-needed
+      test-posts-ignore-archetypes
       test-crowdfund-ledger-sync
       test-detached-pwa
       test-dos-caps

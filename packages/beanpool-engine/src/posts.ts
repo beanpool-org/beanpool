@@ -74,7 +74,6 @@ export interface MarketplacePost {
     targetGroupName?: string;
     targetPubkey?: string;
     assignedTo?: string;
-    targetArchetypes?: string;
 }
 
 export interface PostFilter {
@@ -96,7 +95,6 @@ export interface PostFilter {
     audienceScope?: AudienceScope | string;
     targetGroupId?: string;
     assignedTo?: string;
-    targetArchetype?: string;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -231,7 +229,6 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         targetGroupName: row.target_group_name || undefined,
         targetPubkey: row.target_pubkey || undefined,
         assignedTo: row.assigned_to || undefined,
-        targetArchetypes: row.target_archetypes || undefined
     };
 }
 
@@ -361,11 +358,6 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     if (filter?.assignedTo) {
         query += " AND p.assigned_to = ?";
         params.push(filter.assignedTo);
-    }
-    if (filter?.targetArchetype) {
-        const escaped = filter.targetArchetype.replace(/[%_\\]/g, '\\$&');
-        query += " AND (p.target_archetypes LIKE ? ESCAPE '\\' OR p.target_archetypes LIKE ? ESCAPE '\\')";
-        params.push(`%"${escaped}"%`, `%${escaped}%`);
     }
 
     if (filter?.query && filter.query.trim()) {

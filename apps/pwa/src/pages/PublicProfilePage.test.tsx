@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { PublicProfilePage } from './PublicProfilePage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import type { MemberProfile, BalanceInfo } from '../lib/api';
+import { getMemberProfile, type MemberProfile, type BalanceInfo } from '../lib/api';
+import { ARCHETYPES } from '@beanpool/core';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -151,5 +152,55 @@ describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791
         expect(detailContent).toHaveStyle({
             paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)',
         });
+    });
+});
+
+describe('PublicProfilePage Collaboration Chemistry names no archetype', () => {
+    const archetypeJson = (primary: string) => JSON.stringify({ primary, secondary: 'sage', mode: 'quick', updatedAt: '2026-09-01T00:00:00.000Z' });
+    const typeNames = Object.values(ARCHETYPES).flatMap((a) => [a.name, a.name.replace(/^The\s+/, '')]);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        sessionStorage.clear();
+    });
+
+    // spark + weaver is a complementary pair (headline was "The Spark + The Weaver");
+    // weaver + weaver is kindred (headline was "Shared Weaver intuition").
+    it.each([
+        ['spark', 'weaver', 'Complementary Synergy'],
+        ['weaver', 'weaver', 'Kindred Rhythms'],
+        ['artisan', 'sage', 'Balanced Collaboration'],
+    ])('viewer %s looking at a %s: card and outreach message carry no type name', async (viewerType, peerType, title) => {
+        vi.mocked(getMemberProfile).mockImplementation(async (pk: string) => (
+            pk === 'my-user-pubkey'
+                ? ({ ...mockProfile, publicKey: pk, callsign: 'Alice', archetype: archetypeJson(viewerType) } as any)
+                : ({ ...mockProfile, archetype: archetypeJson(peerType) } as any)
+        ));
+        const onMessage = vi.fn();
+        render(
+            <PublicProfilePage
+                identity={mockIdentity}
+                pubkey="peer-pubkey-123"
+                onBack={vi.fn()}
+                onMessage={onMessage}
+                onNavigatePost={vi.fn()}
+            />
+        );
+
+        const cardTitle = await screen.findByText(title);
+        const card = cardTitle.closest('.rounded-2xl') as HTMLElement;
+        expect(card).not.toBeNull();
+        for (const name of typeNames) {
+            expect(card.textContent).not.toContain(name);
+        }
+
+        fireEvent.click(screen.getByRole('button', { name: 'Collaborate with Bob' }));
+        expect(onMessage).toHaveBeenCalledWith('peer-pubkey-123');
+        const prefill = JSON.parse(sessionStorage.getItem('bp_chat_prefill') || '{}');
+        expect(prefill.text).toBeTruthy();
+        for (const name of typeNames) {
+            expect(prefill.text).not.toContain(name);
+        }
+        vi.mocked(getMemberProfile).mockImplementation(async () => mockProfile);
     });
 });

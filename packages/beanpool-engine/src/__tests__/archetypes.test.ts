@@ -90,8 +90,7 @@ describe('Archetype Engine', () => {
         assert.strictEqual(insight.relationshipType, 'kindred_spirits');
         assert.strictEqual(insight.emoji, '🌱');
         assert.strictEqual(insight.title, 'Kindred Rhythms');
-        assert.strictEqual(insight.headline, 'Shared Weaver intuition');
-        assert.ok(insight.summary.includes('You both share the Weaver rhythm.'));
+        assert.strictEqual(insight.headline, 'Similar ways of working');
     });
 
     it('calculates Dynamic Complements synergy for ideal partner pairings', () => {
@@ -99,8 +98,7 @@ describe('Archetype Engine', () => {
         assert.strictEqual(insight.relationshipType, 'dynamic_complements');
         assert.strictEqual(insight.emoji, '⚡');
         assert.strictEqual(insight.title, 'Complementary Synergy');
-        assert.ok(insight.headline.includes('The Spark'));
-        assert.ok(insight.headline.includes('The Weaver'));
+        assert.strictEqual(insight.headline, 'Strengths that complement');
     });
 
     it('calculates Balanced Allies synergy for general pairings', () => {
@@ -108,6 +106,30 @@ describe('Archetype Engine', () => {
         assert.strictEqual(insight.relationshipType, 'balanced_allies');
         assert.strictEqual(insight.emoji, '✨');
         assert.strictEqual(insight.title, 'Balanced Collaboration');
+    });
+
+    // Everything calculateSynergy returns is shown to a member about ANOTHER member, and no public
+    // archetype labels is a standing refusal (docs/the-commons.md). Headlines used to read
+    // "The Weaver + The Catalyst"; the kindred case named the shared type, and quoted its tagline.
+    it('never names a type, or quotes a tagline, in anything shown about the other member', () => {
+        const keys = Object.keys(ARCHETYPES) as ArchetypeKey[];
+        // Names match case-sensitively: "brings the spark or vision" is prose, "Spark" is the type.
+        const names = keys.flatMap(k => [ARCHETYPES[k].name, ARCHETYPES[k].name.replace(/^The\s+/, '')]);
+        const taglines = keys.map(k => ARCHETYPES[k].tagline.toLowerCase());
+        for (const viewer of keys) {
+            for (const member of keys) {
+                const insight = calculateSynergy(viewer, member);
+                const shown = [insight.title, insight.headline, insight.summary, ...insight.strengths];
+                for (const text of shown) {
+                    for (const name of names) {
+                        assert.ok(!text.includes(name), `${viewer}→${member}: "${text}" names "${name}"`);
+                    }
+                    for (const tagline of taglines) {
+                        assert.ok(!text.toLowerCase().includes(tagline), `${viewer}→${member}: "${text}" quotes "${tagline}"`);
+                    }
+                }
+            }
+        }
     });
 
     it('parses JSON string, JSON-encoded keys, and raw keys cleanly with parseArchetype', () => {

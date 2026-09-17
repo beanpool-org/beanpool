@@ -155,7 +155,7 @@ export function ArchetypeQuizModal({
 
                     <h3 id="quiz-modal-title" className="text-base sm:text-lg font-bold text-nature-950 dark:text-white m-0 text-center flex-1 px-2 truncate">
                         {step === 'intro'
-                            ? 'Discover Your Archetype'
+                            ? 'How you like to work'
                             : step === 'quiz'
                             ? `${mode === 'quick' ? '⚡ Quick Spark' : '🧭 Deep Resonance'}`
                             : '✨ Your Working Style'}
@@ -184,14 +184,14 @@ export function ArchetypeQuizModal({
                             </h2>
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 text-center leading-relaxed mb-6 px-1">
                                 Every community thrives on a balance of different energies — from
-                                creative visionaries and organizers to anchors and champions. Discover
-                                your natural superpowers and see your collaboration synergy with neighbours.
+                                creative visionaries and organizers to anchors and champions. Say what
+                                you prefer, and get tips for working well with neighbours.
                             </p>
 
                             {/* Mode Card: Quick Spark */}
                             <button
                                 type="button"
-                                aria-label="Quick Spark: 9 questions, approx 1 minute. A fast 60-second snapshot to discover your core community rhythm."
+                                aria-label="Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work."
                                 onClick={() => {
                                     setMode('quick');
                                     setCurrentIndex(0);
@@ -214,8 +214,8 @@ export function ArchetypeQuizModal({
                                             </span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
-                                            A fast 60-second snapshot to discover your core community
-                                            rhythm and start seeing synergy with others.
+                                            A 60-second snapshot of how you like to work, plus tips for
+                                            working with others.
                                         </p>
                                     </div>
                                 </div>
@@ -259,8 +259,8 @@ export function ArchetypeQuizModal({
                                 <span className="text-emerald-600 dark:text-emerald-400 text-base shrink-0 leading-none mt-0.5" aria-hidden="true">🛡️</span>
                                 <div>
                                     <strong className="font-bold text-nature-900 dark:text-white">Privacy-First:</strong> We never
-                                    display psychological type numbers or clinical labels. The app only
-                                    calculates relational synergy between members.
+                                    show your type to other members, only tips for working with you. No
+                                    labels on profiles, lists or the map.
                                 </div>
                             </div>
                         </div>
@@ -360,7 +360,7 @@ export function ArchetypeQuizModal({
                             {/* Superpowers */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
                                 <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                                    <span aria-hidden="true">🌟</span> Your Community Superpowers
+                                    <span aria-hidden="true">🌟</span> What you tend to enjoy
                                 </h4>
                                 <ul className="space-y-2 m-0 p-0 list-none">
                                     {primaryInfo.superpowers.map((power, i) => (
@@ -375,10 +375,10 @@ export function ArchetypeQuizModal({
                             {/* Ideal Collaborators */}
                             <div className="bg-white dark:bg-nature-900 p-5 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm">
                                 <h4 className="text-sm font-bold text-nature-950 dark:text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                    <span aria-hidden="true">👥</span> Ideal Collaborator Pairings
+                                    <span aria-hidden="true">👥</span> Who you work well with
                                 </h4>
                                 <p className="text-xs text-nature-500 dark:text-nature-400 mb-3 leading-normal">
-                                    You naturally build high synergy when collaborating on projects or deals with:
+                                    You tend to work well with people who prefer the styles of:
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {primaryInfo.idealPartners.map((partnerKey) => {

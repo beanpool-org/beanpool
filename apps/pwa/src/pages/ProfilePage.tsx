@@ -366,7 +366,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                             </div>
                         </div>
                         <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed mb-4 m-0">
-                            Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                            Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
                         </p>
                         <button
                             type="button"

@@ -170,7 +170,7 @@ export function ArchetypeQuizModal({
 
                     <Text style={[styles.headerTitle, { color: colors.text.heading }]}>
                         {step === 'intro'
-                            ? 'Discover Your Archetype'
+                            ? 'How you like to work'
                             : step === 'quiz'
                             ? `${mode === 'quick' ? '⚡ Quick Spark' : '🧭 Deep Resonance'}`
                             : '✨ Your Working Style'}
@@ -202,14 +202,14 @@ export function ArchetypeQuizModal({
                         </Text>
                         <Text style={[styles.introSub, { color: colors.text.secondary }]}>
                             Every community thrives on a balance of different energies — from
-                            creative visionaries and organizers to anchors and champions. Discover
-                            your natural superpowers and see your collaboration synergy with neighbours.
+                            creative visionaries and organizers to anchors and champions. Say what
+                            you prefer, and get tips for working well with neighbours.
                         </Text>
 
                         {/* Mode Card: Quick Spark */}
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Quick Spark: 9 questions, approx 1 minute. A fast 60-second snapshot to discover your core community rhythm."
+                            accessibilityLabel="Quick Spark: 9 questions, approx 1 minute. A 60-second snapshot of how you like to work."
                             style={({ pressed }) => [
                                 styles.modeCard,
                                 {
@@ -255,8 +255,8 @@ export function ArchetypeQuizModal({
                                     <Text
                                         style={[styles.modeDesc, { color: colors.text.secondary }]}
                                     >
-                                        A fast 60-second snapshot to discover your core community
-                                        rhythm and start seeing synergy with others.
+                                        A 60-second snapshot of how you like to work, plus tips for
+                                        working with others.
                                     </Text>
                                 </View>
                             </View>
@@ -366,8 +366,8 @@ export function ArchetypeQuizModal({
                                 ]}
                             >
                                 <Text style={{ fontWeight: '700' }}>Privacy-First:</Text> We never
-                                display psychological type numbers or clinical labels. The app only
-                                calculates relational synergy between members.
+                                show your type to other members, only tips for working with you. No
+                                labels on profiles, lists or the map.
                             </Text>
                         </View>
                     </ScrollView>
@@ -533,7 +533,7 @@ export function ArchetypeQuizModal({
                             ]}
                         >
                             <Text style={[styles.sectionTitle, { color: colors.text.heading }]}>
-                                🌟 Your Community Superpowers
+                                🌟 What you tend to enjoy
                             </Text>
                             {primaryInfo.superpowers.map((power, i) => (
                                 <View key={i} style={styles.bulletRow}>
@@ -558,10 +558,10 @@ export function ArchetypeQuizModal({
                             ]}
                         >
                             <Text style={[styles.sectionTitle, { color: colors.text.heading }]}>
-                                👥 Ideal Collaborator Pairings
+                                👥 Who you work well with
                             </Text>
                             <Text style={[styles.sectionSubtitle, { color: colors.text.secondary }]}>
-                                You naturally build high synergy when collaborating on projects or deals with:
+                                You tend to work well with people who prefer the styles of:
                             </Text>
                             <View style={styles.partnerTagsRow}>
                                 {primaryInfo.idealPartners.map((partnerKey) => {

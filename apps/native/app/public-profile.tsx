@@ -832,7 +832,7 @@ export default function PublicProfileScreen() {
                                                 <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                Take the 60-second quiz to discover your working style alignment and project synergy with {callsignStr || 'this member'}.
+                                                Take the 60-second quiz to get tips for working with {callsignStr || 'this member'}.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
@@ -854,18 +854,18 @@ export default function PublicProfileScreen() {
                                                 <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                {callsignStr || 'This member'} hasn't taken their Archetype quiz yet. Send them a friendly nudge in chat to discover your working style alignment!
+                                                {callsignStr || 'This member'} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel={`Nudge ${callsignStr || 'member'} to take Archetype quiz`}
+                                                accessibilityLabel={`Nudge ${callsignStr || 'member'} to take the working style quiz`}
                                                 style={styles.synergyTakeQuizBtn}
                                                 onPress={() => {
                                                     if (pubKeyStr) {
                                                         router.push({
                                                             pathname: `/chat/${pubKeyStr}`,
                                                             params: {
-                                                                prefill: `Hey ${callsignStr || 'there'}! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡`
+                                                                prefill: `Hey ${callsignStr || 'there'}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡`
                                                             }
                                                         });
                                                     }
@@ -885,7 +885,7 @@ export default function PublicProfileScreen() {
                                                 <Text style={styles.synergyInviteTitle}>Collaboration Chemistry</Text>
                                             </View>
                                             <Text style={styles.synergyInviteDesc}>
-                                                Take the 60-second quiz to discover your working style alignment and project synergy with {callsignStr || 'this member'}.
+                                                Take the 60-second quiz to get tips for working with {callsignStr || 'this member'}.
                                             </Text>
                                             <Pressable
                                                 accessibilityRole="button"
@@ -1109,7 +1109,7 @@ export default function PublicProfileScreen() {
                                 <Text style={styles.synergyInviteTitle}>Your Working Style</Text>
                             </View>
                             <Text style={styles.synergyInviteDesc}>
-                                Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                                Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
                             </Text>
                             <Pressable
                                 accessibilityRole="button"

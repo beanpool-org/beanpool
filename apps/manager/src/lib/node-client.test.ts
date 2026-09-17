@@ -503,6 +503,69 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
     });
 
+    it('member rekey and offboard helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        const {
+            fetchRekeyStatusApi,
+            issueRekeyCodeApi,
+            completeRekeyApi,
+            fetchOffboardPreviewApi,
+            executeOffboardApi,
+        } = await import('./node-client');
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ isInvalidated: false, invalidatedInfo: null, pendingRequest: null, history: [] }),
+        });
+        await fetchRekeyStatusApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, code: '123456', oldPubkey: 'pub1', callsign: 'alice', expiresAt: '', operator: 'op' }),
+        });
+        await issueRekeyCodeApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, oldPubkey: 'pub1', newPubkey: 'pub2', callsign: 'alice' }),
+        });
+        await completeRekeyApi('https://node.example.com', 'pub1', '123456', 'pub2', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+                member: { publicKey: 'pub1', callsign: 'alice', status: 'active', joinedAt: '' },
+                balance: 0,
+                commonsBalance: 100,
+                costToCommunity: 0,
+                projectedCommonsBalance: 100,
+                pendingEscrowsCount: 0,
+                isSoleOwner: false,
+                activeMembers: [],
+            }),
+        });
+        await fetchOffboardPreviewApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+
+        fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ success: true, memberPubkey: 'pub1', callsign: 'alice', resolution: 'donate_to_commons', balanceSettled: 0 }),
+        });
+        await executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'donate_to_commons' }, 'adminpass', 'tfa123');
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+    });
+
     it('fetchNodeRoles, grantNodeRoleApi, and revokeNodeRoleApi send X-Admin-2FA-Session header when tfaToken is provided', async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,

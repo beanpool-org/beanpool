@@ -148,6 +148,30 @@ async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
     }
 }
 
+interface WipeableStorage {
+    getAllKeys(): Promise<readonly string[]>;
+    multiRemove(keys: string[]): Promise<void>;
+    removeItem(key: string): Promise<void>;
+}
+
+/**
+ * AsyncStorage state that belongs to the identity being wiped. Guest markers record which nodes
+ * THIS key joined as a guest; left behind, a fresh identity inherits them and a real 'stranger'
+ * result on those nodes is treated as guest mode. `beanpool_saved_nodes` stays on purpose: it is
+ * a list of community addresses, not anything about who the member is.
+ */
+export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
+    await storage.removeItem('beanpool_anchor_url');
+    await storage.removeItem('beanpool:identity');
+    await storage.removeItem('beanpool_guest_nodes');
+
+    const allKeys = await storage.getAllKeys();
+    const syncKeys = allKeys.filter((k: string) => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
+    if (syncKeys.length > 0) {
+        await storage.multiRemove(syncKeys);
+    }
+}
+
 export async function wipeIdentity(): Promise<void> {
     if (isWeb) {
         localStorage.removeItem(KEY_ID);
@@ -163,15 +187,8 @@ export async function wipeIdentity(): Promise<void> {
 
     try {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const allKeys = await AsyncStorage.getAllKeys();
-        const syncKeys = allKeys.filter((k: string) => k.startsWith('pillar_sync_') || k.startsWith('pillar:'));
-        if (syncKeys.length > 0) {
-            await AsyncStorage.multiRemove(syncKeys);
-        }
-        
-        await AsyncStorage.removeItem('beanpool_anchor_url');
-        await AsyncStorage.removeItem('beanpool:identity');
-        
+        await wipeIdentityScopedStorage(AsyncStorage);
+
         const { getDb } = require('./db');
         const db = await getDb();
         if (db) {

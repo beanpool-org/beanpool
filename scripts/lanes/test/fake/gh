@@ -1,0 +1,21 @@
+#!/bin/zsh
+# Fake gh for selftest.sh — never talks to GitHub. Every call is appended to $FAKE_STATE/gh.calls.
+#   FAKE_GH_DOWN=1   every `gh api` call fails (GitHub not answering)
+#   FAKE_GH_PR=N     what `gh pr list --head` returns (empty = no PR)
+#   $FAKE_STATE/comments   the PR's inline comment count
+S=${FAKE_STATE:?}
+print -r -- "gh $*" >> "$S/gh.calls"
+case "$1 $2" in
+  api\ *)     [ "$FAKE_GH_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
+              cat "$S/comments" 2>/dev/null || print 0;;
+  "pr list")  print -r -- "$FAKE_GH_PR";;
+  "pr view")  case "$*" in
+                *isDraft*) print false;; *state*) print OPEN;; *headRefName*) print feat/x;;
+                *mergeable*) print MERGEABLE;; *title*) print "Fake title";;
+              esac;;
+  "pr ready") ;;
+  "pr checks") print SUCCESS;;
+  "pr merge") print -r -- "$*" >> "$S/merges";;
+  "run list") print -r -- "${FAKE_GH_RUN:-completed success}";;
+  *) print -u2 "fake gh: unhandled: $*"; exit 1;;
+esac

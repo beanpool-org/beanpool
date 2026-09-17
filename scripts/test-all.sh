@@ -478,20 +478,75 @@ echo "╠═══════════════════════�
 printf "║  Total: %d passed, %d failed, %d skipped\n" "$PASS" "$FAIL" "${#SKIPPED_NAMES[@]}"
 echo "╚══════════════════════════════════════════╝"
 
-# Show failure logs
+# Failure details. A plain tail of each log is not enough for the turbo checks: `turbo run test`
+# writes every package into one log, so when one package fails and others finish after it, its
+# error scrolls out of the tail — a failing PWA test once had to be diagnosed by re-running it.
+# So for a turbo check, print the failing TASK'S own output, found by the `Failed:` summary line.
+#
+# Turbo writes two layouts and both must be read. Locally every line is prefixed `pkg:task: `.
+# Under GitHub Actions it groups instead: each task is one unprefixed block, a passing one wrapped
+# in ::group::pkg:task … ::endgroup::, a failing one under a bare (coloured) `pkg:task` line.
+# Anything not recognised falls back to the old tail, so this can never show less than before.
+FAILED_TASK_LINES=150
+
+turbo_failed_tasks() {
+  # "Failed:    @beanpool/pwa#test, @beanpool/core#test"  ->  one pkg#task per line
+  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
+}
+
+turbo_task_output() {
+  local log="$1" want="$2" headers="$3"
+  awk -v esc="$(printf '\033')" -v want="$want" -v headers="$headers" '
+    BEGIN { n = split(headers, h, " "); for (i = 1; i <= n; i++) failed[h[i]] = 1 }
+    { line = $0; gsub(esc "\\[[0-9;]*[A-Za-z]", "", line) }
+    index(line, want ": ") == 1 { print substr(line, length(want) + 3); next }
+    line == want || line == "::group::" want { inside = 1; next }
+    inside && (line ~ /^::(end)?group::/ || line ~ /^ Tasks: / || (line in failed)) { inside = 0 }
+    inside && line !~ /^::/ { print line }
+  ' "$log"
+}
+
 if [ $FAIL -gt 0 ]; then
   echo ""
   echo "──── Failure Details ────"
   for fn in "${FAILED_NAMES[@]}"; do
     echo ""
     echo "━━━ $fn ━━━"
-    tail -40 "$LOGDIR/$fn.log"
+    shown=0
+    unread=0
+    tasks=$(turbo_failed_tasks "$LOGDIR/$fn.log")
+    if [ -n "$tasks" ]; then
+      headers=$(echo $tasks | tr '#' ':')   # space-separated: BSD awk refuses a newline in -v
+      for task in $tasks; do
+        out=$(turbo_task_output "$LOGDIR/$fn.log" "$(echo "$task" | tr '#' ':')" "$headers")
+        if [ -z "$out" ]; then unread=1; continue; fi
+        total=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+        if [ "$total" -gt $FAILED_TASK_LINES ]; then
+          echo "── $task (last $FAILED_TASK_LINES of its $total lines) ──"
+        else
+          echo "── $task ──"
+        fi
+        printf '%s\n' "$out" | tail -n $FAILED_TASK_LINES
+        shown=1
+      done
+    fi
+    if [ $shown -eq 0 ] || [ $unread -eq 1 ]; then tail -40 "$LOGDIR/$fn.log"; fi
   done
   echo ""
+
+  # Keep every log of a failing run. CI sets TEST_ALL_LOG_DIR and uploads that directory as a
+  # workflow artifact; run locally, the temp dir is simply left in place. Passing runs keep nothing.
+  if [ -n "${TEST_ALL_LOG_DIR:-}" ] && mkdir -p "$TEST_ALL_LOG_DIR" && cp "$LOGDIR"/*.log "$TEST_ALL_LOG_DIR"/; then
+    echo "Full logs of every check copied to $TEST_ALL_LOG_DIR"
+  else
+    trap - EXIT INT TERM
+    echo "Full logs of every check kept in $LOGDIR"
+    LOGDIR=""
+  fi
 fi
 
 # Cleanup
-rm -rf "$LOGDIR"
+[ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
 # Exit with failure if anything failed
 [ $FAIL -eq 0 ]

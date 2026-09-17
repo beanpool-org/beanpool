@@ -305,6 +305,11 @@ check "brief carries the full gh pr create line"  grep -qF "gh pr create -R $LAN
 check "role is build"                            [ "$(cat "$S24/role" 2>/dev/null)" = build ]
 check "review ran on the branch afterwards"      [ "$(cat "$FAKE_STATE/reviewed" 2>/dev/null)" = feat/nopr ]
 
+scenario "25. the appended headless rules make the run start from origin/<base>, not the checkout"
+hb=$(lane_brief claude "Build the thing on feat/z.")
+check "headless brief carries: git fetch origin && git checkout -B <branch> origin/<base>" eval '[[ "$hb" == *"git fetch origin && git checkout -B <branch> origin/<base>"* ]]'
+check "headless brief carries the --detach origin/<base> form for verification-only work" eval '[[ "$hb" == *"git checkout --detach origin/<base>"* ]]'
+
 print
 print "selftest: $PASS passed, $FAILS failed"
 if [ "$LANE_SELFTEST_KEEP" = 1 ]; then print "kept $T"; else

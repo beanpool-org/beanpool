@@ -1,6 +1,12 @@
 RULES FOR THIS HEADLESS RUN
 - You are running headless. When you stop replying, the process EXITS. Never run a command in the background and
   never say you will report later — there is no later. Run everything in the foreground and finish before you stop.
+- Start from origin/<base>, not the checkout: `claude --worktree` can branch from the maintainer's checkout HEAD,
+  which is often behind origin. Before reading or changing anything, run
+  `git fetch origin && git checkout -B <branch> origin/<base>` (base is the PR's base branch, normally main), or
+  `git fetch origin && git checkout --detach origin/<base>` for verification-only work. If the branch already
+  exists on origin (a CONTINUE/FIX/SYNC stage), use `git checkout -B <branch> origin/<branch>` instead — never
+  reset an existing branch onto origin/<base>.
 - Do NOT run scripts/test-all.sh. CI runs the full suite on the PR. Run only the suites your change touches.
 - The worktree is new: `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
   @beanpool/engine before running anything — their dist is shared and goes stale across branches.

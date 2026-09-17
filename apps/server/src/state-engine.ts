@@ -2450,6 +2450,20 @@ export interface KeeperJoinRequest {
 }
 
 /**
+ * Has an admin switched this member's operator access off? True when they keep at least one
+ * treasury_operators binding but members.can_operate = 0 (adminSetOperator suspends a steward node-wide
+ * without deleting their bindings). A member with no binding at all is simply not a keeper yet.
+ */
+function isOperatorSwitchedOff(memberPubkey: string): boolean {
+    const row = db.prepare(`
+        SELECT COALESCE(m.can_operate, 0) AS can_operate,
+               EXISTS (SELECT 1 FROM treasury_operators o WHERE o.member_pubkey = m.public_key) AS has_binding
+        FROM members m WHERE m.public_key = ?
+    `).get(memberPubkey) as any;
+    return !!row && row.has_binding === 1 && row.can_operate !== 1;
+}
+
+/**
  * A member asks to join an enterprise as a keeper, with an explicit backing pledge (0 .. available).
  * (docs/the-commons.md §2.3, §2.4 Rule 3).
  * A pledge of 0 is valid. Re-validated at request time AND at approval time.
@@ -2476,6 +2490,9 @@ export function requestToJoinEnterprise(
     }
     if (km.credit_frozen === 1) {
         throw new Error('Your credit is frozen, so you cannot join as a keeper');
+    }
+    if (isOperatorSwitchedOff(memberPubkey)) {
+        throw new Error('Your operator access is switched off by a node admin, so you cannot join as a keeper');
     }
 
     const existingOp = db.prepare(
@@ -2588,6 +2605,10 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): { 
     if (km.credit_frozen === 1) {
         throw new Error('Applicant credit is frozen, so they cannot be approved as a keeper');
     }
+    // A lead's approval must never reverse an admin suspension (PR #838 B3).
+    if (isOperatorSwitchedOff(req.member_pubkey)) {
+        throw new Error("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
+    }
 
     // Re-validate available_to_back SERVER-SIDE AT APPROVAL
     const pledged = Number(req.pledged_backing || 0);
@@ -2607,12 +2628,17 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): { 
             throw new Error('Request is no longer pending');
         }
 
+        // The operator switch is raised only for a first binding. For anyone who already keeps an
+        // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
+        const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(req.member_pubkey);
         db.prepare(`
             INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
             VALUES (?, ?, 'keeper', ?, ?)
             ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing
         `).run(req.enterprise_pubkey, req.member_pubkey, actorPubkey, pledged);
-        db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(req.member_pubkey);
+        if (!hadBinding) {
+            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(req.member_pubkey);
+        }
 
         if (pledged > 0) {
             const pledgeId = crypto.randomUUID();

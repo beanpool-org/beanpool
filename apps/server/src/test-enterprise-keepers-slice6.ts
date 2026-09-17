@@ -32,10 +32,11 @@ import {
     treasuryKeepers, isLeadOrSoleKeeperOrAdmin,
     requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
-    cancelActiveSuccessionIfLeadActive,
+    cancelActiveSuccessionIfLeadActive, adminSetOperator,
 } from './state-engine.js';
+import { createDecision, castDecisionVote, tickDecisions, getDecision, getQuorumRequired } from './decisions-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, initSchema } from './db/db.js';
 import { recordActivity } from './engine/members.js';
 
 const PORT = 8626;
@@ -48,6 +49,17 @@ function assert(cond: boolean, msg: string): void {
         console.error(`✗ ${msg}`);
         throw new Error(`Assertion failed: ${msg}`);
     }
+}
+
+function expectThrow(fn: () => unknown, fragment: string, msg: string): void {
+    let threw = false;
+    let message = '';
+    try { fn(); } catch (e: any) { threw = true; message = e?.message || String(e); }
+    assert(threw && message.includes(fragment), `${msg}${threw ? '' : ' (did not throw)'}${threw && !message.includes(fragment) ? ` (threw: ${message})` : ''}`);
+}
+
+function hasBinding(treasury: string, member: string): boolean {
+    return !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(treasury, member);
 }
 
 function giveEarnedCredit(pubkey: string, targetEarned: number) {
@@ -302,6 +314,36 @@ async function main() {
         assert(e.message.includes('not active'), 'Approving suspended applicant rejected');
     }
     assert(approveSuspendedThrew, 'Approving suspended applicant threw');
+
+    // 1.9b (PR #838 B3) A member whose operator switch an admin turned off (bindings kept, can_operate=0)
+    // can neither ask to join nor be approved, and a lead's approval never switches them back on.
+    const { publicKey: b3HomeEnt } = createTreasury('B3HomeEnterprise', 'avatarB3', 0);
+    const opSuspended = makeIdentity('OpSuspended', 50);
+    adminAssignTreasuryOperator(b3HomeEnt, opSuspended.pubKeyHex, 'admin', 0);
+    adminSetOperator(opSuspended.pubKeyHex, false);
+    expectThrow(() => requestToJoinEnterprise(ent1, opSuspended.pubKeyHex, 0),
+        'operator access is switched off', 'B3: admin-suspended keeper cannot ask to join another enterprise');
+
+    const opLaterSuspended = makeIdentity('OpLaterSuspended', 50);
+    adminAssignTreasuryOperator(b3HomeEnt, opLaterSuspended.pubKeyHex, 'admin', 0);
+    const b3Req = requestToJoinEnterprise(ent1, opLaterSuspended.pubKeyHex, 10);
+    adminSetOperator(opLaterSuspended.pubKeyHex, false);
+    expectThrow(() => approveKeeperRequest(b3Req.id, lead1.pubKeyHex),
+        'operator access is switched off', 'B3: lead cannot approve a request from a member suspended after asking');
+    const b3Member = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(opLaterSuspended.pubKeyHex) as any;
+    assert(b3Member.can_operate === 0, 'B3: refused approval leaves can_operate at 0 for all their enterprises');
+    assert(hasBinding(b3HomeEnt, opLaterSuspended.pubKeyHex) && !hasBinding(ent1, opLaterSuspended.pubKeyHex),
+        'B3: existing binding kept, no new binding created');
+    assert((db.prepare("SELECT status FROM enterprise_keeper_requests WHERE id = ?").get(b3Req.id) as any).status === 'pending',
+        'B3: refused approval leaves the request pending');
+
+    // A member with no binding at all starts with the switch off — approval turns it on for them, as before.
+    const freshApplicant = makeIdentity('FreshApplicant', 20);
+    db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(freshApplicant.pubKeyHex);
+    const freshReq = requestToJoinEnterprise(ent1, freshApplicant.pubKeyHex, 0);
+    approveKeeperRequest(freshReq.id, lead1.pubKeyHex);
+    assert((db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(freshApplicant.pubKeyHex) as any).can_operate === 1,
+        'B3: approving a member with no prior binding raises their operator switch');
 
     // 1.10 Suspended lead/sole keeper loses isLeadOrSoleKeeperOrAdmin authority
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(lead1.pubKeyHex);

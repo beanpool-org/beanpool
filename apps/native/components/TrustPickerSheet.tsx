@@ -41,6 +41,7 @@ export function TrustPickerSheet({ visible, selected, onSelect, onClose }: Trust
                                     key={f.id}
                                     style={[styles.item, isActive && styles.itemActive]}
                                     accessibilityRole="button"
+                                    accessibilityLabel={f.label}
                                     accessibilityState={{ selected: isActive }}
                                     onPress={() => { onSelect(f.id); onClose(); }}
                                 >

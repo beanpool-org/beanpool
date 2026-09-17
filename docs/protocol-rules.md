@@ -376,7 +376,6 @@ Achievements are **earned badges** displayed on a member's profile. They are der
 | 🏘️ **Local Hero** | 10+ unique trade partners | Well-connected community member |
 | ⚖️ **Reciprocity Champion** | Send/receive ratio between 0.7 and 1.3 | Balanced giver and receiver |
 | 🌱 **Node Anchor** | Invited 5+ members who became active | Growing the community |
-| 🛡️ **Guardian Angel** | Set 3 or more guardians | Secured their self-managed identity |
 | 🎖️ **Veteran** | Account age ≥ 365 days | A year of community participation |
 | 💝 **Generous** | Donated to 3+ community projects | Supporting community initiatives |
 

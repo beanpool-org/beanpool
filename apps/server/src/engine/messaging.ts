@@ -26,7 +26,7 @@ export interface MessagingCallbacks {
 }
 
 function assertMemberActive(publicKey: string): void {
-    if (isSyntheticAccount(publicKey)) return;
+    if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled') throw new Error('Account is disabled');
@@ -179,16 +179,19 @@ export function sendMessage(
 
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
-    const senderMember = getMember(db, authorPubkey) as any;
-    const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
-    cb.dispatchPushNotification(
-        participants.map(p => p.public_key),
-        authorPubkey,
-        '💬 New Message',
-        `${senderName} sent you a message`,
-        { screen: 'chat', conversationId: effectiveConvId },
-        'chat'
-    );
+    const convRow = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
+    if (convRow?.type !== 'enterprise_thread') {
+        const senderMember = getMember(db, authorPubkey) as any;
+        const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
+        cb.dispatchPushNotification(
+            participants.map(p => p.public_key),
+            authorPubkey,
+            '💬 New Message',
+            `${senderName} sent you a message`,
+            { screen: 'chat', conversationId: effectiveConvId },
+            'chat'
+        );
+    }
 
     return msg;
 }
@@ -215,8 +218,11 @@ export function toggleMessageReaction(
             metadata = {};
         }
     }
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+        metadata = {};
+    }
 
-    if (!metadata.reactions) {
+    if (!Array.isArray(metadata.reactions)) {
         metadata.reactions = [];
     }
 
@@ -247,6 +253,8 @@ export function toggleMessageReaction(
 }
 
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+export const MESSAGE_REMOVED_EDIT_ERROR = 'A message removed by a keeper cannot be edited';
+export const THREAD_MESSAGE_EDIT_ERROR = 'Messages in an enterprise discussion thread cannot be edited';
 
 export function editMessage(
     cb: MessagingCallbacks,
@@ -260,6 +268,12 @@ export function editMessage(
     if (!row) throw new Error('Message not found');
     if (row.author_pubkey !== authorPubkey) throw new Error('Only the author can edit a message');
     if (row.type === 'system') throw new Error('System messages cannot be edited');
+    // A keeper-removed message is a tombstone: never editable, by any route.
+    if (row.type === 'removed') throw new Error(MESSAGE_REMOVED_EDIT_ERROR);
+    // Enterprise discussion-thread messages are not editable. This route has no size bound
+    // and knows nothing of thread moderation or a wound-up enterprise's read-only thread.
+    const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
+    if (conv?.type === 'enterprise_thread') throw new Error(THREAD_MESSAGE_EDIT_ERROR);
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
@@ -323,7 +337,10 @@ export function injectSystemMessage(
         [SystemMessageType.ESCROW_CANCELLED]: `Escrow cancelled and funds refunded.`,
         [SystemMessageType.COMMONS_GRANT]: `Commons grant awarded.`,
         [SystemMessageType.VOUCH_GRANTED]: `Vouch granted.`,
-        [SystemMessageType.VOUCH_REVOKED]: `Vouch revoked.`
+        [SystemMessageType.VOUCH_REVOKED]: `Vouch revoked.`,
+        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: `Dispute arbitrated by admin (${meta.authSigner || 'admin'}): ${
+            meta.resolution === 'release_to_seller' ? 'Released to seller' : meta.resolution === 'refund_to_buyer' ? 'Refunded to buyer' : 'Split 50/50'
+        }${meta.reason ? ` — ${meta.reason}` : ''}.`
     };
     
     for (const row of convRows) {

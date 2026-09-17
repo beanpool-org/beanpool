@@ -1,6 +1,6 @@
 services:
   beanpool-node:
-    image: ghcr.io/beanpool-org/beanpool-node:latest
+    image: ghcr.io/beanpool-org/beanpool-node:${BEANPOOL_IMAGE_TAG:-latest}
     build:
       context: .
       network: host

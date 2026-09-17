@@ -6,7 +6,7 @@
 // so the node and the fleet manager compute an identical floor instead of the
 // manager keeping a hand-copied, drift-prone reimplementation.
 import type Database from 'better-sqlite3';
-import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 
 type Db = Database.Database;
@@ -17,8 +17,8 @@ type Db = Database.Database;
 // Tuning (owner decision 2026-07-05): Lowered cap from 5000 to 500. One solid trade
 // banks a partner; repeat trades add nothing. Legitimate users need more distinct
 // counterparties to build deep credit.
-// CANONICAL tuning knob — single source of truth for volume caps (do not duplicate in manager or server).
-export const PER_COUNTERPARTY_VOLUME_CAP = 500;
+// CANONICAL tuning knob — single source of truth for volume caps (defined in @beanpool/core).
+export { PER_COUNTERPARTY_VOLUME_CAP };
 
 export interface WashAnalysis {
     flaggedPairs: Set<string>;
@@ -163,12 +163,13 @@ export function runWashTradingAnalysis(db: Db): WashAnalysis {
             let compIdx = 0;
             for (const comp of components) {
                 if (comp.length <= 12) {
-                    const compSet = new Set(comp);
+                    // ⚡ Bolt: Look up pairs directly in edgeVol30 O(N^2) instead of scanning all E entries O(E) per component
                     let internalVol = 0;
-                    for (const [key, vol] of edgeVol30.entries()) {
-                        const [u, v] = key.split('|');
-                        if (compSet.has(u) && compSet.has(v)) {
-                            internalVol += vol;
+                    for (let i = 0; i < comp.length; i++) {
+                        for (let j = i + 1; j < comp.length; j++) {
+                            const u = comp[i] < comp[j] ? comp[i] : comp[j];
+                            const v = comp[i] < comp[j] ? comp[j] : comp[i];
+                            internalVol += edgeVol30.get(`${u}|${v}`) || 0;
                         }
                     }
 
@@ -340,6 +341,95 @@ export function getMemberTrustStats(db: Db, publicKey: string): TrustStats {
     };
 }
 
+export interface EnterpriseFloorInfo {
+    allowance: number;
+    floor: number;
+    derivedAllowance: number;
+    legacyFloor: number;
+    activated: boolean;
+}
+
+const enterpriseFloorCache = new WeakMap<Db, Map<string, EnterpriseFloorInfo>>();
+
+export function clearEnterpriseFloorCache(db?: Db, enterprisePubkey?: string): void {
+    if (!db) return;
+    const cache = enterpriseFloorCache.get(db);
+    if (!cache) return;
+    if (enterprisePubkey) {
+        cache.delete(enterprisePubkey);
+    } else {
+        cache.clear();
+    }
+}
+
+/**
+ * Enterprise Derived Credit Floor (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4).
+ * The credit floor derives from its keepers — the plain sum of each keeper's explicit
+ * backing pledge of their own earned credit, capped by CREDIT_FLOOR_CAP.
+ *
+ * Grandfathering: existing enterprises keep their fixed line as a legacy floor until
+ * keepers' pledges reach or exceed it, at which point the legacy floor is auto-cleared.
+ *
+ * O(1) reads via an in-memory cache WeakMap per DB handle.
+ */
+export function getEnterpriseFloor(db: Db, enterprisePubkey: string): EnterpriseFloorInfo {
+    let cache = enterpriseFloorCache.get(db);
+    if (!cache) {
+        cache = new Map();
+        enterpriseFloorCache.set(db, cache);
+    }
+    const cached = cache.get(enterprisePubkey);
+    if (cached) return cached;
+
+    const memberRow = db.prepare(
+        "SELECT COALESCE(credit_frozen, 0) as credit_frozen, legacy_credit_floor FROM members WHERE public_key = ?"
+    ).get(enterprisePubkey) as any;
+
+    const isCreditFrozen = memberRow?.credit_frozen === 1;
+
+    let derivedAllowance = 0;
+    try {
+        const pledgeRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        derivedAllowance = Number(pledgeRow?.total || 0);
+    } catch {
+        derivedAllowance = 0;
+    }
+
+    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+
+    // Auto-clear legacy floor once keepers' derived pledges reach or exceed it (Slice 4).
+    // Strictly read-only here: persistent database UPDATE is executed inside state mutation endpoints.
+    if (legacyFloor > 0 && derivedAllowance >= legacyFloor) {
+        legacyFloor = 0;
+    }
+
+    const allowance = isCreditFrozen
+        ? 0
+        : Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, derivedAllowance));
+
+    const floor = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - allowance;
+    const activated = allowance > 0;
+
+    const result: EnterpriseFloorInfo = {
+        allowance,
+        floor,
+        derivedAllowance,
+        legacyFloor,
+        activated,
+    };
+
+    cache.set(enterprisePubkey, result);
+    return result;
+}
+
 /**
  * Returns the full trust profile for a member: stats, floor, ceiling, and tier.
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
@@ -358,14 +448,34 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
 } {
     const stats = getMemberTrustStats(db, publicKey);
 
+    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
+    const isTreasury = memberRow?.is_treasury === 1;
+
+    // Enterprise Derived Floor model (docs/the-commons.md §2.4, §6 Slice 4)
+    if (isTreasury) {
+        const ef = getEnterpriseFloor(db, publicKey);
+        const floor = ef.floor;
+        const tier = getTier(floor);
+        return {
+            stats,
+            floor,
+            tier,
+            earnedCredit: ef.allowance,
+            grantedCredit: ef.legacyFloor,
+            qualifiedValue: 0,
+            avgRating: 5.0,
+            reviewCount: 0,
+            vouched: false,
+            activated: ef.activated,
+        };
+    }
+
     // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder) + Elder vouch.
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
     const grantedCredit = memberRow?.earned_credit || 0;
     const elderVouched = !!memberRow?.elder_vouched_by;
-    const isTreasury = memberRow?.is_treasury === 1;
     // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
     // with no stored amount, defaults to the light level.
     const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
@@ -394,19 +504,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
 
     // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until an
     // appointed voucher vouches for them, or an admin/genesis grant graduates a founding member.
-    // Completing a trade NO LONGER activates: that was a Sybil faucet — N sock accounts each doing
-    // one throwaway trade with a colluding creator would each mint themselves the -20 voucher (gift
-    // 1 bean to N socks → 20N beans of unbacked credit). The -20 floor is now *handed out* by a
-    // vouch: the one human-gated, admin-appointed way in (see vouchMember / can_vouch). Nice
-    // property — when a member is finally vouched, any earned trust they'd already banked unlocks
-    // alongside the welcome voucher, so their floor jumps straight to reflect their real trading.
     // Trust Model v3: a completed real trade (earnedCredit > 0) opens the floor on its own — no
-    // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1) that the
-    // #15 vouch-gating pass dropped, which left earned-trust members showing "no credit line".
-    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || isTreasury;
-    const effectiveGranted = isTreasury ? Math.max(200, grantedCredit) : grantedCredit;
+    // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1).
+    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0;
     const allowance = (activated && !isCreditFrozen)
-        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + effectiveGranted)
+        ? Math.min(c.CREDIT_FLOOR_CAP, vouchCredit + earnedCredit + grantedCredit)
         : 0;
 
     // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
@@ -420,3 +522,4 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // multiplier inputs, surfaced so the client can show them honestly.
     return { stats, floor, tier, earnedCredit, grantedCredit, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated };
 }
+

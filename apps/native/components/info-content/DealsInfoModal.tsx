@@ -155,7 +155,34 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.infoBox}>
                         <Text style={styles.infoBoxIcon}>💡</Text>
                         <Text style={styles.infoBoxText}>
-                            If there is a dispute and the goods aren't delivered, the buyer can cancel the trust hold to get their credits back, or involve a Guardian for arbitration.
+                            If goods aren't delivered, the buyer can cancel the hold directly. For contested trades stuck over 7 days, administrators can arbitrate with full provenance.
+                        </Text>
+                    </View>
+                </View>
+            )
+        },
+        {
+            id: 'disputes',
+            label: '⚖️ Disputes',
+            content: (
+                <View style={styles.tabContent}>
+                    <Text style={styles.descriptionText}>
+                        When a trade cannot be agreed upon, community administrators provide transparent dispute arbitration for escrows stalled over 7 days.
+                    </Text>
+
+                    <View style={styles.cardContainer}>
+                        <Text style={styles.cardLabel}>THREE ARBITRATION OUTCOMES</Text>
+                        <View style={{ marginTop: 4 }}>
+                            <ListItem prefix="1."><Text style={styles.boldWhiteText}>Release to Seller:</Text> Disburses escrowed credits to the seller (with standard community fee).</ListItem>
+                            <ListItem prefix="2."><Text style={styles.boldWhiteText}>Refund to Buyer:</Text> Returns 100% of escrowed credits back to the buyer (fee-exempt).</ListItem>
+                            <ListItem prefix="3."><Text style={styles.boldWhiteText}>Split 50/50:</Text> Returns half to the buyer and releases half to the seller.</ListItem>
+                        </View>
+                    </View>
+
+                    <View style={styles.infoBox}>
+                        <Text style={styles.infoBoxIcon}>🛡️</Text>
+                        <Text style={styles.infoBoxText}>
+                            <Text style={styles.boldWhiteText}>Never a Quiet Admin Override:</Text> Every arbitration carries the acting admin's cryptographic identity (<Text style={styles.boldWhiteText}>auth_signer</Text>), writes a visible public record on both parties' transaction and activity views, notifies both members, and strictly preserves ledger conservation.
                         </Text>
                     </View>
                 </View>
@@ -180,7 +207,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            Repeated bad reviews or failing to release funds held in trust will result in an automatic review by Network Guardians, which may lead to account suspension.
+                            Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).
                         </Text>
                     </View>
                 </View>

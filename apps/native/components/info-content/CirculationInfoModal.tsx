@@ -106,7 +106,7 @@ export function CirculationInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>WHERE DOES IT GO?</Text>
                         <Text style={styles.cardText}>
-                            100% of collected fees go directly into the <Text style={styles.boldWhiteText}>Community Commons</Text>. These funds are then distributed to community-voted projects through Quadratic Voting.
+                            100% of collected fees go directly into the <Text style={styles.boldWhiteText}>Community Commons</Text>. These funds are then distributed to community-approved enterprises and projects through community Decisions.
                         </Text>
                     </View>
 

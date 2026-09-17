@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { loadAiConfig, saveAiConfig, askAiCopilot, type AiConfig } from '../../lib/ai-client';
+import { loadAiConfig, saveAiConfig, askAiCopilot, type AiConfig, type CopilotContextData } from '../../lib/ai-client';
 import type { NodeProfile } from '../../lib/profiles';
 
 interface AiServicesModuleProps {
     activeNode: NodeProfile;
-    contextData: { telemetry?: any; gateway?: any; members?: any; logs?: any[] };
+    contextData: CopilotContextData;
 }
 
 export function AiServicesModule({ activeNode, contextData }: AiServicesModuleProps) {
@@ -28,8 +28,9 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
         try {
             const res = await askAiCopilot(prompt.trim(), contextData, config);
             setResponse(res);
-        } catch (e: any) {
-            setResponse(`❌ AI Copilot Error: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setResponse(`❌ AI Copilot Error: ${msg}`);
         } finally {
             setLoading(false);
         }
@@ -115,7 +116,7 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
                         <label className="block text-nature-400 mb-1 font-semibold">LLM Provider:</label>
                         <select
                             value={config.provider}
-                            onChange={(e) => setConfig({ ...config, provider: e.target.value as any })}
+                            onChange={(e) => setConfig({ ...config, provider: e.target.value as AiConfig['provider'] })}
                             className="w-full bg-nature-900 border border-nature-800 px-3 py-2 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-terra-500"
                         >
                             <option value="ollama">Ollama (Local Node LLM)</option>

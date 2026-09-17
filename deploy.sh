@@ -2,17 +2,26 @@
 set -e
 
 # BeanPool Global Mesh Deploy Script
-# Pulls pre-built image from GHCR and deploys to remote nodes
+# Deploys to remote nodes via SSH (local build by default, or pre-built GHCR image)
 #
 # Usage:
-#   bash deploy.sh           # Deploy to all nodes
-#   bash deploy.sh 1 3 4     # Deploy to specific nodes by number
+#   bash deploy.sh                              # Deploy to all nodes (local build)
+#   bash deploy.sh 1 3 4                        # Deploy to specific nodes by number
+#   DEPLOY_PULL=1 bash deploy.sh                # Pull pre-built image (defaults to :latest)
+#   DEPLOY_PULL=1 DEPLOY_TAG=<sha> bash deploy.sh  # Pull and deploy specific commit tag
 #
-# The Docker image is auto-built by GitHub Actions on push to main:
-#   ghcr.io/beanpool-org/beanpool-node:latest
+# Image tags in GHCR:
+#   :latest only moves on a RELEASE (.github/workflows/docker-publish.yml).
+#   Pushes to main are tagged with their short-sha (e.g. DEPLOY_TAG=3fb6e72).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE="ghcr.io/beanpool-org/beanpool-node:latest"
+
+if [ -n "${DEPLOY_TAG:-}" ] && ! [[ "$DEPLOY_TAG" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+  echo "🛑 FATAL: Invalid DEPLOY_TAG: '$DEPLOY_TAG'"
+  exit 1
+fi
+
+IMAGE="ghcr.io/beanpool-org/beanpool-node:${DEPLOY_TAG:-latest}"
 
 # Load .env file for Cloudflare credentials (if it exists)
 if [ -f "$SCRIPT_DIR/.env" ]; then
@@ -37,17 +46,6 @@ else
   )
 fi
 
-# Package docker-compose.yml + data-preserving deploy config
-PKG_PATH="$SCRIPT_DIR/.deploy-package.tar.gz"
-echo "📦 Packaging deploy config..."
-tar -czf "$PKG_PATH" \
-    --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='.turbo' \
-    --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
-    --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
-    --exclude='.deploy-package.tar.gz' \
-    -C "$SCRIPT_DIR" .
-echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
-
 # Determine which nodes to deploy
 TARGETS=()
 if [ $# -gt 0 ]; then
@@ -64,6 +62,12 @@ fi
 
 echo ""
 echo "🌍 Deploying to ${#TARGETS[@]} node(s):"
+if [ -n "${DEPLOY_TAG:-}" ]; then
+  echo "🏷️  Deploy tag: $DEPLOY_TAG"
+fi
+if [ "${DEPLOY_PULL:-}" = "1" ] && [ -z "${DEPLOY_TAG:-}" ]; then
+  echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
+fi
 for NODE in "${TARGETS[@]}"; do
   NAME=$(echo "$NODE" | cut -d: -f2)
   IP=$(echo "$NODE" | cut -d: -f3)
@@ -71,6 +75,62 @@ for NODE in "${TARGETS[@]}"; do
   echo "   $NAME ($IP) → $DNS"
 done
 echo ""
+
+# Verify image in registry before touching any node if pulling is requested or required
+NEEDS_REGISTRY_IMAGE=0
+if [ "${DEPLOY_PULL:-}" = "1" ]; then
+  NEEDS_REGISTRY_IMAGE=1
+else
+  for NODE in "${TARGETS[@]}"; do
+    NODE_NAME=$(echo "$NODE" | cut -d: -f2)
+    case "$NODE_NAME" in
+      test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi|yarravalley) ;;
+      *) NEEDS_REGISTRY_IMAGE=1 ;;
+    esac
+  done
+fi
+
+if [ "$NEEDS_REGISTRY_IMAGE" = "1" ]; then
+  echo "🔍 Verifying $IMAGE exists in registry before touching any node..."
+  IMAGE_FOUND=0
+  if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+    IMAGE_FOUND=1
+  else
+    REGISTRY_TOKEN=$(curl -fsSL "https://ghcr.io/token?scope=repository:beanpool-org/beanpool-node:pull" 2>/dev/null | sed -n -E 's/.*"token":"([^"]+)".*/\1/p')
+    if [ -n "$REGISTRY_TOKEN" ]; then
+      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $REGISTRY_TOKEN" \
+        -H "Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json" \
+        "https://ghcr.io/v2/beanpool-org/beanpool-node/manifests/${DEPLOY_TAG:-latest}")
+      if [ "$HTTP_STATUS" = "200" ]; then
+        IMAGE_FOUND=1
+      fi
+    fi
+  fi
+
+  if [ "$IMAGE_FOUND" -ne 1 ]; then
+    echo ""
+    echo "🛑 FATAL: Image $IMAGE does not exist in registry!"
+    echo "   The build for tag '${DEPLOY_TAG:-latest}' failed or has not completed yet."
+    echo "   Aborting deploy to prevent rolling back nodes to a stale local image."
+    echo "   Check build status: https://github.com/beanpool-org/beanpool/actions"
+    echo ""
+    exit 1
+  fi
+  echo "✅ Verified image exists in registry: $IMAGE"
+  echo ""
+fi
+
+# Package docker-compose.yml + data-preserving deploy config
+PKG_PATH="$SCRIPT_DIR/.deploy-package.tar.gz"
+echo "📦 Packaging deploy config..."
+tar -czf "$PKG_PATH" \
+    --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='.turbo' \
+    --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
+    --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
+    --exclude='.deploy-package.tar.gz' \
+    -C "$SCRIPT_DIR" .
+echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
 
 # Deploy each node
 for NODE in "${TARGETS[@]}"; do
@@ -97,6 +157,11 @@ for NODE in "${TARGETS[@]}"; do
 
   echo "====================================="
   echo "🚀 Deploying $NAME ($IP) → $DNS"
+  if [ -n "${DEPLOY_TAG:-}" ]; then
+    echo "🏷️  Tag: $DEPLOY_TAG"
+  else
+    echo "🏷️  Tag: latest"
+  fi
   echo "====================================="
 
   # Upload
@@ -169,6 +234,7 @@ for NODE in "${TARGETS[@]}"; do
     export CF_API_TOKEN='${CF_API_TOKEN}'
     export CF_ZONE_ID='${CF_ZONE_ID}'
     export CF_RECORD_NAME='${DNS}'
+    ${DEPLOY_TAG:+export BEANPOOL_IMAGE_TAG='${DEPLOY_TAG}'}
     export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
     export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
     sudo mkdir -p $PROJECT_DIR/data
@@ -236,6 +302,9 @@ for NODE in "${TARGETS[@]}"; do
     fi
     echo "Public IP: $PUBLIC_IP"
     echo "DNS Record: $CF_RECORD_NAME"
+    if [ -n "${DEPLOY_TAG:-}" ]; then
+      echo "Image Tag: ${DEPLOY_TAG}"
+    fi
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
     COMPOSE_FLAGS=()
@@ -246,22 +315,53 @@ for NODE in "${TARGETS[@]}"; do
     # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
     #
     # DEPLOY_PULL=1 takes the published GHCR image instead. That drops the guarantee — you get whatever CI last
-    # pushed to :latest, NOT your working tree — so it is only correct when the commit you want is already built
-    # and pushed. What it buys is not building a monorepo on a small host: the VIC box is 1.3 GB and runs six
-    # nodes, so a build there leans on swap and competes with communities that have live members.
+    # pushed (by default :latest, which only updates on release; pass DEPLOY_TAG=<sha> for main builds), NOT your
+    # working tree — so it is only correct when the commit you want is already built and pushed. What it buys is
+    # not building a monorepo on a small host: the VIC box is 1.3 GB and runs six nodes, so a build there leans
+    # on swap and competes with communities that have live members.
     #
     # It is opt-in per run, not per node, because the choice depends on the state of your tree at that moment
     # rather than on which node you are deploying to.
     if [ "${DEPLOY_PULL:-}" = "1" ]; then
-      echo "📦 DEPLOY_PULL=1 — taking the published image for: $NAME (NOT your working tree)"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
+      if [ -z "${DEPLOY_TAG:-}" ]; then
+        echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
+      fi
+      echo "📦 DEPLOY_PULL=1 — taking the published image (${DEPLOY_TAG:-latest}) for: $NAME (NOT your working tree)"
+      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+        echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
+        echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
+        echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
+        echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
+        exit 1
+      }
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
     elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
       echo "🔨 Local build enabled for target: $NAME"
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
     else
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull
+      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+        echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
+        echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
+        echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
+        echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
+        exit 1
+      }
       sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+    fi
+
+    CONTAINER_ID=\$(sudo docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME ps -q beanpool-node 2>/dev/null | head -n1)
+    if [ -n "\$CONTAINER_ID" ]; then
+      IMAGE_ID=\$(sudo docker inspect --format '{{.Image}}' "\$CONTAINER_ID" 2>/dev/null)
+      REPO_TAG=\$(sudo docker inspect --format '{{.Config.Image}}' "\$CONTAINER_ID" 2>/dev/null)
+      REVISION=\$(sudo docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "\$CONTAINER_ID" 2>/dev/null)
+      DIGEST=\$(sudo docker inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' "\$IMAGE_ID" 2>/dev/null)
+      echo "📋 Started container details for $NAME:"
+      echo "   Container: \$CONTAINER_ID"
+      echo "   Image:     \${REPO_TAG:-\$IMAGE_ID}"
+      echo "   Digest:    \${DIGEST:-\$IMAGE_ID}"
+      if [ -n "\$REVISION" ]; then
+        echo "   Revision:  \$REVISION"
+      fi
     fi
 EOF
 

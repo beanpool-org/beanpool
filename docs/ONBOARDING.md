@@ -4,10 +4,15 @@
 > **Revision**: 3 (2026-08-05) — the keyholder model. See [Revision History](#revision-history).
 > **Goal**: Reduce onboarding friction for non-technical users while preserving full sovereignty, with no central point of failure anywhere in the system.
 
-> ⚠️ **The keeper sections of this document are superseded by
-> [`recovery-model.md`](recovery-model.md) (2026-08-10).** The K1–K5 numbering is gone,
-> replaced by three tiers and a two-layer split. Where the two disagree, `recovery-model.md`
-> wins. The onboarding-flow material here still stands.
+> ⚠️ **Keeper (social/guardian/friend-shard) recovery was SCRAPPED in September 2026.**
+> All proposals for keyholders (K1–K5), Shamir 3-of-N secret sharing across friends,
+> backup buddies, and guardian recovery in this document are obsolete and were never
+> retained.
+> The only two recovery paths in BeanPool are:
+> 1. **The member's 12 words** (available everywhere: PWA and Native; completely sovereign and node-independent).
+> 2. **SSO Sign-In Recovery** (available on Native only; two-layer hub + provider fragment; works only while the community node holds its fragment).
+>
+> See [`keeper-recovery-parked.md`](keeper-recovery-parked.md) and [`recovery-model.md`](recovery-model.md). The onboarding UI material here is preserved for historical context.
 
 ---
 
@@ -33,9 +38,9 @@ Meanwhile, technically-minded users who *want* self-custodied keys shouldn't be 
 | The native app's *web* build path writes the same plaintext object to `localStorage` | [identity.ts:106-107](../apps/native/utils/identity.ts#L106-L107) |
 | The PWA stores the same plaintext object in **unencrypted IndexedDB** | [identity.ts:127-128](../apps/pwa/src/lib/identity.ts#L127-L128) |
 | Keypair derivation is `sha256(sha256(words))` — a deliberate BIP-39 deviation | [crypto.ts:165-166](../apps/native/utils/crypto.ts#L165-L166) |
-| Guardian recovery exists: `recovery_requests` (with `cooldown_until`, `quorum_required`, `expires_at`) + `recovery_approvals` | [schema.sql:341-362](../apps/server/src/db/schema.sql#L341-L362) |
+| Guardian recovery tables exist in schema (`recovery_requests`, `recovery_approvals`), but social recovery was scrapped in Sept 2026 (client routes removed) | [schema.sql:341-362](../apps/server/src/db/schema.sql#L341-L362) |
 | `members.invited_by` records who invited each member (FK to `members.public_key`) — **the inviter is already known** | [schema.sql:6](../apps/server/src/db/schema.sql#L6) |
-| `friends.is_guardian` exists | [schema.sql:240](../apps/server/src/db/schema.sql#L240) |
+| `friends.is_guardian` column exists in schema (legacy; client social recovery scrapped) | [schema.sql:240](../apps/server/src/db/schema.sql#L240) |
 | The onboarding stepper is a 4-step component (`Your Name / Your Photo / Safety Backup / How it Works`) | [welcome.tsx:568-590](../apps/native/app/welcome.tsx#L568-L590) |
 | `identity.mnemonic` is read directly by four screens | [welcome.tsx:542](../apps/native/app/welcome.tsx#L542), [settings.tsx:537](../apps/native/app/%28tabs%29/settings.tsx#L537), [SettingsPage.tsx:247](../apps/pwa/src/pages/SettingsPage.tsx#L247) |
 | **No SSO / OAuth code exists anywhere in the repo** | — |
@@ -47,7 +52,7 @@ Meanwhile, technically-minded users who *want* self-custodied keys shouldn't be 
 
 1. **Zero-friction by default** — a non-technical user should be able to join and be protected without ever seeing a seed phrase or understanding cryptography.
 2. **Sovereignty always available** — a technically-minded user can opt into full self-custody at any point, no gates.
-3. **Your community is your backup** — recovery should feel social, not technical.
+3. **Sovereign and simple recovery** — 12 words everywhere; optional two-layer SSO on native.
 4. **Layered resilience** — no single point of failure, in the design *or* in the infrastructure.
 5. **Same Ed25519 protocol underneath** — this is a UX and key-custody layer. The identity model (Ed25519 keypair, signed request headers, node-held public keys) does not change.
 6. **Relatable, zero-jargon voice** — no "mnemonic", "Ed25519", "DID", "shard", "threshold".
@@ -56,7 +61,13 @@ Meanwhile, technically-minded users who *want* self-custodied keys shouldn't be 
 
 ---
 
-## Part 0: The Keyholder Model
+## Part 0: The Keyholder Model (⚠️ Scrapped September 2026)
+
+> **⚠️ Historical Specification (Scrapped September 2026):**
+> The multi-party keyholder scheme (K1–K5, Shamir 3-of-N split across phone backup, hub, inviter, and friends)
+> described below was SCRAPPED in September 2026. Zero human-keeper shares exist.
+> BeanPool relies exclusively on the member's 12 words (everywhere) and two-layer SSO recovery (Native only).
+> See [`keeper-recovery-parked.md`](keeper-recovery-parked.md) and [`recovery-model.md`](recovery-model.md).
 
 ### The idea
 
@@ -294,7 +305,7 @@ Provider buttons are Google then Apple (D11). Facebook and GitHub are paused —
 1. **⚡ Energy & Favours**: *"Share your skills, borrow gear, or help neighbours out. Earn credits for your time and energy."*
 2. **🪙 Mutual Credits**: *"No cash needed. Everyone starts with a clean slate and trades fairly within your local hub."*
 3. **🤝 Trust Escrow**: *"Trades stay safe and fair. Both sides confirm when a job or exchange is done."*
-4. **🔑 Getting Back In**: *"Your account is split into pieces held by your phone, your hub and people you trust. Lose your phone and any 3 of them bring you back."*
+4. **🔑 Getting Back In**: *"Your account is restored with your 12 safety words, or optionally via linked sign-in on your phone."*
 
 → "Let's Begin! 🚀" → main app.
 
@@ -304,13 +315,13 @@ Provider buttons are Google then Apple (D11). Facebook and GitHub are paused —
 
 | Technical Concept | What We Call It in the UI | Example Copy |
 |---|---|---|
-| **Shamir share** | **A piece** | *"One piece on its own is useless — it takes 3."* |
-| **Threshold / quorum** | **It takes 3** | *"Any 3 of your keepers can bring you back."* |
-| **Keyholder** | **Keeper** | *"Your keepers: this phone, your hub, Kim, and Google."* |
+| **Shamir share** *(scrapped)* | **A piece** | *(Scrapped in September 2026)* |
+| **Threshold / quorum** *(scrapped)* | **It takes 3** | *(Scrapped in September 2026)* |
+| **Keyholder / Keeper** *(scrapped)* | **Keeper** | *(Scrapped in September 2026; see keeper-recovery-parked.md)* |
 | **BIP-39 mnemonic** | **12 Safety Words** | *"Think of these 12 words like a master key. Keep them secret, keep them safe!"* |
 | **Ed25519 keypair / DID** | **Your Account ID** | *"Your unique digital stamp on BeanPool. No email or password needed."* |
 | **Anchor node / server** | **Community Hub** | *"The local server hosting your community's trades and members."* |
-| **Guardian** | **Backup Buddy** | *"Pick people you trust. Any 3 keepers can get you back in."* |
+| **Guardian / Buddy** *(scrapped)* | **Backup Buddy** | *(Scrapped in September 2026)* |
 | **Mutual credit ledger** | **Community Balance** | *"Your local trading balance — earn by helping out, spend on goods & services."* |
 | **Secure Store / Keyring** | **Device Vault** | *"Locked securely on your device behind Face ID or Touch ID."* |
 
@@ -466,7 +477,15 @@ Replace any binary "backed up ✅" with a keeper count, because that's the truth
 
 ---
 
-## Part 3: Recovery
+## Part 3: Recovery (⚠️ Scrapped September 2026)
+
+> **⚠️ Historical Specification (Scrapped September 2026):**
+> The human-keeper recovery flows, release rules, and 3-of-N reconstruction described below
+> were scrapped in September 2026.
+> The live recovery flows in BeanPool are:
+> 1. **12 Words (Universal)**: Enter callsign + 12-word seed phrase on any device.
+> 2. **SSO Sign-In Recovery (Native only)**: Two layers (hub fragment + Apple/Google OAuth sub).
+> See [`keeper-recovery-parked.md`](keeper-recovery-parked.md) and [`recovery-model.md`](recovery-model.md).
 
 ### Release rules
 

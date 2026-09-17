@@ -9,11 +9,15 @@ import {
     getProjects, getAllProjects, getVotingRounds, getActiveRound,
     getCommonsBalance, getGovernanceCredits,
     adminRejectProject,
+    createDecision, getDecision, getAllDecisions, getOpenDecisions,
+    castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
+    getActiveMembersCount30d, getDecisionVoiceCredits,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
+    isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -35,10 +39,20 @@ router.get('/api/commons/projects', async (ctx) => {
 
 router.post('/api/commons/projects', async (ctx) => {
     const { proposerPubkey, title, description, requestedAmount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || !title || !requestedAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!title || !requestedAmount) {
         ctx.status = 400;
         ctx.body = { error: 'proposerPubkey, title, and requestedAmount are required' };
+        return;
+    }
+    if (isOperatorSwitchedOff(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
         return;
     }
     const project = createProject(actor, title, description || '', Number(requestedAmount));
@@ -52,8 +66,12 @@ router.post('/api/commons/projects', async (ctx) => {
 
 router.post('/api/commons/projects/update', async (ctx) => {
     const { proposerPubkey, projectId, title, description, requestedAmount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || typeof actor !== 'string') return ctx.throw(400, 'Invalid pubkey');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!projectId || !title || !requestedAmount) return ctx.throw(400, 'Missing fields');
     
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
@@ -65,8 +83,12 @@ router.post('/api/commons/projects/update', async (ctx) => {
 
 router.post('/api/commons/projects/delete', async (ctx) => {
     const { proposerPubkey, projectId } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || proposerPubkey;
-    if (!actor || typeof actor !== 'string') return ctx.throw(400, 'Invalid pubkey');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!projectId) return ctx.throw(400, 'Missing projectId');
     
     const success = deleteProject(actor, projectId);
@@ -78,8 +100,13 @@ router.post('/api/commons/projects/delete', async (ctx) => {
 
 router.post('/api/commons/vote', async (ctx) => {
     const { voterPubkey, projectId, voteCount } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || voterPubkey;
-    if (!actor || !projectId) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!projectId) {
         ctx.status = 400;
         ctx.body = { error: 'voterPubkey and projectId are required' };
         return;
@@ -107,6 +134,95 @@ router.get('/api/commons/rounds', async (ctx) => {
     ctx.body = { rounds: getVotingRounds(), activeRound: getActiveRound() };
 });
 
+// ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
+
+router.get('/api/commons/decisions', async (ctx) => {
+    const status = ctx.query.status as any;
+    const decisions = getAllDecisions(status);
+    const activeMembers30d = getActiveMembersCount30d();
+    ctx.body = {
+        decisions: decisions.map(d => ({
+            ...d,
+            tally: tallyDecision(d.id, undefined, activeMembers30d),
+        })),
+        activeMembers30d,
+    };
+});
+
+router.get('/api/commons/decisions/:id', async (ctx) => {
+    const decision = getDecision(ctx.params.id);
+    if (!decision) return ctx.throw(404, 'Decision not found');
+    const tally = tallyDecision(decision.id);
+    const votes = getDecisionVotes(decision.id);
+    const actor = (ctx.state as any)?.actor || (ctx.query?.voterPubkey as string);
+    const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
+    ctx.body = { decision, tally, votes, voiceCredits };
+});
+
+router.post('/api/commons/decisions', async (ctx) => {
+    const { title, description, touches, effect, subject, params, closesAt } = (ctx as any).requestBody || {};
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required to propose a decision' };
+        return;
+    }
+    if (!title || !touches || !effect) {
+        ctx.status = 400;
+        ctx.body = { error: 'title, touches, and effect are required' };
+        return;
+    }
+    if (!description || description.trim().length < 10) {
+        ctx.status = 400;
+        ctx.body = { error: 'description must be at least 10 characters for governance accountability' };
+        return;
+    }
+    const closesAtOverride = process.env.NODE_ENV === 'test' ? closesAt : undefined;
+    try {
+        const decision = createDecision({
+            authorPubkey: actor,
+            title,
+            description: description.trim(),
+            touches,
+            effect,
+            subject,
+            params,
+            closesAt: closesAtOverride,
+        });
+        ctx.body = { success: true, decision };
+    } catch (err: any) {
+        ctx.status = 400;
+        ctx.body = { error: err.message };
+    }
+});
+
+router.post('/api/commons/decisions/:id/vote', async (ctx) => {
+    const { support, voteCount, signature } = (ctx as any).requestBody || {};
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required to vote' };
+        return;
+    }
+    if (support === undefined) {
+        ctx.status = 400;
+        ctx.body = { error: 'support (boolean) is required' };
+        return;
+    }
+    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true, creditsUsed: result.creditsUsed };
+});
+
+router.post('/api/commons/decisions/tick', async (ctx) => {
+    const result = tickDecisions();
+    ctx.body = { success: true, ...result };
+});
+
 // ==========================================
 // CROWDFUNDING API
 // ==========================================
@@ -126,8 +242,13 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
 
 router.post('/api/crowdfund/projects', async (ctx) => {
     const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!actor || !title || !goalAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
         return;
@@ -143,7 +264,25 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         }
     }
 
+    if (photos !== undefined && photos !== null) {
+        if (!Array.isArray(photos)) {
+            ctx.status = 400;
+            ctx.body = { error: 'photos must be an array' };
+            return;
+        }
+        if (photos.length > 10) {
+            ctx.status = 400;
+            ctx.body = { error: 'A project can have at most 10 photos' };
+            return;
+        }
+    }
+
     const projectId = id || crypto.randomUUID();
+    if (isOperatorSwitchedOff(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
+        return;
+    }
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
@@ -153,8 +292,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
 
 router.post('/api/crowdfund/projects/update', async (ctx) => {
     const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!id || !actor || !title || !goalAmount) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!id || !title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'id, creatorPubkey, title, and goalAmount are required' };
         return;
@@ -166,6 +310,19 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         if (diffDays > maxDays) {
             ctx.status = 400;
             ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
+            return;
+        }
+    }
+
+    if (photos !== undefined && photos !== null) {
+        if (!Array.isArray(photos)) {
+            ctx.status = 400;
+            ctx.body = { error: 'photos must be an array' };
+            return;
+        }
+        if (photos.length > 10) {
+            ctx.status = 400;
+            ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
     }
@@ -183,8 +340,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
 router.post('/api/crowdfund/projects/delete', async (ctx) => {
     const { id, creatorPubkey } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || creatorPubkey;
-    if (!id || !actor) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!id) {
         ctx.status = 400;
         ctx.body = { error: 'id and creatorPubkey are required' };
         return;
@@ -203,13 +365,18 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
 router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     const projectId = ctx.params.id;
     const { fromPubkey, amount, memo } = (ctx as any).requestBody || {};
-    const actor = (ctx.state.actor as string) || fromPubkey;
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     const parsedAmount = Number(amount);
     
     // SECURITY (SRV-8): require a positive, finite amount. A negative parsedAmount
     // is truthy and previously slipped past `!parsedAmount`, relying on the
     // transactions CHECK(amount > 0) to abort mid-transaction.
-    if (!actor || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
         ctx.body = { error: 'fromPubkey and a positive amount are required' };
         return;

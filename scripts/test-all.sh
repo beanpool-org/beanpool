@@ -107,6 +107,10 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 
+# Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
+# is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
+run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -158,7 +162,143 @@ run_federation_suites() {
     # left the remaining suites unexecuted, so a single break masked every other one and each fix-and-rerun
     # cycle only revealed the next problem. Statuses are collected and all failures reported together.
     FAILED=""
-    for t in test-schema-upgrade test-creator-channels test-pulse-resolver test-pulse-submit test-pulse-oauth test-callsign-predicates test-recovery-shares test-sso test-daily-pulse test-pairing-relay test-pricing-guide test-pricing-aggregator-lifecycle test-activity-feed test-member-purge test-keeper-deposit test-keeper-routes test-keeper-release test-recovery-collect test-sso-recovery-roundtrip test-friend-recovery-roundtrip test-keeper-http test-commons-conservation test-treasury-keepership test-treasury-eggs test-demurrage-window test-crowdfund-delete-refund test-admin-password-query test-cors-policy test-gateway-config test-csrf-protection test-totp-admin-2fa test-totp-helpers test-moderation-admin test-ledger-export test-ledger-audit-startup test-mirror-sync-audit-log test-federation-bridge test-connector-credit-cap test-connector-public-url test-federation-link test-listing-reach test-listing-pull test-settlement-state test-settlement-exchange test-settlement-orchestration test-federation-purchase-route test-federation-commission test-federation-settlement test-admin-auth test-backend-monitors test-backup-hardening test-backup-topology test-cash-also-needed test-crowdfund-ledger-sync test-detached-pwa test-dos-caps test-economic-hardening test-federation-api test-federation-receipt test-genesis test-hardening test-logger-sanitization test-manager-build test-onboarding-funnel test-request-auth test-sync-signature test-trust-value-curve test-voting-round-grant test-vouch-covenant test-wash-sybil-defense test-apple-probe test-recovery-backup-durability test-public-address test-invite-trampoline test-recovery-pin test-request-body test-admin-thresholds test-manager-backups test-push-preferences test-settings test-srv20-ledger-reset; do
+    # ONE SUITE PER LINE. Add a new suite as its own line beside a related one rather than at the
+    # bottom: two PRs that each append after the same last line conflict, while insertions at
+    # different points merge cleanly. Order does not matter, since every suite gets a fresh data dir.
+    # scripts/check-suite-registration.sh reads this array, so keep one name per line.
+    SUITES=(
+      test-schema-upgrade
+      test-creator-channels
+      test-pulse-resolver
+      test-pulse-submit
+      test-pulse-oauth
+      test-oauth-ingest-bounds
+      test-pulse-curated
+      test-pulse-admin-channels
+      test-pulse-thumbnail
+      test-callsign-predicates
+      test-recovery-shares
+      test-sso
+      test-daily-pulse
+      test-pairing-relay
+      test-pricing-guide
+      test-pricing-aggregator-lifecycle
+      test-activity-feed
+      test-member-purge
+      test-keeper-deposit
+      test-keeper-routes
+      test-keeper-release
+      test-recovery-collect
+      test-sso-recovery-roundtrip
+      test-keeper-http
+      test-commons-conservation
+      test-ledger-rollback
+      test-treasury-keepership
+      test-treasury-eggs
+      test-enterprise-credit-rules
+      test-derived-enterprise-floor
+      test-demurrage-window
+      test-crowdfund-delete-refund
+      test-admin-password-query
+      test-cors-policy
+      test-gateway-config
+      test-csrf-protection
+      test-totp-admin-2fa
+      test-totp-helpers
+      test-moderation-admin
+      test-ledger-export
+      test-ledger-audit-startup
+      test-mirror-sync-audit-log
+      test-federation-bridge
+      test-connector-credit-cap
+      test-connector-public-url
+      test-federation-link
+      test-listing-reach
+      test-listing-pull
+      test-settlement-state
+      test-settlement-exchange
+      test-settlement-orchestration
+      test-federation-purchase-route
+      test-federation-commission
+      test-federation-settlement
+      test-admin-auth
+      test-admin-key-auth
+      test-backend-monitors
+      test-backup-hardening
+      test-backup-topology
+      test-cash-also-needed
+      test-crowdfund-ledger-sync
+      test-detached-pwa
+      test-dos-caps
+      test-economic-hardening
+      test-federation-api
+      test-federation-receipt
+      test-genesis
+      test-hardening
+      test-logger-sanitization
+      test-manager-build
+      test-onboarding-funnel
+      test-request-auth
+      test-api-path-auth
+      test-sync-signature
+      test-trust-value-curve
+      test-voting-round-grant
+      test-vouch-covenant
+      test-wash-sybil-defense
+      test-apple-probe
+      test-recovery-backup-durability
+      test-public-address
+      test-invite-trampoline
+      test-request-body
+      test-admin-thresholds
+      test-manager-backups
+      test-push-preferences
+      test-settings
+      test-srv20-ledger-reset
+      test-harvester
+      test-membership-probe
+      test-message-attachment
+      test-social-ratings
+      test-app-store-versions
+      test-funnel-event
+      test-handshake
+      test-post-pause-resume
+      test-cancel-post-request
+      test-marketplace-auth
+      test-escrow-fail-closed
+      test-version-resolution
+      test-avatar-endpoint
+      test-etag-short-circuit
+      test-api-headers-and-feed-etag
+      test-directory-publisher
+      test-members-holiday
+      test-admin-seed-invite
+      test-admin-genesis-pubkey
+      test-admin-empty-sentinel
+      test-node-roles
+      test-federation-link-binding
+      test-ws-pong-watchdog
+      test-ws-http-port
+      test-polls
+      test-migration-projects-enterprises
+      test-commons-reject-project
+      test-commons-projects-update-delete
+      test-decisions-engine
+      test-decisions-client-api
+      test-escrow-disputes
+      test-shutdown-recovery
+      test-storage-health
+      test-groups-isolation
+      test-groups-routes
+      test-groups-patch-http
+      test-member-wizards
+      test-enterprise-pause
+      test-enterprise-season-lifecycle
+      test-enterprise-keepers-slice6
+      test-enterprise-location
+      test-enterprise-thread
+    )
+    for t in "${SUITES[@]}"; do
       echo "━━━ $t ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" $SUITE_TIMEOUT pnpm exec tsx "src/$t.ts"
@@ -175,9 +315,13 @@ run_federation_suites() {
     # once would leave half the route untested, and it is the half that moves value: the purchase route can
     # debit a member, and the commission route can draw on the Commons pot.
     #
-    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is inside `bash -c '...'`, so one in a
-    # comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
-    for t in test-federation-purchase-route test-federation-commission; do
+    # NO APOSTROPHES ANYWHERE IN THIS FUNCTION. The whole block is one single-quoted bash -c string, so one
+    # in a comment closes the string and the file fails to parse 100 lines later with "unexpected end of file".
+    SETTLEMENT_ON_SUITES=(
+      test-federation-purchase-route
+      test-federation-commission
+    )
+    for t in "${SETTLEMENT_ON_SUITES[@]}"; do
       echo "━━━ $t (settlement ON) ━━━"
       TMP_DIR=$(mktemp -d)
       ENABLE_PEER_CONNECTORS=true FEDERATION_SETTLEMENT=true BEANPOOL_DATA_DIR="$TMP_DIR" \
@@ -211,6 +355,20 @@ run_federation_suites() {
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-idor(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-idor"; fi
     rm -rf "$TMP_DIR"
 
+    # Member-read IDOR (A2-16 family) - asserts one member cannot read another members invites
+    # or notification preferences. Runs the suite a SECOND time with enforcement on, because its
+    # 403 assertions sit behind an ENFORCE_READ_AUTH check in the suite itself: in the default
+    # pass above they are skipped and it reports green having never tested what it is named for.
+    # The flag-off pass still earns its place (push-token and preference round-trips), so this is
+    # a second run rather than a move.
+    echo "━━━ test-push-preferences (read auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth)"; fi
+    rm -rf "$TMP_DIR"
+
     # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,
     # preserves metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row.
     echo "━━━ test-messaging-consolidation ━━━"
@@ -219,6 +377,17 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-consolidation.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-consolidation(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-consolidation"; fi
+    rm -rf "$TMP_DIR"
+
+    # WebSocket upgrades on the plain HTTP port, which is the Cloudflare tunnel origin, again with ws
+    # auth ON. ENFORCE_WS_AUTH is read once at import, and the pass above only proves the flag-off path;
+    # this one proves an unsigned /ws is refused on 8080 exactly as on 8443.
+    echo "━━━ test-ws-http-port (ws auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-http-port.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(wsauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(wsauth)"; fi
     rm -rf "$TMP_DIR"
 
     # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.
@@ -243,8 +412,22 @@ run_federation_suites() {
 
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
+  # Check 1: Stripe / payment tokens
   if grep -rE "sk_test_|sk_live_|pk_live_" apps/ packages/ --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build --exclude-dir=.build --exclude-dir=.expo 2>/dev/null; then
     echo "❌ Error: Hardcoded secret keys found in codebase" && exit 1
+  fi
+
+  # Check 2: Tracked secret or environment files
+  TRACKED_SECRETS=$(git ls-files | grep -iE "(^|/)\.env(\..+)?$|community\.key$|tunnel-token$|pc-api-key\.json$|\.p8$|\.pem$|\.keystore$" | grep -v "\.env\.example$" || true)
+  if [ -n "$TRACKED_SECRETS" ]; then
+    echo "❌ Error: Tracked secret file(s) found in git: $TRACKED_SECRETS" && exit 1
+  fi
+
+  # Check 3: Inventoried secret keys assigned hardcoded values in tracked files
+  INVENTORIED_KEYS="ADMIN_PASSWORD|BACKUP_ADMIN_PASSWORD|ADMIN_SECRET|CF_API_TOKEN|CF_TUNNEL_TOKEN|CLOUDFLARE_API_KEY|CLOUDFLARE_API_TOKEN|TIKTOK_CLIENT_SECRET|INSTAGRAM_APP_SECRET|INSTAGRAM_CLIENT_SECRET|BACKUP_REPLICATION_TOKEN"
+  LEAKS=$(git grep -nE "^[[:space:]]*(-[[:space:]]+)?(export[[:space:]]+)?($INVENTORIED_KEYS)=" 2>/dev/null | grep -vE "=['\''\"]?\\$\\{[A-Za-z0-9_]+(:-)?\\}['\''\"]?$" | grep -vE "(\.env\.example|apps/server/README\.md|deploy\.sh|docs/|apps/registrar/\.dev\.vars|scripts/bootstrap-community-eggs\.mjs|scripts/grant-operator\.mjs)" || true)
+  if [ -n "$LEAKS" ]; then
+    echo "❌ Error: Hardcoded assignment to inventoried secret key found in tracked file:" && echo "$LEAKS" && exit 1
   fi
 '
 
@@ -307,20 +490,75 @@ echo "╠═══════════════════════�
 printf "║  Total: %d passed, %d failed, %d skipped\n" "$PASS" "$FAIL" "${#SKIPPED_NAMES[@]}"
 echo "╚══════════════════════════════════════════╝"
 
-# Show failure logs
+# Failure details. A plain tail of each log is not enough for the turbo checks: `turbo run test`
+# writes every package into one log, so when one package fails and others finish after it, its
+# error scrolls out of the tail — a failing PWA test once had to be diagnosed by re-running it.
+# So for a turbo check, print the failing TASK'S own output, found by the `Failed:` summary line.
+#
+# Turbo writes two layouts and both must be read. Locally every line is prefixed `pkg:task: `.
+# Under GitHub Actions it groups instead: each task is one unprefixed block, a passing one wrapped
+# in ::group::pkg:task … ::endgroup::, a failing one under a bare (coloured) `pkg:task` line.
+# Anything not recognised falls back to the old tail, so this can never show less than before.
+FAILED_TASK_LINES=150
+
+turbo_failed_tasks() {
+  # "Failed:    @beanpool/pwa#test, @beanpool/core#test"  ->  one pkg#task per line
+  sed "s/$(printf '\033')\[[0-9;]*[A-Za-z]//g" "$1" | sed -n 's/^Failed:[[:space:]]*//p' | tr ', ' '\n\n' | grep '#'
+}
+
+turbo_task_output() {
+  local log="$1" want="$2" headers="$3"
+  awk -v esc="$(printf '\033')" -v want="$want" -v headers="$headers" '
+    BEGIN { n = split(headers, h, " "); for (i = 1; i <= n; i++) failed[h[i]] = 1 }
+    { line = $0; gsub(esc "\\[[0-9;]*[A-Za-z]", "", line) }
+    index(line, want ": ") == 1 { print substr(line, length(want) + 3); next }
+    line == want || line == "::group::" want { inside = 1; next }
+    inside && (line ~ /^::(end)?group::/ || line ~ /^ Tasks: / || (line in failed)) { inside = 0 }
+    inside && line !~ /^::/ { print line }
+  ' "$log"
+}
+
 if [ $FAIL -gt 0 ]; then
   echo ""
   echo "──── Failure Details ────"
   for fn in "${FAILED_NAMES[@]}"; do
     echo ""
     echo "━━━ $fn ━━━"
-    tail -40 "$LOGDIR/$fn.log"
+    shown=0
+    unread=0
+    tasks=$(turbo_failed_tasks "$LOGDIR/$fn.log")
+    if [ -n "$tasks" ]; then
+      headers=$(echo $tasks | tr '#' ':')   # space-separated: BSD awk refuses a newline in -v
+      for task in $tasks; do
+        out=$(turbo_task_output "$LOGDIR/$fn.log" "$(echo "$task" | tr '#' ':')" "$headers")
+        if [ -z "$out" ]; then unread=1; continue; fi
+        total=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+        if [ "$total" -gt $FAILED_TASK_LINES ]; then
+          echo "── $task (last $FAILED_TASK_LINES of its $total lines) ──"
+        else
+          echo "── $task ──"
+        fi
+        printf '%s\n' "$out" | tail -n $FAILED_TASK_LINES
+        shown=1
+      done
+    fi
+    if [ $shown -eq 0 ] || [ $unread -eq 1 ]; then tail -40 "$LOGDIR/$fn.log"; fi
   done
   echo ""
+
+  # Keep every log of a failing run. CI sets TEST_ALL_LOG_DIR and uploads that directory as a
+  # workflow artifact; run locally, the temp dir is simply left in place. Passing runs keep nothing.
+  if [ -n "${TEST_ALL_LOG_DIR:-}" ] && mkdir -p "$TEST_ALL_LOG_DIR" && cp "$LOGDIR"/*.log "$TEST_ALL_LOG_DIR"/; then
+    echo "Full logs of every check copied to $TEST_ALL_LOG_DIR"
+  else
+    trap - EXIT INT TERM
+    echo "Full logs of every check kept in $LOGDIR"
+    LOGDIR=""
+  fi
 fi
 
 # Cleanup
-rm -rf "$LOGDIR"
+[ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
 # Exit with failure if anything failed
 [ $FAIL -eq 0 ]

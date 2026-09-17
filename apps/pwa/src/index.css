@@ -33,6 +33,27 @@
   --header-overlay: rgba(251, 250, 248, 0.85);
   --nav-bg: #ffffff;
   --shadow-card: 0 4px 6px -1px rgba(100, 118, 100, 0.1), 0 2px 4px -2px rgba(100, 118, 100, 0.05);
+  --nav-height: 4rem;
+  --bottom-nav-height: 4rem;
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+:root[data-bottom-nav="hidden"],
+[data-bottom-nav="hidden"],
+.bottom-nav-hidden {
+  --bottom-nav-height: 0px;
+  --bottom-nav-offset: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 768px) {
+  :root,
+  :root[data-bottom-nav="hidden"],
+  [data-bottom-nav="hidden"],
+  .bottom-nav-hidden {
+    --nav-height: 0px;
+    --bottom-nav-height: 0px;
+    --bottom-nav-offset: 0px !important;
+  }
 }
 
 /* Optional Dark Mode / High Contrast */
@@ -85,6 +106,18 @@ html, body, #root {
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 2px;
+}
+
+/* A chip row that scrolls sideways on its own, without drawing a scrollbar under the chips.
+   Both names are already in use across the pages; neither was defined until now. */
+.scrollbar-none,
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Selection color */

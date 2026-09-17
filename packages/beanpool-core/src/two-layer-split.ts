@@ -86,7 +86,7 @@ export class TwoLayerCombineError extends Error {
 // ---------------------------------------------------------------------------
 
 /** First {@link SEED_CHECKSUM_LENGTH} bytes of `SHA-256(seed)`. */
-function seedChecksum(seed: Uint8Array): Uint8Array {
+export function seedChecksum(seed: Uint8Array): Uint8Array {
     // Convert to hex and parse via CryptoJS.enc.Hex so the hash covers the
     // actual 32 bytes, not a zero-padded WordArray reinterpretation.
     const hexSeed = Array.from(seed)

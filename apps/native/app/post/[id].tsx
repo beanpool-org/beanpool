@@ -11,8 +11,11 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance,
+    treasuryApprove, treasuryComplete, treasuryReject,
+    fetchGroupDetails, deleteGroupPostApi
 } from '../../utils/db';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
 import { getProfileStatus, describeMissing } from '../../utils/profile-status';
@@ -335,7 +338,7 @@ export default function PostDetailModal() {
         },
     }));
 
-    const { id, txId } = useLocalSearchParams<{ id: string; txId?: string }>();
+    const { id, txId } = useLocalSearchParams<{ id?: string; txId?: string }>();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
@@ -402,6 +405,9 @@ export default function PostDetailModal() {
 
     const [unreadCount, setUnreadCount] = useState<number>(0);
     const [reqUnreadCounts, setReqUnreadCounts] = useState<Record<string, number>>({});
+    const [operatedTreasuries, setOperatedTreasuries] = useState<string[]>([]);
+    const [isConvenor, setIsConvenor] = useState(false);
+    const [deletingAsConvenor, setDeletingAsConvenor] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -414,6 +420,14 @@ export default function PostDetailModal() {
                         if (p) {
                             if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                             setPostMissing(false);
+                            const targetGroupId = p.target_group_id || p.targetGroupId;
+                            if (targetGroupId) {
+                                fetchGroupDetails(targetGroupId).then(res => {
+                                    setIsConvenor(res?.group?.viewerRole === 'convenor');
+                                }).catch(() => setIsConvenor(false));
+                            } else {
+                                setIsConvenor(false);
+                            }
                         } else if (!notFoundTimer.current) {
                             // Local miss: getPost kicked off a server upsert that emits
                             // sync_data_updated (→ reload) if the post exists. Declare
@@ -457,13 +471,33 @@ export default function PostDetailModal() {
                             WHERE t.id = ?
                         `, [singleTxId]).then(updateActiveTx);
                     } else if (activeIdentity) {
-                        database.getFirstAsync(`
-                            SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
-                            FROM marketplace_transactions t 
-                            LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
-                            LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.post_id=? AND t.status='pending' AND (t.buyer_pubkey=? OR t.seller_pubkey=?) ORDER BY t.created_at DESC LIMIT 1
-                        `, [singleId, activeIdentity.publicKey, activeIdentity.publicKey]).then(updateActiveTx);
+                        const currentPost = await getPost(singleId);
+                        let isKeeper = false;
+                        try {
+                            const b = await getBalance(activeIdentity.publicKey);
+                            const mine: string[] = Array.isArray((b as any)?.keeperOf) ? (b as any).keeperOf : [];
+                            if (currentPost?.author_pubkey && mine.includes(currentPost.author_pubkey)) {
+                                isKeeper = true;
+                            }
+                        } catch {}
+
+                        if (isKeeper || currentPost?.author_pubkey === activeIdentity.publicKey) {
+                            database.getFirstAsync(`
+                                SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
+                                FROM marketplace_transactions t 
+                                LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
+                                LEFT JOIN members s ON t.seller_pubkey = s.public_key 
+                                WHERE t.post_id=? AND t.status='pending' ORDER BY t.created_at DESC LIMIT 1
+                            `, [singleId]).then(updateActiveTx);
+                        } else {
+                            database.getFirstAsync(`
+                                SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
+                                FROM marketplace_transactions t 
+                                LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
+                                LEFT JOIN members s ON t.seller_pubkey = s.public_key 
+                                WHERE t.post_id=? AND t.status='pending' AND (t.buyer_pubkey=? OR t.seller_pubkey=?) ORDER BY t.created_at DESC LIMIT 1
+                            `, [singleId, activeIdentity.publicKey, activeIdentity.publicKey]).then(updateActiveTx);
+                        }
                     }
 
                     database.getAllAsync(`
@@ -584,12 +618,18 @@ export default function PostDetailModal() {
         }
     }, [activeTx?.id, post?.pending_transaction_id, identity?.publicKey]);
 
-    // Track whether the viewer still needs to list an Offer (Gate 1).
+    // Track whether the viewer still needs to list an Offer (Gate 1) and enterprises they operate.
     useEffect(() => {
         if (!identity?.publicKey) return;
         let cancelled = false;
         getBalance(identity.publicKey)
-            .then(b => { if (!cancelled) setBlockedFromTrading(!!(b as any).isBlockedFromTrading); })
+            .then(b => {
+                if (!cancelled) {
+                    setBlockedFromTrading(!!(b as any).isBlockedFromTrading);
+                    const mine: string[] = Array.isArray((b as any).keeperOf) ? (b as any).keeperOf : [];
+                    setOperatedTreasuries(mine);
+                }
+            })
             .catch(() => {});
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
@@ -612,7 +652,8 @@ export default function PostDetailModal() {
         );
     }
 
-    const isOwnPost = identity?.publicKey === post.author_pubkey;
+    const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));
+    const isOwnPost = identity?.publicKey === post.author_pubkey || isOperatorOfAuthor;
     const isPulsePost = (post.author_callsign || post.authorCallsign) === 'Daily Pulse';
     
     // --- Escrow Roles ---
@@ -620,10 +661,10 @@ export default function PostDetailModal() {
         ? (activeTx.buyer_pubkey === identity?.publicKey || activeTx.seller_pubkey === identity?.publicKey) && !isOwnPost
         : (identity?.publicKey === post.accepted_by);
     const isPayer = activeTx
-        ? activeTx.buyer_pubkey === identity?.publicKey
+        ? (activeTx.buyer_pubkey === identity?.publicKey || (isOperatorOfAuthor && activeTx.buyer_pubkey === post.author_pubkey))
         : ((post.type === 'offer' && isAcceptedByMe) || (post.type === 'need' && isOwnPost));
     const isPayee = activeTx
-        ? activeTx.seller_pubkey === identity?.publicKey
+        ? (activeTx.seller_pubkey === identity?.publicKey || (isOperatorOfAuthor && activeTx.seller_pubkey === post.author_pubkey))
         : ((post.type === 'offer' && isOwnPost) || (post.type === 'need' && isAcceptedByMe));
     const targetPeerCallsign = activeTx 
         ? (isPayer ? activeTx.seller_callsign || 'Peer' : activeTx.buyer_callsign || 'Peer')
@@ -721,7 +762,11 @@ export default function PostDetailModal() {
         if (!identity) return;
         setAccepting(true);
         try {
-            await approveMarketplaceRequest(transactionId, identity.publicKey);
+            if (isOperatorOfAuthor) {
+                await treasuryApprove(post.author_pubkey, transactionId);
+            } else {
+                await approveMarketplaceRequest(transactionId, identity.publicKey);
+            }
             const updated = await getPost(post.id);
             setPost(updated);
             hapticSuccess();
@@ -755,7 +800,11 @@ export default function PostDetailModal() {
             const req = requests.find(r => r.id === rejectModalTxId);
             const peerPubkey = req ? (post.type === 'need' ? req.seller_pubkey : req.buyer_pubkey) : null;
             
-            await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
+            if (isOperatorOfAuthor) {
+                await treasuryReject(post.author_pubkey, rejectModalTxId);
+            } else {
+                await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
+            }
             
             // Optionally send the reject message if provided
             if (rejectMessage.trim() && peerPubkey) {
@@ -836,15 +885,16 @@ export default function PostDetailModal() {
                 <View style={{ width: 68 }} />
             </View>
 
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
             <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
                 {/* Type + Category Badge */}
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
-                        <Text style={styles.catEmoji}>{emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isOffer ? colors.brand.primary : palette.orange600 }]} numberOfLines={1}>
-                            {isOffer ? '● ' : '● '}{post.type.toUpperCase()} · {categoryLabel(post.category).toUpperCase()}
-                            {post.repeatable ? ' · RECURRING' : ''}
+                        <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
+                        <Text style={[styles.catLabel, { color: isPulsePost ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
+                            {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
                         </Text>
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
@@ -855,6 +905,16 @@ export default function PostDetailModal() {
                     <View style={{ backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 12, lineHeight: 17 }}>
                             💸 <Text style={{ fontWeight: '700' }}>Cash also needed</Text> for fuel or materials, at cost. Time and tools are beans. Agree the details in chat — the app never handles the money.
+                        </Text>
+                    </View>
+                )}
+
+                {/* Audience Scope Banner (Item 10) */}
+                {(post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId) && (
+                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1.5, borderRadius: 12, padding: 12, marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <MaterialCommunityIcons name="lock" size={18} color={colors.brand.primary} />
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, flex: 1 }}>
+                            Only {post.target_group_name || post.targetGroupName || 'group members'} can see this
                         </Text>
                     </View>
                 )}
@@ -873,15 +933,17 @@ export default function PostDetailModal() {
                 )}
 
                 {/* Price Card */}
-                <View style={styles.priceCard}>
-                    <Text style={styles.priceLabel}>{priceLabel}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                        <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
-                        <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{
-                            { fixed: '', hourly: ' / Hr', daily: ' / Dy', weekly: ' / Wk', monthly: ' / Mo' }[post.price_type as string] || ''
-                        }</Text>
+                {!isPulsePost && (
+                    <View style={styles.priceCard}>
+                        <Text style={styles.priceLabel}>{priceLabel}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
+                            <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{
+                                { fixed: '', hourly: ' / Hr', daily: ' / Dy', weekly: ' / Wk', monthly: ' / Mo' }[post.price_type as string] || ''
+                            }</Text>
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Author / Counterparty Card */}
                 {isOwnPost && targetPeerPubkey ? (
@@ -971,7 +1033,11 @@ export default function PostDetailModal() {
                                                 if (!identity) return;
                                                 setAccepting(true);
                                                 try {
-                                                    await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                    if (isOperatorOfAuthor) {
+                                                        await treasuryComplete(post.author_pubkey, txToComplete, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                    } else {
+                                                        await completeMarketplaceTransaction(txToComplete, identity.publicKey, post.price_type !== 'fixed' ? Number(completeHours) : undefined);
+                                                    }
                                                     setShowCompleteConfirm(false);
                                                     
                                                     const targetPubkey = isPayer ? (activeTx?.seller_pubkey || post.accepted_by) : (activeTx?.buyer_pubkey || post.author_pubkey);
@@ -1483,6 +1549,53 @@ export default function PostDetailModal() {
                             </View>
                         )}
 
+                        {/* Convenor Post Moderation (Item 10) */}
+                        {!isOwnPost && isConvenor && Boolean(post.target_group_id || post.targetGroupId) && (
+                            <View style={{ marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint }}>
+                                <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, marginBottom: 8 }}>
+                                    🛡️ Convenor Moderation ({post.target_group_name || post.targetGroupName || 'Group'})
+                                </Text>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityHint="Deletes this post as convenor"
+                                    disabled={deletingAsConvenor}
+                                    style={[styles.deletePostBtn, { backgroundColor: colors.surface.card }]}
+                                    onPress={() => {
+                                        const groupTitle = post.target_group_name || post.targetGroupName || 'the group';
+                                        Alert.alert(
+                                            `Delete Group Post?`,
+                                            `Delete this post as Convenor of ${groupTitle}? This action cannot be undone.`,
+                                            [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                {
+                                                    text: 'Delete Post',
+                                                    style: 'destructive',
+                                                    onPress: async () => {
+                                                        try {
+                                                            setDeletingAsConvenor(true);
+                                                            const gId = (post.target_group_id || post.targetGroupId)!;
+                                                            await deleteGroupPostApi(gId, post.id);
+                                                            Alert.alert('Post Deleted', 'The post has been removed from the group.', [
+                                                                { text: 'OK', onPress: () => router.back() }
+                                                            ]);
+                                                        } catch (e: any) {
+                                                            Alert.alert('Error', e?.message || 'Failed to delete post');
+                                                        } finally {
+                                                            setDeletingAsConvenor(false);
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        );
+                                    }}
+                                >
+                                    <Text style={styles.deletePostBtnText}>
+                                        {deletingAsConvenor ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        )}
+
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
                             <Pressable 
                                 accessibilityRole="button"
@@ -1680,7 +1793,9 @@ export default function PostDetailModal() {
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>➕ Create an Offer</Text>
                             </Pressable>
-                            <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { marginTop: 10 }]} onPress={() => setShowContributionRequired(false)}>
+                            {/* flex: 0 — editCancelBtn is flex: 1 for the row layouts; in this column it squashed the
+                                button to ~30dp and hid the label. */}
+                            <Pressable accessibilityRole="button" style={[styles.editCancelBtn, { flex: 0, marginTop: 10, minHeight: 48 }]} onPress={() => setShowContributionRequired(false)}>
                                 <Text style={styles.editCancelBtnText}>Not now</Text>
                             </Pressable>
                         </Pressable>

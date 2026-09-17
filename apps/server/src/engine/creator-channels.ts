@@ -27,7 +27,7 @@ import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
-export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
 
 export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
     ['youtube', 'tiktok', 'instagram', 'facebook', 'soundcloud', 'website', 'rss'] as const;
@@ -36,7 +36,7 @@ export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
 // 'other'. `community` is additive: every other id keeps its meaning and its stored rows, only the
 // labels the client renders were rewritten.
 export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
-    ['community', 'food', 'craft', 'business', 'repair', 'art', 'other'] as const;
+    ['community', 'food', 'craft', 'business', 'repair', 'art', 'learn', 'other'] as const;
 
 /**
  * Platforms whose items the node can list unaided.
@@ -428,6 +428,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     const fbProfileId = (platform === 'facebook' && /^\/profile\.php\/?$/i.test(parsed.pathname))
         ? parsed.searchParams.get('id')
         : null;
+    const ytVideoId = (platform === 'youtube' && /^\/watch\/?$/i.test(parsed.pathname))
+        ? parsed.searchParams.get('v')
+        : null;
     if (platform === 'website' || platform === 'rss') {
         // A feed URL's identity often lives in the query string —
         // `youtube.com/feeds/videos.xml?channel_id=UC…` is the autolist path itself, and
@@ -438,8 +441,12 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             if (TRACKING_PARAMS.some(re => re.test(key))) parsed.searchParams.delete(key);
         }
         parsed.searchParams.sort();   // stable ordering, so one feed is one string
+    } else if (fbProfileId) {
+        parsed.search = `?id=${encodeURIComponent(fbProfileId)}`;
+    } else if (ytVideoId) {
+        parsed.search = `?v=${encodeURIComponent(ytVideoId)}`;
     } else {
-        parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
+        parsed.search = '';
     }
     parsed.hash = '';
     // The four platforms are https-only, so normalising their scheme is safe and helps
@@ -467,6 +474,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'tiktok' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
+    } else if (platform === 'youtube' && seg0 === 'watch' && ytVideoId) {
+        handle = null;
+        parsed.pathname = '/watch';
     } else if (platform === 'youtube' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
@@ -536,7 +546,8 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
 
     // `instagram.com` on its own parses, passes the host check, and yields no handle — a valid URL
     // that points at no account. Storing it would put an empty chip on the member's profile.
-    if (!handle && !isShortLink && platform !== 'website' && platform !== 'rss') {
+    const isBareVideo = platform === 'youtube' && seg0 === 'watch' && !!ytVideoId;
+    if (!handle && !isShortLink && !isBareVideo && platform !== 'website' && platform !== 'rss') {
         throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
     }
 

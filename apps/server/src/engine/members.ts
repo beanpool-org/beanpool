@@ -2,16 +2,35 @@
 //
 // Bridges the database storage layer with server singletons and broadcasts.
 
-import { db } from '../db/db.js';
+import { db, seedNodeRolesFromGenesis } from '../db/db.js';
 import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
+import { bumpMembersVersion } from './versions.js';
 
 /**
  * Record activity timestamp for a member.
  */
 export function recordActivity(publicKey: string): void {
     db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    try {
+        const activeProps = db.prepare(
+            "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
+        ).all(publicKey) as any[];
+        if (activeProps.length > 0) {
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'").run(publicKey);
+            for (const p of activeProps) {
+                (globalThis as any).broadcast?.({
+                    type: 'enterprise_succession_cancelled',
+                    proposalId: p.id,
+                    enterprisePubkey: p.enterprise_pubkey,
+                    leadPubkey: publicKey
+                });
+            }
+        }
+    } catch {
+        // Safe to ignore if table does not exist in isolated db test
+    }
 }
 
 /**
@@ -21,6 +40,13 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(adminPublicKey) as any;
     if (existing) {
         db.prepare("UPDATE members SET invited_by = 'genesis', invite_code = 'genesis' WHERE public_key = ?").run(adminPublicKey);
+        if (adminPublicKey !== 'SYSTEM') {
+            seedNodeRolesFromGenesis();
+            db.prepare(
+                `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
+                 VALUES (?, 'owner', 'genesis')`
+            ).run(adminPublicKey);
+        }
         return getMember(db, adminPublicKey)!;
     }
 
@@ -32,6 +58,13 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     })();
 
     ledger.initializeGenesisAccount(adminPublicKey);
+    if (adminPublicKey !== 'SYSTEM') {
+        seedNodeRolesFromGenesis();
+        db.prepare(
+            `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
+             VALUES (?, 'owner', 'genesis')`
+        ).run(adminPublicKey);
+    }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
     return getMember(db, adminPublicKey)!;
 }
@@ -57,13 +90,6 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
     return !row;
 }
 
-/**
- * Guardians needed before a member is worth offering as a recovery target. This is the
- * LEGACY guardian-vote path, not the keyholder split — it happens to share the number 3
- * with core's RECOVERY_THRESHOLD, so it is kept as its own constant rather than importing
- * that one and quietly coupling two unrelated schemes.
- */
-const RECOVERY_MIN_GUARDIANS = 3;
 /** Bounded so a one-letter prefix cannot ask the node to serialise the whole member table. */
 const RECOVERY_CANDIDATE_LIMIT = 20;
 
@@ -123,8 +149,6 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
     const rows = db.prepare(`
         SELECT * FROM (
             SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
-                   (SELECT COUNT(*) FROM friends f
-                     WHERE f.owner_pubkey = m.public_key AND f.is_guardian = 1) AS guardian_count,
                    (SELECT COUNT(*) FROM recovery_shares s
                      WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
@@ -133,17 +157,17 @@ export function findRecoveryCandidates(callsign: string): RecoveryCandidate[] {
             WHERE lower(m.callsign) LIKE ? ESCAPE '\\'
               AND m.status NOT IN ('migrated', 'pruned')
         )
-        WHERE guardian_count >= ? OR sso_count > 0
+        WHERE sso_count > 0
         ORDER BY length(callsign), callsign
         LIMIT ?
-    `).all(escaped + '%', RECOVERY_MIN_GUARDIANS, RECOVERY_CANDIDATE_LIMIT) as any[];
+    `).all(escaped + '%', RECOVERY_CANDIDATE_LIMIT) as any[];
 
     return rows.map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
         joinedAt: r.joined_at,
         avatarUrl: r.avatar_url,
-        canRecoverByGuardians: Number(r.guardian_count) >= RECOVERY_MIN_GUARDIANS,
+        canRecoverByGuardians: false,
         canRecoverBySso: Number(r.sso_count) > 0,
     }));
 }
@@ -239,12 +263,22 @@ export function registerMember(broadcast: (event: any) => void, publicKey: strin
 export function registerVisitor(publicKey: string, callsign?: string, homeNodeUrl?: string): void {
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     if (existing) {
+        let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {
             db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            changed = true;
         }
         if (homeNodeUrl && !existing.home_node_url) {
             db.prepare("UPDATE members SET home_node_url = ? WHERE public_key = ?").run(homeNodeUrl, publicKey);
+            changed = true;
         }
+        // Bumped HERE rather than at the call sites: this function writes to `members` and is
+        // reached from five federation paths (inbound handshake, settlement exchange, listing
+        // resolution, transfer to a visiting member, messaging a visiting member), none of which
+        // broadcast. Only the federation listing cache remembered to invalidate, so a visitor
+        // arriving by any other route was invisible in the member directory for as long as the
+        // ETag held — which, with no other write, is forever.
+        if (changed) bumpMembersVersion();
         return;
     }
     const generatedCallsign = callsign || `Visitor-${publicKey.substring(0, 8)}`;
@@ -254,6 +288,7 @@ export function registerVisitor(publicKey: string, callsign?: string, homeNodeUr
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(publicKey);
     })();
     ledger.initializeGenesisAccount(publicKey);
+    bumpMembersVersion();
     console.log(`🌐 Visitor registered: ${generatedCallsign} (federation${homeNodeUrl ? ` from ${homeNodeUrl}` : ''})`);
 }
 

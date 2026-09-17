@@ -17,19 +17,27 @@ import {
     fetchNodeLogs,
     freezeNodeUser,
     pruneNodeUser,
+    pruneInviteBranch,
     updateNodeUserTier,
     updateNodeUserVoucher,
     updateNodeUserOperator,
+    grantNodeRoleApi,
+    revokeNodeRoleApi,
     fetchNodeTreasuries,
     createNodeTreasury,
     seedTreasuryOffer,
     loginToNode,
+    acknowledgeShutdownStatus,
     resolveNodeApiUrl,
     buildAdminHeaders,
     getTfaSessionToken,
     setTfaSessionToken,
+    normalizeNodeUrl,
     type DiagnosticsResponse,
     type GatewayConfig,
+    type NodeHealthFlag,
+    type NodeReport,
+    type NodeDataPayload,
 } from './lib/node-client';
 
 import { FleetSidebar, type TabId, type NodeHealthStatus, type AlertCounts } from './components/layout/FleetSidebar';
@@ -44,8 +52,18 @@ import { GatewayModule } from './components/modules/GatewayModule';
 import { MembersModule } from './components/modules/MembersModule';
 import { TopologyModule } from './components/modules/TopologyModule';
 import { InvitesModule } from './components/modules/InvitesModule';
-import { LogsModule } from './components/modules/LogsModule';
+import { LogsModule, type LogEntry } from './components/modules/LogsModule';
 import { AiServicesModule } from './components/modules/AiServicesModule';
+
+import { IS_FLEET_MODE } from './lib/mode';
+import { AdminLoginCard } from './components/auth/AdminLoginCard';
+import { HomeScreen } from './components/modules/HomeScreen';
+import { PeopleSafetySection } from './components/modules/PeopleSafetySection';
+import { EconomySection } from './components/modules/EconomySection';
+import { BulletinSection } from './components/modules/BulletinSection';
+import { ApplianceSection } from './components/modules/ApplianceSection';
+import { ColdStartWizard } from './components/modules/ColdStartWizard';
+import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -84,7 +102,7 @@ function credentialDigest(password?: string): string {
     return `${password.length}:${(h >>> 0).toString(36)}`;
 }
 
-export function App() {
+export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}) {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => {
         const savedId = loadActiveProfileId();
@@ -96,20 +114,134 @@ export function App() {
     });
     const [activeTab, setActiveTab] = useState<TabId>(() => {
         try {
-            return (localStorage.getItem('bp_fleet_active_tab') as TabId) || 'overview';
+            const saved = (localStorage.getItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab') as TabId);
+            if (saved) return saved;
+        } catch {}
+        return isFleetMode ? 'overview' : 'home';
+    });
+    const [navSubTab, setNavSubTab] = useState<string | undefined>(undefined);
+
+    const [adminToken, setAdminToken] = useState<string | null>(() => {
+        try {
+            return sessionStorage.getItem('bp-admin-token');
         } catch {
-            return 'overview';
+            return null;
         }
     });
 
-    const activeNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+    const singleNodeOrigin = typeof window !== 'undefined' && window.location
+        ? normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin)
+        : 'http://localhost';
+
+    const rawActiveNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
+
+    const activeNode: NodeProfile = !isFleetMode
+        ? {
+            id: 'local-node',
+            name: rawActiveNode?.name || 'Local Sovereign Node',
+            url: singleNodeOrigin,
+            adminPassword: adminToken || rawActiveNode?.adminPassword || undefined,
+            isPrimary: true,
+        }
+        : rawActiveNode;
+
+    if (!isFleetMode && activeNode && adminToken) {
+        activeNode.adminPassword = adminToken;
+        if (profiles[0] && profiles[0].id === 'local-node' && !profiles[0].adminPassword) {
+            profiles[0].adminPassword = adminToken;
+        }
+    }
+
+    const [auditState, setAuditState] = useState<{
+        running: boolean;
+        result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null;
+    }>({ running: false, result: null });
+
+    const handleRunLedgerAudit = async () => {
+        if (!activeNode) return;
+        setAuditState((prev) => ({ ...prev, running: true }));
+        try {
+            const pwd = activeNode.adminPassword || adminToken || undefined;
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/ledger-audit');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: buildAdminHeaders(pwd, getTfaSessionToken(activeNode.id)),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setAuditState({
+                    running: false,
+                    result: {
+                        ok: data.ok,
+                        drift: data.drift ?? 0,
+                        sumBalances: data.sumBalances,
+                        baseline: data.baseline,
+                        strandedEscrows: data.strandedEscrows,
+                    },
+                });
+            } else {
+                setAuditState((prev) => ({ ...prev, running: false }));
+                alert(data.error || 'Ledger audit failed');
+            }
+        } catch (e: unknown) {
+            setAuditState((prev) => ({ ...prev, running: false }));
+            alert(e instanceof Error ? e.message : 'Ledger audit failed');
+        }
+    };
+
+    const handleDownloadBackup = async () => {
+        if (!activeNode) return;
+        try {
+            const pwd = activeNode.adminPassword || adminToken || undefined;
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup');
+            const headers = buildAdminHeaders(pwd, getTfaSessionToken(activeNode.id));
+            headers['Content-Type'] = 'application/json';
+            const res = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ password: pwd }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+            const blob = await res.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const disposition = res.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="(.+?)"/);
+            a.download = match ? match[1] : `beanpool-backup-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.tar.gz`;
+            a.href = downloadUrl;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(downloadUrl);
+        } catch (e: unknown) {
+            alert('Failed to download backup: ' + (e instanceof Error ? e.message : String(e)));
+        }
+    };
+
+    const handleLogout = () => {
+        try {
+            sessionStorage.removeItem('bp-admin-token');
+            sessionStorage.removeItem('bp-2fa-session');
+            sessionStorage.removeItem('bp_tfa_session_local-node');
+        } catch {}
+        if (!isFleetMode && activeNode) {
+            delete activeNode.adminPassword;
+        }
+        if (!isFleetMode && profiles[0] && profiles[0].id === 'local-node') {
+            delete profiles[0].adminPassword;
+        }
+        setAdminToken(null);
+    };
 
     const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
     const [diagError, setDiagError] = useState<string | null>(null);
 
     const [fleetDiags, setFleetDiags] = useState<Record<string, NodeDiagnosticState>>({});
-    const [fleetNodeData, setFleetNodeData] = useState<Record<string, any>>({});
+    const [fleetNodeData, setFleetNodeData] = useState<Record<string, NodeDataPayload>>({});
     const [fleetGateways, setFleetGateways] = useState<Record<string, GatewayConfig>>({});
 
     const [gateway, setGateway] = useState<GatewayConfig | null>(null);
@@ -117,12 +249,48 @@ export function App() {
     const [gatewaySuccess, setGatewaySuccess] = useState<string | null>(null);
     const [gatewaySaving, setGatewaySaving] = useState(false);
 
-    const [nodeData, setNodeData] = useState<any | null>(null);
+    const [nodeData, setNodeData] = useState<NodeDataPayload | null>(null);
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
-    const [nodeLogs, setNodeLogs] = useState<any[]>([]);
+    const [nodeLogs, setNodeLogs] = useState<LogEntry[]>([]);
+
+    const [publicCommunityName, setPublicCommunityName] = useState<string | null>(null);
+
+    // In single-node mode, load public community info for immediate branding even before admin login
+    useEffect(() => {
+        if (!isFleetMode) {
+            const url = resolveNodeApiUrl(singleNodeOrigin, '/api/local/community-info');
+            fetch(url)
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => {
+                    if (d?.communityName) {
+                        setPublicCommunityName(d.communityName);
+                    }
+                })
+                .catch(() => {});
+        }
+    }, [isFleetMode, singleNodeOrigin]);
+
+    const effectiveCommunityName = diag?.communityName || publicCommunityName || '';
+
+    // Document title and branding
+    useEffect(() => {
+        if (isFleetMode) {
+            if (typeof document !== 'undefined') {
+                document.title = 'BeanPool Fleet Manager — Control Plane';
+            }
+        } else {
+            const title = effectiveCommunityName
+                ? `${effectiveCommunityName} — Node Settings`
+                : 'BeanPool — Node Settings';
+            if (typeof document !== 'undefined') {
+                document.title = title;
+            }
+        }
+    }, [isFleetMode, effectiveCommunityName]);
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingNode, setEditingNode] = useState<NodeProfile | null>(null);
+    const [showColdStart, setShowColdStart] = useState<boolean | null>(null);
 
     // 2FA / TOTP prompt state — when a node returns totpRequired, this modal pops up
     const [totpPromptNode, setTotpPromptNode] = useState<{ profileId: string; name: string; url: string } | null>(null);
@@ -181,8 +349,8 @@ export function App() {
             } else {
                 setTotpError('Server did not issue a session token');
             }
-        } catch (e: any) {
-            setTotpError(e.message || 'Verification failed');
+        } catch (e: unknown) {
+            setTotpError(e instanceof Error ? e.message : 'Verification failed');
         }
     };
 
@@ -240,14 +408,14 @@ export function App() {
                 } catch {}
 
                 const flags = (nData?.health?.flags || []).filter(
-                    (f: any) => !savedDismissed.has(f.id || f.type || f.description)
+                    (f: NodeHealthFlag) => !savedDismissed.has(f.id || f.type || f.description || '')
                 );
                 const reports = (nData?.reports || []).filter(
-                    (r: any) => !savedDismissed.has(r.id || r.targetPubkey || r.reason)
+                    (r: NodeReport) => !savedDismissed.has(r.id || r.targetPubkey || r.reason || '')
                 );
 
-                const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-                const hasWarning = flags.some((f: any) => f.severity === 'warning');
+                const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+                const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
 
                 const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
                 setNodeHealthMap((prev) => ({ ...prev, [p.id]: status }));
@@ -283,9 +451,9 @@ export function App() {
 
     useEffect(() => {
         try {
-            localStorage.setItem('bp_fleet_active_tab', activeTab);
+            localStorage.setItem(isFleetMode ? 'bp_fleet_active_tab' : 'bp_settings_active_tab', activeTab);
         } catch {}
-    }, [activeTab]);
+    }, [activeTab, isFleetMode]);
 
     // Accumulate telemetry history when fleetDiags updates
     useEffect(() => {
@@ -388,7 +556,7 @@ export function App() {
                 let totpRetry = false;
                 let sessionToken: string | undefined;
                 if (diagRes.status === 401) {
-                    let body: any = null;
+                    let body: Record<string, unknown> | null = null;
                     try { body = await diagRes.json(); } catch {}
                     if (body?.totpRequired) {
                         // Node requires 2FA and we don't have a valid session token.
@@ -427,8 +595,8 @@ export function App() {
                 }
                 const data = await diagRes.json();
                 diagSuccess(p, data);
-            } catch (e: any) {
-                const errMsg = e.message || 'Failed to connect';
+            } catch (e: unknown) {
+                const errMsg = e instanceof Error ? e.message : 'Failed to connect';
                 if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
                     const authFailed = isAuthFailure(errMsg) || errMsg === '2FA_CANCELLED';
                     if (authFailed && errMsg !== '2FA_CANCELLED') {
@@ -463,8 +631,8 @@ export function App() {
                 ...prev,
                 [activeNode.id]: { diag: data, loading: false, error: null },
             }));
-        } catch (e: any) {
-            const errMsg = e.message || 'Failed to connect to node';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : 'Failed to connect to node';
             if (!errMsg.includes('429')) {
                 setDiagError(errMsg);
             }
@@ -480,8 +648,8 @@ export function App() {
         try {
             const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setGateway(data);
-        } catch (e: any) {
-            const errMsg = e.message || '';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : '';
             // Only set gateway to null on explicit auth error, NOT on 429 rate limiting
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
                 setGateway(null);
@@ -502,13 +670,13 @@ export function App() {
 
             const flags = data?.health?.flags || [];
             const reports = data?.reports || [];
-            const hasAlert = flags.some((f: any) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-            const hasWarning = flags.some((f: any) => f.severity === 'warning');
+            const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
+            const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
 
             const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
             setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
-        } catch (e: any) {
-            const errMsg = e.message || '';
+        } catch (e: unknown) {
+            const errMsg = e instanceof Error ? e.message : String(e);
             if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Unauthorized')) {
                 setNodeData(null);
             }
@@ -526,7 +694,7 @@ export function App() {
             // yields undefined and silently empties the panel.
             const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setNodeLogs(logs);
-        } catch (e: any) {
+        } catch (e: unknown) {
             // Keep existing logs on error
         }
     };
@@ -581,8 +749,8 @@ export function App() {
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
             setTimeout(() => setGatewaySuccess(null), 3000);
-        } catch (e: any) {
-            alert('Failed to update gateway: ' + e.message);
+        } catch (e: unknown) {
+            alert('Failed to update gateway: ' + (e instanceof Error ? e.message : String(e)));
         } finally {
             setGatewaySaving(false);
         }
@@ -657,16 +825,16 @@ export function App() {
     // Node-scoped alerts for active selected node
     const activeNodeData = activeProfileId ? fleetNodeData[activeProfileId] : null;
     const activeMemberCritical = activeNodeData ? (
-        ((activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && (f.severity === 'critical' || f.severity === 'alert')).length) +
-        ((activeNodeData.reports || []).filter((r: any) => !globalDismissed.has(r.id || r.targetPubkey || r.reason)).length)
+        ((activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && (f.severity === 'critical' || f.severity === 'alert')).length) +
+        ((activeNodeData.reports || []).filter((r: NodeReport) => !globalDismissed.has(r.id || r.targetPubkey || r.reason || '')).length)
     ) : 0;
 
     const activeMemberWarning = activeNodeData ? (
-        (activeNodeData.health?.flags || []).filter((f: any) => !globalDismissed.has(f.id || f.type || f.description) && f.severity === 'warning').length
+        (activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && f.severity === 'warning').length
     ) : 0;
 
-    const logErrorsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'ERROR').length;
-    const logWarningsCount = nodeLogs.filter((l: any) => (l.level || '').toUpperCase() === 'WARN' || (l.level || '').toUpperCase() === 'WARNING').length;
+    const logErrorsCount = nodeLogs.filter((l: LogEntry) => String(l.level || '').toUpperCase() === 'ERROR').length;
+    const logWarningsCount = nodeLogs.filter((l: LogEntry) => String(l.level || '').toUpperCase() === 'WARN' || String(l.level || '').toUpperCase() === 'WARNING').length;
 
     const activeGatewayData = activeProfileId ? fleetGateways[activeProfileId] || gateway : gateway;
     const activeGatewayCritical = activeGatewayData?.rateLimiting?.enabled === false ? 1 : 0;
@@ -706,6 +874,24 @@ export function App() {
         ai: { critical: 0, warning: 0 },
     };
 
+    if (!isFleetMode && !adminToken) {
+        return (
+            <AdminLoginCard
+                nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
+                onAuthenticated={(pwd, sessionToken) => {
+                    setAdminToken(pwd);
+                    if (activeNode) {
+                        activeNode.adminPassword = pwd;
+                    }
+                    if (sessionToken) {
+                        setTfaSessionToken(activeNode?.id || 'local-node', sessionToken);
+                    }
+                    setRefreshToken((n) => n + 1);
+                }}
+            />
+        );
+    }
+
     return (
         <div className="min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased">
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
@@ -718,15 +904,21 @@ export function App() {
                 onRemoveNode={handleRemoveNode}
                 onReorderNodes={handleReorderNodes}
                 activeTab={activeTab}
-                onSelectTab={(tab) => setActiveTab(tab)}
+                onSelectTab={(tab) => {
+                    setNavSubTab(undefined);
+                    setActiveTab(tab);
+                }}
                 nodeHealthMap={nodeHealthMap}
                 tabAlertCounts={tabAlertCounts}
+                isFleetMode={isFleetMode}
+                communityName={effectiveCommunityName}
+                onLogout={handleLogout}
             />
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 min-h-screen">
                 {/* Active Target Banner for Control Subsystems */}
-                {activeTab !== 'overview' && activeTab !== 'analytics' && (
+                {isFleetMode && activeTab !== 'overview' && activeTab !== 'analytics' && (
                     <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2 font-mono">
                             <span className="text-nature-400">Target Control Node:</span>
@@ -745,138 +937,334 @@ export function App() {
 
                 {/* Workspace Body */}
                 <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
-                    {activeTab === 'overview' && (
-                        <TelemetryModule
-                            profiles={profiles}
-                            activeProfileId={activeProfileId}
-                            fleetDiags={fleetDiags}
-                            fleetNodeData={fleetNodeData}
-                            onSelectNode={(id: string) => setActiveProfileId(id)}
-                            onInspectNodeThreats={(id: string) => {
-                                setActiveProfileId(id);
-                                setActiveTab('members');
-                            }}
-                            onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                            onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
-                            onSelectTab={(tab) => setActiveTab(tab)}
-                        />
-                    )}
+                    {!isFleetMode ? (
+                        <>
+                            {activeTab === 'home' && (() => {
+                                const isZeroMembers = Array.isArray(nodeData?.members) && nodeData.members.length === 0;
+                                const hasCompletedColdStart = typeof window !== 'undefined'
+                                    ? localStorage.getItem('bp_cold_start_completed') === 'true'
+                                    : false;
+                                const shouldShowColdStart = showColdStart === true ||
+                                    (showColdStart === null && isZeroMembers && !hasCompletedColdStart && !nodeDataLoading);
 
-                    {activeTab === 'analytics' && (
-                        <AnalyticsModule
-                            profiles={profiles}
-                            activeProfileId={activeProfileId}
-                            fleetDiags={fleetDiags}
-                            historyMap={historyMap}
-                            onSelectNode={(id: string) => setActiveProfileId(id)}
-                            onEditNode={(node: NodeProfile) => setEditingNode(node)}
-                            onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
-                        />
-                    )}
-
-                    {activeTab === 'gateway' && (
-                        <GatewayModule
-                            gateway={gateway}
-                            gatewayLoading={gatewayLoading}
-                            gatewaySuccess={gatewaySuccess}
-                            gatewaySaving={gatewaySaving}
-                            activeWsConnections={diag?.activeWsConnections || 3}
-                            onChangeGateway={(updated) => setGateway(updated)}
-                            onSaveGateway={handleSaveGateway}
-                            onAuthenticate={(pwd) => {
-                                if (activeNode) {
-                                    handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
+                                if (shouldShowColdStart) {
+                                    return (
+                                        <SectionErrorBoundary sectionName="Cold-Start Wizard" resetKey={activeNode?.id}>
+                                            <ColdStartWizard
+                                                activeNode={activeNode}
+                                                diag={diag}
+                                                nodeData={nodeData}
+                                                tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                                onComplete={() => {
+                                                    setShowColdStart(false);
+                                                    loadNodeData();
+                                                    loadDiagnostics();
+                                                    setActiveTab('home');
+                                                }}
+                                                onCancel={() => setShowColdStart(false)}
+                                            />
+                                        </SectionErrorBoundary>
+                                    );
                                 }
-                            }}
-                        />
-                    )}
+                                return (
+                                    <SectionErrorBoundary sectionName="Home" resetKey={activeNode?.id}>
+                                        <HomeScreen
+                                            communityName={diag?.communityName || activeNode?.name || 'Local Sovereign Node'}
+                                            publicDomain={activeNode?.url?.replace(/^https?:\/\//, '') || 'localhost'}
+                                            version="1.4.2"
+                                            diag={diag}
+                                            nodeData={nodeData}
+                                            onNavigate={(tab, sub) => {
+                                                setNavSubTab(sub);
+                                                setActiveTab(tab);
+                                            }}
+                                            onInviteMember={() => {
+                                                setNavSubTab('invites');
+                                                setActiveTab('people');
+                                            }}
+                                            onCreateEnterprise={() => {
+                                                setNavSubTab('enterprises');
+                                                setActiveTab('economy');
+                                            }}
+                                            onDownloadBackup={handleDownloadBackup}
+                                            onRunLedgerAudit={handleRunLedgerAudit}
+                                            auditState={auditState}
+                                            onStartColdStartWizard={() => setShowColdStart(true)}
+                                            onAcknowledgeShutdown={async () => {
+                                                if (activeNode) {
+                                                    await acknowledgeShutdownStatus(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
+                                                    await refreshFleetDiagnostics({ manual: true });
+                                                }
+                                            }}
+                                        />
+                                    </SectionErrorBoundary>
+                                );
+                            })()}
 
-                    {activeTab === 'members' && (
-                        <MembersModule
-                            nodeData={nodeData}
-                            nodeDataLoading={nodeDataLoading}
-                            activeNodeUrl={activeNode?.url}
-                            adminPassword={activeNode?.adminPassword}
-                            onRefresh={() => loadNodeData()}
-                            onFreezeUser={async (pubkey, freeze) => {
-                                if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
-                                    await fetch(url, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify({ freeze, password: activeNode.adminPassword }),
-                                    });
-                                }
-                            }}
-                            onPruneUser={async (pubkey) => {
-                                if (activeNode) {
-                                    const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
-                                    const url = resolveNodeApiUrl(activeNode.url, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
-                                    await fetch(url, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify({ password: activeNode.adminPassword }),
-                                    });
-                                }
-                            }}
-                            onUpdateTier={async (pubkey, tier) => {
-                                if (activeNode) {
-                                    await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword);
-                                }
-                            }}
-                            onToggleVoucher={async (pubkey, canVouch) => {
-                                if (activeNode) {
-                                    await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword);
-                                }
-                            }}
-                            onToggleOperator={async (pubkey, granted) => {
-                                if (activeNode) {
-                                    await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword);
-                                }
-                            }}
-                        />
-                    )}
+                            {activeTab === 'people' && (
+                                <SectionErrorBoundary sectionName="People & Safety" resetKey={activeNode?.id}>
+                                    <PeopleSafetySection
+                                        activeNode={activeNode}
+                                        nodeData={nodeData}
+                                        nodeDataLoading={nodeDataLoading}
+                                        onRefresh={() => loadNodeData()}
+                                        onFreezeUser={async (pubkey, freeze) => {
+                                            if (activeNode) {
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneUser={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneBranch={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onUpdateTier={async (pubkey, tier) => {
+                                            if (activeNode) {
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleVoucher={async (pubkey, canVouch) => {
+                                            if (activeNode) {
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleOperator={async (pubkey, granted) => {
+                                            if (activeNode) {
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onGrantNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onRevokeNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        initialSubTab={(navSubTab as any) || 'directory'}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
-                    {activeTab === 'topology' && (
-                        <TopologyModule
-                            activeNode={activeNode}
-                            diag={diag}
-                            profiles={profiles}
-                            onRefresh={() => loadDiagnostics()}
-                        />
-                    )}
+                            {activeTab === 'economy' && (
+                                <SectionErrorBoundary sectionName="Shared Projects & Economy" resetKey={activeNode?.id}>
+                                    <EconomySection
+                                        activeNode={activeNode}
+                                        nodeData={nodeData}
+                                        tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        initialSubTab={(navSubTab as any) || 'enterprises'}
+                                        onRefresh={() => {
+                                            loadNodeData();
+                                            loadDiagnostics();
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
-                    {activeTab === 'invites' && <InvitesModule activeNode={activeNode} />}
+                            {activeTab === 'bulletin' && (
+                                <SectionErrorBoundary sectionName="Bulletin & News" resetKey={activeNode?.id}>
+                                    <BulletinSection
+                                        activeNode={activeNode}
+                                        onRefresh={() => loadNodeData()}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
-                    {activeTab === 'onboarding' && (
-                        <OnboardingModule
-                            profiles={profiles}
-                            activeProfileId={activeProfileId}
-                            onSelectNode={(id: string) => setActiveProfileId(id)}
-                        />
-                    )}
+                            {activeTab === 'appliance' && (
+                                <SectionErrorBoundary sectionName="Appliance & Data" resetKey={activeNode?.id}>
+                                    <ApplianceSection
+                                        activeNode={activeNode}
+                                        diag={diag}
+                                        gateway={gateway}
+                                        gatewayLoading={gatewayLoading}
+                                        gatewaySuccess={gatewaySuccess}
+                                        gatewaySaving={gatewaySaving}
+                                        nodeLogs={nodeLogs}
+                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onSaveGateway={handleSaveGateway}
+                                        onRefreshDiag={() => loadDiagnostics()}
+                                        onRefreshLogs={() => loadLogs()}
+                                        onDownloadBackup={handleDownloadBackup}
+                                        onRunLedgerAudit={handleRunLedgerAudit}
+                                        auditState={auditState}
+                                        initialSubTab={(navSubTab as any) || 'diagnostics'}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+                        </>
+                    ) : (
+                        <>
+                            {activeTab === 'overview' && (
+                                <SectionErrorBoundary sectionName="Fleet Overview" resetKey={activeProfileId || activeNode?.id}>
+                                    <TelemetryModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        fleetDiags={fleetDiags}
+                                        fleetNodeData={fleetNodeData}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                        onInspectNodeThreats={(id: string) => {
+                                            setActiveProfileId(id);
+                                            setActiveTab('members');
+                                        }}
+                                        onEditNode={(node: NodeProfile) => setEditingNode(node)}
+                                        onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
+                                        onSelectTab={(tab) => setActiveTab(tab)}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
-                    {activeTab === 'logs' && (
-                        <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
-                    )}
+                            {activeTab === 'analytics' && (
+                                <SectionErrorBoundary sectionName="Fleet Analytics" resetKey={activeProfileId || activeNode?.id}>
+                                    <AnalyticsModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        fleetDiags={fleetDiags}
+                                        historyMap={historyMap}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                        onEditNode={(node: NodeProfile) => setEditingNode(node)}
+                                        onRefreshFleet={() => refreshFleetDiagnostics({ manual: true })}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
 
-                    {activeTab === 'ai' && (
-                        <AiServicesModule
-                            activeNode={activeNode}
-                            contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
-                        />
+                            {activeTab === 'gateway' && (
+                                <SectionErrorBoundary sectionName="Gateway Module" resetKey={activeProfileId || activeNode?.id}>
+                                    <GatewayModule
+                                        gateway={gateway}
+                                        gatewayLoading={gatewayLoading}
+                                        gatewaySuccess={gatewaySuccess}
+                                        gatewaySaving={gatewaySaving}
+                                        activeWsConnections={diag?.activeWsConnections || 3}
+                                        onChangeGateway={(updated) => setGateway(updated)}
+                                        onSaveGateway={handleSaveGateway}
+                                        onAuthenticate={(pwd) => {
+                                            if (activeNode) {
+                                                handleSaveNodeEdit(activeNode.id, { adminPassword: pwd });
+                                            }
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'members' && (
+                                <SectionErrorBoundary sectionName="Members & Access" resetKey={activeProfileId || activeNode?.id}>
+                                    <MembersModule
+                                        nodeData={nodeData}
+                                        nodeDataLoading={nodeDataLoading}
+                                        activeNodeUrl={activeNode?.url}
+                                        adminPassword={activeNode?.adminPassword}
+                                        tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        onRefresh={() => loadNodeData()}
+                                        onFreezeUser={async (pubkey, freeze) => {
+                                            if (activeNode) {
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneUser={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onPruneBranch={async (pubkey) => {
+                                            if (activeNode) {
+                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onUpdateTier={async (pubkey, tier) => {
+                                            if (activeNode) {
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleVoucher={async (pubkey, canVouch) => {
+                                            if (activeNode) {
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onToggleOperator={async (pubkey, granted) => {
+                                            if (activeNode) {
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                            }
+                                        }}
+                                        onGrantNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                        onRevokeNodeRole={async (pubkey, role) => {
+                                            if (activeNode) {
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await loadNodeData();
+                                            }
+                                        }}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'topology' && (
+                                <SectionErrorBoundary sectionName="Topology Module" resetKey={activeProfileId || activeNode?.id}>
+                                    <TopologyModule
+                                        activeNode={activeNode}
+                                        diag={diag}
+                                        profiles={profiles}
+                                        onRefresh={() => loadDiagnostics()}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'invites' && (
+                                <SectionErrorBoundary sectionName="Invites Module" resetKey={activeProfileId || activeNode?.id}>
+                                    <InvitesModule activeNode={activeNode} />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'onboarding' && (
+                                <SectionErrorBoundary sectionName="Onboarding Funnel" resetKey={activeProfileId || activeNode?.id}>
+                                    <OnboardingModule
+                                        profiles={profiles}
+                                        activeProfileId={activeProfileId}
+                                        onSelectNode={(id: string) => setActiveProfileId(id)}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'logs' && (
+                                <SectionErrorBoundary sectionName="Logs Module" resetKey={activeProfileId || activeNode?.id}>
+                                    <LogsModule logs={nodeLogs} onRefresh={() => loadLogs()} />
+                                </SectionErrorBoundary>
+                            )}
+
+                            {activeTab === 'ai' && (
+                                <SectionErrorBoundary sectionName="AI Services" resetKey={activeProfileId || activeNode?.id}>
+                                    <AiServicesModule
+                                        activeNode={activeNode}
+                                        contextData={{ telemetry: diag, gateway, members: nodeData?.members, logs: nodeLogs }}
+                                    />
+                                </SectionErrorBoundary>
+                            )}
+                        </>
                     )}
                 </main>
             </div>
 
             {/* Add Node Modal */}
-            {showAddModal && (
+            {isFleetMode && showAddModal && (
                 <AddNodeModal onClose={() => setShowAddModal(false)} onAdd={handleAddNode} />
             )}
 
             {/* Edit / Configure Node Modal */}
-            {editingNode && (
+            {isFleetMode && editingNode && (
                 <EditNodeModal
                     node={editingNode}
                     onClose={() => setEditingNode(null)}

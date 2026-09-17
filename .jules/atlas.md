@@ -36,6 +36,10 @@ Atlas's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native
 - Stack uses Tailwind for styling — no CSS modules
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — TelemetryModule component unit tests LANDED in #676.
+Added 6 unit tests covering metric calculations, UI interactions, and tab switching in `apps/manager/src/components/modules/TelemetryModule.test.tsx`. (Manager test block was lifted by commit `464c600` / PR #419 wiring `"test": "vitest run"` into `apps/manager/package.json`). Do not re-file.
+Before filing component unit test PRs in `apps/manager`, ensure tests assert both computation logic and UI DOM updates, and verify test runner passes via `pnpm --filter manager test`.
+
 ### 2026-08-25 — Manager tests are BLOCKED. Stop adding them until this is fixed.
 `apps/manager/package.json` has **no `"test"` script**, so `turbo run test` skips the package
 entirely and nothing under `apps/manager/src/**/*.test.ts` has ever run in CI — including the
@@ -81,3 +85,23 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `EditNodeModal` component in `apps/manager/src/components/nodes/EditNodeModal.tsx` was untested.
 **Learning:** Mocking `fetchDiagnostics` from `../../lib/node-client` allows testing connection state responses (success/failure feedback UI) in component tests.
 **Action:** Identify remaining untested modal and panel components in `apps/manager/src/components/`.
+
+## 2026-08-28 - [manager tests] MemberDetailModal component unit tests
+**Gap:** `MemberDetailModal` component in `apps/manager/src/components/modules/MemberDetailModal.tsx` was untested.
+**Learning:** Testing `MemberDetailModal` required verifying rendered profile/platform metadata, trust score calculations, security flag alerts, freeze/unfreeze toggles, vouch promotion/demotion, operator grants, and prune modal confirmation workflows.
+**Action:** Identify remaining modal/module components in `apps/manager/src/components/modules/` for unit test coverage.
+
+## 2026-08-29 - [manager tests] ThreatReviewModal component unit tests
+**Gap:** `ThreatReviewModal` component in `apps/manager/src/components/modules/ThreatReviewModal.tsx` was untested.
+**Learning:** Testing `ThreatReviewModal` required wrapping async timer-based action dismissals and clipboard interactions in `act()` to handle React state updates cleanly.
+**Action:** Continue expanding test coverage for modal and module components in `apps/manager/src/components/modules/`.
+
+## 2026-08-30 - [manager tests] TelemetryModule component unit tests
+**Gap:** `TelemetryModule` component in `apps/manager/src/components/modules/TelemetryModule.tsx` was untested.
+**Learning:** Testing `TelemetryModule` required mocking `NodeProfile` objects and `DiagnosticsResponse` state objects (including `callsign`) to verify calculations for total users, database storage size in MB, active WebSocket/P2P streams, view mode toggles, and callback triggers.
+**Action:** Identify remaining untested module components in `apps/manager/src/components/modules/` for unit test coverage.
+
+## 2026-09-10 - [manager tests] OnboardingModule component unit tests
+**Gap:** `OnboardingModule` component in `apps/manager/src/components/modules/OnboardingModule.tsx` was untested.
+**Learning:** Testing `OnboardingModule` required mocking `fetchOnboardingFunnel` to verify initial loading, error states, funnel step rendering with percentages/notes, day window toggles (7/30/90 days), and node selection callbacks.
+**Action:** Check remaining module components in `apps/manager/src/components/modules/` for unit test coverage gaps.

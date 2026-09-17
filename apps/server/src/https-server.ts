@@ -41,6 +41,8 @@ import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
 import { WebSocketServer } from 'ws';
+import type { IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
@@ -62,10 +64,10 @@ import {
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
     submitReport, getReports, dismissReport, actionReport, getReportCount,
-    getFriends, addFriend, removeFriend, setGuardian,
+    getFriends, addFriend, removeFriend,
     adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier, adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
-    getAdminPubkey, recordActivity,
+    recordActivity,
     markConversationRead, getUnreadCounts,
     createProject, updateProject, deleteProject, voteForProject, createVotingRound, closeVotingRound,
     getProjects, getAllProjects, getVotingRounds, getActiveRound, getCommonsBalance, getGovernanceCredits,
@@ -76,7 +78,7 @@ import {
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery
+    dispatchPushNotification
 } from './state-engine.js';
 import { getCrowdfundProjects, getCrowdfundProject, createCrowdfundProject, updateCrowdfundProject, pledgeToProject, deleteCrowdfundProject, db, getDbDataVersion } from './db/db.js';
 import { initDirectoryPublisher, pushDirectoryNow } from './services/directory-publisher.js';
@@ -86,11 +88,12 @@ import {
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from './services/snapshot-scheduler.js';
 
-const PUBLIC_DIR = path.resolve('public');
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const SERVER_ROOT = path.resolve(__dirname, '..');
+const PUBLIC_DIR = fs.existsSync(path.resolve('public')) ? path.resolve('public') : path.join(SERVER_ROOT, 'public');
 
 // Route modules
 import { createSettingsRoutes } from './routes/settings.js';
@@ -98,6 +101,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { createGroupRoutes } from './routes/groups.js';
 import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
 import { createFederationCommissionRoutes } from './routes/federation-commission.js';
 import { createMessagingRoutes } from './routes/messaging.js';
@@ -108,13 +112,13 @@ import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
-import { createPinRoutes } from './routes/pin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
+import { createAvatarRoutes } from './routes/avatar.js';
 import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
@@ -238,6 +242,11 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/commons/rounds',           // community transparency
     '/api/crowdfund/projects',       // public crowdfund list
     '/api/treasuries',               // community transparency: list of treasuries
+    '/api/enterprises',              // community transparency: list of enterprises
+    '/api/enterprises/map',          // map pins: enterprises with a location
+    '/api/map/enterprises',          // map pins: alias
+    '/api/treasuries/map',           // map pins: alias
+    '/api/commons/decisions',        // governance transparency: list of decisions
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
     '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
@@ -259,18 +268,14 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up guardians by callsign
-    /^\/api\/recovery\/status\/[^/]+$/,                     // pre-membership: recovering user polls status
-    // Keyholder restore screen (D8): a user on a new phone has no identity to sign with, and the
-    // screen cannot be drawn without knowing which keepers exist. Types and counts only, never
-    // identities, and rate-limited in the handler — it is a membership oracle by necessity, which
-    // ONBOARDING Part 9 accepts and records rather than pretends away.
-    /^\/api\/recovery\/keepers\/[^/]+$/,
-    // A2-16: /api/recovery/pending/:guardian is deliberately NOT public — it lists a
-    // guardian's wards' recovery requests. It is gated under ENFORCE_READ_AUTH and the
-    // route additionally requires the verified signer to BE that guardian.
+    /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
+    /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
+    /^\/api\/commons\/my-credits\/[^/]+$/,                  // governance: voice credits public read
+    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
+    /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
+    /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
 ];
 
 function isPublicRead(path: string): boolean {
@@ -364,6 +369,8 @@ function broadcastWsAnalytics() {
     }
 }
 
+const PONG_PAYLOAD = JSON.stringify({ type: 'pong' });
+
 function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http').IncomingMessage) {
     const id = 'ws_' + crypto.randomBytes(8).toString('hex');
     const ip = getIpAddress(req);
@@ -456,6 +463,29 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
                     try { client.send(trafficPayload); } catch {}
                 }
             }
+
+            // Reply to opt-in application-level ping on the sync WebSocket.
+            // Tiny & fast: skips JSON parsing unless an opt-in key is present in dataStr.
+            // Old clients send {"type":"ping"} and receive no reply, preventing
+            // unexpected doorbell-driven sync loops on un-upgraded clients.
+            // One opt-in key, and the cheap substring check is for that key only. Prefiltering on
+            // a bare 'pong' matched any message that merely CONTAINED the word and forced a
+            // JSON.parse of it — on a 1-CPU node shared with four other containers, per client,
+            // per message. Accepting a second alias bought nothing but another way to be wrong.
+            // Length-bounded before the substring scan, let alone the parse. Without it a
+            // client could stream multi-megabyte frames containing "wantPong" and force a
+            // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
+            // four other nodes. A legitimate opt-in ping is well under 256 bytes.
+            if (type === 'sync' && dataStr.length < 256 && dataStr.includes('wantPong')) {
+                try {
+                    const msg = JSON.parse(dataStr);
+                    if (msg && msg.type === 'ping' && msg.wantPong === true) {
+                        if (ws.readyState === 1) { // OPEN
+                            try { ws.send(PONG_PAYLOAD); } catch {}
+                        }
+                    }
+                } catch { /* ignore malformed messages */ }
+            }
         }
     });
 
@@ -486,10 +516,128 @@ function untrackConnection(ws: any) {
     }
 }
 
+/**
+ * The methods that carry a request body and change state. The body parser, the signature requirement and
+ * activity recording all key off this one list. They used to spell out POST/PUT/DELETE separately and all
+ * three left out PATCH, so the group member-role and group-update routes (both PATCH) never received their
+ * body, and every correctly signed PATCH failed signature verification against an empty body.
+ */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * @koa/router matches routes ignoring letter case, but every path-based security decision in this file
+ * (signature enforcement, its bypass list, the public-read allowlist, the admin IP allowlist, feature
+ * toggles) compares the path as sent. Those two views must never disagree about what a request is, so a
+ * path that is canonical only once case is ignored is refused before any of them run:
+ *   - the `/api` or `/ws` prefix itself is not lowercase; or
+ *   - the path reaches a route only by ignoring case.
+ * Route PARAMETERS keep their case — a mixed-case callsign or id still matches, because only the literal
+ * part of a route differs between the two regexps.
+ */
+const caseSensitiveRouteRegexps = new WeakMap<Router.Layer, RegExp>();
+function isNonCanonicalPath(router: Router, requestPath: string): boolean {
+    const lower = requestPath.toLowerCase();
+    if (lower === requestPath) return false;
+    for (const prefix of ['/api', '/ws']) {
+        if ((lower === prefix || lower.startsWith(prefix + '/')) && !requestPath.startsWith(prefix)) return true;
+    }
+    for (const layer of router.stack) {
+        if (layer.methods.length === 0 || !layer.match(requestPath)) continue;
+        let exact = caseSensitiveRouteRegexps.get(layer);
+        if (!exact) {
+            exact = new RegExp(layer.regexp.source, layer.regexp.flags.replace('i', ''));
+            caseSensitiveRouteRegexps.set(layer, exact);
+        }
+        if (!exact.test(requestPath)) return true;
+    }
+    return false;
+}
+
+// Both listeners take upgrades: the HTTPS server for direct and LAN clients, and the plain HTTP
+// server because the Cloudflare tunnel's origin is http://beanpool-node:8080. Before this was shared,
+// upgrades on 8080 fell through to Koa and got a 404, so tunnel-mode nodes had no live updates.
+// One handler and one WebSocketServer pair means /ws and /ws/logs get the same auth, client
+// tracking and heartbeat whichever port the socket arrived on.
+export type UpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
+
+function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
+    return async (req, socket, head) => {
+        const reqUrl = req.url || '';
+        const parsedUrl = new URL(reqUrl, 'https://localhost');
+        const pathname = parsedUrl.pathname;
+
+        if (pathname === '/ws') {
+            // SRV-4: require a member-signed connect token when enforcement is on.
+            if (ENFORCE_WS_AUTH && !verifyWsConnect(pathname, parsedUrl.searchParams)) {
+                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+            wss.handleUpgrade(req, socket, head, (ws: any) => {
+                ws.isAlive = true;
+                ws.on('pong', () => { ws.isAlive = true; });
+                // A2-20: tag the socket with its authenticated member (present only
+                // under ENFORCE_WS_AUTH, where verifyWsConnect validated this pubkey's
+                // signature) so broadcast() can scope sensitive events to the parties.
+                ws._memberPubkey = ENFORCE_WS_AUTH ? (parsedUrl.searchParams.get('pubkey') || null) : null;
+
+                addWsClient(ws);
+                trackConnection(ws, 'sync', req);
+                ws.on('close', () => {
+                    removeWsClient(ws);
+                    untrackConnection(ws);
+                });
+                ws.on('error', () => {
+                    removeWsClient(ws);
+                    untrackConnection(ws);
+                });
+            });
+        } else if (pathname === '/ws/logs') {
+            const auth = parsedUrl.searchParams.get('auth');
+            const ticket = parsedUrl.searchParams.get('ticket');
+            const config = getLocalConfig();
+            let authorized = false;
+
+            if (ticket && isValidWsTicket(ticket)) {
+                authorized = true;
+            } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
+                logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
+                authorized = true;
+            }
+
+            if (!authorized) {
+                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+            logsWss.handleUpgrade(req, socket, head, (ws: any) => {
+                ws.isAlive = true;
+                ws.on('pong', () => { ws.isAlive = true; });
+
+                addLogClient(ws);
+                trackConnection(ws, 'admin', req);
+                ws.on('close', () => {
+                    removeLogClient(ws);
+                    untrackConnection(ws);
+                });
+                ws.on('error', () => {
+                    removeLogClient(ws);
+                    untrackConnection(ws);
+                });
+            });
+        } else {
+            socket.destroy();
+        }
+    };
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
 export function getKoaApp(): Koa | null { return _koaApp; }
+// Same for WebSocket upgrades. Null until startHttpsServer runs (index.ts starts HTTP first).
+let _upgradeHandler: UpgradeHandler | null = null;
+export function getUpgradeHandler(): UpgradeHandler | null { return _upgradeHandler; }
 
 export async function startHttpsServer(port: number): Promise<void> {
     const app = new Koa();
@@ -502,12 +650,36 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Standard Modern Security Headers Middleware
     app.use(async (ctx, next) => {
+        // Global security headers applied to all responses (API and static):
+        // nosniff protects against stored-XSS MIME confusion (e.g. /api/avatar/:pubkey)
+        // HSTS enforces encrypted transport globally.
         ctx.set('X-Content-Type-Options', 'nosniff');
-        ctx.set('X-Frame-Options', 'DENY');
-        ctx.set('X-XSS-Protection', '1; mode=block');
-        // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
-        ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
         ctx.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+        // Document-only security headers (CSP, X-Frame-Options, X-XSS-Protection) are only
+        // evaluated by browsers during HTML document navigation or iframe embedding.
+        // They are omitted on API routes and WebSocket paths to eliminate protocol overhead (~450 bytes)
+        // on JSON fetch and 304 responses, while ensuring HTML documents and static assets retain them.
+        const lowerPath = ctx.path.toLowerCase();
+        const isApiOrWs = lowerPath === '/api' || lowerPath.startsWith('/api/') || lowerPath === '/ws' || lowerPath.startsWith('/ws/');
+        if (!isApiOrWs) {
+            ctx.set('X-Frame-Options', 'DENY');
+            ctx.set('X-XSS-Protection', '1; mode=block');
+            // #131: Removed connect-src wildcard; https: permits PWA→peer-node fetch calls, wss: permits encrypted WebSockets only
+            ctx.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'");
+        }
+        await next();
+    });
+
+    // Fail closed on a path that only matches once case is ignored — see isNonCanonicalPath. 404 rather
+    // than 401: nothing lives at that spelling, and a signature would not change that, so 401 would
+    // misdirect a client into signing a request that can never succeed.
+    app.use(async (ctx, next) => {
+        if (isNonCanonicalPath(router, ctx.path)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Not found' };
+            return;
+        }
         await next();
     });
 
@@ -516,7 +688,9 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        const clientIp = replicationClientIp(ctx);
+        // Derive real remote socket IP for security access control (strip IPv6-mapped IPv4 prefix)
+        const rawSocketIp = ctx.socket?.remoteAddress || ctx.ip || 'unknown';
+        const clientIp = rawSocketIp.replace(/^::ffff:/, '');
 
         // 1. Dynamic CORS Allowed Origins Handling (#131)
         const requestOrigin = ctx.get('Origin');
@@ -534,13 +708,13 @@ export async function startHttpsServer(port: number): Promise<void> {
                 ctx.set('Access-Control-Allow-Credentials', 'true');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
-                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (isWildcardAllowed) {
                 // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
                 ctx.set('Access-Control-Allow-Origin', '*');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
-                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+                ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             }
         }
 
@@ -549,12 +723,38 @@ export async function startHttpsServer(port: number): Promise<void> {
             return;
         }
 
-        // 2. Admin IP Allowlist Enforcement (/settings and /api/local/admin/*)
+        // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            if (ctx.path === '/settings' || ctx.path.startsWith('/api/local/admin/')) {
-                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => 
-                    clientIp === allowedIp || allowedIp === '*' || (allowedIp.endsWith('*') && clientIp.startsWith(allowedIp.slice(0, -1)))
-                );
+            const normalizedPath = path.posix.normalize(ctx.path.toLowerCase()).replace(/\/+$/, '') || '/';
+            if (
+                normalizedPath === '/settings' ||
+                normalizedPath.startsWith('/settings/') ||
+                normalizedPath === '/settings-legacy' ||
+                normalizedPath === '/settings.js' ||
+                normalizedPath === '/api/local/admin' ||
+                normalizedPath.startsWith('/api/local/admin/') ||
+                normalizedPath === '/api/admin' ||
+                normalizedPath.startsWith('/api/admin/') ||
+                normalizedPath === '/api/local/verify-password' ||
+                normalizedPath === '/api/local/dashboard' ||
+                normalizedPath === '/api/local/update-identity' ||
+                normalizedPath === '/api/local/change-password' ||
+                normalizedPath === '/api/local/reset' ||
+                normalizedPath === '/api/local/connectors' ||
+                normalizedPath.startsWith('/api/local/connectors/') ||
+                normalizedPath.startsWith('/api/local/federation/') ||
+                normalizedPath === '/api/manager' ||
+                normalizedPath.startsWith('/api/manager/') ||
+                normalizedPath === '/api/pricing-guide/admin' ||
+                normalizedPath.startsWith('/api/pricing-guide/admin/')
+            ) {
+                const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
+                    const norm = allowedIp.trim();
+                    if (clientIp === norm || norm === '*') return true;
+                    if ((norm === '127.0.0.1' || norm === 'localhost') && (clientIp === '127.0.0.1' || clientIp === '::1')) return true;
+                    if (norm.endsWith('*') && clientIp.startsWith(norm.slice(0, -1))) return true;
+                    return false;
+                });
                 if (!isAllowed) {
                     ctx.status = 403;
                     ctx.body = { error: 'Access denied by Gateway Admin IP allowlist' };
@@ -564,33 +764,36 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
 
         // 3. Subsystem Feature Toggles Interceptors
-        if (!gwConfig.features?.marketplace && ctx.path.startsWith('/api/marketplace')) {
+        // What a check PROTECTS is matched ignoring case; what it EXEMPTS is matched as sent, so a
+        // differently-cased spelling can only ever be treated more strictly.
+        const lowerPath = ctx.path.toLowerCase();
+        if (!gwConfig.features?.marketplace && lowerPath.startsWith('/api/marketplace')) {
             ctx.status = 503;
             ctx.body = { error: 'Marketplace feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.messaging && ctx.path.startsWith('/api/messaging')) {
+        if (!gwConfig.features?.messaging && lowerPath.startsWith('/api/messaging')) {
             ctx.status = 503;
             ctx.body = { error: 'Messaging feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.federation && ctx.path.startsWith('/api/federation')) {
+        if (!gwConfig.features?.federation && lowerPath.startsWith('/api/federation')) {
             ctx.status = 503;
             ctx.body = { error: 'Federation feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.invites && (ctx.path.startsWith('/api/invite') || ctx.path.startsWith('/api/community/invite'))) {
+        if (!gwConfig.features?.invites && (lowerPath.startsWith('/api/invite') || lowerPath.startsWith('/api/community/invite'))) {
             ctx.status = 503;
             ctx.body = { error: 'Invites feature is currently disabled by node gateway' };
             return;
         }
-        if (!gwConfig.features?.servePwa && (ctx.path === '/' || ctx.path.startsWith('/app') || ctx.path.endsWith('.html'))) {
+        if (!gwConfig.features?.servePwa && (ctx.path === '/' || lowerPath.startsWith('/app') || lowerPath.endsWith('.html'))) {
             // The invite trampoline (`/?invite=`) is plain HTML served by this
             // server (NOT the PWA), and invites must work even on headless nodes
             // — so exempt it. It renders native-app-only there (no web escape
             // hatch), since servePwa is off.
             const isInviteTrampoline = ctx.path === '/' && !!ctx.query.invite;
-            if (ctx.path !== '/settings' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
+            if (ctx.path !== '/settings' && !ctx.path.startsWith('/settings/') && ctx.path !== '/settings-legacy' && !ctx.path.startsWith('/api/') && !isInviteTrampoline) {
                 ctx.status = 530;
                 ctx.body = { error: 'Headless Mode: PWA hosting is disabled on this node gateway' };
                 return;
@@ -626,7 +829,8 @@ export async function startHttpsServer(port: number): Promise<void> {
     // Administrative In-Memory Rate Limiter Middleware
     const adminRateLimits = new Map<string, number[]>();
     app.use(async (ctx, next) => {
-        if (ctx.path.startsWith('/api/local/') || ctx.path.startsWith('/api/admin/')) {
+        const lowerPath = ctx.path.toLowerCase();
+        if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
@@ -676,20 +880,25 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {
-        if (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') {
+        if (MUTATING_METHODS.has(ctx.method)) {
             if (ctx.request.type === 'application/json' || ctx.get('content-type')?.includes('json')) {
                 // A2-10: reject an over-limit body up-front by Content-Length so a
                 // well-behaved client gets a clean 413 before we read a byte. The
                 // streaming cap in readBody is the backstop for chunked / lying-length
                 // requests.
+                // Some routes are far tighter than the global cap. Applying their limit
+                // here rather than in the handler is the difference between refusing a
+                // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
+                // one event loop first — which on a 1 vCPU node is most of the attack.
+                const routeLimit = routeBodyLimit(ctx.path.toLowerCase());
                 const declaredLen = Number(ctx.get('content-length'));
-                if (Number.isFinite(declaredLen) && declaredLen > MAX_JSON_BODY_BYTES) {
+                if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
                     ctx.body = { error: 'Request body too large' };
                     return;
                 }
                 try {
-                    const body = await readBody(ctx.req);
+                    const body = await readBody(ctx.req, routeLimit);
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
@@ -706,11 +915,6 @@ export async function startHttpsServer(port: number): Promise<void> {
                     // survived. test-request-body.ts asserts it over real HTTP instead — same
                     // reasoning as test-keeper-http.ts, and the same trap as #143.
                     (ctx.request as any).body = parsed;
-
-                    const sender = parsed.publicKey || parsed.authorPublicKey || parsed.buyerPublicKey || parsed.from || parsed.memberPublicKey || parsed.voterPublicKey;
-                    if (sender && typeof sender === 'string' && sender.length >= 32) {
-                        recordActivity(sender);
-                    }
                 } catch (e: any) {
                     // A2-10: an over-limit body is rejected outright (413) instead of
                     // silently continuing with an empty body — and we stop here so no
@@ -733,11 +937,16 @@ export async function startHttpsServer(port: number): Promise<void> {
 
     // Cryptographic Signature Verification Middleware
     async function requireSignature(ctx: Koa.Context, next: Koa.Next) {
-        const isMutatingApi = (ctx.method === 'POST' || ctx.method === 'PUT' || ctx.method === 'DELETE') && ctx.path.startsWith('/api/');
+        // Whether a request NEEDS a signature is decided ignoring case, matching how the router dispatches
+        // it. The exemptions below (bypass list, public reads) stay exact-match, so a differently-cased
+        // spelling can only ever be held to the stricter rule. isNonCanonicalPath refuses such spellings
+        // earlier; this keeps the middleware correct on its own.
+        const isApiPath = ctx.path.toLowerCase().startsWith('/api/');
+        const isMutatingApi = MUTATING_METHODS.has(ctx.method) && isApiPath;
         // SRV-2/SRV-4: gated reads require the same signature as writes when
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
         // unless it is on the public allowlist.
-        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && ctx.path.startsWith('/api/') && !isPublicRead(ctx.path);
+        const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && isApiPath && !isPublicRead(ctx.path);
         const isBypassed =
             ctx.path.startsWith('/api/local/') ||
             ctx.path.startsWith('/api/admin/') ||
@@ -750,17 +959,24 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.path === '/api/invite/redeem-offline' ||
             ctx.path === '/api/recovery/sso/github-exchange';
 
-        if ((!isMutatingApi && !isGatedRead) || isBypassed) {
+        if (isBypassed) {
             return await next();
         }
 
         const pubKeyHex = ctx.get('X-Public-Key');
         const signatureBase64 = ctx.get('X-Signature');
 
-        if (!pubKeyHex || !signatureBase64) {
-            ctx.status = 401;
-            ctx.body = { error: 'Missing cryptographic signature headers' };
-            return;
+        if (!isMutatingApi && !isGatedRead) {
+            // Optional read auth: if signature headers are provided, verify them to populate ctx.state.actor
+            if (!pubKeyHex || !signatureBase64) {
+                return await next();
+            }
+        } else {
+            if (!pubKeyHex || !signatureBase64) {
+                ctx.status = 401;
+                ctx.body = { error: 'Missing cryptographic signature headers' };
+                return;
+            }
         }
 
         // X-1 / X-1b: every signed request MUST use the replay-proof scheme —
@@ -852,7 +1068,8 @@ export async function startHttpsServer(port: number): Promise<void> {
                 const k = key.toLowerCase();
                 const isIdentityField = k.endsWith('pubkey') || k.endsWith('publickey') || k === 'from' || k === 'createdby';
                 const isOtherEntity = k.startsWith('target') || k.startsWith('old') || k.startsWith('to')
-                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller');
+                    || k.startsWith('invited') || k.startsWith('friend') || k.startsWith('seller')
+                    || k.startsWith('member');
                 
                 if (isIdentityField && !isOtherEntity && typeof value === 'string' && value !== pubKeyHex) {
                     // A2-13: don't name the field in the client-facing error — leaking
@@ -868,6 +1085,12 @@ export async function startHttpsServer(port: number): Promise<void> {
             ctx.status = 403;
             ctx.body = { error: 'Signature validation failed' };
             return;
+        }
+
+        // Activity (the lead-succession "gone quiet" signal) is recorded from the VERIFIED signer only, never
+        // from a body field — an unsigned request naming the lead must not stamp them active (PR #838 B2).
+        if (ctx.state.actor && MUTATING_METHODS.has(ctx.method)) {
+            try { recordActivity(ctx.state.actor); } catch (e: any) { console.warn('[Activity] could not record:', e?.message || e); }
         }
 
         await next();
@@ -907,6 +1130,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createMarketplaceRoutes(deps),
+        createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps),
         createFederationCommissionRoutes(deps),
         createMessagingRoutes(deps),
@@ -916,13 +1140,13 @@ export async function startHttpsServer(port: number): Promise<void> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createChannelRoutes(deps),
-        createPinRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
         createPulseRoutes(deps),
         createPulseSubmitRoutes(deps),
+        createAvatarRoutes(deps),
         // Temporary Apple `sub` parity probe. Registers nothing unless APPLE_PROBE=1
         // (the domain-association file aside) — see routes/apple-probe.ts.
         createAppleProbeRoutes(),
@@ -969,9 +1193,20 @@ export async function startHttpsServer(port: number): Promise<void> {
         gzip: true,
     }));
 
-    // SPA fallback — return index.html for /manager/* and /app/* routes
+    // SPA fallback — return index.html for /settings/*, /manager/* and /app/* routes
     app.use(async (ctx) => {
         if (ctx.method === 'GET') {
+            if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
+                const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
+                if (fs.existsSync(settingsIndexPath)) {
+                    ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    ctx.set('Pragma', 'no-cache');
+                    ctx.set('Expires', '0');
+                    ctx.type = 'html';
+                    ctx.body = fs.createReadStream(settingsIndexPath);
+                    return;
+                }
+            }
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
@@ -1005,78 +1240,12 @@ export async function startHttpsServer(port: number): Promise<void> {
     return new Promise((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
 
-        // WebSocket upgrade handler
+        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler)
         const wss = new WebSocketServer({ noServer: true });
         const logsWss = new WebSocketServer({ noServer: true });
-
-        server.on('upgrade', async (req, socket, head) => {
-            const reqUrl = req.url || '';
-            const parsedUrl = new URL(reqUrl, 'https://localhost');
-            const pathname = parsedUrl.pathname;
-
-            if (pathname === '/ws') {
-                // SRV-4: require a member-signed connect token when enforcement is on.
-                if (ENFORCE_WS_AUTH && !verifyWsConnect(pathname, parsedUrl.searchParams)) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-                wss.handleUpgrade(req, socket, head, (ws: any) => {
-                    ws.isAlive = true;
-                    ws.on('pong', () => { ws.isAlive = true; });
-                    // A2-20: tag the socket with its authenticated member (present only
-                    // under ENFORCE_WS_AUTH, where verifyWsConnect validated this pubkey's
-                    // signature) so broadcast() can scope sensitive events to the parties.
-                    ws._memberPubkey = ENFORCE_WS_AUTH ? (parsedUrl.searchParams.get('pubkey') || null) : null;
-
-                    addWsClient(ws);
-                    trackConnection(ws, 'sync', req);
-                    ws.on('close', () => {
-                        removeWsClient(ws);
-                        untrackConnection(ws);
-                    });
-                    ws.on('error', () => {
-                        removeWsClient(ws);
-                        untrackConnection(ws);
-                    });
-                });
-            } else if (pathname === '/ws/logs') {
-                const auth = parsedUrl.searchParams.get('auth');
-                const ticket = parsedUrl.searchParams.get('ticket');
-                const config = getLocalConfig();
-                let authorized = false;
-
-                if (ticket && isValidWsTicket(ticket)) {
-                    authorized = true;
-                } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
-                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                    authorized = true;
-                }
-
-                if (!authorized) {
-                    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                    socket.destroy();
-                    return;
-                }
-                logsWss.handleUpgrade(req, socket, head, (ws: any) => {
-                    ws.isAlive = true;
-                    ws.on('pong', () => { ws.isAlive = true; });
-
-                    addLogClient(ws);
-                    trackConnection(ws, 'admin', req);
-                    ws.on('close', () => {
-                        removeLogClient(ws);
-                        untrackConnection(ws);
-                    });
-                    ws.on('error', () => {
-                        removeLogClient(ws);
-                        untrackConnection(ws);
-                    });
-                });
-            } else {
-                socket.destroy();
-            }
-        });
+        const handleUpgrade = createUpgradeHandler(wss, logsWss);
+        _upgradeHandler = handleUpgrade;
+        server.on('upgrade', handleUpgrade);
 
         // Setup 60-second ping/pong heartbeat to clean up dead/ghost connections
         const heartbeatInterval = setInterval(() => {
@@ -1112,9 +1281,23 @@ export async function startHttpsServer(port: number): Promise<void> {
 // comfortably covers every legitimate JSON request (avatars/photos/attachments are
 // their own binary endpoints); past it we abort with 413.
 const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
+
+/** Routes whose legitimate bodies are much smaller than the global cap, enforced before
+ *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
+const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
+    [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
+];
+
+function routeBodyLimit(path: string): number {
+    for (const [pattern, limit] of ROUTE_BODY_LIMITS) {
+        if (pattern.test(path)) return limit;
+    }
+    return MAX_JSON_BODY_BYTES;
+}
+
 class BodyTooLargeError extends Error { constructor() { super('Request body too large'); this.name = 'BodyTooLargeError'; } }
 
-function readBody(req: import('node:http').IncomingMessage): Promise<string> {
+function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -1122,7 +1305,7 @@ function readBody(req: import('node:http').IncomingMessage): Promise<string> {
         req.on('data', (chunk: Buffer) => {
             if (aborted) return; // already over limit — discard without buffering
             total += chunk.length;
-            if (total > MAX_JSON_BODY_BYTES) {
+            if (total > maxBytes) {
                 aborted = true;
                 reject(new BodyTooLargeError()); // stop buffering; do NOT destroy the
                 // socket abruptly (that races the 413 response into an EPIPE) — just

@@ -310,6 +310,28 @@ section {
     line-height: 1.65;
 }
 
+/* One-line statement under the hero, linking to the post-extraction page.
+   Deliberately quieter than the subtitle above it — it is a principle, not a pitch. */
+.hero-manifesto {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    max-width: 720px;
+    margin: 1.1rem auto 0;
+    line-height: 1.6;
+}
+.hero-manifesto a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+    transition: var(--transition);
+}
+.hero-manifesto a:hover,
+.hero-manifesto a:focus-visible {
+    color: #fbbf24;
+    border-bottom-color: var(--accent);
+}
+
 /* ======================== HERO LOWER GRID ======================== */
 .hero-lower-grid {
     display: grid;

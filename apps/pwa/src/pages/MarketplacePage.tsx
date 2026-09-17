@@ -6,18 +6,23 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
+import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
+import { PollCard } from '../components/PollCard';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
+import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
 import { loadEnabledPeers, togglePeer } from '../lib/peer-prefs';
+import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 import { TRANSACTION_FEE_RATE } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
@@ -27,8 +32,9 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
-    getMembers,
+    getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing,
+    getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
 } from '../lib/api';
@@ -36,6 +42,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 
 import { matchesExpandedSearch } from '../lib/search';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
+import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -44,6 +51,8 @@ interface Props {
     onPostOpened?: () => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
+    transactions?: MarketplaceTransaction[];
+    onRefreshTransactions?: () => void;
 }
 
 // Turn a server trade-gate rejection into a friendly message. The covenant / contribution /
@@ -84,7 +93,7 @@ function remoteOriginLabel(post: any): string {
     return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
@@ -92,6 +101,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [beansOnly, setBeansOnly] = useState(() => localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
+    const [groupFilter, setGroupFilter] = useState<string>('all');
+    const [userGroups, setUserGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [favCategories, setFavCategories] = useState<string[]>(() => {
@@ -177,6 +188,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Detail view
     const [selectedPost, setSelectedPost] = useState<MarketplacePost | null>(null);
+    const [inactiveEnterprises, setInactiveEnterprises] = useState<Map<string, { paused: boolean; status: string; name: string }>>(new Map());
+    const [selectedPostEnterprise, setSelectedPostEnterprise] = useState<{ paused: boolean; status: string; name: string } | null>(null);
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+        triggerElement?: HTMLElement | null;
+    } | null>(null);
+
+    // Keyboard accessibility: Escape closes post detail view (defers to lightbox and child modals if open)
+    useEffect(() => {
+        if (!selectedPost) return;
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (lightboxState?.isOpen || showCategoryPicker || showPricingGuide || showDealsModal) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedPost(null);
+                setSelectedTxId(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedPost, lightboxState?.isOpen, showCategoryPicker, showPricingGuide, showDealsModal]);
 
     // Clear the last commission's message when a DIFFERENT listing is opened (review finding — a real bug).
     // `commissionResult` is page-level state, so commissioning listing A and then opening listing B showed A's
@@ -264,9 +300,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Active Deals Segment Toggle
     const [activeTab, setActiveTab] = useState<'feed' | 'deals'>('feed');
-    // Global requests waiting for the current user's approval
-    const [globalRequests, setGlobalRequests] = useState<MarketplaceTransaction[]>([]);
-    const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
+    // Transactions consumed from App.tsx (single poller owner)
+    const myTransactions = externalTransactions ?? [];
+    const globalRequests = myTransactions.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested');
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
+
+    useEffect(() => {
+        return onBlocklistUpdated(() => {
+            setBlocklistVersion(v => v + 1);
+        });
+    }, []);
 
     const myMarketPosts = posts.filter(p => 
         identity && 
@@ -292,58 +335,110 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const pendingDealsCount = globalRequests.length + myTransactions.filter(t => t.status === 'pending').length;
 
-    // Author ratings cache for tiles
+    // Author ratings cache for tiles — cached by author in ref to prevent fan-out on every 15s poll
+    const RATINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL ensures ratings updates eventually appear
     const [authorRatingsCache, setAuthorRatingsCache] = useState<Record<string, { average: number; count: number }>>({}); 
+    const ratingsCacheRef = useRef<Map<string, { rating: { average: number; count: number }; fetchedAt: number }>>(new Map());
+    const ratingsInFlightRef = useRef<Set<string>>(new Set());
 
     // Author avatar cache for tiles
     const [authorAvatarCache, setAuthorAvatarCache] = useState<Record<string, string | null>>({});
 
-    const refresh = useCallback(async () => {
-        try {
-            const filter: any = {};
-            if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
-            if (categoryFilter !== 'all') filter.category = categoryFilter;
-            if (beansOnly) filter.beansOnly = true;
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // The filter the in-flight refresh is actually fetching. Without it, changing a filter while
+    // a refresh was in flight handed the caller the PREVIOUS filter's promise — the list settled
+    // on results for a filter the member had already moved away from, and it counted as a
+    // successful refresh of the new one.
+    const refreshKeyRef = useRef<string>('');
 
-            // Always fetch home node + global requests. Also fetch the viewer's OWN posts — the server
-            // returns the author's paused posts only to the authenticated author, so this is how "My
-            // Posts" can surface & re-activate a paused Offer (the general feed omits paused).
-            const [homeData, myTxs, myOwnPosts] = await Promise.all([
-                getMarketplacePosts(filter),
-                identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]),
-                identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([])
-            ]);
-
-            setMyTransactions(myTxs);
-            setGlobalRequests(myTxs.filter(t => t.buyerPublicKey === identity?.publicKey && t.status === 'requested'));
-
-            // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
-            const byId = new Map<string, MarketplacePost>();
-            for (const p of homeData) byId.set(p.id, p);
-            for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
-            let allPosts: MarketplacePost[] = Array.from(byId.values());
-
-            // Fetch from all enabled peer nodes in parallel
-            if (enabledPeers.size > 0) {
-                const peerResults = await Promise.allSettled(
-                    [...enabledPeers].map(async (peerUrl) => {
-                        const data = await getRemotePosts(peerUrl, filter);
-                        return data.map(p => ({ ...p, _remoteNode: peerUrl }));
-                    })
-                );
-                for (const result of peerResults) {
-                    if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
-                }
-            }
-
-            setPosts(allPosts);
-            setError(null);
-        } catch (e: any) {
-            setError(e.message || 'Failed to load');
-        } finally {
-            setLoading(false);
+    // Fetch user groups for feed filtering (Item 10)
+    useEffect(() => {
+        if (identity?.publicKey) {
+            getGroups().then(groups => {
+                const active = groups.filter(g => g.viewerStatus === 'active');
+                setUserGroups(active);
+            }).catch(console.error);
         }
-    }, [typeFilter, categoryFilter, beansOnly, enabledPeers, identity]);
+    }, [identity]);
+
+    const refresh = useCallback(async () => {
+        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}`;
+        if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
+            return refreshPromiseRef.current;
+        }
+        refreshKeyRef.current = refreshKey;
+        const p = (async () => {
+            try {
+                const filter: any = {};
+                if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
+                if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
+                if (beansOnly) filter.beansOnly = true;
+                if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
+
+                // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
+                // (to filter out paused or wound-up enterprises from the feed and search without heavy getTreasuries overhead).
+                const statusesPromise = getEnterpriseStatuses().catch(() => null);
+                const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
+                    getMarketplacePosts(filter),
+                    identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
+                    statusesPromise,
+                    // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
+                    statusesPromise.then(res => res ? null : getTreasuries().catch(() => ({ treasuries: [] })))
+                ]);
+
+                const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
+                if (statusesData?.enterprises) {
+                    for (const t of statusesData.enterprises) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
+                    }
+                } else if (fallbackTreasuries?.treasuries) {
+                    for (const t of fallbackTreasuries.treasuries) {
+                        if (t.paused || t.status === 'winding_up' || t.status === 'completed') {
+                            inactiveMap.set(t.publicKey, { paused: !!t.paused, status: t.status || 'active', name: t.name });
+                        }
+                    }
+                }
+                setInactiveEnterprises(inactiveMap);
+
+                // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
+                const byId = new Map<string, MarketplacePost>();
+                for (const p of homeData) byId.set(p.id, p);
+                for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
+                let allPosts: MarketplacePost[] = Array.from(byId.values());
+
+                // Fetch from all enabled peer nodes in parallel
+                if (enabledPeers.size > 0) {
+                    const peerResults = await Promise.allSettled(
+                        [...enabledPeers].map(async (peerUrl) => {
+                            const data = await getRemotePosts(peerUrl, filter);
+                            return data.map(p => ({ ...p, _remoteNode: peerUrl }));
+                        })
+                    );
+                    for (const result of peerResults) {
+                        if (result.status === 'fulfilled') allPosts = allPosts.concat(result.value);
+                    }
+                }
+
+                setPosts(allPosts);
+                setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
+            } catch (e: any) {
+                setError(e.message || 'Failed to load');
+                throw e;
+            } finally {
+                setLoading(false);
+                refreshPromiseRef.current = null;
+            }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -365,25 +460,94 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, [identity]);
 
     useEffect(() => {
-        refresh();
-        const interval = setInterval(refresh, 15_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                refresh().catch(() => {});
+                interval = setInterval(() => {
+                    refresh().catch(() => {});
+                }, withJitter(300_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refresh();
+        });
+
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
+        };
     }, [refresh]);
 
-    // Fetch ratings for all unique post authors
+    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {
         if (posts.length === 0) return;
+        const now = Date.now();
         const uniqueAuthors = [...new Set(posts.map(p => p.authorPublicKey))];
+        const uncachedAuthors = uniqueAuthors.filter(pk => {
+            if (ratingsInFlightRef.current.has(pk)) return false;
+            const cached = ratingsCacheRef.current.get(pk);
+            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
+        });
+
+        if (uncachedAuthors.length === 0) return;
+
+        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
+
         Promise.all(
-            uniqueAuthors.map(pk =>
+            uncachedAuthors.map(pk =>
                 getMemberRatings(pk)
                     .then(r => [pk, { average: r.average, count: r.count }] as const)
-                    .catch(() => [pk, { average: 0, count: 0 }] as const)
+                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
+                    // would show an established member as unrated for the full cache TTL because
+                    // of one transient blip — in a marketplace where the rating is the trust
+                    // signal, that is worse than showing nothing. Leaving it uncached lets the
+                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
+                    .catch(() => [pk, null] as const)
             )
         ).then(results => {
-            const cache: Record<string, { average: number; count: number }> = {};
-            for (const [pk, rating] of results) cache[pk] = rating;
-            setAuthorRatingsCache(cache);
+            const fetchedAt = Date.now();
+            setAuthorRatingsCache(prev => {
+                const next = { ...prev };
+                for (const [pk, rating] of results) {
+                    if (!rating) continue;
+                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
+                    next[pk] = rating;
+                }
+                return next;
+            });
+        }).finally(() => {
+            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
         });
     }, [posts]);
 
@@ -400,9 +564,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             .catch(() => {});
     }, []);
 
+    // The ids of the open Need's outstanding bids, as a plain string so it compares by VALUE in the
+    // dependency array below. This page no longer polls transactions itself — App.tsx owns that —
+    // so without a dependency on them the detail effect captured `myTransactions` at open time and
+    // a bid arriving while the post was open never appeared until it was closed and reopened.
+    // Depending on `myTransactions` directly would re-run this effect on every poll even when
+    // nothing relevant changed, re-rendering an open post every 10s; this only changes when the
+    // set of outstanding bids for THIS post actually changes.
+    const openNeedBidIds = selectedPost?.type === 'need'
+        ? myTransactions
+            .filter(t => t.postId === selectedPost.id && t.status === 'requested')
+            .map(t => t.id)
+            .sort()
+            .join(',')
+        : '';
+
     // Load author profile + ratings when detail view opens
     useEffect(() => {
-        if (!selectedPost) return;
+        if (!selectedPost) {
+            setSelectedPostEnterprise(null);
+            return;
+        }
+        let cancelled = false;
+        setSelectedPostEnterprise(null);
         setLoadingProfile(true);
         setAuthorProfile(null);
         setAuthorAvgRating({ average: 0, count: 0 });
@@ -411,12 +595,39 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         setShowRatingForm(false);
         setShowReportForm(false);
         setReportReason('');
+
+        // Check if author is a paused / wound-up / completed enterprise (guards cached post copy & deep links)
+        const cachedEnt = inactiveEnterprises.get(selectedPost.authorPublicKey);
+        if (cachedEnt) {
+            setSelectedPostEnterprise(cachedEnt);
+        } else {
+            getTreasury(selectedPost.authorPublicKey)
+                .then((t: any) => {
+                    if (cancelled) return;
+                    if (t && (t.paused || t.status === 'winding_up' || t.status === 'completed')) {
+                        const ent = { paused: !!t.paused, status: t.status || 'active', name: t.name };
+                        setSelectedPostEnterprise(ent);
+                        setInactiveEnterprises(prev => new Map(prev).set(selectedPost.authorPublicKey, ent));
+                    } else {
+                        setSelectedPostEnterprise(null);
+                    }
+                })
+                .catch(() => {
+                    if (!cancelled) setSelectedPostEnterprise(null);
+                });
+        }
+
         getMemberProfile(selectedPost.authorPublicKey, identity?.publicKey)
             .then(p => setAuthorProfile(p))
             .catch(() => setAuthorProfile(null))
             .finally(() => setLoadingProfile(false));
         getMemberRatings(selectedPost.authorPublicKey)
-            .then(r => setAuthorAvgRating({ average: r.average, count: r.count, asProvider: r.asProvider, asReceiver: r.asReceiver }))
+            .then(r => {
+                const rating = { average: r.average, count: r.count };
+                ratingsCacheRef.current.set(selectedPost.authorPublicKey, { rating, fetchedAt: Date.now() });
+                setAuthorRatingsCache(prev => ({ ...prev, [selectedPost.authorPublicKey]: rating }));
+                setAuthorAvgRating({ average: r.average, count: r.count, asProvider: r.asProvider, asReceiver: r.asReceiver });
+            })
             .catch(() => {});
         
         setHasExistingRating(false);
@@ -435,13 +646,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         
         // Fetch requests if this is a Need
         if (selectedPost.type === 'need') {
-            getMyMarketplaceTransactions(identity?.publicKey || '')
+            const txPromise = myTransactions.length > 0
+                ? Promise.resolve(myTransactions)
+                : (identity ? getMyMarketplaceTransactions(identity.publicKey).catch(() => []) : Promise.resolve([]));
+            txPromise
                 .then(async txs => {
                     const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');
                     const enriched = await Promise.all(filtered.map(async req => {
                         try {
                             // For needs, the author is the buyer, so the requester is the seller
-                            const r = await getMemberRatings(req.sellerPublicKey);
+                            const cached = ratingsCacheRef.current.get(req.sellerPublicKey);
+                            let r: { average: number; count: number };
+                            if (cached && Date.now() - cached.fetchedAt <= RATINGS_CACHE_TTL_MS) {
+                                r = cached.rating;
+                            } else {
+                                r = await getMemberRatings(req.sellerPublicKey);
+                                // Written back so a re-run (a new bid arriving) does not refetch
+                                // every existing bidder's rating again.
+                                ratingsCacheRef.current.set(req.sellerPublicKey, { rating: r, fetchedAt: Date.now() });
+                            }
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
                     }));
@@ -451,7 +674,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } else {
             setRequests([]);
         }
-    }, [selectedPost?.id, identity?.publicKey]);
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedPost?.id, identity?.publicKey, openNeedBidIds]);
 
     async function handleMessageAuthor() {
         if (!identity || !selectedPost) return;
@@ -495,11 +721,37 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== DETAIL VIEW ===================
     if (selectedPost) {
+        if (selectedPost.type === 'poll') {
+            return (
+                <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
+                    <button
+                        onClick={() => {
+                            setSelectedPost(null);
+                            setSelectedTxId(null);
+                            setEditMode(false);
+                            setEditPhotos([]);
+                        }}
+                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                    >
+                        <span className="text-xl leading-none">←</span> Back to Market
+                    </button>
+                    <PollCard
+                        post={selectedPost}
+                        identity={identity}
+                        onVoteSuccess={() => {
+                            refresh();
+                        }}
+                        onOpenProfile={onOpenProfile}
+                    />
+                </div>
+            );
+        }
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(selectedPost.category);
         const typeColor = POST_TYPE_COLORS[selectedPost.type];
         const postedDate = new Date(selectedPost.createdAt);
         const ago = getTimeAgo(postedDate);
         const isOwnPost = identity?.publicKey === selectedPost.authorPublicKey;
+        const authorEnterpriseInactive = selectedPostEnterprise || inactiveEnterprises.get(selectedPost.authorPublicKey) || null;
         // #109: a cross-browsed post lives on another node, and cross-community messaging
         // has no working path yet — don't offer a button that can't deliver.
         //
@@ -542,7 +794,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             : (isOwnPost ? ((selectedPost as any).acceptedByCallsign || 'Peer') : selectedPost.authorCallsign);
 
         return (
-            <div className="p-4 max-w-lg mx-auto pb-24">
+            <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {/* Back Button */}
                 <button
                     onClick={() => {
@@ -564,12 +816,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         style={{ backgroundColor: `${typeColor}15`, borderBottomColor: `${typeColor}30` }}
                     >
                         <div className="flex items-center gap-2">
-                            <span className="text-2xl">{cat?.emoji ?? '🌐'}</span>
+                            <span className="text-2xl">{isPulsePost ? '🗞️' : (cat?.emoji ?? '🌐')}</span>
                             <span 
                                 className="text-xs font-black uppercase tracking-wider"
-                                style={{ color: typeColor }}
+                                style={{ color: isPulsePost ? '#d97706' : typeColor }}
                             >
-                                {selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} <span className="text-nature-400 font-medium">·</span> {cat?.label ?? selectedPost.category}
+                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
                         <span className="text-xs font-semibold text-nature-500">{ago}</span>
@@ -577,12 +829,66 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     {/* Content */}
                     <div className="p-5">
+                        {/* Enterprise Season State Banners */}
+                        {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">⏸️</span>
+                                <div>
+                                    <div className="font-bold text-sm text-amber-900 dark:text-amber-100">Enterprise Paused for Season</div>
+                                    <p className="mt-0.5 text-amber-800 dark:text-amber-200 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is currently paused for the season. Listings cannot be bought right now.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {authorEnterpriseInactive?.status === 'winding_up' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-600 text-rose-950 dark:text-rose-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">⏳</span>
+                                <div>
+                                    <div className="font-bold text-sm text-rose-900 dark:text-rose-100">Enterprise Winding Up</div>
+                                    <p className="mt-0.5 text-rose-800 dark:text-rose-200 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which is winding down. Listings cannot be bought.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {authorEnterpriseInactive?.status === 'completed' && (
+                            <div
+                                role="alert"
+                                aria-live="polite"
+                                className="mb-4 p-4 rounded-xl bg-stone-100 dark:bg-stone-900 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                            >
+                                <span className="text-2xl" aria-hidden="true">🏁</span>
+                                <div>
+                                    <div className="font-bold text-sm">Enterprise Closed</div>
+                                    <p className="mt-0.5 text-stone-600 dark:text-stone-400 leading-relaxed font-normal">
+                                        This listing belongs to <strong>{authorEnterpriseInactive.name}</strong>, which has closed permanently.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
                             {selectedPost.status === 'paused' && (
                                 <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">⏸ Paused</span>
                             )}
                             {selectedPost.title}
                         </h2>
+
+                        {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
+                            <div className="p-3 mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
+                                <span className="text-base">🔒</span>
+                                <span>Only {selectedPost.targetGroupName || 'group members'} can see this</span>
+                            </div>
+                        )}
 
                         {selectedPost.description && (
                             <p className="text-base text-nature-600 leading-relaxed mb-5 whitespace-pre-wrap">
@@ -594,34 +900,51 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
                             <div className="flex gap-2 overflow-x-auto mb-5 pb-2 snap-x">
                                 {selectedPost.photos.map((photo, i) => (
-                                    <img
+                                    <button
                                         key={i}
-                                        src={photo}
-                                        alt={`photo ${i+1}`}
-                                        className="h-40 w-auto rounded-xl object-cover border border-nature-200 shrink-0 snap-start shadow-sm"
-                                    />
+                                        type="button"
+                                        onClick={(e) =>
+                                            setLightboxState({
+                                                isOpen: true,
+                                                photos: selectedPost.photos!,
+                                                initialIndex: i,
+                                                title: selectedPost.title,
+                                                triggerElement: e.currentTarget,
+                                            })
+                                        }
+                                        aria-label={`View enlarged photo ${i + 1} of ${selectedPost.photos!.length}: ${selectedPost.title}`}
+                                        className="h-40 w-auto rounded-xl overflow-hidden border border-nature-200 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
+                                    >
+                                        <img
+                                            src={photo}
+                                            alt={`photo ${i + 1}`}
+                                            className="h-40 w-auto object-cover"
+                                        />
+                                    </button>
                                 ))}
                             </div>
                         )}
 
                         {/* Credits */}
-                        <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
-                            <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
-                                {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
-                            </span>
-                            <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <span>{selectedPost.credits}</span>
-                                <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
-                                    <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                    {{ fixed: '', hourly: '/Hr', daily: '/Dy', weekly: '/Wk', monthly: '/Mo' }[selectedPost.priceType] || ''}
+                        {!isPulsePost && (
+                            <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
+                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
+                                    {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
                                 </span>
+                                <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                    <span>{selectedPost.credits}</span>
+                                    <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
+                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                        {{ fixed: '', hourly: '/Hr', daily: '/Dy', weekly: '/Wk', monthly: '/Mo' }[selectedPost.priceType] || ''}
+                                    </span>
+                                </div>
+                                {selectedPost.credits > 0 && (
+                                    <p className="text-nature-400 text-xs mt-1 font-mono">
+                                        ≈ {(selectedPost.credits / 40).toFixed(1)} hrs
+                                    </p>
+                                )}
                             </div>
-                            {selectedPost.credits > 0 && (
-                                <p className="text-nature-400 text-xs mt-1 font-mono">
-                                    ≈ {(selectedPost.credits / 40).toFixed(1)} hrs
-                                </p>
-                            )}
-                        </div>
+                        )}
                     </div>
                 </div>
 
@@ -637,10 +960,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         {/* Avatar */}
                         {loadingProfile ? (
                             <div className="w-14 h-14 rounded-full bg-nature-100 animate-pulse shrink-0" />
-                        ) : authorProfile?.avatar ? (
+                        ) : resolveAvatarUrl(authorProfile?.avatar) ? (
                             <img
-                                src={authorProfile.avatar}
-                                alt="avatar"
+                                src={resolveAvatarUrl(authorProfile?.avatar)!}
+                                alt={selectedPost.authorCallsign}
                                 className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm shrink-0"
                             />
                         ) : (
@@ -761,6 +1084,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          setSelectedTxId(null);
                                                          setShowCompleteConfirm(false);
                                                          refresh();
+                                                         onRefreshTransactions?.();
 
                                                          // Trigger Review Modal immediately
                                                          setReviewStars(5);
@@ -823,6 +1147,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                      setSelectedPost(null);
                                      setSelectedTxId(null);
                                      refresh();
+                                     onRefreshTransactions?.();
                                  } catch (e: any) {
                                      setError(e.message || 'Failed to cancel transaction');
                                  } finally {
@@ -870,6 +1195,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 try {
                                                     await rejectMarketplaceRequest(req.id, identity.publicKey);
                                                     setRequests(prev => prev.filter(r => r.id !== req.id));
+                                                    // This page no longer polls transactions itself,
+                                                    // so App's pending-deals badge would otherwise
+                                                    // stay stale until its next tick.
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to reject offer');
                                                 } finally {
@@ -890,6 +1219,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     const updated = await getMarketplacePosts({ id: selectedPost.id });
                                                     if (updated.length > 0) setSelectedPost(updated[0]);
                                                     refresh();
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to approve offer. Check your balance.');
                                                 } finally {
@@ -953,6 +1283,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 try {
                                                     await cancelMarketplaceRequest(myRequest.id, identity.publicKey);
                                                     setRequests(prev => prev.filter(r => r.id !== myRequest.id));
+                                                    onRefreshTransactions?.();
                                                 } catch (e: any) {
                                                     setError(e.message || 'Failed to cancel request');
                                                 } finally {
@@ -1028,7 +1359,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </button>
                                     <button
                                         onClick={async () => {
-                                            if (!identity || !selectedPost) return;
+                                            if (!identity || !selectedPost || authorEnterpriseInactive) return;
                                             setAccepting(true);
                                             try {
                                                 const isVariable = selectedPost.priceType !== 'fixed';
@@ -1059,6 +1390,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     }
                                                     handleMessageAuthor();
                                                     refresh();
+                                                    onRefreshTransactions?.();
                                                 }
                                                 setShowAcceptConfirm(false);
                                             } catch (err) {
@@ -1067,9 +1399,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setAccepting(false);
                                             }
                                         }}
-                                        disabled={accepting || isRemotePost || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
+                                        disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
                                         className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
-                                            accepting || isRemotePost
+                                            accepting || isRemotePost || !!authorEnterpriseInactive
                                                 ? 'bg-emerald-400 cursor-not-allowed opacity-60'
                                                 : 'bg-emerald-600 hover:bg-emerald-700'
                                         }`}
@@ -1205,6 +1537,33 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                 )}
                             </div>
+                        ) : authorEnterpriseInactive ? (
+                            <div className="space-y-2">
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="w-full py-3.5 rounded-xl font-bold text-white text-[15px] bg-nature-400 dark:bg-nature-700 cursor-not-allowed opacity-60 flex items-center justify-center gap-2"
+                                >
+                                    <span>
+                                        {authorEnterpriseInactive.status === 'completed'
+                                            ? '🏁 Enterprise Closed'
+                                            : authorEnterpriseInactive.status === 'winding_up'
+                                                ? '⏳ Enterprise Winding Up'
+                                                : authorEnterpriseInactive.paused
+                                                    ? '⏸️ Enterprise Paused for Season'
+                                                    : ''}
+                                    </span>
+                                </button>
+                                <p className="text-xs text-nature-500 dark:text-nature-400 text-center font-medium">
+                                    {authorEnterpriseInactive.status === 'completed'
+                                        ? 'This community enterprise has wound up.'
+                                        : authorEnterpriseInactive.status === 'winding_up'
+                                            ? 'This community enterprise is winding down and no longer accepting deals.'
+                                            : authorEnterpriseInactive.paused
+                                                ? 'This community enterprise is paused for the season and not taking orders.'
+                                                : ''}
+                                </p>
+                            </div>
                         ) : (
                             <button
                                 onClick={async () => {
@@ -1321,7 +1680,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     try {
                                                         await submitRating(identity.publicKey, targetPubkey, myRating, ratingComment, selectedPost.pendingTransactionId);
                                                         const fresh = await getMemberRatings(targetPubkey);
-                                                        setAuthorAvgRating({ average: fresh.average, count: fresh.count });
+                                                        const freshRating = { average: fresh.average, count: fresh.count };
+                                                        ratingsCacheRef.current.set(targetPubkey, { rating: freshRating, fetchedAt: Date.now() });
+                                                        setAuthorRatingsCache(prev => ({ ...prev, [targetPubkey]: freshRating }));
+                                                        setAuthorAvgRating(freshRating);
                                                         setHasExistingRating(true);
                                                         setShowRatingForm(false);
                                                     } catch (e: any) {
@@ -1430,7 +1792,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 )}
                                 <button
                                     onClick={() => {
-                                        setEditType(selectedPost.type);
+                                        setEditType(selectedPost.type as 'offer' | 'need');
                                         setEditCategory(selectedPost.category);
                                         setEditTitle(selectedPost.title);
                                         setEditDescription(selectedPost.description);
@@ -1661,10 +2023,52 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
+                {/* Convenor Post Moderation (Item 10) */}
+                {!isOwnPost && Boolean(selectedPost.targetGroupId && userGroups.some(g => g.id === selectedPost.targetGroupId && (g.viewerRole === 'convenor' || (g as any).isConvenor))) && (
+                    <div className="mt-4 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            🛡️ Convenor Moderation ({selectedPost.targetGroupName || 'Group'})
+                        </p>
+                        <button
+                            onClick={async () => {
+                                if (!confirm(`Delete this post as Convenor of ${selectedPost.targetGroupName || 'the group'}? This action cannot be undone.`)) return;
+                                setDeleting(selectedPost.id);
+                                try {
+                                    await deleteGroupPost(selectedPost.targetGroupId!, selectedPost.id);
+                                    setSelectedPost(null);
+                                    setSelectedTxId(null);
+                                    refresh();
+                                } catch (e: any) {
+                                    setError(e.message || 'Failed to delete post as convenor');
+                                } finally {
+                                    setDeleting(null);
+                                }
+                            }}
+                            disabled={deleting === selectedPost.id}
+                            className={`w-full py-3 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors ${
+                                deleting === selectedPost.id ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                        >
+                            {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Group Post (Convenor)'}
+                        </button>
+                    </div>
+                )}
+
                 {error && (
                     <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4 text-red-600 text-sm text-center shadow-sm">
                         {error}
                     </div>
+                )}
+
+                {lightboxState?.isOpen && (
+                    <ImageLightbox
+                        isOpen={lightboxState.isOpen}
+                        photos={lightboxState.photos}
+                        initialIndex={lightboxState.initialIndex}
+                        title={lightboxState.title}
+                        triggerElement={lightboxState.triggerElement}
+                        onClose={() => setLightboxState(null)}
+                    />
                 )}
             </div>
         );
@@ -1736,11 +2140,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 {/* Row 2: Full-Width Type Segmented Control */}
                 <div className="w-full bg-nature-100 dark:bg-nature-900/60 rounded-2xl p-0.5 flex gap-0.5 mt-0.5 mb-1 shadow-inner border border-nature-200/50 dark:border-nature-800/40">
-                    {(['all', 'for-you', 'offer', 'need'] as const).map((t) => {
+                    {(['all', 'for-you', 'offer', 'need', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
                         if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
                         if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
                         if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
@@ -1753,7 +2158,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-nature-200 hover:bg-white/40 dark:hover:bg-nature-800/30'
                                 }`}
                             >
-                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : '🟠 Needs'}
+                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : t === 'need' ? '🟠 Needs' : '🗳️ Polls'}
                             </button>
                         );
                     })}
@@ -1797,6 +2202,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         💡 Pricing Guide
                     </button>
+
+                    {userGroups.length > 0 && (
+                        <div className="relative inline-block">
+                            <select
+                                value={groupFilter}
+                                onChange={(e) => setGroupFilter(e.target.value)}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
+                                    groupFilter !== 'all'
+                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-800'
+                                }`}
+                                aria-label="Filter feed by group"
+                            >
+                                <option value="all">👥 All Groups & Public</option>
+                                {userGroups.map((g) => (
+                                    <option key={g.id} value={g.id}>
+                                        👥 {g.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 {/* Row 3: Symmetrical Filter Dropdowns (50% / 50% split) */}
@@ -1896,44 +2323,77 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">Loading...</p>
             ) : (() => {
-                let filtered = posts.filter(p => p.status === 'active');
+                let filtered = posts.filter(p => {
+                    if (p.type === 'poll') {
+                        return p.status === 'active' || p.status === 'completed';
+                    }
+                    if (inactiveEnterprises.has(p.authorPublicKey)) {
+                        return false;
+                    }
+                    return p.status === 'active';
+                });
 
-                // Text search (synonym-expanded)
+                // Group filter (Item 10)
+                if (groupFilter !== 'all') {
+                    filtered = filtered.filter(p => p.targetGroupId === groupFilter || (p as any).target_group_id === groupFilter);
+                }
+
+                // Text search (synonym-expanded): exclude polls from goods search unless polls filter active
                 if (searchQuery.trim()) {
-                    filtered = filtered.filter(p =>
-                        matchesExpandedSearch(searchQuery, p.title, p.description)
-                    );
+                    filtered = filtered.filter(p => {
+                        if (p.type === 'poll' && typeFilter !== 'poll') return false;
+                        return matchesExpandedSearch(searchQuery, p.title, p.description);
+                    });
                 }
 
                 // Blocked user filtering
-                try {
-                    const blockedJson = localStorage.getItem('bp_blocked_users');
-                    if (blockedJson) {
-                        const blocked: string[] = JSON.parse(blockedJson);
-                        if (blocked.length > 0) {
-                            const blockedSet = new Set(blocked);
-                            filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
-                        }
-                    }
-                } catch { /* ignore malformed blocklist */ }
+                const blocked = getBlockedUsers();
+                if (blocked.length > 0) {
+                    const blockedSet = new Set(blocked);
+                    filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
+                }
 
-                // Radius filter
+                // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs
                 if (radiusSettings) {
                     filtered = filtered.filter(p => {
+                        if (p.type === 'poll') return typeFilter === 'all' || typeFilter === 'poll';
                         if (p.lat == null || p.lng == null) return false;
                         const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
                         return dist <= radiusSettings.radiusKm;
                     });
                 }
 
-                // Local "★ For You" category filter
+                // Local "★ For You" category filter (exclude polls)
                 if (typeFilter === 'for-you') {
-                    filtered = filtered.filter(p => favCategories.includes(p.category));
+                    filtered = filtered.filter(p => p.type !== 'poll' && favCategories.includes(p.category));
                 }
 
-                // Founding-trade filter: surface newcomers whose first trade unlocks their account
+                // Beans-only filter (exclude polls)
+                if (beansOnly) {
+                    filtered = filtered.filter(p => p.type !== 'poll');
+                }
+
+                // Founding-trade filter (exclude polls)
                 if (foundingOnly) {
-                    filtered = filtered.filter(p => p.authorFoundingNeeded);
+                    filtered = filtered.filter(p => p.type !== 'poll' && p.authorFoundingNeeded);
+                }
+
+                // Specific type filter
+                if (typeFilter === 'offer') {
+                    filtered = filtered.filter(p => p.type === 'offer');
+                } else if (typeFilter === 'need') {
+                    filtered = filtered.filter(p => p.type === 'need');
+                } else if (typeFilter === 'poll') {
+                    filtered = filtered.filter(p => p.type === 'poll');
+                }
+
+                // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+                const realMemberListingsCount = posts.filter(p => {
+                    const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
+                    return !isPulse && p.type !== 'poll' && p.status === 'active';
+                }).length;
+                if (realMemberListingsCount >= 2) {
+                    filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));
                 }
 
                 // Pin Daily Pulse post to the top of the feed (local only)
@@ -2057,15 +2517,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             if (viewMode === 'grid') {
                                 return (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                                        {filtered.map((post) => (
+                                        {filtered.map((post) => {
+                                            if (post.type === 'poll') {
+                                                return (
+                                                    <div key={post.id} className="h-full">
+                                                        <PollCard
+                                                            post={post}
+                                                            identity={identity}
+                                                            onVoteSuccess={() => refresh()}
+                                                            onOpenProfile={onOpenProfile}
+                                                        />
+                                                    </div>
+                                                );
+                                            }
+                                            const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                            return (
                                             <div
                                                 key={post.id}
-                                                onClick={() => setSelectedPost(post)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                role="button"
-                                                tabIndex={0}
-                                                aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                className="h-full cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                                onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                                onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                                role={isPulse ? undefined : "button"}
+                                                tabIndex={isPulse ? undefined : 0}
+                                                aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                className={`h-full rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                             >
                                                 <MarketplaceCard
                                                     post={post as any}
@@ -2078,9 +2552,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    onPhotoClick={(photos, idx, e) => {
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos,
+                                                            initialIndex: idx,
+                                                            title: post.title,
+                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
+                                                        });
+                                                    }}
                                                 />
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 );
                             }
@@ -2117,15 +2601,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                         </div>
                                         <div className="flex flex-col gap-1.5">
-                                            {items.map(post => (
+                                            {items.map(post => {
+                                                if (post.type === 'poll') {
+                                                    return (
+                                                        <div key={post.id} className="w-full my-1">
+                                                            <PollCard
+                                                                post={post}
+                                                                identity={identity}
+                                                                onVoteSuccess={() => refresh()}
+                                                                onOpenProfile={onOpenProfile}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+                                                const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                                return (
                                                 <div
                                                     key={post.id}
-                                                    onClick={() => setSelectedPost(post)}
-                                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    aria-label={`Open listing: ${post.title}${remoteOriginLabel(post)}`}
-                                                    className="cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                                    onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                                    onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                                    role={isPulse ? undefined : "button"}
+                                                    tabIndex={isPulse ? undefined : 0}
+                                                    aria-label={isPulse ? `Daily Pulse: ${post.title}` : `Open listing: ${post.title}${remoteOriginLabel(post)}`}
+                                                    className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                                 >
                                                     <MarketplaceCard
                                                         post={post as any}
@@ -2136,11 +2634,21 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
-                                                        viewMode={viewMode}
-                                                        isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    />
+                                                    viewMode={viewMode}
+                                                    isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    onPhotoClick={(photos, idx, e) => {
+                                                        setLightboxState({
+                                                            isOpen: true,
+                                                            photos,
+                                                            initialIndex: idx,
+                                                            title: post.title,
+                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
+                                                        });
+                                                    }}
+                                                />
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );
@@ -2207,6 +2715,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         if (!identity) return;
                                         setSubmittingReview(true);
                                         try {
+                                            const ratedPubkey = promptReviewForTx.targetPubkey;
                                             await submitRating(
                                                 identity.publicKey, 
                                                 promptReviewForTx.targetPubkey, 
@@ -2216,6 +2725,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             );
                                             setPromptReviewForTx(null);
                                             refresh();
+                                            onRefreshTransactions?.();
+                                            getMemberRatings(ratedPubkey).then(fresh => {
+                                                const freshRating = { average: fresh.average, count: fresh.count };
+                                                ratingsCacheRef.current.set(ratedPubkey, { rating: freshRating, fetchedAt: Date.now() });
+                                                setAuthorRatingsCache(prev => ({ ...prev, [ratedPubkey]: freshRating }));
+                                            }).catch(() => {});
                                         } catch (e: any) {
                                             alert(e.message || 'Failed to submit review');
                                         } finally {
@@ -2238,7 +2753,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {!selectedPost && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
-                    className="fixed bottom-[90px] right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
                     <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST
                 </button>
@@ -2315,6 +2831,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </button>
                     </div>
                 </div>
+            )}
+
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    triggerElement={lightboxState.triggerElement}
+                    onClose={() => setLightboxState(null)}
+                />
             )}
         </div>
     );

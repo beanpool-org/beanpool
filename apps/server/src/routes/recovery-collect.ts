@@ -34,13 +34,13 @@
 import Router from '@koa/router';
 
 import { db } from '../db/db.js';
+import { isSingleBlobSso } from '@beanpool/core';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
 import {
     openCollection,
     collectionState,
     collectionProgress,
     listReleases,
-    releaseMemberFragment,
     releaseHubFragment,
     releaseSsoFragmentForIdentity,
     cancelCollection,
@@ -67,13 +67,6 @@ function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolea
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
 
-/** The human keepers on a member's current split — who D7 says to warn. */
-function humanKeepersOf(ownerPubkey: string, generation: number): string[] {
-    return (db.prepare(`
-        SELECT holder_ref FROM recovery_shares
-        WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'member'
-    `).all(ownerPubkey, generation) as { holder_ref: string }[]).map(r => r.holder_ref);
-}
 
 function fail(ctx: any, e: unknown): void {
     if (e instanceof RecoveryReleaseError || e instanceof SsoVerificationError) {
@@ -154,7 +147,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // recovery — a legitimate user is on the other end of this and push is best-effort — but
         // it is logged, because a notification that silently never fires would make D7 decorative.
         try {
-            const targets = [pubkey, ...humanKeepersOf(pubkey, collection.generation)];
+            const targets = [pubkey];
             const member = getMember(pubkey);
             dispatchPushNotification(
                 targets,
@@ -170,12 +163,19 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         }
 
         const progress = collectionProgress(collection.id);
+        const ssoRows = db.prepare(`
+            SELECT kdf_params FROM recovery_shares
+            WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'sso'
+        `).all(pubkey, collection.generation) as { kdf_params: string | null }[];
+        const isSingleBlob = ssoRows.length > 0 && ssoRows.every(r => isSingleBlobSso(r.kdf_params));
+        const defaultThreshold = isSingleBlob ? 1 : 2;
+        const threshold = progress?.threshold ?? defaultThreshold;
         ctx.status = 200;
         ctx.body = {
             collectionId: collection.id,
             generation: collection.generation,
             expiresAt: collection.expiresAt,
-            threshold: progress?.threshold ?? 2,
+            threshold,
             progress,
         };
     });
@@ -198,11 +198,15 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
         const releases = listReleases(collection.id);
+        const progress = collectionProgress(collection.id);
+        const isSingleBlob = releases.some(r => r.holderType === 'sso' && isSingleBlobSso(r.kdfParams));
+        const defaultThreshold = isSingleBlob ? 1 : 2;
+        const threshold = progress?.threshold ?? defaultThreshold;
         ctx.status = 200;
         ctx.body = {
             collected: releases.length,
-            threshold: 2,
-            enough: releases.length >= 2,
+            threshold,
+            enough: progress?.enough ?? (releases.length >= threshold),
             fragments: releases.map(r => ({
                 holderType: r.holderType,
                 shareIndex: r.shareIndex,
@@ -266,77 +270,6 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             ctx.status = 200;
             ctx.body = collectionProgress(collection.id);
         } catch (e) { return fail(ctx, e); }
-    });
-
-    /**
-     * D6 — a human keeper approves, signed by that keeper.
-     *
-     * They send the fragment already decrypted with their own key and re-wrapped to the recovering
-     * device's ephemeral key. The node never sees a plaintext piece, which is what keeps "a stolen
-     * database plus a compromised hub is still short of the threshold" true.
-     */
-    router.post('/api/recovery/approve-keeper', async (ctx) => {
-        const keeper = ctx.state?.actor as string | undefined;
-        if (!keeper || !getMember(keeper)) {
-            ctx.status = 401;
-            ctx.body = { error: 'Approving a recovery must be signed by the keeper doing it.' };
-            return;
-        }
-        const body = (ctx as any).requestBody || {};
-        const state = typeof body.collectionId === 'string' ? collectionState(body.collectionId) : null;
-        if (!state) return notMySession(ctx);
-
-        try {
-            const released = releaseMemberFragment(state.collection.id, keeper, {
-                payload: String(body.payload ?? ''),
-                payloadIv: String(body.payloadIv ?? ''),
-                payloadTag: String(body.payloadTag ?? ''),
-                ephemeralPubkey: String(body.ephemeralPubkey ?? ''),
-            });
-            ctx.status = 200;
-            ctx.body = { released: released.holderType, progress: collectionProgress(state.collection.id) };
-        } catch (e) { return fail(ctx, e); }
-    });
-
-    /**
-     * What a keeper needs in order to approve: whose account, and what to wrap the fragment to.
-     *
-     * Signed by the keeper, and answers only for collections they are actually a keeper on — so it
-     * cannot be used to look up an arbitrary session.
-     */
-    router.post('/api/recovery/approve-keeper/context', async (ctx) => {
-        const keeper = ctx.state?.actor as string | undefined;
-        if (!keeper || !getMember(keeper)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
-
-        const body = (ctx as any).requestBody || {};
-        const state = typeof body.collectionId === 'string' ? collectionState(body.collectionId) : null;
-        if (!state) return notMySession(ctx);
-
-        const share = db.prepare(`
-            SELECT encrypted_share, share_iv, share_tag, ephemeral_pubkey, share_index
-            FROM recovery_shares
-            WHERE owner_pubkey = ? AND generation = ? AND holder_type = 'member' AND holder_ref = ?
-        `).get(state.collection.ownerPubkey, state.collection.generation, keeper) as
-            Record<string, unknown> | undefined;
-        if (!share) return notMySession(ctx);
-
-        const owner = getMember(state.collection.ownerPubkey);
-        ctx.status = 200;
-        ctx.body = {
-            callsign: owner?.callsign,
-            live: state.live,
-            reason: state.reason,
-            // What the keeper unwraps with their own key...
-            fragment: {
-                encryptedShare: share.encrypted_share,
-                shareIv: share.share_iv,
-                shareTag: share.share_tag,
-                ephemeralPubkey: share.ephemeral_pubkey,
-                shareIndex: share.share_index,
-            },
-            // ...and what they re-wrap it to.
-            recipientEphemeralPubkey: state.collection.requesterEphemeralPubkey,
-        };
     });
 
     /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */

@@ -13,6 +13,9 @@
   "dependencies": {
     "@beanpool/core": "workspace:*",
     "@beanpool/engine": "workspace:*",
+    "@types/qrcode": "1.5.6",
+    "leaflet": "^1.9.4",
+    "qrcode": "1.5.4",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -21,6 +24,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
     "@types/jest": "^30.0.0",
+    "@types/leaflet": "^1.9.21",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.0",
     "@vitejs/plugin-react": "^4.4.0",

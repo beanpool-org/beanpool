@@ -7,6 +7,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
+import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 
 interface Props {
     isFullView?: boolean;
@@ -29,26 +31,78 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
 
     useEffect(() => {
         let isMounted = true;
+        let timer: ReturnType<typeof setInterval> | null = null;
+        let lastFetchTime = 0;
+        let fetchPromise: Promise<void> | null = null;
 
         async function fetchFeed() {
-            try {
-                const res = await getActivityFeedApi(30, 0);
-                if (isMounted && res?.feed) {
-                    setFeed(res.feed);
+            if (fetchPromise) return fetchPromise;
+            const p = (async () => {
+                try {
+                    const res = await getActivityFeedApi(30, 0);
+                    if (isMounted && res?.feed) {
+                        setFeed(res.feed);
+                    }
+                    // Stamped on SUCCESS only — see the note in MapPage. A failed fetch in
+                    // `finally` counted as a refresh and the cooldown suppressed the retry.
+                    lastFetchTime = Date.now();
+                } catch (e) {
+                    console.warn('[ActivityWaterfall] Could not fetch activity feed:', e);
+                    throw e;
+                } finally {
+                    if (isMounted) setLoading(false);
+                    fetchPromise = null;
                 }
-            } catch (e) {
-                console.warn('[ActivityWaterfall] Could not fetch activity feed:', e);
-            } finally {
-                if (isMounted) setLoading(false);
-            }
+            })();
+            fetchPromise = p;
+            return p;
         }
 
-        fetchFeed();
-        const timer = setInterval(fetchFeed, 30_000); // 30s live pulse refresh
+        const startPolling = () => {
+            if (!timer) {
+                fetchFeed().catch(() => {});
+                timer = setInterval(() => {
+                    fetchFeed().catch(() => {});
+                }, withJitter(300_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (fetchPromise) return fetchPromise;
+            if (Date.now() - lastFetchTime < 2000) return;
+            return fetchFeed();
+        });
 
         return () => {
             isMounted = false;
-            clearInterval(timer);
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
         };
     }, []);
 

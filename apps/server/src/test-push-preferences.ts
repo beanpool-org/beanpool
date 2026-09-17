@@ -36,10 +36,11 @@ const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).
 const CALLSIGN = `prefuser-${pubKeyHex.slice(0, 6)}`;
 
 async function signedFetch(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
-    const bodyString = JSON.stringify(body ?? {});
+    const bodyString = method === 'GET' || method === 'HEAD' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const pathname = path.split('?')[0];
+    const canonical = `${method}\n${pathname}\n${ts}\n${nonce}\n${bodyString}`;
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'X-Public-Key': pubKeyHex,
@@ -47,7 +48,11 @@ async function signedFetch(method: string, path: string, body?: unknown): Promis
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyString });
+    const fetchOptions: RequestInit = { method, headers };
+    if (method !== 'GET' && method !== 'HEAD') {
+        fetchOptions.body = bodyString;
+    }
+    const res = await fetch(`${BASE}${path}`, fetchOptions);
     let parsed: any;
     try {
         parsed = await res.json();
@@ -98,11 +103,11 @@ async function main(): Promise<void> {
     assert(validPushDel.status === 200 && validPushDel.body?.success === true, 'DELETE /api/push-tokens removes push token successfully');
 
     // ── 2. Member Preferences GET & POST Validation ─────────────────────────────
-    const missingGetPref = await fetch(`${BASE}/api/members/preferences`);
+    const missingGetPref = await signedFetch('GET', '/api/members/preferences');
     assert(missingGetPref.status === 400, 'GET /api/members/preferences rejects missing publicKey query param with 400');
 
-    const validGetPref = await fetch(`${BASE}/api/members/preferences?publicKey=${pubKeyHex}`);
-    const defaultPrefBody = await validGetPref.json();
+    const validGetPref = await signedFetch('GET', `/api/members/preferences?publicKey=${pubKeyHex}`);
+    const defaultPrefBody = validGetPref.body;
     assert(validGetPref.status === 200 && typeof defaultPrefBody === 'object', 'GET /api/members/preferences fetches default member preferences');
 
     const invalidPostPref = await signedFetch('POST', '/api/members/preferences', { publicKey: pubKeyHex });
@@ -119,9 +124,31 @@ async function main(): Promise<void> {
     });
     assert(validPostPref.status === 200 && validPostPref.body?.success === true, 'POST /api/members/preferences updates member preferences successfully');
 
-    const verifyUpdatedPref = await fetch(`${BASE}/api/members/preferences?publicKey=${pubKeyHex}`);
-    const updatedPrefBody = await verifyUpdatedPref.json();
+    const verifyUpdatedPref = await signedFetch('GET', `/api/members/preferences?publicKey=${pubKeyHex}`);
+    const updatedPrefBody = verifyUpdatedPref.body;
     assert(verifyUpdatedPref.status === 200 && updatedPrefBody?.notify_chat === 'false' && updatedPrefBody?.notify_escrow === 'false', 'GET /api/members/preferences confirms updated preferences saved');
+
+    // ── 3. Read Auth Member Isolation Tests ─────────────────────────────────────
+    const victimKeyPair = crypto.generateKeyPairSync('ed25519');
+    const victimPubHex = (victimKeyPair.publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, 'victim', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`)
+      .run(victimPubHex);
+
+    // Test that when ENFORCE_READ_AUTH is active via signedFetch, querying another member's preferences or invites returns 403.
+    const otherMemberPref = await signedFetch('GET', `/api/members/preferences?publicKey=${victimPubHex}`);
+    const otherMemberInvites = await signedFetch('GET', `/api/invite/mine/${victimPubHex}`);
+    if (process.env.ENFORCE_READ_AUTH === 'true') {
+        assert(otherMemberPref.status === 403, 'GET /api/members/preferences for another user returns 403 under ENFORCE_READ_AUTH');
+        assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403 under ENFORCE_READ_AUTH');
+    }
+
+    // Test signed fetch for own preferences / invites:
+    const ownPref = await signedFetch('GET', `/api/members/preferences?publicKey=${pubKeyHex}`);
+    assert(ownPref.status === 200, 'GET /api/members/preferences for own publicKey succeeds');
+
+    const ownInvites = await signedFetch('GET', `/api/invite/mine/${pubKeyHex}`);
+    assert(ownInvites.status === 200, 'GET /api/invite/mine/:publicKey for own publicKey succeeds');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

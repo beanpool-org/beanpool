@@ -1,5 +1,10 @@
 # SSO client handover — 2026-08-11, revised 2026-08-14
 
+> **⚠️ Historical.** Keeper (social/guardian) recovery was scrapped in September 2026.
+> This document describes it as live because that was true when it was written.
+> The only recovery paths now are the member's 12 words and SSO (native only).
+> See [keeper-recovery-parked.md](keeper-recovery-parked.md).
+
 **Read this before touching recovery, keepers, or Sign in with Apple or Google.**
 
 You are picking up mid-build. The design was settled on 2026-08-10 and the server half merged
@@ -291,9 +296,10 @@ measured. The measurement is recorded in the header comment of
 ## 5. Traps that have already cost hours
 
 1. **`deploy.sh` ships your working tree.** A plain `deploy.sh` local-builds whatever tree it
-   is pointed at, on any branch, silently. `DEPLOY_PULL=1` is the only path to the CI image
-   from `main`. The test node sat 3 days stale while we debugged client code that was fine.
-   **Verify by grepping the running image, not the version string.**
+   is pointed at, on any branch, silently. `DEPLOY_PULL=1` pulls from GHCR, but `:latest` only
+   moves on a release — to deploy a CI image from `main`, pass `DEPLOY_TAG=<short-sha>` (e.g.
+   `DEPLOY_PULL=1 DEPLOY_TAG=3fb6e72 bash deploy.sh 11`). The test node sat 3 days stale while we
+   debugged client code that was fine. **Verify by grepping the running image, not the version string.**
 2. **`-allowProvisioningUpdates` does not register devices.** It creates certificates and
    profiles only. Device registration happens **only** via the Xcode GUI or the developer
    portal. Apple documents this nowhere. Every headless build attempt failed on this.

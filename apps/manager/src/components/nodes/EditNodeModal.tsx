@@ -23,8 +23,9 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
             const cleanUrl = normalizeNodeUrl(url);
             const data = await fetchDiagnostics(cleanUrl, password.trim() || undefined);
             setTestStatus(`✅ Connection OK! Status: ${data.status.toUpperCase()} (${data.communityName || 'BeanPool Node'})`);
-        } catch (e: any) {
-            setTestStatus(`❌ Connection Error: ${e.message}`);
+        } catch (e: unknown) {
+            const errMessage = e instanceof Error ? e.message : String(e);
+            setTestStatus(`❌ Connection Error: ${errMessage}`);
         } finally {
             setTestLoading(false);
         }
@@ -84,6 +85,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
+                                autoComplete="off"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="Enter Admin Password for authentication"

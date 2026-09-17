@@ -50,6 +50,8 @@ import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
+import { initAppStoreVersionChecks } from './app-store-versions.js';
+import { initShutdownRecovery } from './engine/shutdown-recovery.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -66,6 +68,17 @@ async function main() {
 
     // Step 2: Admin password (first boot: env var or auto-generate)
     initAdminPassword();
+
+    // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
+    const shutdownRecovery = initShutdownRecovery();
+    if (shutdownRecovery.uncleanShutdown) {
+        if (shutdownRecovery.ok) {
+            console.log(`🛡️  ${shutdownRecovery.message}`);
+        } else {
+            console.error(`🚨 FATAL: ${shutdownRecovery.message}`);
+            process.exit(1);
+        }
+    }
 
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
@@ -190,6 +203,11 @@ async function main() {
 
     // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
     scheduleDailyPulse();
+
+    // Step 8.8: App-store version lookup. The node checks the stores twice a day and
+    // serves the answer in /api/community/health, so phones stop downloading the Play
+    // Store listing page over their own metered connections to find out.
+    initAppStoreVersionChecks();
 
     // Step 9: Start cert renewal scheduler (checks every 24h)
     startRenewalScheduler();

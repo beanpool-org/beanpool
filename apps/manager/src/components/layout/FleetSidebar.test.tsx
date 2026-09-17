@@ -19,6 +19,7 @@ describe('FleetSidebar Component', () => {
         onReorderNodes: vi.fn(),
         activeTab: 'overview' as TabId,
         onSelectTab: vi.fn(),
+        isFleetMode: true,
     };
 
     it('renders fleet sidebar with brand title and connected profiles', () => {
@@ -101,5 +102,70 @@ describe('FleetSidebar Component', () => {
         render(<FleetSidebar {...defaultProps} nodeHealthMap={nodeHealthMap} />);
 
         expect(screen.getByTitle('Admin password needed')).toBeInTheDocument();
+    });
+
+    it('renders empty state when profiles array is empty', () => {
+        const onOpenAddModal = vi.fn();
+        render(<FleetSidebar {...defaultProps} profiles={[]} onOpenAddModal={onOpenAddModal} />);
+
+        expect(screen.getByText('No Connected Nodes')).toBeInTheDocument();
+        expect(screen.getByText('Add your first sovereign node profile to begin managing your fleet.')).toBeInTheDocument();
+
+        const addSovereignButton = screen.getByRole('button', { name: /\+ add sovereign node/i });
+        fireEvent.click(addSovereignButton);
+        expect(onOpenAddModal).toHaveBeenCalledTimes(1);
+    });
+
+    describe('Single Node Mode (isFleetMode = false)', () => {
+        const singleNodeProps = {
+            ...defaultProps,
+            isFleetMode: false,
+            activeTab: 'home' as TabId,
+        };
+
+        it('renders single-node sidebar with Node Settings brand and 4 plain-English sections + Home', () => {
+            render(<FleetSidebar {...singleNodeProps} />);
+
+            expect(screen.getByText('BeanPool')).toBeInTheDocument();
+            expect(screen.getByText('Node Settings')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /home/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /people & safety/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /shared projects & economy/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /bulletin & news/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /appliance & data/i })).toBeInTheDocument();
+
+            // Omits fleet controls
+            expect(screen.queryByText(/connected fleet/i)).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /\+ add node/i })).not.toBeInTheDocument();
+            expect(screen.queryByText(/multi-server control plane/i)).not.toBeInTheDocument();
+        });
+
+        it('calls onSelectTab when a single-node section is clicked', () => {
+            const onSelectTab = vi.fn();
+            render(<FleetSidebar {...singleNodeProps} onSelectTab={onSelectTab} />);
+
+            fireEvent.click(screen.getByRole('button', { name: /people & safety/i }));
+            expect(onSelectTab).toHaveBeenCalledWith('people');
+
+            fireEvent.click(screen.getByRole('button', { name: /appliance & data/i }));
+            expect(onSelectTab).toHaveBeenCalledWith('appliance');
+        });
+
+        it('renders single node status card and legacy settings link', () => {
+            render(<FleetSidebar {...singleNodeProps} />);
+
+            expect(screen.getByText('Node Status')).toBeInTheDocument();
+            expect(screen.getByText('Alpha Node')).toBeInTheDocument();
+            expect(screen.getByText('Legacy Settings')).toHaveAttribute('href', '/settings-legacy');
+        });
+
+        it('renders community name in header brand and marks decorative seedling as aria-hidden', () => {
+            render(<FleetSidebar {...singleNodeProps} communityName="Mullumbimby Commons" />);
+
+            expect(screen.getAllByText('Mullumbimby Commons').length).toBe(2);
+            expect(screen.queryByRole('img', { name: 'Mullumbimby Commons — Node Settings' })).toBeNull();
+            const seedlingEl = screen.getByText('🌱');
+            expect(seedlingEl).toHaveAttribute('aria-hidden', 'true');
+        });
     });
 });

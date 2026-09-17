@@ -38,7 +38,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const pathname = path.split('?')[0];
+    const canonical = `${method}\n${pathname}\n${ts}\n${nonce}\n${bodyString}`;
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
         'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
@@ -86,7 +87,12 @@ async function main() {
         { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
 
-    // Reactions — sending a message from A, then testing reaction permissions.
+    // Send message — spoof check (signed by A but claiming to be B) is DENIED.
+    const msgSpoofed = await signedFetch('POST', '/api/messages/send', A,
+        { conversationId: conv.id, authorPubkey: B.pubKeyHex, ciphertext: 'impersonating B', nonce: '123' });
+    assert(msgSpoofed.status === 403, `send message: spoofed authorPubkey is DENIED (got ${msgSpoofed.status} ${msgSpoofed.error ?? ''})`);
+
+    // Send message — participant A sends valid message.
     const msgRes = await signedFetch('POST', '/api/messages/send', A,
         { conversationId: conv.id, authorPubkey: A.pubKeyHex, ciphertext: 'hello', nonce: '123' });
     assert(msgRes.status === 200, `send message: A sends message in A-B DM (got ${msgRes.status})`);
@@ -98,9 +104,28 @@ async function main() {
         { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: '👍' });
     assert(reactA.status === 200, `reactions: participant A can react (got ${reactA.status})`);
 
+    const reactOverlength = await signedFetch('POST', '/api/messages/react', A,
+        { messageId: msgId, authorPubkey: A.pubKeyHex, emoji: 'A'.repeat(100) });
+    assert(reactOverlength.status === 400, `reactions: overlength emoji is REJECTED with 400 (got ${reactOverlength.status})`);
+
     const reactC = await signedFetch('POST', '/api/messages/react', C,
         { messageId: msgId, authorPubkey: C.pubKeyHex, emoji: '👎' });
     assert(reactC.status === 404, `reactions: outsider C is DENIED reacting to message (got ${reactC.status} ${reactC.error ?? ''})`);
+
+    // Mark-read authorization — participant A can mark read; outsider C is rejected (403).
+    const markA = await signedFetch('POST', '/api/messages/mark-read', A,
+        { pubkey: A.pubKeyHex, conversationId: conv.id });
+    assert(markA.status === 200, `mark-read: participant A can mark read (got ${markA.status})`);
+
+    const markC = await signedFetch('POST', '/api/messages/mark-read', C,
+        { pubkey: C.pubKeyHex, conversationId: conv.id });
+    assert(markC.status === 403, `mark-read: outsider C is DENIED marking conversation read (got ${markC.status} ${markC.error ?? ''})`);
+
+    // Marketplace transactions IDOR — subject reads own transactions (200); outsider is denied (403).
+    const txA = await signedFetch('GET', `/api/marketplace/transactions?publicKey=${A.pubKeyHex}`, A);
+    assert(txA.status === 200, `marketplace transactions IDOR: A reads own transactions (got ${txA.status} ${txA.error ?? ''})`);
+    const txC = await signedFetch('GET', `/api/marketplace/transactions?publicKey=${A.pubKeyHex}`, C);
+    assert(txC.status === 403, `marketplace transactions IDOR: C is DENIED A's marketplace transactions (got ${txC.status} ${txC.error ?? ''})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

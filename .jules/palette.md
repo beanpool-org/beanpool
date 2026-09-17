@@ -19,6 +19,10 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+### 2026-09-09 — Incomplete ARIA meter semantics in CreditBar (#681). Landed after fix.
+#681 added `role="meter"`, `aria-label`, `aria-valuenow`, and `aria-valuemin={floor}` to PWA `CreditBar.tsx`, but omitted `aria-valuemax`. Assistive technologies default omitted `aria-valuemax` to 100; because BeanPool balances regularly exceed 100, this produced an invalid ARIA state (`valuenow > valuemax`) and validator errors until `aria-valuemax={feeFreeMax}` (default 200) and clamped `aria-valuenow = Math.min(valuemax, Math.max(valuemin, balance))` were added.
+Before filing an accessibility PR, check every ARIA attribute the role requires, not just the role itself. For `role="meter"` and `role="progressbar"`, always supply valid `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` that cover the full range of runtime values.
+
 ### 2026-08-25 — CategoryPickerModal a11y LANDED in #371. Raised four times.
 #366, #390, #399 closed as duplicates. #371 won because it was the only one with an Escape
 handler *and* an explicit close button *and* `type="button"`. One open nit worth a future PR:
@@ -34,6 +38,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 - Marketplace filter-clear `✕` buttons (category + distance): keyboard-operable.
 - REJECTED: WelcomePage "← Back" controls (#72) — already semantic `<button>`s; not
   an a11y gap. Do not re-file.
+- OnboardingGuide decorative emojis hidden (#780): wrapped in `aria-hidden="true"` to prevent screen reader noise while preserving WCAG 2.5.3 visible names.
 
 ---
 
@@ -95,3 +100,56 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-08-31 - PricingGuideModal Accessibility & Keyboard Focus Indicators
 **Learning:** `PricingGuideModal.tsx` close button, category selection pills, and interactive catalog item rows (`role="button"`) lacked visual focus ring indicators (`focus-visible:ring-2`) and explicit screen-reader `aria-label`s on item rows when interactive.
 **Action:** Added `focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to modal close button, category buttons, and item cards. Added dynamic `aria-label` context to item cards.
+
+## 2026-09-01 - PrivacyBadge Accessibility & Focus Ring Styling
+**Learning:** `PrivacyBadge.tsx` lacked an explicit `type="button"` attribute, descriptive screen-reader `aria-label` text communicating privacy mode and action, decorative status dot hiding (`aria-hidden="true"`), and visible keyboard focus ring styling (`focus-visible:ring-2`).
+**Action:** Added `type="button"`, dynamic `aria-label`, `aria-hidden="true"` on status indicator dot, and `focus-visible:ring-2 focus-visible:ring-emerald-500` focus ring styling.
+
+## 2026-09-02 - RadiusPickerPage Modal Accessibility & Keyboard Navigation
+**Learning:** `RadiusPickerPage.tsx` full-screen location modal overlay lacked ARIA modal semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), Escape key press dismiss listener, explicit `type="button"` attributes on action buttons, descriptive `aria-label` text on buttons and range slider, and visible focus-visible ring indicators.
+**Action:** Added `role="dialog"`, `aria-modal="true"`, `aria-labelledby="radius-picker-title"`, `id="radius-picker-title"`, `useEffect` Escape key handler, explicit `type="button"`, `aria-label` text, and `focus-visible:ring-2 focus-visible:ring-amber-500` focus rings.
+
+## 2026-09-03 - ToggleSwitch ARIA Switch Semantics & Focus Ring Styling
+**Learning:** `ToggleSwitch` in `SettingsPage.tsx` rendered custom interactive buttons without `role="switch"` or `aria-checked`, lacked descriptive `aria-label` text, and suppressed outline styling with `outline-none` without providing focus-visible ring indicators.
+**Action:** Added `role="switch"`, `aria-checked={checked}`, `aria-label={label}`, and `focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to `ToggleSwitch`, and updated all usages in `SettingsPage.tsx` with explicit descriptive `label` props.
+
+## 2026-09-04 - PeoplePage ARIA Tab Semantics & Action Button Accessibility
+**Learning:** `PeoplePage.tsx` rendered sub-navigation buttons without ARIA tablist semantics (`role="tablist"`, `role="tab"`, `aria-selected`), lacked explicit `type="button"` attributes, missed visual focus ring indicators (`focus-visible:ring-2`), and used icon-only buttons (like `💬`) or action buttons without descriptive screen-reader `aria-label` context.
+**Action:** Added `role="tablist"` and `aria-label="People navigation"` to the sub-nav wrapper, `type="button"`, `role="tab"`, and `aria-selected` to tab buttons, explicit `type="button"`, `aria-label`, and `focus-visible:ring-2` focus rings to avatar profile triggers and action buttons (Message 💬, Remove friend, + Add friend).
+
+## 2026-09-05 - CreditBar ARIA Meter Semantics & Decorative Emoji Hiding
+**Learning:** `CreditBar.tsx` rendered a visual credit balance gauge without ARIA meter semantics (`role="meter"`, `aria-label`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-valuetext`), rendering the gauge invisible or invalid to screen-reader users, and included raw decorative emoji icons (`⚖️`, `🎣`) that created noise in screen-reader navigation.
+**Action:** Added `role="meter"`, `aria-label="Credit balance gauge"`, `aria-valuenow` clamped within `[floor, feeFreeMax]`, `aria-valuemin={floor}`, `aria-valuemax={feeFreeMax}`, and `aria-valuetext={`${fmt(balance)} Beans`}` to the container div, and wrapped decorative emojis with `<span aria-hidden="true">`.
+
+
+## 2026-09-06 - ReportModal Accessibility & Focus Indicators
+**Learning:** `ReportModal.tsx` close button and reason selection buttons lacked minimum accessible touch target sizes (< 44px height/width), missing `aria-pressed` states on selectable reason pills, raw decorative emoji `🚩` read by screen readers, and missing focus-visible outline rings on interactive buttons.
+**Action:** Added `aria-hidden="true"` to decorative emoji, `min-w-[44px] min-h-[44px]` touch target sizing, `aria-pressed={isSelected}` on reason pills, and `focus-visible:ring-2` focus rings across close, reason, cancel, and submit report buttons.
+
+## 2026-09-07 - PulseNudges Touch Target Sizing & Keyboard Focus Ring Styling
+**Learning:** `PulseNudges.tsx` dismiss icon `✕` buttons and action buttons ("Dismiss", "Add to Pulse", "Share") lacked minimum touch target sizing (< 44px height/width) and visible focus ring indicators (`focus-visible:ring-2`) for keyboard users.
+**Action:** Added `min-w-[44px] min-h-[44px]` to dismiss `✕` buttons and `min-h-[44px]` to action buttons, along with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500` styling across all interactive buttons in `PulseNudges.tsx`.
+
+## 2026-09-08 - ArchetypeQuizModal Dialog Title Linking, Emojis, and Focus Rings
+**Learning:** `ArchetypeQuizModal.tsx` modal header lacked title ID linking (`id="quiz-modal-title"` with `aria-labelledby="quiz-modal-title"`), decorative emojis (`🌱`, `⚡`, `🧭`, `🛡️`, `🌟`, `👥`) were unhidden from screen readers, and interactive controls (back/close buttons, quiz mode cards, radio options, save, and deepen buttons) lacked visible keyboard focus ring indicators (`focus-visible:ring-2`).
+**Action:** Linked modal header title via `id="quiz-modal-title"` and `aria-labelledby="quiz-modal-title"`, added `aria-hidden="true"` to decorative emojis, and added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all modal buttons.
+
+## 2026-09-09 - ChannelChips Focus Ring Styling
+**Learning:** `ChannelChips.tsx` rendered interactive external profile links and channel chips without explicit `focus-visible` ring indicators, making keyboard focus highlights invisible or inconsistent.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-1` to channel chips in `ChannelChips.tsx`.
+
+## 2026-09-13 - RecoveryAlertBanner Region Label, Focus Rings, and Touch Targets
+**Learning:** `RecoveryAlertBanner.tsx` rendered an urgent security alert region (`role="region"`) without an `aria-label`, raw decorative emojis (`🚨`, `🛑`) were exposed to screen readers, and the action button lacked minimum touch target height (`min-h-[44px]`), dynamic `aria-busy` state, and focus-visible outline rings.
+**Action:** Added `aria-label="Account recovery alert"` to `role="region"`, wrapped decorative emojis with `aria-hidden="true"`, added `aria-busy={stopping}`, `min-h-[44px]`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2` styling to the action button.
+
+## 2026-09-14 - OnboardingGuide Decorative Emoji Hiding
+**Learning:** `OnboardingGuide.tsx` rendered decorative emojis (`⚡`, `🟢`, `🫘`, `🪙`, `🤝`, `🌾`, `⏱️`, `🔒`, `🚀`, `📍`, `💬`, `➕`, `💳`) in headings and paragraph texts without hiding them from assistive technology, causing screen readers to announce character names and create noise during onboarding navigation.
+**Action:** Wrapped all decorative emojis in `OnboardingGuide.tsx` with `<span aria-hidden="true">` and added `OnboardingGuide.test.tsx` verifying decorative emoji hiding.
+
+## 2026-09-15 - PulseFeedCard Focus Rings and Touch Target Sizing
+**Learning:** `PulseFeedCard.tsx` interactive buttons (author profile trigger, hide/delete action buttons, and modal confirmation triggers) lacked minimum touch target sizing (< 44px) and focus-visible outline rings for keyboard users.
+**Action:** Added `min-h-[44px]` touch target sizing and `focus-visible:outline-none focus-visible:ring-2` focus rings across interactive controls in `PulseFeedCard.tsx`, and added component test coverage.
+
+## 2026-09-16 - CreateGroupModal Dialog Title Linking, Emojis, and Focus Rings
+**Learning:** `CreateGroupModal.tsx` modal header lacked title ID linking (`id="create-group-title"` with `aria-labelledby="create-group-title"`), raw decorative emojis (`👥`, `ℹ️`, `🤝`, `🛠️`, `🛡️`, `☕`, `💬`, `🚪`, `⏳`, `🔒`) were unhidden from screen readers, and interactive controls (close button, category selection buttons, and join policy buttons) lacked visible keyboard focus ring indicators (`focus-visible:ring-2`).
+**Action:** Linked modal header title via `id="create-group-title"` and `aria-labelledby="create-group-title"`, wrapped decorative emojis with `<span aria-hidden="true">`, added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` styling across all modal interactive controls, and added unit test coverage in `CreateGroupModal.test.tsx`.

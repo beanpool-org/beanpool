@@ -379,6 +379,22 @@ function getJsonWithIPv4(urlStr: string): Promise<{ status: number; json: any }>
         const platform = body.platform;
         const grantType = body.grantType || 'authorization_code';
 
+        if (body.code && String(body.code).length > 1024) {
+            ctx.status = 400;
+            ctx.body = { error: 'Code exceeds maximum length of 1024 characters.' };
+            return;
+        }
+        if (body.codeVerifier && String(body.codeVerifier).length > 256) {
+            ctx.status = 400;
+            ctx.body = { error: 'Code verifier exceeds maximum length of 256 characters.' };
+            return;
+        }
+        if (body.refreshToken && String(body.refreshToken).length > 2048) {
+            ctx.status = 400;
+            ctx.body = { error: 'Refresh token exceeds maximum length of 2048 characters.' };
+            return;
+        }
+
         if (platform === 'tiktok') {
             const clientKey = process.env.TIKTOK_CLIENT_KEY || process.env.TIKTOK_CLIENT_ID;
             const clientSecret = process.env.TIKTOK_CLIENT_SECRET;

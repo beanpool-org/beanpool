@@ -70,15 +70,37 @@ type CreateTreasuryFn = (
  * treasury "creates a negative nobody earns back — the stranded-negative problem in reverse". A link
  * spends beans the community actually has, or it does not spend.
  */
+export function findDefaultLinkOperator(): string | null {
+    const adminRow = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM' AND public_key != '' ORDER BY rowid ASC LIMIT 1").get() as any;
+    if (adminRow?.public_key) return adminRow.public_key;
+    // Do not fall back to arbitrary members: return null to prevent privilege escalation
+    return null;
+}
+
 export function ensureFederationLink(
     peerId: string,
     callsign: string | undefined,
     createTreasury: CreateTreasuryFn,
+    operatorPubkey?: string,
 ): FederationLink | null {
     if (!peerId) return null;
 
     const existing = getFederationLink(peerId);
-    if (existing) return existing;
+    if (existing) {
+        // Do not auto-rebind default keepers if administrators have deliberately
+        // revoked them. Only bind if explicitly requested with operatorPubkey.
+        if (operatorPubkey) {
+            const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(existing.treasuryPubkey, operatorPubkey);
+            if (!bound) {
+                db.transaction(() => {
+                    db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                                VALUES (?, ?, 'keeper', 'admin')`).run(existing.treasuryPubkey, operatorPubkey);
+                    db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(operatorPubkey);
+                })();
+            }
+        }
+        return existing;
+    }
 
     // The bridge account may not exist yet — a cap can be set before the first trade. Create it now so
     // the card can show a real 0 rather than nothing, and so the demurrage exemption is in place before
@@ -87,6 +109,7 @@ export function ensureFederationLink(
 
     let name = linkNameFor(callsign, peerId);
     let created!: { publicKey: string };
+    const op = operatorPubkey || findDefaultLinkOperator();
 
     // ONE TRANSACTION over the treasury and the link row (review finding, accepted). Without it, an insert
     // that failed would leave the treasury behind with nothing pointing at it, and that orphan appears in the
@@ -112,6 +135,12 @@ export function ensureFederationLink(
         }
         db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)')
             .run(peerId, created.publicKey);
+
+        if (op) {
+            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                        VALUES (?, ?, 'keeper', 'system')`).run(created.publicKey, op);
+            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(op);
+        }
     })();
 
     logger.info('P2P', `[Link] Created "${name}" for peer ${peerId.slice(-8)} (treasury ${created.publicKey.slice(0, 12)}…, ceiling 0)`);
@@ -230,7 +259,15 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
         if (getConnectorCreditCap(connector.address) === null) continue;
         const peerId = peerIdFromAddress(connector.address);
         if (!peerId) continue;                       // no peer id = nothing to key a bridge or a link on
-        if (getFederationLink(peerId)) continue;
+        const existing = getFederationLink(peerId);
+        if (existing) {
+            try {
+                ensureFederationLink(peerId, connector.callsign, createTreasury);
+            } catch (e: any) {
+                logger.error('P2P', `[Link] Failed to reconcile existing link for ${peerId.slice(-8)}: ${e?.message || e}`);
+            }
+            continue;
+        }
         try {
             if (ensureFederationLink(peerId, connector.callsign, createTreasury)) created++;
         } catch (e: any) {
@@ -242,4 +279,5 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
     return created;
 }
 
-export { bridgeAccountId };
+export { bridgeAccountId, ensureFederationLink as createFederationLink };
+

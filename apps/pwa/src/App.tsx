@@ -4,28 +4,33 @@
  * Handles:
  * - Identity gate (first-run → WelcomePage)
  * - Tab routing (Marketplace / Ledger)
- * - Persistent header with SyncStatus + PrivacyBadge
+ * - Persistent header with SyncStatus
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadIdentity, updateCallsign, type BeanPoolIdentity } from './lib/identity';
-import { connectToAnchor, onSystemAnnouncement } from './lib/sync';
-import { checkMembership, getConversations, getMarketplacePosts, getMyMarketplaceTransactions, getCommunityHealth } from './lib/api';
+import { connectToAnchor, onSystemAnnouncement, onSyncActivity } from './lib/sync';
+import { checkMembership, getConversations, getMyMarketplaceTransactions, getCommunityHealth, type MarketplaceTransaction } from './lib/api';
+import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
-import pkg from '../package.json';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
+import { normaliseVersion, isVersionOlder } from './lib/app-version';
+import { retryPendingReports } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { PulsePage } from './pages/PulsePage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
+import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
+import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 
 function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
@@ -73,37 +78,97 @@ function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenP
     );
 }
 
-type Tab = 'map' | 'marketplace' | 'messages' | 'people' | 'ledger' | 'projects';
+type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
+
+// Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
+// Each tab's share of the row follows its label length, with a floor for the emoji above it.
+export function navTabWeight(label: string): number {
+    return Math.max(4, label.length);
+}
+// Measured in headless Chrome at 320px: "Commons" in extrabold needs ~4.9px of row per px of
+// font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.
+export const NAV_LABEL_FONT_SIZE = 'min(0.6rem, 3.3vw)';
+
+// What the header reads out of GET /api/community/health. `online` is ours, not the
+// node's: it records whether that call answered at all.
+interface NodeHealthState {
+    online: boolean;
+    version?: string;
+    minAppVersion?: string;
+    nodeName?: string;
+    callsign?: string;
+    memberCount?: number;
+    postCount?: number;
+    tree?: { totalMembers?: number };
+    activity?: { totalPosts?: number };
+}
 
 export function App() {
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<Tab>('marketplace');
-    const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites' | 'guardians'>('friends');
+    const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile'>('menu');
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);
+    const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
+    const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
+
+    useEffect(() => {
+        if (typeof document !== 'undefined') {
+            if (isBottomNavVisible) {
+                document.documentElement.removeAttribute('data-bottom-nav');
+                document.documentElement.classList.remove('bottom-nav-hidden');
+                document.documentElement.style.removeProperty('--bottom-nav-height');
+                document.documentElement.style.removeProperty('--bottom-nav-offset');
+            } else {
+                document.documentElement.setAttribute('data-bottom-nav', 'hidden');
+                document.documentElement.classList.add('bottom-nav-hidden');
+                document.documentElement.style.setProperty('--bottom-nav-height', '0px');
+                document.documentElement.style.setProperty('--bottom-nav-offset', 'env(safe-area-inset-bottom, 0px)');
+            }
+        }
+        return () => {
+            if (typeof document !== 'undefined') {
+                document.documentElement.removeAttribute('data-bottom-nav');
+                document.documentElement.classList.remove('bottom-nav-hidden');
+                document.documentElement.style.removeProperty('--bottom-nav-height');
+                document.documentElement.style.removeProperty('--bottom-nav-offset');
+            }
+        };
+    }, [isBottomNavVisible]);
     const [theme, toggleTheme] = useTheme();
     const [sysAnnouncement, setSysAnnouncement] = useState<{ title: string, body: string, severity: string } | null>(null);
     const [totalUnread, setTotalUnread] = useState(0);
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
+    const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [isGuest, setIsGuest] = useState(false);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
-    const [communityHealth, setCommunityHealth] = useState<any | null>(null);
+    const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
+    // The node's own version, once health has answered; the baked-in bundle version until then.
+    const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
+    const isVersionOutdated = !!(communityHealth?.minAppVersion && isVersionOlder(__APP_VERSION__, communityHealth.minAppVersion));
 
     const toggleCommunityStatus = () => {
-        if (communityHealth) {
-            setShowCommunityStatus(!showCommunityStatus);
+        if (showCommunityStatus) {
+            setShowCommunityStatus(false);
             return;
         }
+        if (communityHealth?.online) {
+            setShowCommunityStatus(true);
+            return;
+        }
+        // Never loaded, or loaded offline: re-check, so a cold start or a dropped
+        // connection recovers on a tap instead of needing a page reload.
         getCommunityHealth()
             .then(h => { setCommunityHealth({ ...h, online: true }); setShowCommunityStatus(true); })
-            .catch(() => { setCommunityHealth({ online: false }); setShowCommunityStatus(true); });
+            .catch(() => { setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
     };
 
     function navigateToTab(tab: string, contextId?: string) {
@@ -114,6 +179,19 @@ export function App() {
         if (tab === 'map-post') {
             setActiveTab('map');
             setOpenNewPost(true);
+            setOpenNewPostGroupId(contextId);
+            return;
+        }
+        if (tab === 'map') {
+            setActiveTab('map');
+            if (contextId) {
+                setOpenNewPost(true);
+                setOpenNewPostGroupId(contextId);
+            }
+            return;
+        }
+        if (tab === 'enterprise' || tab === 'treasury') {
+            if (contextId) setOpenTreasuryPubkey(contextId);
             return;
         }
         setActiveTab(tab as Tab);
@@ -121,11 +199,28 @@ export function App() {
         if (tab === 'marketplace' && contextId) setOpenMarketPostId(contextId);
     }
 
-    // Load existing identity on mount
+    // Load existing identity and initial community health on mount
     useEffect(() => {
+        let mounted = true;
+
         loadIdentity()
-            .then(setIdentity)
-            .finally(() => setLoading(false));
+            .then(id => { if (mounted) setIdentity(id); })
+            .finally(() => { if (mounted) setLoading(false); });
+
+        getCommunityHealth()
+            .then(h => { if (mounted) setCommunityHealth({ ...h, online: true }); })
+            .catch(() => { if (mounted) setCommunityHealth(prev => ({ ...prev, online: false })); });
+
+        retryPendingReports().catch(() => {});
+        const handleOnline = () => {
+            retryPendingReports().catch(() => {});
+        };
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            mounted = false;
+            window.removeEventListener('online', handleOnline);
+        };
     }, []);
 
     // Connect to BeanPool Node once identity is loaded
@@ -157,35 +252,143 @@ export function App() {
         return unsub;
     }, [identity]);
 
+    // The identity in flight, read at await-resolution time rather than captured. The previous
+    // guard compared `identity.publicKey !== currentPubkey` — both sides come from the same
+    // closure, so it was always false and guarded nothing: a fetch resolving after a logout or an
+    // account switch wrote the OLD account's transactions into the new one's view.
+    const identityPubkeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        identityPubkeyRef.current = identity?.publicKey ?? null;
+        // Clear on switch or logout, so the next account never briefly renders the last one's
+        // deals while its first fetch is still in flight.
+        setMyTransactions([]);
+        setPendingDealsCount(0);
+        setTotalUnread(0);
+    }, [identity?.publicKey]);
+
+    const refreshTransactions = useCallback(async () => {
+        if (!identity) return;
+        const currentPubkey = identity.publicKey;
+        try {
+            const txs = await getMyMarketplaceTransactions(currentPubkey);
+            if (identityPubkeyRef.current !== currentPubkey) return;
+            setMyTransactions(txs);
+            const activeDeals = txs.filter(t => t.status === 'pending').length;
+            const pendingRequests = txs.filter(t => 
+                t.buyerPublicKey === currentPubkey && t.status === 'requested'
+            ).length;
+            setPendingDealsCount(activeDeals + pendingRequests);
+        } catch { /* offline */ }
+    }, [identity?.publicKey]);
+
     // Poll unread message count and active deals
     useEffect(() => {
         if (!identity) return;
+        let interval: ReturnType<typeof setInterval> | null = null;
+        // Guards the awaits below: the effect re-runs on identity change, so without this a poll
+        // started by the previous identity can resolve afterwards and write that member's counts
+        // over the new one's — or set state on an unmounted tree.
+        let cancelled = false;
+        let lastPollTime = 0;
+        let pollPromise: Promise<void> | null = null;
+
         const pollUnread = async () => {
-            try {
-                const result = await getConversations(identity.publicKey);
-                setTotalUnread(result.totalUnread || 0);
+            if (pollPromise) return pollPromise;
+            const p = (async () => {
+                try {
+                    // Settled independently, not awaited in sequence. These were chained, so a failing
+                    // /api/conversations threw out of the try before transactions were ever fetched —
+                    // and since MarketplacePage stopped polling transactions itself and now reads them
+                    // from here, one unrelated endpoint erroring starved the whole marketplace view.
+                    const [convResult, txResult] = await Promise.allSettled([
+                        getConversations(identity.publicKey),
+                        getMyMarketplaceTransactions(identity.publicKey),
+                    ]);
+                    if (cancelled) return;
 
-                // Poll marketplace for active deals + inbound requests
-                const [posts, txs] = await Promise.all([
-                    getMarketplacePosts(),
-                    getMyMarketplaceTransactions(identity.publicKey)
-                ]);
-                
-                const activeDeals = posts.filter(p => 
-                    p.status === 'pending' && 
-                    (p.authorPublicKey === identity.publicKey || p.acceptedBy === identity.publicKey)
-                ).length;
-                
-                const pendingRequests = txs.filter(t => 
-                    t.buyerPublicKey === identity.publicKey && t.status === 'requested'
-                ).length;
+                    if (convResult.status === 'fulfilled') {
+                        setTotalUnread(convResult.value.totalUnread || 0);
+                    }
 
-                setPendingDealsCount(activeDeals + pendingRequests);
-            } catch { /* offline */ }
+                    if (txResult.status === 'fulfilled') {
+                        const txs = txResult.value;
+                        setMyTransactions(txs);
+
+                        const activeDeals = txs.filter(t => t.status === 'pending').length;
+
+                        const pendingRequests = txs.filter(t =>
+                            t.buyerPublicKey === identity.publicKey && t.status === 'requested'
+                        ).length;
+
+                        setPendingDealsCount(activeDeals + pendingRequests);
+                    }
+
+                    // Both failing means nothing was refreshed, so this must NOT count as a
+                    // poll: stamping it would start the cooldown and suppress the retry, and it
+                    // must reject so the coordinator does not advance the delta cursor past data
+                    // that never arrived. One of the two failing is tolerated on purpose — that
+                    // is why they are settled independently rather than chained.
+                    if (convResult.status === 'rejected' && txResult.status === 'rejected') {
+                        throw convResult.reason;
+                    }
+                    lastPollTime = Date.now();
+                } finally {
+                    pollPromise = null;
+                }
+            })();
+            pollPromise = p;
+            return p;
         };
-        pollUnread();
-        const interval = setInterval(pollUnread, 10000);
-        return () => clearInterval(interval);
+
+        const startPolling = () => {
+            if (!interval) {
+                pollUnread().catch(() => {});
+                interval = setInterval(() => {
+                    pollUnread().catch(() => {});
+                }, withJitter(300_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: update unread counts immediately on WebSocket activity.
+        // The promise is RETURNED, not fired and forgotten: the coordinator only advances the
+        // delta cursor when every listener resolved, so a listener that swallows its own
+        // completion makes that check meaningless and lets the cursor move past data that
+        // never arrived.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or polled within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (pollPromise) return pollPromise;
+            if (Date.now() - lastPollTime < 2000) return;
+            return pollUnread();
+        });
+
+        return () => {
+            cancelled = true;
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
+        };
     }, [identity]);
 
     if (loading) {
@@ -210,6 +413,7 @@ export function App() {
 
     const TABS: { id: Tab; label: string; emoji: string }[] = [
         { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'pulse', label: 'Pulse', emoji: '📡' },
         { id: 'map', label: 'Map', emoji: '🗺️' },
         { id: 'projects', label: 'Commons', emoji: '🌱' },
         { id: 'messages', label: 'Chat', emoji: '💬' },
@@ -218,7 +422,16 @@ export function App() {
     ];
 
     return (
-        <div className="flex h-screen overflow-hidden bg-bg-primary text-text-primary">
+        <div 
+            className={`flex h-screen overflow-hidden bg-bg-primary text-text-primary ${!isBottomNavVisible ? 'bottom-nav-hidden' : ''}`}
+            data-bottom-nav={isBottomNavVisible ? 'visible' : 'hidden'}
+            style={{
+                ...(!isBottomNavVisible ? {
+                    '--bottom-nav-height': '0px',
+                    '--bottom-nav-offset': 'env(safe-area-inset-bottom, 0px)',
+                } : {})
+            } as React.CSSProperties}
+        >
             {/* Desktop Left Sidebar (Visible on md and larger) */}
             <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">
                 {/* Brand Logo Header */}
@@ -234,7 +447,10 @@ export function App() {
                         <img src="/bean.png" alt="BeanPool Icon" className="w-9 h-9 object-contain drop-shadow-sm" />
                         <div className="flex flex-col">
                             <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
-                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 tracking-wider">v{pkg.version}</span>
+                            <span
+                                className="text-[10px] font-bold text-amber-700 dark:text-amber-500 tracking-wider"
+                                aria-label={`Version ${displayVersion}`}
+                            >v{displayVersion}</span>
                         </div>
                     </div>
                 </div>
@@ -281,7 +497,7 @@ export function App() {
                 {/* Sidebar Footer Controls */}
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
                     <div className="flex items-center justify-between px-2 py-1">
-                        <SyncStatus />
+                        <SyncStatus isMember={!isGuest} />
                         <button
                             onClick={() => setShowSettings(!showSettings)}
                             aria-label="Settings"
@@ -317,6 +533,32 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+                {/* Minimum Version Gate Banner (Non-dismissible) */}
+                {isVersionOutdated && (
+                    <div
+                        role="alert"
+                        aria-live="assertive"
+                        className="w-full bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-amber-700 dark:border-amber-800 shrink-0"
+                    >
+                        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                            <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
+                            <div className="leading-tight">
+                                <span className="font-bold">App update required: </span>
+                                <span className="text-amber-100 text-xs sm:text-sm">
+                                    Your app version ({__APP_VERSION__}) is too old for this community (minimum required: v{normaliseVersion(communityHealth?.minAppVersion)}). Please refresh or reinstall to update.
+                                </span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => window.location.reload()}
+                            className="px-3 py-1.5 bg-white text-amber-900 font-bold rounded-lg text-xs hover:bg-amber-50 active:scale-95 transition-all cursor-pointer border-none shadow-sm shrink-0"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                )}
+
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
                 <header className="relative shadow-md md:hidden" style={{
                     display: 'flex',
@@ -336,7 +578,7 @@ export function App() {
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
 
                     <div className="relative z-10" style={{ marginTop: '12px' }}>
-                        <SyncStatus />
+                        <SyncStatus isMember={!isGuest} />
                     </div>
 
                     <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
@@ -346,7 +588,7 @@ export function App() {
                                 style={{ marginTop: '8px' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label}
+                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label === 'Pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
                         ) : (
                             <div 
@@ -356,7 +598,10 @@ export function App() {
                             >
                                 <img src="/bean.png" alt="BeanPool Icon" style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
                                 <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
-                                <span className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider">v{pkg.version}</span>
+                                <span
+                                    className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
+                                    aria-label={`Version ${displayVersion}`}
+                                >v{displayVersion}</span>
                             </div>
                         )}
 
@@ -408,11 +653,14 @@ export function App() {
                     flex: 1,
                     minHeight: 0,
                     overflowY: (activeTab === 'map' && !showSettings) ? 'hidden' : 'auto',
-                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : '4rem',
+                    paddingBottom: (activeTab === 'map' && !showSettings) ? '0' : 'var(--bottom-nav-offset)',
                     position: 'relative',
                 }} className="md:pb-0">
                     {showSettings && (
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, overflowY: 'auto' }}>
+                        // zIndex 100 ties the mobile header and bottom nav, so DOM order decides: Settings
+                        // (in <main>) draws over the header before it, keeping its own Back tappable, and
+                        // under the bottom nav after it, which stays usable. At 60 Back sat under the header.
+                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, overflowY: 'auto' }}>
                             <SettingsPage
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
@@ -421,12 +669,14 @@ export function App() {
                                 onToggleTheme={toggleTheme}
                                 initialMode={settingsInitialMode}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
+                                nodeVersion={communityHealth?.version?.trim() || undefined}
                             />
                         </div>
                     )}
 
                     {showProfileSetup && (
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 70, overflowY: 'auto', background: 'var(--bg-primary)' }}>
+                        // 110: above the mobile header and the bottom nav (both 100), or the last step's Back sits under the nav.
+                        <div data-testid="profile-setup-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 110, overflowY: 'auto', background: 'var(--bg-primary)' }}>
                             <ProfileSetup
                                 identity={identity}
                                 onDone={() => setShowProfileSetup(false)}
@@ -438,12 +688,51 @@ export function App() {
                     {/* Tab content — always mounted when not in settings */}
                     {!showSettings && (
                         <>
-                            {activeTab === 'map' && <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}><MapPage identity={identity} openNewPost={openNewPost} onOpenNewPostHandled={() => setOpenNewPost(false)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} /></Suspense>}
-                            {activeTab === 'marketplace' && <MarketplacePage identity={identity} marketClickCount={marketClickCount} openPostId={openMarketPostId} onPostOpened={() => setOpenMarketPostId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab !== 'map' && (
+                                <div className="max-w-xl mx-auto px-4 pt-2">
+                                    <RecoveryAlertBanner identity={identity} />
+                                </div>
+                            )}
+                            {activeTab === 'map' && (
+                                <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
+                                    <MapPage
+                                        identity={identity}
+                                        openNewPost={openNewPost}
+                                        initialGroupId={openNewPostGroupId}
+                                        onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
+                                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                        onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                    />
+                                </Suspense>
+                            )}
+                            {activeTab === 'marketplace' && (
+                                <MarketplacePage
+                                    identity={identity}
+                                    marketClickCount={marketClickCount}
+                                    openPostId={openMarketPostId}
+                                    onPostOpened={() => setOpenMarketPostId(null)}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    transactions={myTransactions}
+                                    onRefreshTransactions={refreshTransactions}
+                                />
+                            )}
+                            {activeTab === 'pulse' && (
+                                <PulsePage
+                                    identity={identity}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                />
+                            )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
-                            {activeTab === 'projects' && <ProjectsPage identity={identity} />}
+                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />}
+                            {activeTab === 'projects' && (
+                                <ProjectsPage
+                                    identity={identity}
+                                    onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                />
+                            )}
                         </>
                     )}
 
@@ -476,11 +765,28 @@ export function App() {
                             }}
                         />
                     )}
+
+                    {/* Treasury Detail Overlay */}
+                    {openTreasuryPubkey && (
+                        <TreasuryDetailPage
+                            identity={identity}
+                            isMember={!isGuest}
+                            pubkey={openTreasuryPubkey}
+                            onBack={() => setOpenTreasuryPubkey(null)}
+                            onNavigatePost={(postId) => {
+                                setOpenTreasuryPubkey(null);
+                                navigateToTab('marketplace', postId);
+                            }}
+                        />
+                    )}
                 </main>
 
                 {/* Bottom nav — mobile only */}
-                <nav className="relative md:hidden" style={{
-                    display: openProfilePubkey ? 'none' : 'flex',
+                <nav 
+                    className={`relative md:hidden bottom-nav-bar ${!isBottomNavVisible ? 'hidden' : ''}`}
+                    data-testid="mobile-bottom-nav"
+                    style={{
+                        display: isBottomNavVisible ? 'flex' : 'none',
                     position: 'fixed',
                     bottom: 0,
                     left: 0,
@@ -490,10 +796,10 @@ export function App() {
                     backgroundPosition: 'center',
                     borderTop: '1px solid #111',
                     zIndex: 100,
-                    padding: '0.2rem 4px',
+                    padding: '0.2rem 4px calc(0.2rem + env(safe-area-inset-bottom, 0px))',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-                    <div className="relative z-10 w-full flex gap-1">
+                    <div className="relative z-10 w-full flex gap-px sm:gap-1">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id && !showSettings;
                         return (
@@ -511,7 +817,12 @@ export function App() {
                                 setOpenProfilePubkey(null);
                             }}
                             style={{
-                                flex: 1,
+                                // Width follows label length (floor 4, the emoji's width), so "Commons"
+                                // gets the room it needs instead of every tab shrinking to fit it.
+                                flexGrow: navTabWeight(tab.label),
+                                flexShrink: 1,
+                                flexBasis: 0,
+                                minWidth: 0,
                                 padding: 0,
                                 background: 'transparent',
                                 border: 'none',
@@ -524,8 +835,9 @@ export function App() {
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 margin: '0 auto',
+                                width: '100%',
                                 gap: '0.1rem',
-                                padding: '0.15rem 0.5rem',
+                                padding: '0.15rem 0',
                                 borderRadius: '10px',
                                 background: 'rgba(0,0,0,0.45)',
                                 border: '1px solid rgba(255,255,255,0.05)',
@@ -582,7 +894,10 @@ export function App() {
                                         </span>
                                     )}
                                 </span>
-                                <span className={isActive ? 'text-rainbow text-dark-aura' : 'text-dark-aura'} style={{ fontSize: '0.65rem', fontWeight: isActive ? 800 : 600 }}>
+                                {/* 0.6rem alone scales with the user's text size and cut "Market"/"Commons"
+                                    to "Mar…"/"Co…" on a 320px phone at 1.3x. The vw cap keeps whole labels
+                                    there; wider screens still get the full 0.6rem. */}
+                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: NAV_LABEL_FONT_SIZE, lineHeight: 1.1 }}>
                                     {tab.label}
                                 </span>
                             </div>

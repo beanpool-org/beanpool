@@ -22,6 +22,9 @@ export interface MarketplaceTransaction {
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
     coverImage?: string | null;
+    disputeResolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | string;
+    disputeResolvedAt?: string;
+    disputeResolvedBy?: string;
 }
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
@@ -69,7 +72,10 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         completedAt: r.completed_at,
         ratedByBuyer: !!r.ratedByBuyer,
         ratedBySeller: !!r.ratedBySeller,
-        coverImage
+        coverImage,
+        disputeResolution: r.dispute_resolution || undefined,
+        disputeResolvedAt: r.dispute_resolved_at || undefined,
+        disputeResolvedBy: r.dispute_resolved_by || undefined
     };
 }
 
@@ -122,7 +128,10 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             completedAt: r.completed_at,
             ratedByBuyer: !!r.ratedByBuyer,
             ratedBySeller: !!r.ratedBySeller,
-            coverImage
+            coverImage,
+            disputeResolution: r.dispute_resolution || undefined,
+            disputeResolvedAt: r.dispute_resolved_at || undefined,
+            disputeResolvedBy: r.dispute_resolved_by || undefined
         };
     });
 }

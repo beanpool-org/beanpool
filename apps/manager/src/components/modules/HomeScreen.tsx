@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
+import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
 
 interface HomeScreenProps {
     communityName: string;
@@ -44,17 +44,17 @@ export function HomeScreen({
     const pendingReportsCount = reports.length;
     
     // Calculate unclaimed invites from nodeData or invites count
-    const membersCount = members.filter((m: any) => m && !m.isTreasury).length;
-    const enterprisesCount = Array.isArray((nodeData as any)?.enterprises)
-        ? (nodeData as any).enterprises.length
-        : members.filter((m: any) => m && m.isTreasury).length;
+    const membersCount = members.filter((m: MemberItem) => m && !m.isTreasury).length;
+    const enterprisesCount = Array.isArray(nodeData?.enterprises)
+        ? nodeData.enterprises.length
+        : members.filter((m: MemberItem) => m && m.isTreasury).length;
 
     const circulationVolume = (() => {
-        if (typeof (nodeData as any)?.tradeVolume === 'number') {
-            return (nodeData as any).tradeVolume.toFixed(1);
+        if (typeof nodeData?.tradeVolume === 'number') {
+            return nodeData.tradeVolume.toFixed(1);
         }
-        if (typeof (nodeData as any)?.circulation === 'number') {
-            return (nodeData as any).circulation.toFixed(1);
+        if (typeof nodeData?.circulation === 'number') {
+            return nodeData.circulation.toFixed(1);
         }
         if (nodeData?.memberStats && typeof nodeData.memberStats === 'object') {
             const stats = Object.values(nodeData.memberStats as Record<string, { volume?: number }>);
@@ -97,8 +97,8 @@ export function HomeScreen({
         });
     }
 
-    const pendingDisputesCount = typeof (nodeData as any)?.escrowDisputesCount === 'number'
-        ? (nodeData as any).escrowDisputesCount
+    const pendingDisputesCount = typeof nodeData?.escrowDisputesCount === 'number'
+        ? nodeData.escrowDisputesCount
         : 0;
     if (pendingDisputesCount > 0) {
         actionItems.push({
@@ -329,8 +329,8 @@ export function HomeScreen({
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
                         {auditState.result?.sumBalances !== undefined
                             ? Math.abs(auditState.result.sumBalances).toFixed(1)
-                            : (typeof (nodeData as any)?.commonsBalance === 'number'
-                                ? (nodeData as any).commonsBalance.toFixed(1)
+                            : (typeof nodeData?.commonsBalance === 'number'
+                                ? nodeData.commonsBalance.toFixed(1)
                                 : '0.0')}{' '}
                         <span className="text-xs font-normal text-nature-400">beans</span>
                     </div>

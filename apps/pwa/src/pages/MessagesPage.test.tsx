@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, getEventChat, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -75,6 +75,9 @@ vi.mock('../lib/api', () => ({
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
     createConversationApi: vi.fn(),
+    getEventChat: vi.fn(),
+    postEventChatMessage: vi.fn(),
+    removeEventChatMessage: vi.fn(),
     sendMessageApi: vi.fn(),
     editMessageApi: vi.fn(),
     toggleMessageReactionApi: vi.fn(),
@@ -458,5 +461,58 @@ describe('MessagesPage conversation filters at 320px with 1.3x text', () => {
         expect(row).toHaveStyle({ flexWrap: 'wrap' });
         expect(row).toHaveClass('scrollbar-none');
         expect(Array.from(row.querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct']);
+    });
+});
+
+describe('MessagesPage: event chat (docs/events-on-the-map.md §2.2, §3)', () => {
+    const EVENT_ID = '8f14e45f-ceea-467a-9d3c-1a2b3c4d5e6f';
+    const PUBKEY = 'a'.repeat(64);
+
+    const chatView = {
+        conversation: { id: EVENT_ID, type: 'event_thread', name: 'Working bee', participants: [], createdBy: 'host-pk', createdAt: '' },
+        messages: [],
+        readOnly: false,
+        readOnlyReason: null,
+        canPost: true,
+        isHost: true,
+        title: 'Working bee',
+        eventEndAt: null,
+        eventState: 'scheduled',
+        privateNote: 'Gate code 1234',
+        notice: "Visible to the host, everyone going, and this node's operator.",
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockConversations = [];
+        mockConversationDetails = {};
+        mockMessagesByConv = {};
+    });
+
+    it('opens an event chat by the event id, and never starts a DM with an id that is not a public key', async () => {
+        // A host who has not tapped Going has no conversation row yet, so the id is not in the list.
+        vi.mocked(getEventChat).mockResolvedValue(chatView as any);
+        render(<MessagesPage identity={mockIdentity} openConversationId={EVENT_ID} />);
+
+        expect(await screen.findByTestId('event-chat')).toBeInTheDocument();
+        expect(await screen.findByTestId('event-chat-pinned-note')).toHaveTextContent('Gate code 1234');
+        expect(createConversationApi).not.toHaveBeenCalled();
+    });
+
+    it('still starts a DM when the id IS a public key', async () => {
+        vi.mocked(getEventChat).mockRejectedValue(new Error('Event not found'));
+        render(<MessagesPage identity={mockIdentity} openConversationId={PUBKEY} />);
+
+        await waitFor(() => expect(createConversationApi).toHaveBeenCalledWith('dm', ['my-pubkey', PUBKEY], 'my-pubkey'));
+        expect(getEventChat).not.toHaveBeenCalled();
+    });
+
+    it("lists an event chat under the event's title", async () => {
+        mockConversations = [{
+            id: EVENT_ID, type: 'event_thread' as any, name: 'Working bee', participants: ['my-pubkey'],
+            createdBy: 'host-pk', unreadCount: 2, createdAt: '2026-09-14T00:00:00Z',
+        }];
+        render(<MessagesPage identity={mockIdentity} />);
+        expect(await screen.findByText('Working bee')).toBeInTheDocument();
     });
 });

@@ -239,6 +239,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 setDraft(prefill);
                 setTimeout(() => draftRef.current?.focus(), 100);
             }
+            // An event chat loads itself through the event's own chat route (EventChat), which re-checks
+            // the RSVP and carries the private note. The DM loader must not also pull it: that payload has
+            // no note, and merging its conversation row back in would overwrite the type this screen
+            // branches on (docs/events-on-the-map.md §2.2).
+            if (activeConv.type === 'event_thread') {
+                return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+            }
+
             // Poll for new messages every 30 seconds (backstop), paused when tab is hidden
             const startPolling = () => {
                 if (!pollRef.current) {

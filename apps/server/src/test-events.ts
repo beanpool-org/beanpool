@@ -7,7 +7,8 @@
  *  4. Cap of 5 upcoming events per author, with member, enterprise and group pools separate.
  *  5. RSVP upsert (going ↔ interested) and delete (not going), refused on cancelled/ended/non-group-member.
  *  6. Private note: host and Going only; never in a broadcast.
- *  7. GET /api/marketplace/posts omits events without `types=` (also in sync mode); includes them with it.
+ *  7. GET /api/marketplace/posts omits events without `types=` (also in sync mode); includes them with it;
+ *     a types= list is intersected with the known types, so a very long one cannot 500.
  *  8. Ended events leave the feed; by id they stay readable to the host and Going only.
  *  9. Edit: time/place change marks UPDATED, other edits do not; convenor may edit; cancel via remove.
  * 10. Events cannot be traded.
@@ -249,6 +250,21 @@ async function main(): Promise<void> {
     assert(onlyEvents.includes(ev.id) && !onlyEvents.includes(offer.id), 'type=event gets events only');
     const byId = await listIds(router, { id: ev.id }, goer);
     assert(byId.length === 1 && byId[0] === ev.id, 'a by-id fetch returns the event without types');
+    // A types= list is intersected with the four known post types before it reaches SQL, so a very long
+    // list cannot exceed SQLite's bound-variable limit and 500 the route.
+    let longCtx: any;
+    try {
+        longCtx = await dispatch(router, 'GET', '/api/marketplace/posts', listCtx({ types: `${'offer,'.repeat(40000)}event` }, goer));
+    } catch (e: any) {
+        longCtx = { status: 500, body: '[]', error: e?.message };
+    }
+    const longIds = longCtx.status === 200 ? (JSON.parse(longCtx.body) as any[]).map(p => p.id) : [];
+    assert(longCtx.status === 200 && longIds.includes(ev.id) && longIds.includes(offer.id),
+        `a types= list of 40,001 entries answers 200 with offers and events (got ${longCtx.status}${longCtx.error ? `: ${longCtx.error}` : ''})`);
+    const unknownOnly = await listIds(router, { types: 'bogus,nonsense' }, goer);
+    assert(unknownOnly.length === 0, 'a types= list of unknown types matches nothing, not everything');
+    const withJunk = await listIds(router, { types: 'bogus,event' }, goer);
+    assert(withJunk.includes(ev.id) && !withJunk.includes(offer.id), 'unknown entries are dropped and known ones kept');
 
     // ── 8. Auto-hide at end; by id after end ─────────────────────────────────────────────────
     console.log('\n--- 8. Ended events ---');

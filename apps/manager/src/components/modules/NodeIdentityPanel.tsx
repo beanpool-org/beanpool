@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 
 export interface NodeIdentityPanelProps {
     activeNode: NodeProfile;
@@ -50,6 +51,7 @@ export function NodeIdentityPanel({
     const [saveStatus, setSaveStatus] = useState<{ text: string; isError: boolean } | null>(null);
     const [publishingNow, setPublishingNow] = useState(false);
     const [publishStatus, setPublishStatus] = useState<string | null>(null);
+    const publishStatusTimer = useTimeout();
 
     // Leaflet map refs
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -324,7 +326,7 @@ export function NodeIdentityPanel({
             setPublishStatus('❌ Failed');
         } finally {
             setPublishingNow(false);
-            setTimeout(() => {
+            publishStatusTimer.schedule(() => {
                 setPublishStatus(null);
             }, 3000);
         }

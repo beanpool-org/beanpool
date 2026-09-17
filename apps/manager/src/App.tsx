@@ -64,6 +64,7 @@ import { BulletinSection } from './components/modules/BulletinSection';
 import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
+import { useTimeout } from './lib/use-timeout';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -247,6 +248,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
     const [gateway, setGateway] = useState<GatewayConfig | null>(null);
     const [gatewayLoading, setGatewayLoading] = useState(false);
     const [gatewaySuccess, setGatewaySuccess] = useState<string | null>(null);
+    const gatewaySuccessTimer = useTimeout();
     const [gatewaySaving, setGatewaySaving] = useState(false);
 
     const [nodeData, setNodeData] = useState<NodeDataPayload | null>(null);
@@ -748,7 +750,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
-            setTimeout(() => setGatewaySuccess(null), 3000);
+            gatewaySuccessTimer.schedule(() => setGatewaySuccess(null), 3000);
         } catch (e: unknown) {
             alert('Failed to update gateway: ' + (e instanceof Error ? e.message : String(e)));
         } finally {

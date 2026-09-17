@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { loadAiConfig, saveAiConfig, askAiCopilot, type AiConfig, type CopilotContextData } from '../../lib/ai-client';
 import type { NodeProfile } from '../../lib/profiles';
+import { useTimeout } from '../../lib/use-timeout';
 
 interface AiServicesModuleProps {
     activeNode: NodeProfile;
@@ -13,11 +14,12 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
     const [response, setResponse] = useState<string | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [saveFeedback, setSaveFeedback] = useState<boolean>(false);
+    const saveFeedbackTimer = useTimeout();
 
     const handleSaveConfig = () => {
         saveAiConfig(config);
         setSaveFeedback(true);
-        setTimeout(() => setSaveFeedback(false), 2500);
+        saveFeedbackTimer.schedule(() => setSaveFeedback(false), 2500);
     };
 
     const handleAsk = async (e: React.FormEvent) => {

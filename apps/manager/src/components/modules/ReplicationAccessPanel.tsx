@@ -9,6 +9,7 @@ import {
     type ReplicationAccessData,
     type ReplicationAccessEvent,
 } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 
 export interface ReplicationAccessPanelProps {
     activeNode: NodeProfile;
@@ -48,6 +49,7 @@ export function ReplicationAccessPanel({
     // Newly generated token revealed once
     const [revealedToken, setRevealedToken] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const copiedTimer = useTimeout();
 
     // Modals
     const [showGenConfirm, setShowGenConfirm] = useState(false);
@@ -194,7 +196,7 @@ export function ReplicationAccessPanel({
         navigator.clipboard.writeText(revealedToken)
             .then(() => {
                 setCopied(true);
-                setTimeout(() => setCopied(false), 3000);
+                copiedTimer.schedule(() => setCopied(false), 3000);
             })
             .catch((err) => {
                 console.error('Failed to copy replication token:', err);

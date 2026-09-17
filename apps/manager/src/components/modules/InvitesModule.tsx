@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
+import { useTimeout } from '../../lib/use-timeout';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -21,6 +22,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const [inviteTier, setInviteTier] = useState<InviteTier>('standard');
     const [generatedTokens, setGeneratedTokens] = useState<GeneratedInviteItem[]>([]);
     const [copiedIndex, setCopiedIndex] = useState<string | number | null>(null);
+    const copiedTimer = useTimeout();
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewQrItem, setPreviewQrItem] = useState<GeneratedInviteItem | null>(null);
     const [showPrintSheet, setShowPrintSheet] = useState(false);
@@ -80,7 +82,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const handleCopy = (text: string, key: string | number) => {
         navigator.clipboard.writeText(text);
         setCopiedIndex(key);
-        setTimeout(() => setCopiedIndex(null), 2000);
+        copiedTimer.schedule(() => setCopiedIndex(null), 2000);
     };
 
     const getTierBadge = (t: InviteTier) => {

@@ -348,6 +348,40 @@ describe('NodeIdentityPanel Component', () => {
         });
     });
 
+    it('clears the publish status timer on unmount so no state update fires afterwards', async () => {
+        const { unmount } = render(
+            <NodeIdentityPanel
+                activeNode={mockProfile}
+                diag={mockDiag}
+                onRefreshDiag={vi.fn()}
+            />
+        );
+        await act(async () => {});
+
+        vi.useFakeTimers();
+        const consoleError = vi.spyOn(console, 'error');
+        try {
+            await act(async () => {
+                fireEvent.click(document.getElementById('publish-now-btn')!);
+            });
+            expect(screen.getByText(/Published!/i)).toBeInTheDocument();
+            const pendingBeforeUnmount = vi.getTimerCount();
+            expect(pendingBeforeUnmount).toBeGreaterThan(0);
+
+            unmount();
+
+            // The 3s reset timer must be gone, not merely harmless.
+            expect(vi.getTimerCount()).toBe(0);
+            act(() => {
+                vi.advanceTimersByTime(5000);
+            });
+            expect(consoleError).not.toHaveBeenCalled();
+        } finally {
+            consoleError.mockRestore();
+            vi.useRealTimers();
+        }
+    });
+
     it('saves identity and node config with full payload parity when submitting form', async () => {
         const onRefreshDiag = vi.fn();
         await act(async () => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -66,6 +67,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     // Tunnel token display
     const [revealToken, setRevealToken] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
+    const copySuccessTimer = useTimeout();
 
     const logTerminalRef = useRef<HTMLDivElement>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -364,7 +366,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 document.body.removeChild(textarea);
             }
             setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
+            copySuccessTimer.schedule(() => setCopySuccess(false), 2000);
         } catch {
             setActionMessage({ text: 'Failed to copy token to clipboard', type: 'error' });
         }

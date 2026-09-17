@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { getMemberDisplayName } from './MembersModule';
 import type { NodeProfile } from '../../lib/profiles';
+import { useTimeout } from '../../lib/use-timeout';
 
 export interface ThreatItem {
     id?: string;
@@ -49,6 +50,7 @@ export function ThreatReviewModal({
     const [dismissing, setDismissing] = useState(false);
     const [dismissError, setDismissError] = useState<string | null>(null);
     const [copiedLog, setCopiedLog] = useState(false);
+    const copiedLogTimer = useTimeout();
 
     // ⚡ Bolt: Pre-compute Map for O(1) member lookups by exact key or prefix token
     const membersMap = useMemo(() => {
@@ -164,7 +166,7 @@ export function ThreatReviewModal({
 
         navigator.clipboard?.writeText(evidencePacket);
         setCopiedLog(true);
-        setTimeout(() => setCopiedLog(false), 2000);
+        copiedLogTimer.schedule(() => setCopiedLog(false), 2000);
     };
 
     return (

@@ -1157,9 +1157,14 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 // Admin: halt a community decision (§3.7)
 router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { adminPubkey, reason } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey;
-    if (!signedActor || !isNodeAdmin(signedActor)) {
+    const { reason } = (ctx as any).requestBody || {};
+    const signedActor = (ctx.state as any)?.actor as string | undefined;
+    if (!signedActor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    if (!isNodeAdmin(signedActor)) {
         ctx.status = 403;
         ctx.body = { error: 'Explicit authenticated node admin required' };
         return;
@@ -1181,9 +1186,13 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
 // Admin: accelerate a pending grace removal decision (§3.7)
 router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const { adminPubkey } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor || adminPubkey;
-    if (!signedActor || !isNodeAdmin(signedActor)) {
+    const signedActor = (ctx.state as any)?.actor as string | undefined;
+    if (!signedActor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    if (!isNodeAdmin(signedActor)) {
         ctx.status = 403;
         ctx.body = { error: 'Explicit authenticated node admin required' };
         return;

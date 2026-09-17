@@ -166,6 +166,12 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
             return r.changes > 0;
         }
+        case 'event_rsvps': {
+            const [postId, memberPubkey] = rowKey.split('|');
+            if (!postId || !memberPubkey) return false;
+            const r = db.prepare(`DELETE FROM event_rsvps WHERE post_id=? AND member_pubkey=?`).run(postId, memberPubkey);
+            return r.changes > 0;
+        }
         case 'members': {
             const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
             db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
@@ -193,6 +199,12 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const [postId, orderNum] = rowKey.split('|');
             if (!postId || orderNum === undefined) return null;
             const r = db.prepare(`SELECT updated_at AS ts FROM post_photos WHERE post_id=? AND order_num=?`).get(postId, Number(orderNum)) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        case 'event_rsvps': {
+            const [postId, memberPubkey] = rowKey.split('|');
+            if (!postId || !memberPubkey) return null;
+            const r = db.prepare(`SELECT updated_at AS ts FROM event_rsvps WHERE post_id=? AND member_pubkey=?`).get(postId, memberPubkey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         case 'members': {
@@ -293,7 +305,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -375,8 +387,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     : null;
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by,
+                                event_start_at, event_end_at, event_place_name, event_private_note, event_state)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -399,7 +412,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.updatedAt || rp.createdAt,
                         pollOptionsJson,
                         pollClosesAtVal,
-                        rp.createdBy ?? null
+                        rp.createdBy ?? null,
+                        rp.eventStartAt ?? null,
+                        rp.eventEndAt ?? null,
+                        rp.eventPlaceName ?? null,
+                        rp.eventPrivateNote ?? null,
+                        rp.eventState ?? null
                     );
                     newPosts++;
                 } else {
@@ -424,6 +442,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         poll_options = COALESCE(?, poll_options),
                         poll_closes_at = COALESCE(?, poll_closes_at),
                         created_by = COALESCE(?, created_by),
+                        event_start_at = ?,
+                        event_end_at = ?,
+                        event_place_name = ?,
+                        event_private_note = ?,
+                        event_state = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -442,6 +465,13 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         pollOptionsJson,
                         pollClosesAtVal,
                         rp.createdBy ?? null,
+                        // Plain assignment, not COALESCE: an edit that clears the place name or note must
+                        // clear it on the replica too. Non-event rows carry none of these, so they stay null.
+                        rp.eventStartAt ?? null,
+                        rp.eventEndAt ?? null,
+                        rp.eventPlaceName ?? null,
+                        rp.eventPrivateNote ?? null,
+                        rp.eventState ?? null,
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -859,6 +889,31 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         pv.signature || '',
                         pv.createdAt || new Date().toISOString()
                     );
+                }
+            }
+
+            // Event RSVPs: last-write-wins on updated_at. A row older than a local tombstone for the same key
+            // is a "not going" that already happened, and must not come back.
+            if (remote.eventRsvps) {
+                const importRsvp = db.prepare(`INSERT INTO event_rsvps
+                    (post_id, member_pubkey, status, signature, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
+                        status = excluded.status,
+                        signature = excluded.signature,
+                        updated_at = excluded.updated_at
+                    WHERE excluded.updated_at IS NOT NULL
+                      AND (event_rsvps.updated_at IS NULL OR excluded.updated_at >= event_rsvps.updated_at)`);
+                const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`);
+                for (const er of remote.eventRsvps) {
+                    if (er.status !== 'going' && er.status !== 'interested') continue;
+                    const updatedAt = er.updatedAt || new Date().toISOString();
+                    const ts = tombstoneAt.get(`${er.postId}|${er.memberPubkey}`) as { deleted_at: string } | undefined;
+                    if (ts && ts.deleted_at >= updatedAt) {
+                        conflictsSkipped++;
+                        continue;
+                    }
+                    importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '', updatedAt);
                 }
             }
 

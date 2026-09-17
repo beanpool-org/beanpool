@@ -156,8 +156,8 @@ export function requestPost(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
     }
-    if (post.type === 'poll') {
-        throw new Error('Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event') {
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     const isOffer = post.type === 'offer';
@@ -234,7 +234,7 @@ export function approvePostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll') return null;
+    if (!post || post.type === 'poll' || post.type === 'event') return null;
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
@@ -412,7 +412,7 @@ export function rejectPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll') return null;
+    if (!post || post.type === 'poll' || post.type === 'event') return null;
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
@@ -447,7 +447,7 @@ export function cancelPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll') return null;
+    if (!post || post.type === 'poll' || post.type === 'event') return null;
 
     const isOffer = post.type === 'offer';
     const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
@@ -514,8 +514,8 @@ export function acceptPost(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
     }
-    if (post.type === 'poll') {
-        throw new Error('Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event') {
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     if (post.type !== 'offer') {
@@ -722,7 +722,7 @@ export function completePostTransaction(
     }
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && post.type === 'poll') return null;
+    if (post && (post.type === 'poll' || post.type === 'event')) return null;
     const isHourly = post && post.price_type !== 'fixed';
     
     let releaseCredits = row.credits;
@@ -868,7 +868,7 @@ export function cancelPostTransaction(
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && post.type === 'poll') return null;
+    if (post && (post.type === 'poll' || post.type === 'event')) return null;
     const completedAt = new Date().toISOString();
 
     cb.conservingTransaction(() => {

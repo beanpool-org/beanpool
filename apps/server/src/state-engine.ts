@@ -228,6 +228,7 @@ import {
     resumePost as resumePostEngine,
     closePoll as closePollEngine,
     votePoll as votePollEngine,
+    rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
     adminBulkDeletePosts as adminBulkDeletePostsEngine
 } from './engine/posts.js';
@@ -3234,7 +3235,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 }
 
 export function createPost(
-    type: 'offer' | 'need' | 'poll', category: string, title: string, description: string, credits: number,
+    type: 'offer' | 'need' | 'poll' | 'event', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
     options?: {
         reach?: unknown;
@@ -3246,6 +3247,10 @@ export function createPost(
         targetGroupId?: string;
         targetPubkey?: string;
         assignedTo?: string;
+        eventStartAt?: unknown;
+        eventEndAt?: unknown;
+        eventPlaceName?: unknown;
+        eventPrivateNote?: unknown;
     }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
@@ -3988,6 +3993,15 @@ export function votePoll(
     signature?: string
 ): { success: boolean; post: MarketplacePost } {
     return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+}
+
+export function rsvpEvent(
+    postId: string,
+    memberPublicKey: string,
+    status: 'going' | 'interested' | null,
+    signature?: string
+): { success: boolean; post: MarketplacePost } {
+    return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature);
 }
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
@@ -6130,7 +6144,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {

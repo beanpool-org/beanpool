@@ -90,7 +90,13 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
                 target_pubkey TEXT REFERENCES members(public_key),
                 assigned_to TEXT REFERENCES members(public_key),
-                target_archetypes TEXT
+                target_archetypes TEXT,
+                event_start_at DATETIME,
+                event_end_at DATETIME,
+                event_place_name TEXT,
+                event_private_note TEXT,
+                event_state TEXT,
+                event_conversation_id TEXT
             );
 
             CREATE TABLE marketplace_transactions (

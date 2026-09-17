@@ -362,6 +362,14 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
+    // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_end_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_place_name TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_by TEXT`).run(); } catch { }

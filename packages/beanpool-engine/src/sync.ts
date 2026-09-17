@@ -248,6 +248,14 @@ export interface SyncPollVote {
     createdAt: string;
 }
 
+export interface SyncEventRsvp {
+    postId: string;
+    memberPubkey: string;
+    status: 'going' | 'interested';
+    signature: string;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -273,6 +281,7 @@ export interface SyncPayload {
     recoveryPins?: SyncRecoveryPin[];
     settlements?: SyncSettlement[];
     pollVotes?: SyncPollVote[];
+    eventRsvps?: SyncEventRsvp[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
     generatedAt?: string;
@@ -305,7 +314,19 @@ export function getStateHash(db: Db): string {
     } catch {
         // Table absent on older schema.
     }
-    const data = JSON.stringify({ m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds, pi: piIds });
+    // Event RSVPs. Added to the hashed object ONLY when there are any, so a node that has never hosted an
+    // event hashes exactly as it did before events existed and a mixed-version pair does not read as diverged.
+    let erKeys: string[] = [];
+    try {
+        erKeys = (db.prepare("SELECT post_id || '|' || member_pubkey || '|' || status AS k FROM event_rsvps ORDER BY post_id, member_pubkey")
+            .all() as any[]).map(r => r.k);
+    } catch {
+        // Table absent on older schema.
+    }
+    const data = JSON.stringify({
+        m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds, pi: piIds,
+        ...(erKeys.length > 0 ? { er: erKeys } : {}),
+    });
 
     let hash = 0;
     for (let i = 0; i < data.length; i++) {
@@ -362,6 +383,15 @@ export function exportSyncState(
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
             : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        // Events. The private note replicates like every DM ciphertext does — a backup holds the whole
+        // node — and never leaves through the listings pull, which reads its own columns.
+        ...(row.type === 'event' ? {
+            eventStartAt: row.event_start_at || undefined,
+            eventEndAt: row.event_end_at || undefined,
+            eventPlaceName: row.event_place_name || undefined,
+            eventPrivateNote: row.event_private_note || undefined,
+            eventState: row.event_state || undefined,
+        } : {}),
     }));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];
@@ -595,6 +625,21 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    // Event RSVPs change (going ↔ interested), so the watermark is updated_at, not created_at. "Not going"
+    // is a delete and travels as an `event_rsvps` tombstone.
+    let eventRsvps: SyncEventRsvp[] = [];
+    try {
+        eventRsvps = sel('event_rsvps', 'updated_at').map((r: any) => ({
+            postId: r.post_id,
+            memberPubkey: r.member_pubkey,
+            status: r.status,
+            signature: r.signature || '',
+            updatedAt: r.updated_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -629,6 +674,7 @@ export function exportSyncState(
         recoveryPins,
         settlements,
         pollVotes,
+        eventRsvps,
         tombstones,
     };
 }

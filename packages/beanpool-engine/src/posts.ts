@@ -29,9 +29,19 @@ export interface PollVoteRecord {
     createdAt: string;
 }
 
+export type EventState = 'scheduled' | 'updated' | 'cancelled';
+export type EventRsvpStatus = 'going' | 'interested';
+
+export interface EventRsvpRecord {
+    memberPubkey: string;
+    memberCallsign?: string;
+    status: EventRsvpStatus;
+    updatedAt: string;
+}
+
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need' | 'poll';
+    type: 'offer' | 'need' | 'poll' | 'event';
     category: string;
     title: string;
     description: string;
@@ -74,6 +84,19 @@ export interface MarketplacePost {
     targetGroupName?: string;
     targetPubkey?: string;
     assignedTo?: string;
+    // Events (docs/events-on-the-map.md §2.1). Times are ISO UTC.
+    eventStartAt?: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    /** Host and `going` only — omitted for every other reader (§2.3). */
+    eventPrivateNote?: string;
+    eventState?: EventState;
+    goingCount?: number;
+    interestedCount?: number;
+    /** The viewer's own RSVP; null when they have none. */
+    myRsvp?: EventRsvpStatus | null;
+    /** Host only: who has RSVPd. Everyone else sees the counts. */
+    eventRsvps?: EventRsvpRecord[];
 }
 
 export interface PostFilter {
@@ -95,6 +118,41 @@ export interface PostFilter {
     audienceScope?: AudienceScope | string;
     targetGroupId?: string;
     assignedTo?: string;
+    /** Restrict to these post types (the list route's `types=` parameter). */
+    types?: string[];
+    /**
+     * Leave events out. The list route sets this unless the client opted in with `types=…event` or
+     * `type=event`, so an app built before events never receives one (docs/events-on-the-map.md §2.6).
+     */
+    excludeEvents?: boolean;
+}
+
+/** An ended event stays readable by id to its host and Going for this long; after that, to nobody. */
+export const EVENT_READABLE_AFTER_END_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * The host set for an event, and for every host-only action on it: the author, an active keeper of an
+ * enterprise author, or an active convenor of the target group. The same set `removePost` trusts.
+ */
+export function isEventHost(
+    db: Db,
+    row: { author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null },
+    pubkey: string | undefined,
+): boolean {
+    if (!pubkey) return false;
+    if (row.author_pubkey === pubkey) return true;
+    const keeper = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+    `).get(pubkey, row.author_pubkey);
+    if (keeper) return true;
+    if (row.audience_scope === 'group' && row.target_group_id) {
+        return !!db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
+        ).get(row.target_group_id, pubkey);
+    }
+    return false;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -229,6 +287,12 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         targetGroupName: row.target_group_name || undefined,
         targetPubkey: row.target_pubkey || undefined,
         assignedTo: row.assigned_to || undefined,
+        ...(row.type === 'event' ? {
+            eventStartAt: row.event_start_at || undefined,
+            eventEndAt: row.event_end_at || undefined,
+            eventPlaceName: row.event_place_name || undefined,
+            eventState: (row.event_state || 'scheduled') as EventState,
+        } : {}),
     };
 }
 
@@ -294,6 +358,9 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
                 ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
                 : " AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))";
         }
+        // Events drop off the feed and map when they end — a filter, not a sweep (§2.2).
+        query += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
+        params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
             query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
@@ -308,6 +375,11 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
 
     if (filter?.id) { query += " AND p.id = ?"; params.push(filter.id); }
     if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
+    if (filter?.types && filter.types.length > 0) {
+        query += ` AND p.type IN (${filter.types.map(() => '?').join(',')})`;
+        params.push(...filter.types);
+    }
+    if (filter?.excludeEvents) { query += " AND p.type != 'event'"; }
     if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
     if (filter?.authorPubkey) { query += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
@@ -432,10 +504,58 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     //
     // `reach` itself stays. It is a property of the listing rather than a fact about third parties, and the
     // cached copy a peer stores needs to be 'local' for loop prevention to hold.
+    // Events: batch fetch RSVPs for all event rows, as for poll votes above.
+    const eventRows = rows.filter(r => r.type === 'event');
+    const rsvpsByPost = new Map<string, any[]>();
+    if (eventRows.length > 0) {
+        try {
+            const rsvps = selectInChunks(db, eventRows.map(r => r.id), ph => `
+                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, m.callsign as member_callsign
+                FROM event_rsvps er
+                LEFT JOIN members m ON er.member_pubkey = m.public_key
+                WHERE er.post_id IN (${ph})
+                ORDER BY er.updated_at ASC
+            `);
+            for (const v of rsvps as any[]) {
+                if (!rsvpsByPost.has(v.post_id)) rsvpsByPost.set(v.post_id, []);
+                rsvpsByPost.get(v.post_id)!.push(v);
+            }
+        } catch {
+            // Table absent on an older schema
+        }
+    }
+
     const nowIso = new Date().toISOString();
-    return rows.map(r => {
+    const nowMs = Date.now();
+    const out: MarketplacePost[] = [];
+    for (const r of rows) {
         const post = rowToPost(db, r, photosByPost);
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+
+        if (post.type === 'event') {
+            const rsvps = rsvpsByPost.get(post.id) || [];
+            const mine = viewer ? rsvps.find(v => v.member_pubkey === viewer) : undefined;
+            const host = isEventHost(db, r, viewer);
+            const going = mine?.status === 'going';
+            // An ended event is readable by id to its host and Going only, and to nobody once the 30-day
+            // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
+            const endMs = r.event_end_at ? Date.parse(r.event_end_at) : NaN;
+            if (filter?.id && !filter.includeAllScopes && !filter.sync && !filter.updatedAfter && endMs <= nowMs) {
+                if ((!host && !going) || nowMs - endMs > EVENT_READABLE_AFTER_END_MS) continue;
+            }
+            post.goingCount = rsvps.filter(v => v.status === 'going').length;
+            post.interestedCount = rsvps.filter(v => v.status === 'interested').length;
+            post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
+            if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
+            if (host) {
+                post.eventRsvps = rsvps.map((v: any) => ({
+                    memberPubkey: v.member_pubkey,
+                    memberCallsign: v.member_callsign || undefined,
+                    status: v.status,
+                    updatedAt: v.updated_at,
+                }));
+            }
+        }
 
         if (post.type === 'poll') {
             // Check auto-close if expired (projected in memory; DB writes handled in write paths/hygiene)
@@ -469,8 +589,19 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
             }));
         }
 
-        return post;
-    });
+        out.push(post);
+    }
+    return out;
+}
+
+/**
+ * The copy of a post that may go to every socket. `new_post` / `post_updated` broadcasts are not addressed
+ * to the viewer the post was read for, so an event's viewer-only fields come off first.
+ */
+export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
+    if (post.type !== 'event') return post;
+    const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = post;
+    return rest;
 }
 
 export function getActivePostCount(db: Db): number {

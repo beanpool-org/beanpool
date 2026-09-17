@@ -53,6 +53,12 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
+    /**
+     * Whether the viewer is a member of this node. False for a guest (a local key the node has no member
+     * for), so the viewer's balance is never requested. Null while App is still checking, so the request
+     * waits for the answer. Omitted means a member.
+     */
+    isMember?: boolean | null;
 }
 
 // Turn a server trade-gate rejection into a friendly message. The covenant / contribution /
@@ -93,7 +99,7 @@ function remoteOriginLabel(post: any): string {
     return name.startsWith('peer (') ? ` from ${name}` : ` (from ${name})`;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
@@ -449,15 +455,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         }).catch(() => {});
     }, []);
 
-    // Track whether the viewer still needs to list an Offer (Gate 1).
+    // Track whether the viewer still needs to list an Offer (Gate 1). A guest has no balance on the node, so
+    // it is only asked once App knows the viewer is a member.
+    const canLoadBalance = !!identity && isMember !== false && isMember !== null;
     useEffect(() => {
-        if (!identity) return;
+        if (!identity || !canLoadBalance) return;
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => { if (!cancelled) setBlockedFromTrading(!!b.isBlockedFromTrading); })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity]);
+    }, [identity, canLoadBalance]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;

@@ -88,6 +88,60 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         expect(screen.queryByText(/steward/i)).not.toBeInTheDocument();
     });
 
+    it('opens a keeper profile when a keeper row is tapped, with a 48px target', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'enterprise-eggs-pubkey',
+            name: 'Community Eggs',
+            status: 'active',
+            paused: false,
+            balance: 100,
+            keepers: [
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
+                // Older payloads carry the key as pubkey rather than publicKey.
+                { pubkey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 },
+            ],
+            posts: [],
+            flow: [],
+        });
+        const onOpenProfile = vi.fn();
+
+        render(
+            <TreasuryDetailPage
+                identity={mockApplicantIdentity}
+                pubkey="enterprise-eggs-pubkey"
+                onBack={vi.fn()}
+                onOpenProfile={onOpenProfile}
+            />
+        );
+
+        const bobRow = (await screen.findByText('Bob')).closest('button');
+        expect(bobRow).not.toBeNull();
+        expect(bobRow).toHaveAttribute('type', 'button');
+        expect(bobRow!.className).toContain('min-h-[48px]');
+        fireEvent.click(bobRow!);
+        expect(onOpenProfile).toHaveBeenCalledWith('keeper-bob-pubkey');
+
+        fireEvent.click(screen.getByText('Alice').closest('button')!);
+        expect(onOpenProfile).toHaveBeenLastCalledWith('lead-alice-pubkey');
+    });
+
+    it('leaves keeper rows as plain rows when nothing can open a profile', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'enterprise-eggs-pubkey',
+            name: 'Community Eggs',
+            status: 'active',
+            paused: false,
+            balance: 100,
+            keepers: [{ publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 }],
+            posts: [],
+            flow: [],
+        });
+
+        render(<TreasuryDetailPage identity={mockApplicantIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />);
+
+        expect((await screen.findByText('Bob')).closest('button')).toBeNull();
+    });
+
     it('shows a suspended keeper labelled as suspended instead of hiding them (PR #838 B1)', async () => {
         const mockTreasury = {
             publicKey: 'enterprise-eggs-pubkey',

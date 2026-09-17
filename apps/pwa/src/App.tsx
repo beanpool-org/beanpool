@@ -147,7 +147,10 @@ export function App() {
     const [pendingDealsCount, setPendingDealsCount] = useState(0);
     const [myTransactions, setMyTransactions] = useState<MarketplaceTransaction[]>([]);
     const [marketClickCount, setMarketClickCount] = useState(0);
-    const [isGuest, setIsGuest] = useState(false);
+    // null until the node has answered the membership check. The Market, Commons and Map pages wait for it
+    // before asking for the viewer's balance, so a guest never sends that request; everything else reads
+    // null as a member, as before.
+    const [isGuest, setIsGuest] = useState<boolean | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     const [showCommunityStatus, setShowCommunityStatus] = useState(false);
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
@@ -247,7 +250,8 @@ export function App() {
                     if (updated) setIdentity(updated);
                 }
             })
-            .catch(() => {});
+            // Unknown after a failed check: treat as a member so the pages waiting on it still load.
+            .catch(() => setIsGuest(prev => prev ?? false));
 
         return unsub;
     }, [identity]);
@@ -702,6 +706,8 @@ export function App() {
                                         onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                         onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
+                                        isMember={isGuest === null ? null : !isGuest}
+                                        covered={!!openTreasuryPubkey || !!openProfilePubkey}
                                     />
                                 </Suspense>
                             )}
@@ -715,6 +721,7 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
                                     onRefreshTransactions={refreshTransactions}
+                                    isMember={isGuest === null ? null : !isGuest}
                                 />
                             )}
                             {activeTab === 'pulse' && (
@@ -731,39 +738,10 @@ export function App() {
                                     identity={identity}
                                     onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    isMember={isGuest === null ? null : !isGuest}
                                 />
                             )}
                         </>
-                    )}
-
-                    {/* Public Profile Overlay */}
-                    {openProfilePubkey && (
-                        <PublicProfilePage
-                            identity={identity}
-                            pubkey={openProfilePubkey}
-                            onBack={() => setOpenProfilePubkey(null)}
-                            onMessage={(pubkey) => {
-                                setOpenProfilePubkey(null);
-                                navigateToTab('messages', pubkey);
-                            }}
-                            onNavigatePost={(postId) => {
-                                setOpenProfilePubkey(null);
-                                navigateToTab('marketplace', postId);
-                            }}
-                            onEditProfile={() => {
-                                setOpenProfilePubkey(null);
-                                setSettingsInitialMode('profile');
-                                setShowSettings(true);
-                            }}
-                            onNavigateTab={(tab, subView) => {
-                                setOpenProfilePubkey(null);
-                                if (tab === 'people' && subView) {
-                                    setPeopleSubView(subView as any);
-                                }
-                                setActiveTab(tab as any);
-                                setShowSettings(false);
-                            }}
-                        />
                     )}
 
                     {/* Treasury Detail Overlay */}
@@ -777,8 +755,45 @@ export function App() {
                                 setOpenTreasuryPubkey(null);
                                 navigateToTab('marketplace', postId);
                             }}
+                            onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                         />
                     )}
+                    {/* Public Profile Overlay — after the enterprise page: both stack at z-[110], so document order puts a
+                        profile opened from a keeper row on top, and Back returns to the enterprise page. Leaving the
+                        profile for anywhere else closes the enterprise page too. */}
+                    {openProfilePubkey && (
+                        <PublicProfilePage
+                            identity={identity}
+                            pubkey={openProfilePubkey}
+                            onBack={() => setOpenProfilePubkey(null)}
+                            onMessage={(pubkey) => {
+                                setOpenProfilePubkey(null);
+                                setOpenTreasuryPubkey(null);
+                                navigateToTab('messages', pubkey);
+                            }}
+                            onNavigatePost={(postId) => {
+                                setOpenProfilePubkey(null);
+                                setOpenTreasuryPubkey(null);
+                                navigateToTab('marketplace', postId);
+                            }}
+                            onEditProfile={() => {
+                                setOpenProfilePubkey(null);
+                                setOpenTreasuryPubkey(null);
+                                setSettingsInitialMode('profile');
+                                setShowSettings(true);
+                            }}
+                            onNavigateTab={(tab, subView) => {
+                                setOpenProfilePubkey(null);
+                                setOpenTreasuryPubkey(null);
+                                if (tab === 'people' && subView) {
+                                    setPeopleSubView(subView as any);
+                                }
+                                setActiveTab(tab as any);
+                                setShowSettings(false);
+                            }}
+                        />
+                    )}
+
                 </main>
 
                 {/* Bottom nav — mobile only */}

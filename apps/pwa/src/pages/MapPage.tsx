@@ -53,9 +53,21 @@ interface Props {
     onOpenNewPostHandled?: () => void;
     onNavigate?: (tab: string, contextId?: string) => void;
     onOpenTreasury?: (pubkey: string) => void;
+    /**
+     * Whether the viewer is a member of this node. False for a guest (a local key the node has no member
+     * for), so the viewer's balance is never requested. Null while App is still checking, so the request
+     * waits for the answer. Omitted means a member.
+     */
+    isMember?: boolean | null;
+    /**
+     * True while App shows the enterprise or profile page over the map. Those pages stack at z-[110], and the
+     * preview card (z-[150]) and New Post panel (z-[1000]) are in the same root stacking context, so they are
+     * hidden — not closed — while covered: Back brings them back with the draft intact.
+     */
+    covered?: boolean;
 }
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
@@ -106,7 +118,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
     // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
     useEffect(() => {
-        if (!previewPost) return;
+        if (!previewPost || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if (e.key === 'Escape') {
                 if (lightboxState?.isOpen) return;
@@ -117,7 +129,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewPost, lightboxState?.isOpen]);
+    }, [previewPost, lightboxState?.isOpen, covered]);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {
@@ -139,8 +151,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Contribution-first gate: until the member has listed an Offer they can't post
     // Needs. Default the form to Offer and warn if they switch to Need while blocked.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
+    // A guest has no balance on the node, so it is only asked once App knows the viewer is a member.
+    const canLoadBalance = isMember !== false && isMember !== null;
 
     useEffect(() => {
+        if (!canLoadBalance) return;
         let cancelled = false;
         getBalance(identity.publicKey)
             .then(b => {
@@ -151,7 +166,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [identity.publicKey]);
+    }, [identity.publicKey, canLoadBalance]);
 
     const needBlocked = blockedFromTrading && newPostType === 'need';
 
@@ -968,7 +983,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
         {/* Map Preview Card */}
         {previewPost && (
-            <div className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)' }}>
+            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}>
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}
@@ -1030,8 +1045,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         {/* Quick Post Panel — rendered OUTSIDE the map div so Leaflet touch handlers don't interfere */}
         {showNewPost && (
             <div 
+                data-testid="map-new-post-panel"
                 className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
-                style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)' }}
+                style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">
                     <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">New Post</span>

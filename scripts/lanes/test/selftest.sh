@@ -285,6 +285,26 @@ check "a restarted watch.sh did not re-fire on the same line, and reported all l
 check "watch.sh printed no shell errors"         eval '! grep -qE "bad option|command not found|parse error|read-only" "$T/watch2.out" "$LOG"'
 wait 2>/dev/null
 
+scenario "24. item() on a branch that exists without a PR → the PR stage gets the build timeout, the full brief, the build role"
+git -C "$T/repo" push -q origin main:refs/heads/feat/nopr
+mkdir -p "$T/briefs"; print "Brief for the no-PR item." > "$T/briefs/nopr.md"
+# stage is spied on (one directory per call, one file per argument) and review stubbed: this is about what item()
+# passes, not about running agents. A subshell keeps the spies out of every other scenario.
+( stage(){ local d="$FAKE_STATE/stage/${1//\//-}"; mkdir -p "$d"; print -r -- $# > "$d/argc"; print -r -- "$2" > "$d/timeout"
+           print -r -- "$3" > "$d/brief"; print -r -- "$4" > "$d/role"; STAGE_OK=1; STAGE_IDLEKILL=0; return 0; }
+  review(){ print -r -- "$1" > "$FAKE_STATE/reviewed"; }
+  item NOPR feat/nopr "$T/briefs/nopr.md" ) >> "$LOG" 2>&1
+show
+S24=$FAKE_STATE/stage/NOPR-PR
+check "the branch was resumed (CONTINUE stage), not rebuilt" eval '[ -d "$FAKE_STATE/stage/NOPR-CONTINUE" ] && [ ! -d "$FAKE_STATE/stage/NOPR" ]'
+check "the PR stage ran"                         [ -d "$S24" ]
+check "the PR stage got 4 arguments"             [ "$(cat "$S24/argc" 2>/dev/null)" = 4 ]
+check "timeout is exactly LANE_BUILD_TIMEOUT ($LANE_BUILD_TIMEOUT)" [ "$(cat "$S24/timeout" 2>/dev/null)" = "$LANE_BUILD_TIMEOUT" ]
+check "brief starts with the branch and names the brief file" eval 'grep -q "^Branch feat/nopr exists on origin" "$S24/brief" && grep -qF "$T/briefs/nopr.md" "$S24/brief"'
+check "brief carries the full gh pr create line"  grep -qF "gh pr create -R $LANE_GH_REPO --base $LANE_BASE --head feat/nopr with a full description" "$S24/brief"
+check "role is build"                            [ "$(cat "$S24/role" 2>/dev/null)" = build ]
+check "review ran on the branch afterwards"      [ "$(cat "$FAKE_STATE/reviewed" 2>/dev/null)" = feat/nopr ]
+
 print
 print "selftest: $PASS passed, $FAILS failed"
 if [ "$LANE_SELFTEST_KEEP" = 1 ]; then print "kept $T"; else

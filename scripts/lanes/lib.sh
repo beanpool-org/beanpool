@@ -473,7 +473,7 @@ item(){ # NAME BRANCH BRIEF-FILE [BRIEF-FILE-2] — build, continue, open the PR
   [ -n "$4" ] && stage "$1-b" "$LANE_BUILD_TIMEOUT" "CONTINUE on branch $2 (fetch and check it out in the lane worktree): now do the SECOND brief below; skip what is already done. Commit and push per step.
 
 $(cat "$(lane_brief_path "$4")")" build
-  [ -n "$(prnum "$2")" ] || stage "$1-PR" "$LANE_BUILD_TIMEOUT""Branch $2 exists on origin (fetch and check it out in the lane worktree). If its work is complete per the brief(s) $(lane_brief_path "$3")${4:+ and $(lane_brief_path "$4")}, open the PR now: gh pr create -R $LANE_GH_REPO --base $LANE_BASE --head $2 with a full description. Otherwise finish it first, commit, push, then open the PR." build
+  [ -n "$(prnum "$2")" ] || stage "$1-PR" "$LANE_BUILD_TIMEOUT" "Branch $2 exists on origin (fetch and check it out in the lane worktree). If its work is complete per the brief(s) $(lane_brief_path "$3")${4:+ and $(lane_brief_path "$4")}, open the PR now: gh pr create -R $LANE_GH_REPO --base $LANE_BASE --head $2 with a full description. Otherwise finish it first, commit, push, then open the PR." build
   review "$2"; }
 
 sync_main(){ # BRANCH — merge origin/<base> into the branch so GitHub can build the merge ref and CI runs

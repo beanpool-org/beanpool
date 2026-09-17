@@ -24,7 +24,7 @@ import {
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise,
+    isKeeperOfEnterprise, isAdminPubkey,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -137,6 +137,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
 
     // ---- Public transparency reads ------------------------------------------------------
+    // A completed (wound-up) enterprise never serves coordinates, whatever the row still holds — a keeper may
+    // have pinned it on their own house (PR #839 Blocker A).
+    const servedCoordinates = (row: any): { lat: number | null; lng: number | null } =>
+        row.status === 'completed' || row.lat == null || row.lng == null
+            ? { lat: null, lng: null }
+            : { lat: Number(row.lat), lng: Number(row.lng) };
+
     const listTreasuriesHandler = async (ctx: any) => {
         const includeBounded = ctx.query?.includeBounded === 'true';
         const whereClause = includeBounded
@@ -222,8 +229,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     windUpInitiatedBy: r.wind_up_initiated_by ?? null,
                     windUpFinalisedAt: r.wind_up_finalised_at ?? null,
                     windUpGraceEndsAt,
-                    lat: r.lat != null ? Number(r.lat) : null,
-                    lng: r.lng != null ? Number(r.lng) : null,
+                    ...servedCoordinates(r),
                     locationAuthSigner: r.location_auth_signer ?? r.auth_signer ?? null,
                     locationUpdatedAt: r.location_updated_at ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
@@ -404,8 +410,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             windUpInitiatedBy: m.wind_up_initiated_by ?? null,
             windUpFinalisedAt: m.wind_up_finalised_at ?? null,
             windUpGraceEndsAt,
-            lat: m.lat != null ? Number(m.lat) : null,
-            lng: m.lng != null ? Number(m.lng) : null,
+            ...servedCoordinates(m),
             locationAuthSigner: m.location_auth_signer ?? m.auth_signer ?? null,
             locationUpdatedAt: m.location_updated_at ?? null,
             deferredClaims,
@@ -960,6 +965,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
             actor = ctx.state?.actor || authSigner;
             if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        } else if (isTreasury(treasury) && statusOf(treasury) === 'completed') {
+            // A wound-up enterprise has no keepers left, and requireKeeperOrAdmin refuses completed enterprises.
+            // A node admin must still be able to clear a location it left behind (PR #839 Blocker A).
+            actor = ctx.state?.actor;
+            if (!actor || !isAdminPubkey(actor) || blocked(statusOf(actor))) {
+                ctx.status = 403;
+                ctx.body = { error: 'Only a node admin may clear the location of a wound-up enterprise' };
+                return;
+            }
+            authSigner = actor;
         } else {
             actor = requireKeeperOrAdmin(ctx, treasury);
             if (!actor) return;

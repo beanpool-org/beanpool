@@ -14,6 +14,12 @@
  *     - Excludes completed (wound-up) enterprises even if they had a location.
  *     - Excludes enterprises without a location.
  *  6. Additive, idempotent migration: existing enterprises have no location (null) and are unaffected.
+ *  7. PR #839 Blocker A — a wound-up enterprise's location is removed and never served:
+ *     - finaliseWindUp clears lat/lng and records the finalising actor as the location signer.
+ *     - /api/treasuries, /api/enterprises and the detail endpoints omit coordinates for completed enterprises.
+ *     - A node admin can still clear a completed enterprise's location (signed member route and Settings app route);
+ *       a stranger cannot.
+ *     - The boot migration clears coordinates already stored on completed enterprises and leaves active ones alone.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-location.ts
  */
@@ -25,11 +31,11 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury,
     adminAssignTreasuryOperator, setEnterpriseLocation,
-    clearEnterpriseLocation, pauseEnterprise,
+    clearEnterpriseLocation, pauseEnterprise, finaliseWindUp,
 } from './state-engine.js';
 import { approximateLocation, roundToRoughly100m } from '@beanpool/core';
 import { startHttpsServer } from './https-server.js';
-import { db } from './db/db.js';
+import { db, initSchema } from './db/db.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 
 const PORT = 8631;
@@ -312,6 +318,90 @@ async function main() {
         assert(detailData.lat === approx.lat, 'GET /api/enterprise/:id includes lat');
         assert(detailData.lng === approx.lng, 'GET /api/enterprise/:id includes lng');
         assert(detailData.locationAuthSigner === aliceKeeper.pubKeyHex, 'GET /api/enterprise/:id includes locationAuthSigner');
+
+        // ── 8. PR #839 Blocker A: a wound-up enterprise's location is removed and never served ──
+        const completedWithCoords = (callsign: string, lat: number, lng: number) => {
+            const { publicKey } = createTreasury(callsign, AVATAR, 0, { lat, lng, locationAuthSigner: adminId.pubKeyHex });
+            // A row as it exists on a live node today: wound up before this fix, coordinates still stored.
+            db.prepare("UPDATE members SET status = 'completed', wind_up_finalised_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(publicKey);
+            return publicKey;
+        };
+
+        // 8a. finaliseWindUp clears the location and records the finalising actor as signer
+        const { publicKey: eggs } = createTreasury('HouseEggs', AVATAR, 0, {
+            lat: -28.5412,
+            lng: 153.5123,
+            locationAuthSigner: aliceKeeper.pubKeyHex,
+        });
+        const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+        db.prepare("UPDATE members SET status = 'winding_up', wind_up_initiated_at = ?, wind_up_initiated_by = ? WHERE public_key = ?")
+            .run(eightDaysAgo, adminId.pubKeyHex, eggs);
+        const windUp = finaliseWindUp(eggs, adminId.pubKeyHex);
+        assert(windUp.status === 'completed', 'Eggs enterprise wound up');
+        const eggsRow = db.prepare('SELECT lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key = ?').get(eggs) as any;
+        assert(eggsRow.lat === null && eggsRow.lng === null, `finaliseWindUp clears lat/lng (got ${eggsRow.lat}, ${eggsRow.lng})`);
+        assert(eggsRow.location_auth_signer === adminId.pubKeyHex, `finaliseWindUp records the finalising actor as location_auth_signer (got ${eggsRow.location_auth_signer})`);
+        assert(eggsRow.auth_signer === adminId.pubKeyHex, `finaliseWindUp records the finalising actor as auth_signer (got ${eggsRow.auth_signer})`);
+        assert(eggsRow.location_updated_at === windUp.finalisedAt, `finaliseWindUp stamps location_updated_at with the finalise time (got ${eggsRow.location_updated_at})`);
+
+        // 8b. List and detail endpoints never return coordinates for a completed enterprise
+        const servedCompleted = completedWithCoords('ServedWoundUp', -28.531, 153.521);
+        for (const listPath of ['/api/treasuries', '/api/enterprises']) {
+            const listRes = await fetch(`${BASE}${listPath}`);
+            assert(listRes.ok, `GET ${listPath} succeeds`);
+            const listData = await listRes.json();
+            const rows = (listData.treasuries ?? listData.enterprises) as any[];
+            const completedRow = rows.find((t: any) => t.publicKey === servedCompleted);
+            assert(completedRow !== undefined, `GET ${listPath} still lists the completed enterprise`);
+            assert(completedRow.lat === null && completedRow.lng === null, `GET ${listPath} omits coordinates for a completed enterprise (got ${completedRow.lat}, ${completedRow.lng})`);
+            const activeRow = rows.find((t: any) => t.publicKey === shed);
+            assert(activeRow.lat === approx.lat && activeRow.lng === approx.lng, `GET ${listPath} still returns coordinates for an active enterprise`);
+        }
+        for (const detailPath of [`/api/enterprise/${servedCompleted}`, `/api/treasury/${servedCompleted}`]) {
+            const res = await fetch(`${BASE}${detailPath}`);
+            assert(res.ok, `GET ${detailPath} succeeds (status ${res.status})`);
+            const data = await res.json();
+            assert(data.lat === null && data.lng === null, `GET ${detailPath} omits coordinates for a completed enterprise (got ${data.lat}, ${data.lng})`);
+        }
+
+        // 8c. A node admin can clear a completed enterprise's location; a stranger cannot
+        const adminClearTarget = completedWithCoords('AdminClearWoundUp', -28.532, 153.522);
+        const strangerClearCompleted = await signedFetch('DELETE', `/api/enterprise/${adminClearTarget}/location`, bobStranger);
+        assert(strangerClearCompleted.status === 403, `Stranger clearing a completed enterprise's location rejected with 403 (got ${strangerClearCompleted.status})`);
+        const strangerUntouched = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(adminClearTarget) as any;
+        assert(strangerUntouched.lat === -28.532, 'Stranger attempt left the completed row unchanged');
+
+        const adminClearCompleted = await signedFetch('DELETE', `/api/enterprise/${adminClearTarget}/location`, adminId);
+        assert(adminClearCompleted.ok, `Admin clears a completed enterprise's location via the signed route (status ${adminClearCompleted.status})`);
+        const adminClearedRow = db.prepare('SELECT lat, lng, location_auth_signer FROM members WHERE public_key = ?').get(adminClearTarget) as any;
+        assert(adminClearedRow.lat === null && adminClearedRow.lng === null, 'Completed enterprise location cleared by admin (signed route)');
+        assert(adminClearedRow.location_auth_signer === adminId.pubKeyHex, 'Admin recorded as signer of the completed-enterprise clear');
+
+        const adminAppClearTarget = completedWithCoords('SettingsClearWoundUp', -28.533, 153.523);
+        const adminAppClear = await fetch(`${BASE}/api/local/admin/treasury/${adminAppClearTarget}/location`, {
+            method: 'DELETE',
+            headers: { 'x-admin-password': 'correct-horse-battery-staple-1234' },
+        });
+        assert(adminAppClear.ok, `Admin clears a completed enterprise's location via the Settings app route (status ${adminAppClear.status})`);
+        const adminAppClearedRow = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(adminAppClearTarget) as any;
+        assert(adminAppClearedRow.lat === null && adminAppClearedRow.lng === null, 'Completed enterprise location cleared by admin (Settings app route)');
+
+        // Setting (not clearing) a location on a completed enterprise stays refused, even for an admin
+        const adminSetCompleted = await signedFetch('POST', `/api/enterprise/${adminClearTarget}/location`, adminId, { lat: -28.5, lng: 153.5 });
+        assert(adminSetCompleted.status === 403 || adminSetCompleted.status === 400, `Admin cannot SET a location on a completed enterprise (got ${adminSetCompleted.status})`);
+
+        // 8d. Migration clears coordinates already stored on completed enterprises; active ones untouched
+        const migrateTarget = completedWithCoords('MigrateWoundUp', -28.534, 153.524);
+        const activeBefore = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
+        assert(activeBefore.lat !== null, 'Active enterprise has coordinates before the migration');
+        initSchema();
+        const migratedRow = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
+        assert(migratedRow.lat === null && migratedRow.lng === null, `Migration clears coordinates on a pre-existing completed enterprise (got ${migratedRow.lat}, ${migratedRow.lng})`);
+        const activeAfter = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
+        assert(JSON.stringify(activeAfter) === JSON.stringify(activeBefore), 'Migration leaves an active enterprise’s location untouched');
+        initSchema();
+        const migratedTwice = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
+        assert(migratedTwice.lat === null && migratedTwice.lng === null, 'Migration is idempotent (second boot is a no-op)');
 
         console.log(`\nAll ${passed}/${run} enterprise location tests passed!`);
     } finally {

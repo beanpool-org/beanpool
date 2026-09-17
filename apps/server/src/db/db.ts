@@ -508,6 +508,23 @@ export function initSchema() {
         }
     } catch { }
 
+    // PR #839 Blocker A: a wound-up enterprise never keeps its map location. finaliseWindUp now clears it, but
+    // an enterprise wound up before that fix still holds the coordinates a keeper may have set on their own
+    // house. Clear them. Idempotent without a marker: it matches only completed rows that still have
+    // coordinates, so a later boot (or a row that arrives from an older peer) is handled the same way.
+    // updated_at is set explicitly so delta sync carries the clear even if the touch trigger is absent.
+    try {
+        db.prepare(`
+            UPDATE members
+            SET lat = NULL, lng = NULL,
+                location_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE is_treasury = 1 AND status = 'completed' AND (lat IS NOT NULL OR lng IS NOT NULL)
+        `).run();
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to clear locations of wound-up enterprises:', err?.message || err);
+    }
+
     // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
     try {
         db.prepare(`DELETE FROM node_config WHERE key LIKE 'treasury_privkey_%'`).run();

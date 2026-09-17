@@ -3537,6 +3537,10 @@ export function setEnterpriseLocation(
         lngVal = lng;
     }
 
+    return writeEnterpriseLocation(enterprisePubkey, actorPubkey, latVal, lngVal);
+}
+
+function writeEnterpriseLocation(enterprisePubkey: string, actorPubkey: string, latVal: number | null, lngVal: number | null) {
     const now = new Date().toISOString();
     db.prepare(`
         UPDATE members
@@ -3548,7 +3552,7 @@ export function setEnterpriseLocation(
     broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: latVal, lng: lngVal, authSigner: actorPubkey, updatedAt: now });
 
     return {
-        ok: true,
+        ok: true as const,
         lat: latVal,
         lng: lngVal,
         locationAuthSigner: actorPubkey,
@@ -3560,6 +3564,9 @@ export function setEnterpriseLocation(
  * Clear an enterprise's map location (docs/the-commons.md §2.2, §2.3, Slice 6).
  * Only keepers or an admin can clear location.
  * Recorded with auth_signer.
+ *
+ * A completed (wound-up) enterprise can still be cleared, by a node admin only: its keepers were released at
+ * wind-up, and a location left behind must never be stuck (PR #839 Blocker A). Setting one stays refused.
  */
 export function clearEnterpriseLocation(
     enterprisePubkey: string,
@@ -3571,6 +3578,13 @@ export function clearEnterpriseLocation(
     locationAuthSigner: string;
     locationUpdatedAt: string;
 } {
+    const member = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (member?.is_treasury && member.status === 'completed') {
+        if (!(actorPubkey === 'admin' || actorPubkey === 'owner:password' || isAdminPubkey(actorPubkey))) {
+            throw new Error('Only a node admin may clear the location of a wound-up enterprise');
+        }
+        return writeEnterpriseLocation(enterprisePubkey, actorPubkey, null, null) as any;
+    }
     return setEnterpriseLocation(enterprisePubkey, actorPubkey, null) as any;
 }
 
@@ -3748,13 +3762,17 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE enterprise = ? AND released_at IS NULL").run(now, enterprisePubkey);
         clearEnterpriseFloorCache(enterprisePubkey);
 
+        // A wound-up enterprise's map location goes with it (PR #839 Blocker A): a keeper may have pinned it
+        // on their own house, and once it is completed nobody keeps it any more. The clear is signed by the
+        // finalising actor, exactly as a keeper's own clear would be.
         db.prepare(`
             UPDATE members
             SET status = 'completed', wind_up_finalised_at = ?,
                 legacy_credit_floor = NULL,
-                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL,
+                lat = NULL, lng = NULL, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?
             WHERE public_key = ?
-        `).run(now, enterprisePubkey);
+        `).run(now, actorPubkey, actorPubkey, now, enterprisePubkey);
 
         db.prepare(`
             UPDATE deferred_wage_claims
@@ -3770,6 +3788,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     });
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: null, lng: null, authSigner: actorPubkey, updatedAt: now });
     broadcast({ type: 'enterprise_wound_up', enterprisePubkey, finalisedBy: actorPubkey, finalisedAt: now, sweptAmount });
 
     return {

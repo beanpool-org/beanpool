@@ -20,6 +20,10 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
+import { EventCard } from '../../components/EventCard';
+import { NewEventModal } from '../../components/NewEventModal';
+import { isEventInFeed, EVENT_TYPES_QUERY } from '../../utils/events';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
@@ -651,10 +655,25 @@ export default function MarketScreen() {
     const [showDealsSheet, setShowDealsSheet] = useState(false);
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
     const [showNewPollModal, setShowNewPollModal] = useState(false);
+    const [showNewEventModal, setShowNewEventModal] = useState(false);
+    // For the distance on event cards. Read only when location is already allowed; the feed never prompts.
+    const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
 
     const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
+
+    useEffect(() => {
+        let cancelled = false;
+        Location.getForegroundPermissionsAsync()
+            .then(async ({ status }) => {
+                if (status !== 'granted') return;
+                const last = await Location.getLastKnownPositionAsync();
+                if (!cancelled && last) setMyLocation({ lat: last.coords.latitude, lng: last.coords.longitude });
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         fetchGroups().then(groups => {
@@ -775,7 +794,8 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                const type = filter === 'all' || filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
+                // Events are opt-in on the list route; only the All view shows them.
+                const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
                 const cat = categoryFilter !== 'all' ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
@@ -825,7 +845,7 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter: any = {};
+        const queryFilter: any = { includeEvents: true };
         if (filter !== 'all' && filter !== 'for-you') {
             queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll';
         }
@@ -833,7 +853,7 @@ export default function MarketScreen() {
             queryFilter.targetGroupId = groupFilter;
         }
         const runLoad = async () => {
-            const data = await getPosts(Object.keys(queryFilter).length > 0 ? queryFilter : undefined);
+            const data = await getPosts(queryFilter);
             setPosts(data);
             if (identity) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
@@ -875,6 +895,10 @@ export default function MarketScreen() {
     let filteredPosts = basePosts.filter(p => {
         if (p.type === 'poll') {
             if (p.status !== 'active' && p.status !== 'completed') return false;
+        } else if (p.type === 'event') {
+            // Ended and cancelled events leave the feed (the sync pull still carries them)
+            if (!isEventInFeed(p)) return false;
+            if (filter !== 'all') return false;
         } else {
             if (p.status !== 'active') return false;
         }
@@ -887,7 +911,7 @@ export default function MarketScreen() {
         // Category filter: polls are civic governance posts and bypass goods category filters
         if (categoryFilter !== 'all' && p.category !== categoryFilter && filter !== 'polls') return false;
         // #108: beans-only browse excludes polls
-        if (beansOnly && (p.type === 'poll' || p.cash_also_needed === 1)) return false;
+        if (beansOnly && (p.type === 'poll' || p.type === 'event' || p.cash_also_needed === 1)) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
@@ -896,7 +920,7 @@ export default function MarketScreen() {
         if (filter === 'for-you' && (p.type === 'poll' || !favCategories.includes(p.category))) return false;
         
         // Trust Level filters
-        if (trustFilter === 'founding' && (p.type === 'poll' || !p.authorFoundingNeeded)) return false;
+        if (trustFilter === 'founding' && (p.type === 'poll' || p.type === 'event' || !p.authorFoundingNeeded)) return false;
         if (trustFilter === 'new' && (p.author_energy_cycled ?? 0) >= 120) return false;
         if (trustFilter === 'resident' && (p.author_energy_cycled ?? 0) < 120) return false;
         if (trustFilter === 'steward' && (p.author_energy_cycled ?? 0) < 520) return false;
@@ -931,7 +955,7 @@ export default function MarketScreen() {
     // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
     const realMemberListingsCount = posts.filter(p => {
         const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-        return !isPulse && p.type !== 'poll' && p.status === 'active';
+        return !isPulse && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
     }).length;
     if (realMemberListingsCount >= 2) {
         filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
@@ -1360,6 +1384,17 @@ export default function MarketScreen() {
                     <Text style={styles.sectionHeaderText}>{item.title.toUpperCase()}</Text>
                     <View style={styles.sectionHeaderLine} />
                 </View>
+            );
+        }
+
+        if (item.type === 'event') {
+            return (
+                <EventCard
+                    post={item}
+                    currentPubkey={identity?.publicKey}
+                    myLocation={myLocation}
+                    onRsvpChanged={() => loadPosts()}
+                />
             );
         }
 
@@ -1825,7 +1860,7 @@ export default function MarketScreen() {
                         </Pressable>
 
                         <Pressable
-                            style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
+                            style={styles.actionSheetOption}
                             accessibilityRole="button"
                             accessibilityLabel="Community Poll: Ask a question with 2–4 options in the feed"
                             onPress={() => {
@@ -1837,6 +1872,22 @@ export default function MarketScreen() {
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.actionSheetOptionTitle}>Community Poll</Text>
                                 <Text style={styles.actionSheetOptionDesc}>Ask a question with 2–4 options in the feed</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Event: A gathering with a time and a place"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                setShowNewEventModal(true);
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>📅</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Event</Text>
+                                <Text style={styles.actionSheetOptionDesc}>A gathering with a time and a place</Text>
                             </View>
                         </Pressable>
 
@@ -1855,6 +1906,12 @@ export default function MarketScreen() {
             <NewPollModal
                 visible={showNewPollModal}
                 onClose={() => setShowNewPollModal(false)}
+                onSuccess={() => loadPosts()}
+            />
+
+            <NewEventModal
+                visible={showNewEventModal}
+                onClose={() => setShowNewEventModal(false)}
                 onSuccess={() => loadPosts()}
             />
         </View>

@@ -16,6 +16,7 @@ import Constants from 'expo-constants';
 import { BeanPoolMerkleTree } from '@beanpool/core';
 import { applyDelta, fetchFriendsFromServer, getDb } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
+import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 
 const SYNC_TIMEOUT_MS = 20_000;
@@ -284,7 +285,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         let postsData: any;
         try {
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}`, {
+            // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
+            // is what keeps builds that predate events from ever caching one.
+            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true&${EVENT_TYPES_QUERY}${postsSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: timeouts.signal(30000)

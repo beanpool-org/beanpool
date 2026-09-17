@@ -113,7 +113,12 @@ export function getEnterpriseThreadMessages(
     });
 }
 
-function checkMemberCanPost(authorPubkey: string): void {
+/**
+ * The author-side block every node-readable thread applies: an invalidated device key, a disabled,
+ * suspended, pruned or closed account, or a credit-frozen member cannot post. Shared with the event chat
+ * (engine/event-thread.ts) so both threads refuse in exactly the same words, which the routes map to 403.
+ */
+export function assertThreadMemberCanPost(authorPubkey: string): void {
     if (isSyntheticAccount(authorPubkey) || authorPubkey.toLowerCase() === 'system') return;
     const cleanKey = typeof authorPubkey === 'string' ? authorPubkey.trim().toLowerCase() : '';
     try {
@@ -157,7 +162,7 @@ export function postEnterpriseThreadMessage(
     }
     // Paused enterprise stays open: pausing is exactly when people need to talk about it.
 
-    checkMemberCanPost(authorPubkey);
+    assertThreadMemberCanPost(authorPubkey);
 
     const cleanText = (text || '').trim();
     if (!cleanText) throw new Error('Message text cannot be empty');

@@ -285,6 +285,7 @@ run_federation_suites() {
       test-ws-http-port
       test-polls
       test-events
+      test-event-chat
       test-migration-projects-enterprises
       test-commons-reject-project
       test-commons-projects-update-delete

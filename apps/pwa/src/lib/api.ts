@@ -568,7 +568,8 @@ export async function deletePulseItem(itemId: string): Promise<{ success: boolea
 
 export interface Conversation {
     id: string;
-    type: 'dm' | 'group';
+    /** `event_thread` is an event's chat — its id is the event's post id (docs/events-on-the-map.md §2.1). */
+    type: 'dm' | 'group' | 'event_thread';
     name: string | null;
     participants: string[];
     createdBy: string;
@@ -1878,6 +1879,50 @@ export async function postEnterpriseThreadMessage(treasury: string, text: string
 
 export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
+}
+
+// ===================== EVENT CHAT (docs/events-on-the-map.md §2.2) =====================
+
+export interface EventThreadMessage {
+    id: string;
+    conversationId: string;
+    authorPubkey: string;
+    authorCallsign?: string;
+    authorAvatar?: string | null;
+    ciphertext: string;
+    nonce: string;
+    type: 'text' | 'removed' | string;
+    metadata?: string;
+    timestamp: string;
+    editedAt?: string | null;
+}
+
+export interface EventThreadView {
+    conversation: Conversation;
+    messages: EventThreadMessage[];
+    readOnly: boolean;
+    readOnlyReason: string | null;
+    canPost: boolean;
+    isHost: boolean;
+    title: string;
+    eventEndAt: string | null;
+    eventState: string;
+    /** The host's note for people going, pinned at the top of the chat rather than stored as a message. */
+    privateNote: string | null;
+    notice: string;
+}
+
+/** The chat of one event. The host and everyone marked Going may read it; everyone else gets a 403. */
+export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<EventThreadView> {
+    return request('GET', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
+}
+
+export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<{ success: boolean; message: EventThreadMessage }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId });
+}
+
+export async function removeEventChatMessage(postId: string, messageId: string): Promise<{ success: boolean; message: EventThreadMessage }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat/remove`, { messageId });
 }
 
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {

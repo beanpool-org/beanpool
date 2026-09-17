@@ -265,6 +265,17 @@ import {
 } from './engine/enterprise-thread.js';
 export { isEnterpriseThreadHidden, isEnterpriseThreadReadOnly } from './engine/enterprise-thread.js';
 import {
+    getEventThread as getEventThreadEngine,
+    postEventThreadMessage as postEventThreadMessageEngine,
+    removeEventThreadMessage as removeEventThreadMessageEngine,
+    type EventThreadMessage,
+    type EventThreadView
+} from './engine/event-thread.js';
+export {
+    ensureEventThread, syncEventThreadMembership, canReadEventThread, loadEventForThread,
+    eventThreadReadOnlyReason, isEventThreadExpired, EVENT_THREAD_NOTICE, EVENT_THREAD_MESSAGE_MAX
+} from './engine/event-thread.js';
+import {
     getNodeRole,
     setNodeRole,
     type NodeRole,
@@ -4391,6 +4402,22 @@ export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: stri
 }
 
 export type { EnterpriseThreadMessage };
+
+// ===================== EVENT CHAT (docs/events-on-the-map.md §2.2) =====================
+
+export function getEventThread(postId: string, viewerPubkey: string | undefined, limit = 50, offset = 0): EventThreadView {
+    return getEventThreadEngine(postId, viewerPubkey, limit, offset);
+}
+
+export function postEventThreadMessage(postId: string, authorPubkey: string, text: string, clientId?: string): EventThreadMessage {
+    return postEventThreadMessageEngine(getMessagingCb(), postId, authorPubkey, text, clientId);
+}
+
+export function removeEventThreadMessage(postId: string, messageId: string, actorPubkey: string): EventThreadMessage {
+    return removeEventThreadMessageEngine(getMessagingCb(), postId, messageId, actorPubkey);
+}
+
+export type { EventThreadMessage, EventThreadView };
 
 // ===================== STATE SYNC =====================
 

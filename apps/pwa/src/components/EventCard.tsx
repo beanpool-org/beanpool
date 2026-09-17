@@ -181,9 +181,11 @@ interface EventDetailProps {
     onOpenProfile?: (pubkey: string) => void;
     onChange?: (post: MarketplacePost) => void;
     onCancelled?: () => void;
+    /** Opens the event's chat — the host and everyone Going (docs/events-on-the-map.md §3). */
+    onOpenChat?: (post: MarketplacePost) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onOpenChat }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
@@ -255,6 +257,17 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">👥 {countsLine(p)}</p>
                 <RsvpButtons rsvp={rsvp} />
                 {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
+
+                {onOpenChat && (isHost || p.myRsvp === 'going') && (
+                    <button
+                        type="button"
+                        data-testid="event-open-chat"
+                        onClick={() => onOpenChat(p)}
+                        className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left"
+                    >
+                        💬 Open event chat{typeof p.goingCount === 'number' ? ` (${p.goingCount})` : ''}
+                    </button>
+                )}
 
                 {p.eventPrivateNote ? (
                     <div data-testid="event-private-note" className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800">

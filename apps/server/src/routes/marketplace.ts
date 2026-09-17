@@ -14,6 +14,7 @@ import {
     getMember, getBalance, getPostsVersion,
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
+    getEventThread, postEventThreadMessage, removeEventThreadMessage,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -458,6 +459,108 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to record RSVP' };
+    }
+});
+
+// --------------------- Event chat (docs/events-on-the-map.md §2.2, slice 4) ---------------------
+//
+// The chat's id IS the event's id. Every call is signed: the host and everyone marked Going may read and
+// post, the host may remove a message, and the chat is read-only once the event ends or is cancelled. The
+// private note rides on the read so the client can pin it at the top without storing it as a message.
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Map an event-chat refusal onto a status. Anything unrecognised is a 400, as elsewhere on this router. */
+function eventChatStatus(msg: string): number {
+    if (msg.includes('Event not found')) return 404;
+    if (msg.includes('no longer available')) return 410;
+    if (msg.includes('Only the host and people going') || msg.includes('Only the host can remove')) return 403;
+    if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended')
+        || msg.includes('pruned') || msg.includes('Account closed')
+        || msg.includes('Device key has been invalidated') || msg.includes('Member not found')) return 403;
+    if (msg.includes('Message not found')) return 404;
+    return 400;
+}
+
+router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    // Same clamping as every other paged route, capped at this chat's page of 100.
+    const limit = Math.min(clampLimit(ctx.query.limit), 100);
+    const offset = clampOffset(ctx.query.offset);
+    try {
+        ctx.body = getEventThread(ctx.params.id, actor, limit, offset);
+    } catch (e: any) {
+        const msg = e?.message || 'Could not open the event chat';
+        ctx.status = eventChatStatus(msg);
+        ctx.body = { error: msg };
+    }
+});
+
+router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    const body = (ctx as any).requestBody || {};
+    const text = typeof body.text === 'string' ? body.text : (typeof body.message === 'string' ? body.message : '');
+    let clientId: string | undefined;
+    if (body.clientId !== undefined && body.clientId !== null) {
+        if (typeof body.clientId !== 'string' || !UUID_V4.test(body.clientId)) {
+            ctx.status = 400;
+            ctx.body = { error: 'clientId must be a UUID v4' };
+            return;
+        }
+        clientId = body.clientId.toLowerCase();
+    }
+    if (!text.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'Message text cannot be empty' };
+        return;
+    }
+    try {
+        const message = postEventThreadMessage(ctx.params.id, actor, text, clientId);
+        ctx.status = 201;
+        ctx.body = { success: true, message };
+    } catch (e: any) {
+        const msg = e?.message || 'Could not post the message';
+        if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
+            ctx.status = 409;
+            ctx.body = { error: msg };
+            return;
+        }
+        ctx.status = eventChatStatus(msg);
+        ctx.body = { error: msg };
+    }
+});
+
+router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    const body = (ctx as any).requestBody || {};
+    const messageId = body.messageId || body.id;
+    if (!messageId || typeof messageId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'messageId is required' };
+        return;
+    }
+    try {
+        const message = removeEventThreadMessage(ctx.params.id, messageId, actor);
+        ctx.body = { success: true, message };
+    } catch (e: any) {
+        const msg = e?.message || 'Could not remove the message';
+        ctx.status = eventChatStatus(msg);
+        ctx.body = { error: msg };
     }
 });
 

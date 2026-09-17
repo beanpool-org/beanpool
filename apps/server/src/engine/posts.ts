@@ -7,6 +7,7 @@ import { db } from '../db/db.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
+import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import {
     getMember,
     getPosts,
@@ -367,6 +368,12 @@ export function createPost(
         if (photos && photos.length > 0) {
             const insertPhoto = db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
             photos.slice(0, 5).forEach((p, idx) => insertPhoto.run(finalId, p, idx));
+        }
+
+        if (type === 'event') {
+            // Every event carries a chat, created with the post and keyed by the post id (§2.1). The first
+            // participant is the acting member — the keeper or convenor for an enterprise or group event.
+            ensureEventThread(finalId);
         }
     })();
 
@@ -764,6 +771,9 @@ export function rsvpEvent(
                     updated_at = excluded.updated_at
             `).run(postId, memberPublicKey, status, signature || '', writeAt);
         }
+        // Chat membership follows the RSVP in the same transaction (§2.2): Going adds you to the event
+        // chat, Interested and "not going" take you out of it. The host never leaves.
+        syncEventThreadMembership(postId, memberPublicKey, status);
     })();
 
     bumpPostsVersion();

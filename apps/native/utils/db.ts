@@ -935,7 +935,7 @@ function formatSystemMessage(
 export async function getConversations(myPubkey: string) {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT c.id, c.name, c.post_id,
+        SELECT c.id, c.name, c.post_id, c.type as convType,
                COALESCE(p.title, c.post_title) as postTitle,
                COALESCE(
                    (SELECT mt2.status FROM marketplace_transactions mt2
@@ -1094,6 +1094,7 @@ export async function getConversations(myPubkey: string) {
             postStatus: row.postStatus,
             postCredits: row.postCredits,
             postPhoto,
+            type: row.convType || 'dm',
             peer: row.name || row.otherCallsign || row.id.slice(0, 8),
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
@@ -2132,6 +2133,37 @@ export async function postEnterpriseThreadMessage(treasury: string, text: string
 
 export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: any } | null> {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
+}
+
+// Event chat (docs/events-on-the-map.md §2.2). The chat's id IS the event's id. Every call is signed: the
+// node serves it to the host and everyone marked Going and to nobody else, so nothing here is cached —
+// the private note in particular never touches the phone's database.
+
+/** Throws the node's own message, which the screen shows, rather than a bare "failed". */
+export async function getEventChat(postId: string, limit = 50, offset = 0): Promise<any> {
+    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat?limit=${limit}&offset=${offset}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'Could not open this event chat.');
+    return body;
+}
+
+export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<any> {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId });
+}
+
+export async function removeEventChatMessage(postId: string, messageId: string): Promise<any> {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/remove`, { messageId });
+}
+
+/** The local conversation's kind, so /chat/:id can hand an event chat to its own screen. */
+export async function getConversationKind(conversationId: string): Promise<string | null> {
+    try {
+        const database = await getDb();
+        const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        return row?.type ?? null;
+    } catch {
+        return null;
+    }
 }
 
 // Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the

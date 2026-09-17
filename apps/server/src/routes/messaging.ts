@@ -11,6 +11,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError } from '../engine/messaging.js';
+import { canReadEventThread, loadEventForThread } from '../engine/event-thread.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -285,6 +286,21 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;
+    }
+    // An event chat is the host plus everyone Going, re-checked against the RSVP rather than the
+    // participants mirror, and private whether or not this node enforces read auth
+    // (docs/events-on-the-map.md §2.2). The private note is never part of this payload — the event chat
+    // route serves it, to the same people.
+    if (conv.type === 'event_thread') {
+        let allowed = false;
+        try {
+            allowed = canReadEventThread(loadEventForThread(conversationId), ctx.state.actor as string | undefined);
+        } catch { allowed = false; }
+        if (!allowed) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only the host and people going can open this event chat' };
+            return;
+        }
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

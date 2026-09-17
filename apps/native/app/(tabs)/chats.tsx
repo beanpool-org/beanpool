@@ -397,6 +397,12 @@ export default function ChatsScreen() {
                 accessibilityRole="button"
                 style={[styles.chatRow, needsAction && styles.chatRowActionNeeded]}
                 onPress={() => {
+                    // An event chat is its own screen (docs/events-on-the-map.md §2.2); say so on the way
+                    // in so it never waits on a database read to find out.
+                    if (item.type === 'event_thread') {
+                        router.push({ pathname: `/chat/${item.id}`, params: { event: '1' } });
+                        return;
+                    }
                     const firstActionable = item.conversationDeals?.[0];
                     if (firstActionable) {
                         if (firstActionable.action === 'review') {

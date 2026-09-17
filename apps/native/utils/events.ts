@@ -251,3 +251,90 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
 export function rsvpSignedMessage(postId: string, status: EventRsvpStatus | null): string {
     return `${postId}:${status ?? 'none'}`;
 }
+
+// ===================== EVENT CHAT (docs/events-on-the-map.md §2.2, §3, slice 4) =====================
+
+export const EVENT_CHAT_MESSAGE_MAX = 2000;
+export const EVENT_CHAT_REMOVED_TEXT = 'removed by the host';
+/** The one line the chat carries: node-readable, not end-to-end encrypted (decision 25). */
+export const EVENT_CHAT_NOTICE = "Visible to the host, everyone going, and this node's operator.";
+
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Event chat messages are stored base64 `plaintext-v1`, like the enterprise thread — the node can read
+ * them, which is what lets membership follow RSVPs and a host remove a message.
+ *
+ * Decoded here rather than through utils/crypto, which pulls in expo-crypto: this file stays free of device
+ * modules so vitest can hold it to the design. Hermes has no Buffer and no guaranteed atob.
+ */
+export function decodeEventChatText(ciphertext: string, type: string): string {
+    if (type === 'removed') return EVENT_CHAT_REMOVED_TEXT;
+    try {
+        const clean = (ciphertext || '').replace(/[^A-Za-z0-9+/]/g, '');
+        // indexOf('') is 0, so a missing character has to be spelled out as missing or the tail of a
+        // padded string decodes to a stray NUL.
+        const at = (i: number): number => (i < clean.length ? B64_ALPHABET.indexOf(clean[i]) : -1);
+        const bytes: number[] = [];
+        for (let i = 0; i < clean.length; i += 4) {
+            const [a, b, c, d] = [at(i), at(i + 1), at(i + 2), at(i + 3)];
+            if (a < 0 || b < 0) break;
+            bytes.push((a << 2) | (b >> 4));
+            if (c >= 0) bytes.push(((b & 15) << 4) | (c >> 2));
+            if (c >= 0 && d >= 0) bytes.push(((c & 3) << 6) | d);
+        }
+        let out = '';
+        for (let i = 0; i < bytes.length; i++) {
+            const b = bytes[i];
+            if (b < 128) {
+                out += String.fromCharCode(b);
+            } else if (b > 191 && b < 224) {
+                out += String.fromCharCode(((b & 31) << 6) | (bytes[i + 1] & 63));
+                i += 1;
+            } else if (b > 223 && b < 240) {
+                out += String.fromCharCode(((b & 15) << 12) | ((bytes[i + 1] & 63) << 6) | (bytes[i + 2] & 63));
+                i += 2;
+            } else {
+                const cp = ((b & 7) << 18) | ((bytes[i + 1] & 63) << 12) | ((bytes[i + 2] & 63) << 6) | (bytes[i + 3] & 63);
+                out += String.fromCharCode(0xd800 + ((cp - 0x10000) >> 10), 0xdc00 + ((cp - 0x10000) & 1023));
+                i += 3;
+            }
+        }
+        return out;
+    } catch {
+        return ciphertext;
+    }
+}
+
+/** The outgoing side: the node takes plain text and stores it; this is only the client-side cap. */
+export function trimEventChatDraft(text: string): string {
+    return (text || '').trim().slice(0, EVENT_CHAT_MESSAGE_MAX);
+}
+
+/**
+ * Whether to offer the chat on the event: the host, or someone marked Going. Who the host is stays the
+ * node's call — the RSVP list is sent to hosts and to nobody else, so its presence is the signal (the same
+ * test the host panel uses).
+ */
+export function canOpenEventChat(post: any): boolean {
+    if (!post || post.type !== 'event') return false;
+    if (Array.isArray(post.eventRsvps)) return true;
+    return (post.myRsvp ?? null) === 'going';
+}
+
+/** "Open event chat (7)" — the going count when the node has given us one. */
+export function eventChatEntryLabel(post: any): string {
+    const going = Number(post?.goingCount ?? post?.event_going_count);
+    return Number.isFinite(going) ? `Open event chat (${going})` : 'Open event chat';
+}
+
+/**
+ * What the chat screen says instead of a composer. The node decides read-only and sends the line; this is
+ * the same rule applied locally so the composer never appears for an event that has clearly finished.
+ */
+export function eventChatReadOnlyReason(post: any, nowMs: number = Date.now()): string | null {
+    if (!post) return null;
+    if (eventStateOf(post) === 'cancelled') return 'This event was cancelled. The chat is read-only.';
+    if (isEventEnded(post, nowMs)) return 'This event has ended. The chat is read-only.';
+    return null;
+}

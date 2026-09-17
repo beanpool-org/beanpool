@@ -8,8 +8,9 @@
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
  * lives in component state and is never written to the phone's cache.
  *
- * Not here yet: the event chat (slice 4) and Copy to a new date (slice 5). "Show on map" opens the phone's
- * maps app, because the in-app map layer for events is the protected-files slice 7.
+ * The event chat (slice 4) is one tap from here, for the host and anyone Going. Not here yet: Copy to a new
+ * date (slice 5). "Show on map" opens the phone's maps app, because the in-app map layer for events is the
+ * protected-files slice 7.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -24,6 +25,7 @@ import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
+    canOpenEventChat, eventChatEntryLabel,
     type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
@@ -209,6 +211,19 @@ export function EventDetail({ post }: EventDetailProps) {
                     </View>
                 )}
 
+                {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
+                    <Pressable
+                        onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
+                        style={styles.chatBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={eventChatEntryLabel({ ...p, goingCount: counts.going })}
+                    >
+                        <Text style={styles.chatBtnText} numberOfLines={1}>
+                            💬 {eventChatEntryLabel({ ...p, goingCount: counts.going })}
+                        </Text>
+                    </Pressable>
+                )}
+
                 {!!placeName && (
                     <View style={styles.placeRow}>
                         <Text style={styles.place} numberOfLines={2}>📍 {placeName}</Text>
@@ -309,6 +324,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
         rsvpText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         rsvpTextSelected: { color: '#fff' },
+        chatBtn: {
+            minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 14,
+            borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,
+        },
+        chatBtnText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
         place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
         linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },

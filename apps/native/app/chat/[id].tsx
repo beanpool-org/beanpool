@@ -12,7 +12,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, getConversationKind } from '../../utils/db';
+import { EventChatView } from '../../components/EventChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -98,7 +99,33 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
     );
 }
 
-export default function ChatScreen() {
+/**
+ * `/chat/:id` serves two kinds of conversation. A DM or group is the screen below. An event chat is its
+ * own screen (docs/events-on-the-map.md §2.2): node-readable `plaintext-v1`, members that follow the
+ * RSVPs, a host who can remove a message, read-only once the event ends — none of which the DM pipeline
+ * below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
+ *
+ * Both callers that can open one — the Inbox row and the event detail — say so with `event=1`, so a DM
+ * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
+ */
+export default function ChatRoute() {
+    const { id, event } = useLocalSearchParams<{ id?: string; event?: string }>();
+    const [isEventChat, setIsEventChat] = useState(event === '1');
+
+    useEffect(() => {
+        if (isEventChat || !id) return;
+        let alive = true;
+        getConversationKind(String(id)).then(kind => {
+            if (alive && kind === 'event_thread') setIsEventChat(true);
+        });
+        return () => { alive = false; };
+    }, [id, isEventChat]);
+
+    if (isEventChat && id) return <EventChatView eventId={String(id)} />;
+    return <ChatScreen />;
+}
+
+function ChatScreen() {
     const { theme, colors } = useTheme();
     const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();

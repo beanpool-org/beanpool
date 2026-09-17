@@ -11,6 +11,8 @@ import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS,
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { PollCard } from '../components/PollCard';
+import { EventCard, EventDetail } from '../components/EventCard';
+import { CLIENT_POST_TYPES, isEventOpen } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -378,6 +380,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             try {
                 const filter: any = {};
                 if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
+                // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page renders them.
+                else filter.types = CLIENT_POST_TYPES;
                 if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
                 if (beansOnly) filter.beansOnly = true;
                 if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
@@ -420,7 +424,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     const peerResults = await Promise.allSettled(
                         [...enabledPeers].map(async (peerUrl) => {
                             const data = await getRemotePosts(peerUrl, filter);
-                            return data.map(p => ({ ...p, _remoteNode: peerUrl }));
+                            // Events are this community only in v1 (§2.4): never show another node's.
+                            return data.filter(p => p.type !== 'event').map(p => ({ ...p, _remoteNode: peerUrl }));
                         })
                     );
                     for (const result of peerResults) {
@@ -729,6 +734,34 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== DETAIL VIEW ===================
     if (selectedPost) {
+        if (selectedPost.type === 'event') {
+            return (
+                <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
+                    <button
+                        onClick={() => {
+                            setSelectedPost(null);
+                            setSelectedTxId(null);
+                            setEditMode(false);
+                            setEditPhotos([]);
+                        }}
+                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                    >
+                        <span className="text-xl leading-none">←</span> Back to Market
+                    </button>
+                    <EventDetail
+                        post={selectedPost}
+                        identity={identity}
+                        distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
+                            ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
+                            : null}
+                        onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
+                        onOpenProfile={onOpenProfile}
+                        onChange={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                        onCancelled={() => { setSelectedPost(null); refresh().catch(() => {}); }}
+                    />
+                </div>
+            );
+        }
         if (selectedPost.type === 'poll') {
             return (
                 <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
@@ -2338,6 +2371,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (inactiveEnterprises.has(p.authorPublicKey)) {
                         return false;
                     }
+                    // Cancelled and ended events leave the feed (§1).
+                    if (p.type === 'event') return isEventOpen(p);
                     return p.status === 'active';
                 });
 
@@ -2373,17 +2408,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // Local "★ For You" category filter (exclude polls)
                 if (typeFilter === 'for-you') {
-                    filtered = filtered.filter(p => p.type !== 'poll' && favCategories.includes(p.category));
+                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && favCategories.includes(p.category));
                 }
 
-                // Beans-only filter (exclude polls)
+                // Beans-only filter (exclude polls and events)
                 if (beansOnly) {
-                    filtered = filtered.filter(p => p.type !== 'poll');
+                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event');
                 }
 
                 // Founding-trade filter (exclude polls)
                 if (foundingOnly) {
-                    filtered = filtered.filter(p => p.type !== 'poll' && p.authorFoundingNeeded);
+                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && p.authorFoundingNeeded);
                 }
 
                 // Specific type filter
@@ -2398,7 +2433,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
                     const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
-                    return !isPulse && p.type !== 'poll' && p.status === 'active';
+                    return !isPulse && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
                 }).length;
                 if (realMemberListingsCount >= 2) {
                     filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));
@@ -2412,6 +2447,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (!isPulseA && isPulseB) return 1;
                     return 0;
                 });
+
+                // Distance on an event card, from the centre the viewer picked for "near me" (§3).
+                const eventDistance = (p: MarketplacePost): number | null =>
+                    radiusSettings && p.lat != null && p.lng != null
+                        ? haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng)
+                        : null;
 
                 // Compute fresh today count
                 const freshTodayCount = posts.filter(post => {
@@ -2526,6 +2567,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                                         {filtered.map((post) => {
+                                            if (post.type === 'event') {
+                                                return (
+                                                    <div key={post.id} className="h-full">
+                                                        <EventCard
+                                                            post={post}
+                                                            identity={identity}
+                                                            distanceKm={eventDistance(post)}
+                                                            onOpen={() => setSelectedPost(post)}
+                                                            onRsvpChange={() => { refresh().catch(() => {}); }}
+                                                        />
+                                                    </div>
+                                                );
+                                            }
                                             if (post.type === 'poll') {
                                                 return (
                                                     <div key={post.id} className="h-full">
@@ -2610,6 +2664,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </div>
                                         <div className="flex flex-col gap-1.5">
                                             {items.map(post => {
+                                                if (post.type === 'event') {
+                                                    return (
+                                                        <div key={post.id} className="w-full my-1">
+                                                            <EventCard
+                                                                post={post}
+                                                                identity={identity}
+                                                                distanceKm={eventDistance(post)}
+                                                                onOpen={() => setSelectedPost(post)}
+                                                                onRsvpChange={() => { refresh().catch(() => {}); }}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
                                                 if (post.type === 'poll') {
                                                     return (
                                                         <div key={post.id} className="w-full my-1">

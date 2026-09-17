@@ -768,9 +768,11 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
 
 // ===================== MARKETPLACE =====================
 
+export type EventRsvpStatus = 'going' | 'interested';
+
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need' | 'poll';
+    type: 'offer' | 'need' | 'poll' | 'event';
     category: string;
     title: string;
     description: string;
@@ -806,6 +808,19 @@ export interface MarketplacePost {
     targetGroupName?: string;
     targetPubkey?: string;
     assignedTo?: string;
+    // Events (docs/events-on-the-map.md §2.1). Times are ISO UTC.
+    eventStartAt?: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    /** Sent only to the host and to members marked Going. */
+    eventPrivateNote?: string;
+    eventState?: 'scheduled' | 'updated' | 'cancelled';
+    goingCount?: number;
+    interestedCount?: number;
+    /** The viewer's own RSVP; null when they have none. */
+    myRsvp?: EventRsvpStatus | null;
+    /** Host only: who has RSVPd. */
+    eventRsvps?: Array<{ memberPubkey: string; memberCallsign?: string; status: EventRsvpStatus; updatedAt: string }>;
 }
 
 export interface MarketplaceTransaction {
@@ -828,6 +843,11 @@ export interface MarketplaceTransaction {
 export async function getMarketplacePosts(filter?: {
     id?: string;
     type?: string;
+    /**
+     * Post types to include, comma-separated. Events are opt-in on the node (docs/events-on-the-map.md §2.6):
+     * a list without `types` (or `type=event`) never contains one.
+     */
+    types?: string;
     category?: string;
     author?: string;
     beansOnly?: boolean;
@@ -841,6 +861,7 @@ export async function getMarketplacePosts(filter?: {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
+    if (filter?.types) params.set('types', filter.types);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
     if (filter?.beansOnly) params.set('beansOnly', 'true');
@@ -854,7 +875,7 @@ export async function getMarketplacePosts(filter?: {
 }
 
 export async function createMarketplacePost(post: {
-    type: 'offer' | 'need' | 'poll';
+    type: 'offer' | 'need' | 'poll' | 'event';
     category: string;
     title: string;
     description: string;
@@ -876,6 +897,11 @@ export async function createMarketplacePost(post: {
     targetGroupId?: string;
     targetPubkey?: string;
     assignedTo?: string;
+    /** Events: ISO UTC. The end is optional; the node sets start + 2 hours. */
+    eventStartAt?: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    eventPrivateNote?: string;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
 }
@@ -1000,6 +1026,11 @@ export async function deleteGroupPost(groupId: string, postId: string): Promise<
 
 export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', `/api/marketplace/posts/${postId}/vote`, { optionId });
+}
+
+/** RSVP to an event as the signed member: Going, Interested, or null for not going. */
+export async function rsvpEvent(postId: string, status: EventRsvpStatus | null): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/rsvp`, { status });
 }
 
 export async function closePoll(postId: string): Promise<{ success: boolean; post: MarketplacePost }> {

@@ -21,6 +21,7 @@ import {
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
+import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
@@ -275,6 +276,12 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
+        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+            ctx.status = 400;
+            ctx.body = { error: AVATAR_FORMAT_ERROR };
+            return;
+        }
     }
 
     const projectId = id || crypto.randomUUID();
@@ -323,6 +330,12 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         if (photos.length > 10) {
             ctx.status = 400;
             ctx.body = { error: 'A project can have at most 10 photos' };
+            return;
+        }
+        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey.
+        if (photos.length > 0 && !isAcceptableAvatarValue(photos[0])) {
+            ctx.status = 400;
+            ctx.body = { error: AVATAR_FORMAT_ERROR };
             return;
         }
     }

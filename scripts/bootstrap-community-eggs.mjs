@@ -15,9 +15,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 if (!ADMIN_PASSWORD) { console.error('✗ Set ADMIN_PASSWORD env var (your node admin password).'); process.exit(1); }
 const admin = { 'content-type': 'application/json', 'x-admin-password': ADMIN_PASSWORD };
 
-const avatar = 'data:image/svg+xml,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">🥚</text></svg>`
-);
+// A bundled avatar, not an SVG data URL: /api/avatar/:pubkey serves raster images only, and the node
+// now refuses any `data:` avatar that is not a base64 JPEG/PNG/WebP/GIF.
+const avatar = 'bundled://sunflower';
 
 // 1. Find or create the treasury.
 const list = await (await fetch(`${NODE_URL}/api/treasuries`)).json().catch(() => ({}));

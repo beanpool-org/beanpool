@@ -7,7 +7,7 @@ export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit } from './db/db.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -1999,12 +1999,20 @@ export function canOperate(publicKey: string): boolean {
  *
  * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
  * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
+ *
+ * The actor's account must also be 'active'. A suspend_member Decision sets status = 'disabled' and
+ * leaves can_operate and the binding alone, so without this a keeper the community suspended could
+ * still list, edit and pay out as the enterprise. Checked here rather than in canOperate(), whose other
+ * callers (getBalance, keeperOf) only drive what the client shows; admin moderation goes through
+ * canAdministerTreasury, which returns before reaching this.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
     if (!canOperate(publicKey)) return false;
-    const row = db.prepare(
-        "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
-    ).get(publicKey, treasuryPubkey);
+    const row = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+    `).get(publicKey, treasuryPubkey);
     return !!row;
 }
 
@@ -2453,20 +2461,6 @@ export interface KeeperJoinRequest {
     decidedBy?: string | null;
     availableToBack?: number;
     earnedCredit?: number;
-}
-
-/**
- * Has an admin switched this member's operator access off? True when they keep at least one
- * treasury_operators binding but members.can_operate = 0 (adminSetOperator suspends a steward node-wide
- * without deleting their bindings). A member with no binding at all is simply not a keeper yet.
- */
-function isOperatorSwitchedOff(memberPubkey: string): boolean {
-    const row = db.prepare(`
-        SELECT COALESCE(m.can_operate, 0) AS can_operate,
-               EXISTS (SELECT 1 FROM treasury_operators o WHERE o.member_pubkey = m.public_key) AS has_binding
-        FROM members m WHERE m.public_key = ?
-    `).get(memberPubkey) as any;
-    return !!row && row.has_binding === 1 && row.can_operate !== 1;
 }
 
 /**
@@ -5113,6 +5107,9 @@ export function createTreasury(
     if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
         throw new Error('That name is already taken');
     }
+    if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
+        throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
+    }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
     let ceiling: number | null = null;
     if (opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null) {
@@ -5169,7 +5166,7 @@ export function createTreasury(
         if (opts.leadKeeperPubkey) {
             db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
-            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(opts.leadKeeperPubkey);
+            raiseCreatorOperatorSwitch(opts.leadKeeperPubkey, pubKeyHex);
         }
         db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
                     VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
@@ -5546,6 +5543,8 @@ export function createProject(proposerPubkey: string, title: string, description
     // poison the grant + conservation math). The upper bound on what can actually
     // be funded is enforced at round close by deductFromCommons (≤ commons balance).
     if (!member || !title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return null;
+    // Checked before any write: a member whose operator switch an admin turned off must not get it back by proposing.
+    if (isOperatorSwitchedOff(proposerPubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
 
     const project: CommunityProject = {
         id: crypto.randomUUID(),
@@ -5594,7 +5593,7 @@ export function createProject(proposerPubkey: string, title: string, description
                         treasury_pubkey, member_pubkey, role, granted_at, granted_by
                     ) VALUES (?, ?, 'lead', ?, 'creator')
                 `).run(project.id, proposerPubkey, now);
-                db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(proposerPubkey);
+                raiseCreatorOperatorSwitch(proposerPubkey, project.id);
             }
         }
     })();

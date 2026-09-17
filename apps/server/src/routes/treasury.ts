@@ -26,7 +26,7 @@ import {
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey,
 } from '../state-engine.js';
-import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -487,6 +487,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (memberStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'Only active community members can create an enterprise' };
+            return;
+        }
+        if (isOperatorSwitchedOff(actor)) {
+            ctx.status = 403;
+            ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
             return;
         }
 

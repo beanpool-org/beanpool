@@ -1144,6 +1144,37 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
     return legacyP as ProjectRow;
 }
 
+/**
+ * Has an admin switched this member's operator access off? True when they keep at least one
+ * treasury_operators binding but members.can_operate = 0 (adminSetOperator suspends a steward node-wide
+ * without deleting their bindings). A member with no binding at all is simply not a keeper yet.
+ */
+export function isOperatorSwitchedOff(memberPubkey: string): boolean {
+    const row = db.prepare(`
+        SELECT COALESCE(m.can_operate, 0) AS can_operate,
+               EXISTS (SELECT 1 FROM treasury_operators o WHERE o.member_pubkey = m.public_key) AS has_binding
+        FROM members m WHERE m.public_key = ?
+    `).get(memberPubkey) as any;
+    return !!row && row.has_binding === 1 && row.can_operate !== 1;
+}
+
+export const OPERATOR_SWITCHED_OFF_CREATE_ERROR =
+    'Your operator access is switched off by a node admin, so you cannot create an enterprise or a project';
+
+/**
+ * Raise the operator switch for the creator of a new enterprise, ONLY when that enterprise is their first
+ * binding. Creation must never switch back on a member who already keeps something: if their switch is off,
+ * an admin turned it off, and every enterprise they keep would go live for them again. Callers refuse such a
+ * member before writing; this keeps the write itself from ever undoing a suspension.
+ */
+export function raiseCreatorOperatorSwitch(creatorPubkey: string, newEnterprisePubkey: string): void {
+    db.prepare(`
+        UPDATE members SET can_operate = 1
+        WHERE public_key = ?
+          AND NOT EXISTS (SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey != ?)
+    `).run(creatorPubkey, creatorPubkey, newEnterprisePubkey);
+}
+
 export function createCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -1153,6 +1184,7 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     const photoUrl = photos && photos.length > 0 ? photos[0] : '';
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
@@ -1178,7 +1210,7 @@ export function createCrowdfundProject(
                         treasury_pubkey, member_pubkey, role, granted_at, granted_by
                     ) VALUES (?, ?, 'lead', ?, 'creator')
                 `).run(id, creator_pubkey, now);
-                db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(creator_pubkey);
+                raiseCreatorOperatorSwitch(creator_pubkey, id);
             }
         }
 

@@ -17,6 +17,7 @@ import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
     pledgeToProject, deleteCrowdfundProject, db,
+    isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR,
 } from '../db/db.js';
 import { getThresholds } from '../config/local-config.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -47,6 +48,11 @@ router.post('/api/commons/projects', async (ctx) => {
     if (!title || !requestedAmount) {
         ctx.status = 400;
         ctx.body = { error: 'proposerPubkey, title, and requestedAmount are required' };
+        return;
+    }
+    if (isOperatorSwitchedOff(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
         return;
     }
     const project = createProject(actor, title, description || '', Number(requestedAmount));
@@ -272,6 +278,11 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     }
 
     const projectId = id || crypto.randomUUID();
+    if (isOperatorSwitchedOff(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: OPERATOR_SWITCHED_OFF_CREATE_ERROR };
+        return;
+    }
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });

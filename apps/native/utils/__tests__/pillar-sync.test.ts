@@ -119,3 +119,53 @@ describe('discoverAnchor() via performSync()', () => {
         expect(result.errorMessage).toBe('All node URLs failed the health check connection.');
     });
 });
+
+describe('performSync request timeouts', () => {
+    const originalFetch = global.fetch;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.useFakeTimers();
+        vi.mocked(AsyncStorage.getItem).mockImplementation(async (key) =>
+            key === 'beanpool_anchor_url' ? 'https://test.beanpool.org' : null);
+        vi.mocked(AsyncStorage.setItem).mockResolvedValue(undefined);
+        vi.mocked(AsyncStorage.removeItem).mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        global.fetch = originalFetch;
+    });
+
+    it("a slow posts download does not use up the next request's budget", async () => {
+        const outcomes: Record<string, string> = {};
+        // Honours the abort signal the way a real fetch does, and takes `ms` to answer.
+        const slow = (name: string, ms: number, body: string, signal?: AbortSignal) =>
+            new Promise((resolve, reject) => {
+                const t = setTimeout(() => {
+                    outcomes[name] = 'ok';
+                    resolve({ ok: true, status: 200, text: async () => body, json: async () => JSON.parse(body) });
+                }, ms);
+                signal?.addEventListener('abort', () => {
+                    if (outcomes[name]) return; // already answered: aborting a finished request is a no-op
+                    clearTimeout(t);
+                    outcomes[name] = 'aborted';
+                    reject(new Error('Aborted'));
+                });
+            });
+
+        global.fetch = vi.fn().mockImplementation((url: string, init?: { signal?: AbortSignal }) => {
+            if (url.includes('/api/marketplace/posts')) return slow('posts', 29_000, '[]', init?.signal);
+            if (url.includes('/api/members')) return slow('members', 5_000, '[]', init?.signal);
+            if (url.includes('/api/crowdfund/projects')) return slow('projects', 1_000, '{"projects":[]}', init?.signal);
+            return Promise.resolve({ ok: false, status: 404 });
+        }) as any;
+
+        const run = performSync();
+        await vi.advanceTimersByTimeAsync(60_000);
+        const result = await run;
+
+        expect(result.success).toBe(true);
+        expect(outcomes).toEqual({ posts: 'ok', members: 'ok', projects: 'ok' });
+    });
+});

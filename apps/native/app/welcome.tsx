@@ -29,6 +29,8 @@ import { colors, palette } from '../constants/colors';
 import { recoverAccountWithSso } from '../utils/sso-recovery';
 import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { SavedNodePicker } from '../components/SavedNodePicker';
+import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { type SsoProvider } from '../utils/sso-signin';
 
 
@@ -93,6 +95,13 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
+    // Communities this device has joined before. They survive an identity wipe on purpose, so
+    // a member recovering on the same phone can tap theirs rather than retype its address.
+    const [savedNodes, setSavedNodes] = useState<SavedNode[]>([]);
+    useEffect(() => {
+        if (mode !== 'ssoRecover') return;
+        getSavedNodes().then(setSavedNodes).catch(() => {});
+    }, [mode]);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
     const [ssoCallsign, setSsoCallsign] = useState('');
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
@@ -1859,6 +1868,16 @@ export default function WelcomeScreen() {
                                     Looking for your account…
                                 </Text>
                             )}
+
+                            <SavedNodePicker
+                                nodes={savedNodes}
+                                onPick={(url) => { setRecoveryAnchorUrl(url); setError(null); }}
+                                disabled={loading}
+                                selectedUrl={normalizeNodeUrl(recoveryAnchorUrl.trim())}
+                                label="Your communities on this phone"
+                                actionLabel="Recover on"
+                                hint="Or type your community's name or address below."
+                            />
 
                             <TextInput
                                 accessibilityLabel="Community name or node address"

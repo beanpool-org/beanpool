@@ -145,9 +145,22 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
 4. **`better-sqlite3` compiles on every `db.prepare()`.** Prepare above loops, never inside. The
    import path admits up to 250k rows inside one transaction.
 
-5. **The feed is a 30-day window.** Items older than 30 days are *tombstoned* by the pruner, never
-   hard deleted — a hard delete does not replicate, so a lagging backup would restore them.
-   Back-catalogue importers are pointless by design. Do not build one.
+5. **The feed keeps the newest 20 items per channel.** `prunePulseItems` (`PULSE_KEEP_PER_CHANNEL
+   = 20`, run on every scheduler tick) *tombstones* every non-curated item outside its channel's
+   newest 20 by `published_at` — never hard deletes: a hard delete does not replicate, so a lagging
+   backup would restore them. Age is not a rule. Curated items (`curated = 1`: BeanPool's seeded
+   learn channel and daily content) are exempt and do not count toward a channel's 20. Resolver
+   intake is capped at the same 20, so prune never fights re-import. Back-catalogue importers are
+   pointless by design. Do not build one. (Replaced the original 30-day window — see
+   [`docs/pulse-learn-lane.md`](../pulse-learn-lane.md) §2.3.)
+
+6. **The node caches thumbnail bytes; they do not replicate.** `pulse-thumbnail.ts` fetches each
+   item's preview image (raster only, ≤ 2 MB) and caches it in memory (20 MB LRU) and on disk under
+   `data/cache/pulse-thumbnails` (100 MB LRU), served by `GET /api/pulse/items/:id/thumbnail`.
+   Only `thumbnail_url` replicates. Video and audio are never fetched. A tombstone stops the bytes
+   being served at once (the route checks `deleted_at` before either cache tier), but only the
+   single-item delete route unlinks them eagerly; every other scrub leaves the file until it is
+   next requested or evicted.
 
 ---
 

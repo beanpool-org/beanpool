@@ -212,6 +212,12 @@ unreachable, ❌ missing.
 - ✅ Give it a name (unique per node, already enforced) and an avatar
 - ❌ Say whether it is ongoing or bounded, and if bounded, goal + end date
 - ❌ Put it somewhere — a map location, so the shed and the flock are findable
+  - **Pins are public, exactly like marketplace post pins**: anyone who can open the node's map sees
+    them, not only members. Findability is the point — a neighbour who has not joined yet should be able
+    to find the flock. What protects a home is the **Approximate** option (rounds to roughly 100 m), kept
+    one tap away beside the warning in the picker, which says so in plain words: "Anyone who opens this
+    node's map will see this spot." A wound-up enterprise's location is cleared at finalisation and never
+    served again. (Marty, 2026-09-17; §10)
 
 **Money**
 - ✅ Hold a balance, exempt from demurrage
@@ -1264,6 +1270,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Approving your own payment | **no** — two-person rule; a different keeper approves |
 | Credit floor while paused | snapshot on pause (`paused_floor_snapshot`, `paused_at`); usable floor is `max(snapshot, derived)` — cannot pull below pause-day floor, earned growth counts, not recomputed downward; expires at **90 days paused** (warn visibly before); clear on resume; keeper exits during pause still release backing per §2.6 (Marty, 2026-09-16, §2.2) |
 | Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
+| Enterprise map pins | **public, exactly like marketplace post pins** — anyone who opens the node's map sees them; the map routes stay on the public read list. Findability is the point; the picker says so plainly and keeps **Approximate** (~100 m) beside the warning to protect a home. A wound-up enterprise's location is cleared and never served (Marty, 2026-09-17, §2.2) |
 
 ---
 

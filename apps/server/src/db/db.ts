@@ -367,6 +367,14 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
+    // Enterprise location (docs/the-commons.md §2.2, Slice 6)
+    try { db.prepare(`ALTER TABLE members ADD COLUMN lat REAL CHECK (lat IS NULL OR (lat >= -90 AND lat <= 90))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN lng REAL CHECK (lng IS NULL OR (lng >= -180 AND lng <= 180))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN location_auth_signer TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN auth_signer TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN location_updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
+
     // Key-based admin auth & break-glass (docs/admin-surface.md §2, §5)
     const hasNodeRoles = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='node_roles'").get();
     if (hasNodeRoles) {
@@ -499,6 +507,23 @@ export function initSchema() {
             })();
         }
     } catch { }
+
+    // PR #839 Blocker A: a wound-up enterprise never keeps its map location. finaliseWindUp now clears it, but
+    // an enterprise wound up before that fix still holds the coordinates a keeper may have set on their own
+    // house. Clear them. Idempotent without a marker: it matches only completed rows that still have
+    // coordinates, so a later boot (or a row that arrives from an older peer) is handled the same way.
+    // updated_at is set explicitly so delta sync carries the clear even if the touch trigger is absent.
+    try {
+        db.prepare(`
+            UPDATE members
+            SET lat = NULL, lng = NULL,
+                location_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            WHERE is_treasury = 1 AND status = 'completed' AND (lat IS NOT NULL OR lng IS NOT NULL)
+        `).run();
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to clear locations of wound-up enterprises:', err?.message || err);
+    }
 
     // Drop dead plaintext private keys from node_config (docs/the-commons.md §6 Slice 4)
     try {

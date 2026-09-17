@@ -18,12 +18,13 @@ import {
     getBalance, moveToCommons, conservingTransaction,
     sweepEnterpriseCeiling,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
+    setEnterpriseLocation, clearEnterpriseLocation,
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise,
+    isKeeperOfEnterprise, isAdminPubkey,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -136,13 +137,20 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
 
     // ---- Public transparency reads ------------------------------------------------------
+    // A completed (wound-up) enterprise never serves coordinates, whatever the row still holds — a keeper may
+    // have pinned it on their own house (PR #839 Blocker A).
+    const servedCoordinates = (row: any): { lat: number | null; lng: number | null } =>
+        row.status === 'completed' || row.lat == null || row.lng == null
+            ? { lat: null, lng: null }
+            : { lat: Number(row.lat), lng: Number(row.lng) };
+
     const listTreasuriesHandler = async (ctx: any) => {
         const includeBounded = ctx.query?.includeBounded === 'true';
         const whereClause = includeBounded
             ? "is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
             : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND status NOT IN ('pruned', 'deleted')";
         const rows = db.prepare(
-            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
@@ -221,6 +229,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     windUpInitiatedBy: r.wind_up_initiated_by ?? null,
                     windUpFinalisedAt: r.wind_up_finalised_at ?? null,
                     windUpGraceEndsAt,
+                    ...servedCoordinates(r),
+                    locationAuthSigner: r.location_auth_signer ?? r.auth_signer ?? null,
+                    locationUpdatedAt: r.location_updated_at ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
                     keepers: treasuryKeepers(r.public_key),
@@ -250,9 +261,45 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/enterprises/statuses', listEnterpriseStatusesHandler);
     router.get('/api/treasuries/statuses', listEnterpriseStatusesHandler);
 
+    // Enterprise map endpoint (docs/the-commons.md §2.2, Slice 6)
+    // Only includes enterprises with a set location; excludes completed enterprises
+    const listEnterpriseMapPinsHandler = async (ctx: any) => {
+        const rows = db.prepare(
+            `SELECT public_key, callsign, avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
+             FROM members
+             WHERE is_treasury = 1
+               AND lat IS NOT NULL
+               AND lng IS NOT NULL
+               AND wind_up_finalised_at IS NULL
+               AND (status IS NULL OR status NOT IN ('completed', 'pruned', 'deleted'))
+             ORDER BY callsign COLLATE NOCASE`
+        ).all() as any[];
+        ctx.body = {
+            enterprises: rows.map(r => ({
+                publicKey: r.public_key,
+                name: r.callsign || 'Unnamed',
+                callsign: r.callsign || 'Unnamed',
+                avatar: r.avatar_url
+                    ? (r.avatar_url.startsWith('bundled://')
+                        ? r.avatar_url
+                        : `/api/avatar/${r.public_key}?size=thumb`)
+                    : null,
+                avatarUrl: r.avatar_url,
+                purpose: r.purpose ?? null,
+                lat: Number(r.lat),
+                lng: Number(r.lng),
+                paused: r.paused === 1,
+                status: r.status || (r.paused === 1 ? 'paused' : 'active'),
+            })),
+        };
+    };
+    router.get('/api/enterprises/map', listEnterpriseMapPinsHandler);
+    router.get('/api/map/enterprises', listEnterpriseMapPinsHandler);
+    router.get('/api/treasuries/map', listEnterpriseMapPinsHandler);
+
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
@@ -363,6 +410,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             windUpInitiatedBy: m.wind_up_initiated_by ?? null,
             windUpFinalisedAt: m.wind_up_finalised_at ?? null,
             windUpGraceEndsAt,
+            ...servedCoordinates(m),
+            locationAuthSigner: m.location_auth_signer ?? m.auth_signer ?? null,
+            locationUpdatedAt: m.location_updated_at ?? null,
             deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
@@ -441,7 +491,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
 
         const body = (ctx as any).requestBody || {};
-        const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt } = body;
+        const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
         const enterpriseName = String(name || title || '').trim();
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
@@ -454,6 +504,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
+        const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
+        const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
 
         try {
             const res = createTreasury(
@@ -468,6 +520,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     goalAmount: parsedGoal,
                     deadlineAt: parsedDeadline,
                     leadKeeperPubkey: actor,
+                    lat: parsedLat,
+                    lng: parsedLng,
+                    locationAuthSigner: parsedLat != null ? actor : undefined,
                 }
             );
 
@@ -859,6 +914,95 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
     router.post('/api/treasury/:treasury/wind-up/finalise', finaliseWindUpHandler);
     router.post('/api/enterprise/:treasury/wind-up/finalise', finaliseWindUpHandler);
+
+    // Set or clear enterprise location (keeper / admin)
+    const setLocationHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        let actor = ctx.state?.actor;
+        let authSigner = (ctx.state as any)?.auth_signer || actor;
+        if (ctx.path?.startsWith('/api/local/admin/')) {
+            if (!(await checkAdminAuth(ctx))) return;
+            authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
+            actor = ctx.state?.actor || authSigner;
+            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        } else {
+            actor = requireKeeperOrAdmin(ctx, treasury);
+            if (!actor) return;
+            authSigner = authSigner || actor;
+        }
+
+        const body = (ctx as any).requestBody || {};
+        let { lat, lng } = body;
+        if (lat === '' || lat === undefined) lat = null;
+        if (lng === '' || lng === undefined) lng = null;
+
+        try {
+            const res = setEnterpriseLocation(
+                treasury,
+                authSigner,
+                (lat != null || lng != null) ? { lat, lng } : null
+            );
+            ctx.body = {
+                success: true,
+                lat: res.lat,
+                lng: res.lng,
+                locationAuthSigner: res.locationAuthSigner,
+                locationUpdatedAt: res.locationUpdatedAt,
+            };
+        } catch (e: any) {
+            const isAuth = /Only a keeper/.test(e?.message || '') || /Not authorised/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to update enterprise location' };
+        }
+    };
+
+    const clearLocationHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        let actor = ctx.state?.actor;
+        let authSigner = (ctx.state as any)?.auth_signer || actor;
+        if (ctx.path?.startsWith('/api/local/admin/')) {
+            if (!(await checkAdminAuth(ctx))) return;
+            authSigner = ctx.state?.auth_signer || ctx.state?.actor || 'admin';
+            actor = ctx.state?.actor || authSigner;
+            if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
+        } else if (isTreasury(treasury) && statusOf(treasury) === 'completed') {
+            // A wound-up enterprise has no keepers left, and requireKeeperOrAdmin refuses completed enterprises.
+            // A node admin must still be able to clear a location it left behind (PR #839 Blocker A).
+            actor = ctx.state?.actor;
+            if (!actor || !isAdminPubkey(actor) || blocked(statusOf(actor))) {
+                ctx.status = 403;
+                ctx.body = { error: 'Only a node admin may clear the location of a wound-up enterprise' };
+                return;
+            }
+            authSigner = actor;
+        } else {
+            actor = requireKeeperOrAdmin(ctx, treasury);
+            if (!actor) return;
+            authSigner = authSigner || actor;
+        }
+
+        try {
+            const res = clearEnterpriseLocation(treasury, authSigner);
+            ctx.body = {
+                success: true,
+                lat: null,
+                lng: null,
+                locationAuthSigner: res.locationAuthSigner,
+                locationUpdatedAt: res.locationUpdatedAt,
+            };
+        } catch (e: any) {
+            const isAuth = /Only a keeper/.test(e?.message || '') || /Not authorised/.test(e?.message || '');
+            ctx.status = isAuth ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to clear enterprise location' };
+        }
+    };
+
+    router.post('/api/enterprise/:treasury/location', setLocationHandler);
+    router.post('/api/treasury/:treasury/location', setLocationHandler);
+    router.delete('/api/enterprise/:treasury/location', clearLocationHandler);
+    router.delete('/api/treasury/:treasury/location', clearLocationHandler);
+    router.post('/api/local/admin/treasury/:treasury/location', setLocationHandler);
+    router.delete('/api/local/admin/treasury/:treasury/location', clearLocationHandler);
 
     // Read-only accountability ledger (public to all node members)
     const getLedgerHandler = async (ctx: any) => {

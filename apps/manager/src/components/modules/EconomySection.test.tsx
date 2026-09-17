@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -43,6 +43,17 @@ describe('EconomySection Component', () => {
         vi.spyOn(nodeClient, 'createNodeTreasury').mockResolvedValue({
             success: true,
             publicKey: 'treasury_pk_new',
+        });
+        vi.spyOn(nodeClient, 'updateEnterpriseLocation').mockResolvedValue({
+            success: true,
+            lat: -28.55,
+            lng: 153.501,
+            locationAuthSigner: 'admin',
+        });
+        vi.spyOn(nodeClient, 'clearEnterpriseLocation').mockResolvedValue({
+            success: true,
+            lat: null,
+            lng: null,
         });
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
             ok: true,
@@ -139,6 +150,180 @@ describe('EconomySection Component', () => {
             mockProfile.adminPassword,
             undefined
         );
+    });
+
+    it('renders enterprise map location status and opens location picker with plain-words warning and approximate button', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Check map location display on enterprise card
+        expect(screen.getByText('Map Location')).toBeInTheDocument();
+        expect(screen.getByText('No map location set')).toBeInTheDocument();
+
+        // Click Set Location
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        // Plain words visibility requirement. Enterprise pins are PUBLIC like post pins (docs/the-commons.md §2.2,
+        // §10, Marty 2026-09-17): the warning must not suggest only node members can see them.
+        const warning = screen.getByText("Anyone who opens this node's map will see this spot.");
+        expect(warning).toBeInTheDocument();
+        expect(screen.queryByText(/everyone on this node/i)).not.toBeInTheDocument();
+        // The Approximate option sits next to that warning, one tap away.
+        const visibilityBox = warning.closest('[data-testid="enterprise-location-visibility"]') as HTMLElement;
+        expect(visibilityBox).not.toBeNull();
+        expect(within(visibilityBox).getByRole('button', { name: /approximate \(~100m\)/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /save location/i })).toBeInTheDocument();
+
+        // Reuses Leaflet map container
+        expect(document.getElementById('enterprise-map-treasury_pk_1234567890')).toBeInTheDocument();
+    });
+
+    it('enters coordinates, approximates to ~100m, and saves location', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Open picker
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        // Enter raw lat/lng
+        const latInput = document.getElementById('lat-input-treasury_pk_1234567890') as HTMLInputElement;
+        const lngInput = document.getElementById('lng-input-treasury_pk_1234567890') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-28.549521' } });
+            fireEvent.change(lngInput, { target: { value: '153.500543' } });
+        });
+
+        // Click Approximate
+        const approxBtn = screen.getByRole('button', { name: /approximate \(~100m\)/i });
+        await act(async () => {
+            fireEvent.click(approxBtn);
+        });
+
+        expect(screen.getByText('~100m')).toBeInTheDocument();
+
+        // Save
+        const saveBtn = screen.getByRole('button', { name: /save location/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        expect(nodeClient.updateEnterpriseLocation).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            { lat: -28.55, lng: 153.501 },
+            mockProfile.adminPassword,
+            undefined
+        );
+    });
+
+    it('clears enterprise location', async () => {
+        const treasuriesWithLoc = [
+            {
+                ...mockTreasuries[0],
+                lat: -28.55,
+                lng: 153.501,
+            },
+        ];
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue(treasuriesWithLoc);
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText(/-28.550, 153.501/i)).toBeInTheDocument();
+
+        // Click Edit
+        const editBtn = screen.getByRole('button', { name: /edit/i });
+        await act(async () => {
+            fireEvent.click(editBtn);
+        });
+
+        // Click Clear Location
+        const clearBtn = screen.getByRole('button', { name: /clear location/i });
+        await act(async () => {
+            fireEvent.click(clearBtn);
+        });
+
+        expect(nodeClient.clearEnterpriseLocation).toHaveBeenCalledWith(
+            mockProfile.url,
+            'treasury_pk_1234567890',
+            mockProfile.adminPassword,
+            undefined
+        );
+    });
+
+    it('supports typing negative coordinate sign and renders error banner with ARIA alert role', async () => {
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={mockNodeData}
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        // Open picker
+        const setLocationBtn = screen.getByRole('button', { name: /set location/i });
+        await act(async () => {
+            fireEvent.click(setLocationBtn);
+        });
+
+        const latInput = document.getElementById('lat-input-treasury_pk_1234567890') as HTMLInputElement;
+        // User starts typing negative coordinate: '-' alone
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-' } });
+        });
+        expect(latInput.value).toBe('-');
+
+        // User continues typing: '-28.55'
+        await act(async () => {
+            fireEvent.change(latInput, { target: { value: '-28.55' } });
+        });
+        expect(latInput.value).toBe('-28.55');
+
+        // Enter valid longitude but out-of-range latitude to trigger validation error banner
+        const lngInput = document.getElementById('lng-input-treasury_pk_1234567890') as HTMLInputElement;
+        await act(async () => {
+            fireEvent.change(lngInput, { target: { value: '153.501' } });
+            fireEvent.change(latInput, { target: { value: '-95' } });
+        });
+
+        const saveBtn = screen.getByRole('button', { name: /save location/i });
+        await act(async () => {
+            fireEvent.click(saveBtn);
+        });
+
+        const alertEl = screen.getByRole('alert');
+        expect(alertEl).toBeInTheDocument();
+        expect(alertEl).toHaveAttribute('aria-live', 'assertive');
+        expect(alertEl).toHaveTextContent(/Latitude must be between -90 and 90/i);
     });
 
     it('revokes a keeper with confirmation', async () => {

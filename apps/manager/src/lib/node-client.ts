@@ -1007,6 +1007,10 @@ export interface NodeTreasury {
     workingCapitalCeiling?: number | null;
     purpose?: string | null;
     keepers?: any[];
+    lat?: number | null;
+    lng?: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
@@ -1027,7 +1031,7 @@ export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury
 
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string },
+    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string; lat?: number | null; lng?: number | null },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {
@@ -1039,6 +1043,45 @@ export async function createNodeTreasury(
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function updateEnterpriseLocation(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    location: { lat: number | null; lng: number | null } | null,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; lat: number | null; lng: number | null; locationAuthSigner?: string | null; locationUpdatedAt?: string | null }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/location`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...(location || {}), password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function clearEnterpriseLocation(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; lat: null; lng: null; locationAuthSigner?: string | null; locationUpdatedAt?: string | null }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/location`);
+    const res = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

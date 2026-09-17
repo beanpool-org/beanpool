@@ -702,7 +702,13 @@ export function GroupDetailModal({
                             {actionLoading ? (
                                 <ActivityIndicator size="small" color={colors.brand.primary} />
                             ) : isMember ? (
-                                <Pressable style={styles.leaveBtn} onPress={handleLeave} accessibilityRole="button">
+                                <Pressable
+                                    style={styles.leaveBtn}
+                                    onPress={handleLeave}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Leave Group"
+                                    accessibilityState={{ disabled: actionLoading }}
+                                >
                                     <Text style={styles.leaveBtnText}>Leave Group</Text>
                                 </Pressable>
                             ) : isPending ? (
@@ -714,7 +720,13 @@ export function GroupDetailModal({
                                     <Text style={styles.joinBtnText}>Invite Only</Text>
                                 </View>
                             ) : (
-                                <Pressable style={styles.joinBtn} onPress={handleJoin}>
+                                <Pressable
+                                    style={styles.joinBtn}
+                                    onPress={handleJoin}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
+                                    accessibilityState={{ disabled: actionLoading }}
+                                >
                                     <Text style={styles.joinBtnText}>
                                         {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                                     </Text>

@@ -1,24 +1,25 @@
-// REFERENCE copy of the enterprise map pin picker. apps/pwa/src/components/EnterpriseLocationPicker.tsx is a port
-// for keepers: change copy or behaviour in both (apps/pwa/src/pages/EnterpriseKeepers.test.tsx checks the copy).
+/**
+ * Keeper-facing enterprise map pin picker (docs/the-commons.md §2.2, §10).
+ *
+ * PORTED from the settings app. The REFERENCE is apps/manager/src/components/modules/EnterpriseLocationPicker.tsx:
+ * copy and behaviour here must stay identical to it (EnterpriseKeepers.test.tsx checks the visible copy of both).
+ * What differs on purpose: this one saves through the keeper route signed by the member's own identity rather
+ * than the admin route, and its classes follow the web app's light/dark theme.
+ */
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { approximateLocation } from '../../lib/geo';
-import { updateEnterpriseLocation, clearEnterpriseLocation, type NodeTreasury } from '../../lib/node-client';
-import type { NodeProfile } from '../../lib/profiles';
+import { approximateLocation } from '../lib/geo';
+import { setEnterpriseLocation, clearEnterpriseLocation } from '../lib/api';
 
 interface EnterpriseLocationPickerProps {
-    treasury: NodeTreasury;
-    activeNode: NodeProfile;
-    effectiveTfaToken?: string;
+    treasury: { publicKey: string; lat?: number | null; lng?: number | null };
     onLocationSaved: (lat: number | null, lng: number | null) => void;
     onClose: () => void;
 }
 
 export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> = ({
     treasury,
-    activeNode,
-    effectiveTfaToken,
     onLocationSaved,
     onClose,
 }) => {
@@ -44,7 +45,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
         });
     }, []);
 
-    // Initialize Leaflet Map (reusing Leaflet from NodeIdentityPanel)
+    // Initialize Leaflet Map
     useEffect(() => {
         if (!mapContainerRef.current) return;
         if (mapInstanceRef.current) return;
@@ -145,13 +146,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
         setSaving(true);
         setError(null);
         try {
-            const res = await updateEnterpriseLocation(
-                activeNode.url,
-                treasury.publicKey,
-                { lat, lng },
-                activeNode.adminPassword,
-                effectiveTfaToken
-            );
+            const res = await setEnterpriseLocation(treasury.publicKey, { lat, lng });
             onLocationSaved(res.lat, res.lng);
             onClose();
         } catch (err: any) {
@@ -165,12 +160,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
         setClearing(true);
         setError(null);
         try {
-            await clearEnterpriseLocation(
-                activeNode.url,
-                treasury.publicKey,
-                activeNode.adminPassword,
-                effectiveTfaToken
-            );
+            await clearEnterpriseLocation(treasury.publicKey);
             setLat(null);
             setLng(null);
             setLatInput('');
@@ -185,16 +175,16 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
     };
 
     return (
-        <div className="mt-3 p-3.5 rounded-xl bg-nature-950 border border-nature-800 space-y-3">
+        <div className="p-3.5 rounded-xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 space-y-3">
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-nature-900 dark:text-white">
                     <span>📍</span>
                     <span>Enterprise Map Location</span>
                 </div>
                 <button
                     type="button"
                     onClick={onClose}
-                    className="text-xs text-nature-400 hover:text-white transition-colors"
+                    className="min-h-[44px] min-w-[44px] text-xs text-nature-500 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white transition-colors"
                     aria-label="Close location picker"
                 >
                     ✕
@@ -206,19 +196,19 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 Approximate option stays right beside it. */}
             <div
                 data-testid="enterprise-location-visibility"
-                className="p-2.5 rounded-lg bg-terra-950/40 border border-terra-800/60 text-xs text-terra-200 space-y-1.5"
+                className="p-2.5 rounded-lg bg-terra-50 dark:bg-terra-950/40 border border-terra-200 dark:border-terra-800/60 text-xs text-terra-800 dark:text-terra-200 space-y-1.5"
             >
-                <p className="font-semibold text-terra-100 m-0">
+                <p className="font-semibold text-terra-900 dark:text-terra-100 m-0">
                     Anyone who opens this node&apos;s map will see this spot.
                 </p>
-                <p className="text-[11px] text-nature-300 m-0">
+                <p className="text-[11px] text-nature-700 dark:text-nature-300 m-0">
                     The flock, shed, or garden is often at someone’s house. Use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m.
                 </p>
                 <button
                     type="button"
                     onClick={handleApproximate}
                     disabled={lat == null || lng == null}
-                    className="px-2.5 py-1 rounded-md bg-terra-900/40 hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-300 border border-terra-700/60 transition-colors"
+                    className="min-h-[44px] px-3 py-1 rounded-md bg-terra-100 dark:bg-terra-900/40 hover:bg-terra-200 dark:hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-700 dark:text-terra-300 border border-terra-300 dark:border-terra-700/60 transition-colors"
                 >
                     Approximate (~100m)
                 </button>
@@ -228,17 +218,17 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             <div
                 id={`enterprise-map-${treasury.publicKey}`}
                 ref={mapContainerRef}
-                className="w-full h-48 rounded-lg border border-nature-800 bg-nature-900 overflow-hidden relative shadow-inner z-0"
+                className="w-full h-48 rounded-lg border border-nature-200 dark:border-nature-800 bg-nature-100 dark:bg-nature-900 overflow-hidden relative shadow-inner z-0"
             />
 
             {/* Coordinates */}
             <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-2 font-mono text-[11px] text-nature-300">
+                    <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-nature-600 dark:text-nature-300">
                         <span>Lat: {lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         <span>Lng: {lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         {isApproximate && (
-                            <span className="px-1.5 py-0.2 rounded bg-terra-900/60 text-terra-300 text-[10px] font-sans font-semibold border border-terra-700/50">
+                            <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[10px] font-sans font-semibold border border-terra-300 dark:border-terra-700/50">
                                 ~100m
                             </span>
                         )}
@@ -247,8 +237,8 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
 
                 {/* Direct coordinate inputs for accessibility / testing */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-nature-400 mb-0.5" htmlFor={`lat-input-${treasury.publicKey}`}>
+                    <div className="min-w-0">
+                        <label className="block text-[10px] uppercase font-bold text-nature-500 dark:text-nature-400 mb-0.5" htmlFor={`lat-input-${treasury.publicKey}`}>
                             Latitude
                         </label>
                         <input
@@ -268,11 +258,11 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                                 }
                             }}
                             placeholder="-28.549"
-                            className="w-full px-2 py-1 rounded bg-nature-900 border border-nature-700 text-white font-mono text-xs focus:outline-none focus:border-terra-500"
+                            className="w-full min-h-[44px] px-2 py-1 rounded bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white font-mono text-xs focus:outline-none focus:border-terra-500"
                         />
                     </div>
-                    <div>
-                        <label className="block text-[10px] uppercase font-bold text-nature-400 mb-0.5" htmlFor={`lng-input-${treasury.publicKey}`}>
+                    <div className="min-w-0">
+                        <label className="block text-[10px] uppercase font-bold text-nature-500 dark:text-nature-400 mb-0.5" htmlFor={`lng-input-${treasury.publicKey}`}>
                             Longitude
                         </label>
                         <input
@@ -292,27 +282,27 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                                 }
                             }}
                             placeholder="153.501"
-                            className="w-full px-2 py-1 rounded bg-nature-900 border border-nature-700 text-white font-mono text-xs focus:outline-none focus:border-terra-500"
+                            className="w-full min-h-[44px] px-2 py-1 rounded bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white font-mono text-xs focus:outline-none focus:border-terra-500"
                         />
                     </div>
                 </div>
             </div>
 
             {error && (
-                <div role="alert" aria-live="assertive" className="text-xs text-rose-400 bg-rose-950/40 border border-rose-900/50 p-2 rounded-lg">
+                <div role="alert" aria-live="assertive" className="text-xs text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 p-2 rounded-lg">
                     {error}
                 </div>
             )}
 
-            {/* Actions */}
-            <div className="flex items-center justify-between gap-2 pt-1">
+            {/* Actions — wrap rather than overflow on a 320dp screen */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <div>
                     {(treasury.lat != null || lat != null) && (
                         <button
                             type="button"
                             onClick={handleClear}
                             disabled={clearing || saving}
-                            className="px-2.5 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-xs font-semibold text-rose-300 border border-rose-800/60 transition-colors disabled:opacity-50"
+                            className="min-h-[44px] px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-xs font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 transition-colors disabled:opacity-50"
                         >
                             {clearing ? 'Clearing...' : 'Clear Location'}
                         </button>
@@ -322,7 +312,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-3 py-1.5 rounded-lg bg-nature-900 hover:bg-nature-800 text-xs font-semibold text-nature-300 transition-colors"
+                        className="min-h-[44px] px-3 py-1.5 rounded-lg bg-nature-100 dark:bg-nature-900 hover:bg-nature-200 dark:hover:bg-nature-800 text-xs font-semibold text-nature-700 dark:text-nature-300 transition-colors"
                     >
                         Cancel
                     </button>
@@ -330,7 +320,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         type="button"
                         onClick={handleSave}
                         disabled={saving || clearing || lat == null || lng == null}
-                        className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-white shadow transition-all"
+                        className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-white shadow transition-all"
                     >
                         {saving ? 'Saving...' : 'Save Location'}
                     </button>

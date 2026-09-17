@@ -1665,6 +1665,23 @@ export async function finaliseWindUp(treasury: string): Promise<{ success: boole
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`);
 }
 
+// Enterprise map pin (docs/the-commons.md §2.2). Keeper route: the server takes the actor from the signature only.
+export interface EnterpriseLocationResponse {
+    success: boolean;
+    lat: number | null;
+    lng: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
+}
+
+export async function setEnterpriseLocation(treasury: string, location: { lat: number; lng: number }): Promise<EnterpriseLocationResponse> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/location`, { lat: location.lat, lng: location.lng });
+}
+
+export async function clearEnterpriseLocation(treasury: string): Promise<EnterpriseLocationResponse> {
+    return request('DELETE', `/api/enterprise/${encodeURIComponent(treasury)}/location`);
+}
+
 export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {
     const params = new URLSearchParams();
     if (opts?.since) params.set('since', opts.since);

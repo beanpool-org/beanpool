@@ -30,7 +30,7 @@ import {
     categoryMeta,
     VIDEO_PLATFORMS,
 } from '@beanpool/core';
-import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, PULSE_REPORT_REASONS } from '../utils/pulse';
+import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
@@ -40,12 +40,15 @@ interface PulseFeedCardProps {
     onMute?: (itemId: string) => void | Promise<void>;
     /** Sends the report; the card shows the flag only when this is provided. */
     onReport?: (item: PulseFeedItem, reason: string) => Promise<void>;
+    /** The node the feed came from; preview images load through its thumbnail proxy. */
+    nodeUrl?: string | null;
 }
 
-export function PulseFeedCard({ item, currentPubkey, onMute, onReport }: PulseFeedCardProps) {
+export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }: PulseFeedCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const [imageFailed, setImageFailed] = useState(false);
+    const thumbnailUri = resolvePulseThumbnailUrl(nodeUrl, item);
     const [showReport, setShowReport] = useState(false);
     const [reportReason, setReportReason] = useState<string | null>(null);
     const [submittingReport, setSubmittingReport] = useState(false);
@@ -250,10 +253,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport }: PulseFe
                 accessibilityLabel={cardAccessibilityLabel}
                 accessibilityHint={item.url ? "Opens external post in browser or app" : undefined}
             >
-                {item.thumbnailUrl && !imageFailed ? (
+                {thumbnailUri && !imageFailed ? (
                     <View style={styles.thumbnailWrap}>
                         <Image
-                            source={{ uri: item.thumbnailUrl }}
+                            source={{ uri: thumbnailUri }}
                             style={styles.thumbnail}
                             contentFit="cover"
                             transition={200}

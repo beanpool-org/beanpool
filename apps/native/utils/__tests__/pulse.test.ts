@@ -15,6 +15,7 @@ import {
     reportPulseItem,
     canReportPulseItem,
     formatRelativeTime,
+    resolvePulseThumbnailUrl,
     PULSE_FIXTURE_ITEMS,
     type PulseFeedItem,
 } from '../pulse';
@@ -289,5 +290,29 @@ describe('reporting a Pulse item (native)', () => {
     it('requires an identity', async () => {
         await expect(reportPulseItem(item, 'Spam or scam', null)).rejects.toThrow(/Identity required/);
         expect(signedPost).not.toHaveBeenCalled();
+    });
+});
+
+describe('resolvePulseThumbnailUrl (preview images go through the node)', () => {
+    const platformThumb = 'https://scontent.cdninstagram.com/v/t51/abc.jpg';
+
+    it('points at the node thumbnail proxy, never the platform image URL', () => {
+        const uri = resolvePulseThumbnailUrl('https://test.beanpool.org', { id: 'item_1', thumbnailUrl: platformThumb });
+        expect(uri).toBe('https://test.beanpool.org/api/pulse/items/item_1/thumbnail');
+        expect(uri).not.toContain('cdninstagram');
+    });
+
+    it('matches the web app route shape: trailing slashes trimmed, id encoded', () => {
+        expect(resolvePulseThumbnailUrl('https://test.beanpool.org//', { id: 'a/b c', thumbnailUrl: platformThumb }))
+            .toBe('https://test.beanpool.org/api/pulse/items/a%2Fb%20c/thumbnail');
+    });
+
+    it('is null when the item has no thumbnail (placeholder tile)', () => {
+        expect(resolvePulseThumbnailUrl('https://test.beanpool.org', { id: 'item_1', thumbnailUrl: null })).toBeNull();
+    });
+
+    it('is null, not the platform URL, when there is no node to proxy through', () => {
+        expect(resolvePulseThumbnailUrl(null, { id: 'item_1', thumbnailUrl: platformThumb })).toBeNull();
+        expect(resolvePulseThumbnailUrl('  ', { id: 'item_1', thumbnailUrl: platformThumb })).toBeNull();
     });
 });

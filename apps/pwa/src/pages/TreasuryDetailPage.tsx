@@ -18,6 +18,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { ReportModal } from '../components/ReportModal';
+import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 
 function decodeThreadText(ciphertext: string, type: string): string {
     if (type === 'removed') return 'removed by a keeper';
@@ -97,6 +98,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     // Succession Proposal State
     const [selectedSuccessionCandidate, setSelectedSuccessionCandidate] = useState<string>('');
     const [submittingSuccession, setSubmittingSuccession] = useState(false);
+
+    // Map Pin State
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
 
     const handleJoinRequest = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -684,6 +688,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         successionInfo?.proposals?.find((p: any) => p.status === 'active') || null;
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
+    // Map pin: only this enterprise's ACTIVE keepers, and never on a closed enterprise. Stricter than
+    // isKeeperOfThis on purpose — keeperOf checks the operator switch but not account status, so a suspended
+    // keeper can still appear there; the keepers list marks them suspended.
+    const isActiveKeeperOfThis = !!identity?.publicKey && Array.isArray(detail?.keepers) && detail.keepers.some(
+        (k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey
+    );
+    const canSetMapPin = isActiveKeeperOfThis && !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
+    const hasMapPin = detail?.lat != null && detail?.lng != null;
 
     return (
         <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
@@ -1069,6 +1081,41 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                         {sweeping ? 'Sweeping…' : 'To Commons 🌱'}
                                     </button>
                                 </form>
+
+                                {/* Map Pin (docs/the-commons.md §2.2) — public, so the picker leads with the warning */}
+                                {canSetMapPin && (
+                                    <div data-testid="enterprise-map-pin-control" className="pt-4 border-t border-emerald-500/20 space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                                                    <span>📍</span>
+                                                    <span>Map Pin</span>
+                                                </div>
+                                                <div className="text-xs text-nature-600 dark:text-nature-400 mt-0.5 break-words">
+                                                    {hasMapPin
+                                                        ? `On the map at ${Number(detail.lat).toFixed(3)}, ${Number(detail.lng).toFixed(3)}`
+                                                        : 'Not on the map'}
+                                                </div>
+                                            </div>
+                                            {!showLocationPicker && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowLocationPicker(true)}
+                                                    className="min-h-[44px] py-2 px-3 rounded-lg border border-emerald-600 dark:border-emerald-500 bg-white dark:bg-nature-900 text-emerald-700 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
+                                                >
+                                                    {hasMapPin ? 'Move or clear map pin' : 'Set map pin'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {showLocationPicker && (
+                                            <EnterpriseLocationPicker
+                                                treasury={{ publicKey: pubkey, lat: detail.lat ?? null, lng: detail.lng ?? null }}
+                                                onLocationSaved={(lat, lng) => setDetail((d: any) => (d ? { ...d, lat, lng } : d))}
+                                                onClose={() => setShowLocationPicker(false)}
+                                            />
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Pending Bids on Needs */}
                                 {pendingBids.length > 0 && (

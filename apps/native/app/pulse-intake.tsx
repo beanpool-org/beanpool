@@ -16,7 +16,7 @@
  *
  * Rules:
  * - Must render at 320dp width and 1.3x font scale without horizontal scroll.
- * - Keyboard avoidance: KeyboardAvoidingView from react-native-keyboard-controller (behavior="padding", keyboardVerticalOffset={64}).
+ * - Keyboard avoidance: KeyboardAvoidingView from react-native-keyboard-controller (behavior="padding", no keyboardVerticalOffset — no navigation header).
  * - SafeAreaView from react-native-safe-area-context.
  * - Uses flexGrow/flexBasis, never fixed percentages.
  */
@@ -335,10 +335,11 @@ export default function PulseIntakeScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+            {/* No keyboardVerticalOffset: the header is inside this view and there is no navigation header, so an
+                offset only adds blank space above the keyboard (it hid the Share to Pulse button at 320dp). */}
             <KeyboardAvoidingView
                 style={styles.keyboardAvoid}
                 behavior="padding"
-                keyboardVerticalOffset={64}
             >
                 {/* Screen Header */}
                 <View style={styles.header}>

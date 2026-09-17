@@ -8,7 +8,7 @@ import { useIdentity } from '../IdentityContext';
 import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } from '../../utils/crypto';
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 
@@ -669,9 +669,12 @@ export default function PeopleScreen() {
             </View>
 
             {/* Views */}
+            {/* Invites scrolls its own focused field above the keyboard (KeyboardAwareScrollView), so the
+                iOS padding here stays off for it rather than lifting the view twice. */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 keyboardVerticalOffset={88}
+                enabled={view !== 'invites'}
                 style={{ flex: 1 }}
             >
             {view === 'friends' && (
@@ -878,7 +881,9 @@ export default function PeopleScreen() {
             )}
 
             {view === 'invites' && (
-                <ScrollView contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}>
+                // "Invite URL or token" sits low on this page: KeyboardAwareScrollView scrolls the focused field above
+                // the keyboard and adds the keyboard's height as bottom space itself.
+                <KeyboardAwareScrollView contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
                             <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
@@ -1025,7 +1030,7 @@ export default function PeopleScreen() {
                             </Pressable>
                         </View>
                     )}
-                </ScrollView>
+                </KeyboardAwareScrollView>
             )}
 
 

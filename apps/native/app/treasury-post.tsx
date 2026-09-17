@@ -138,7 +138,9 @@ export default function TreasuryPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={64} style={{ flex: 1 }}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name={isNeed ? 'hand-extended' : 'tag'} size={20} color={colors.brand.primary} style={{ marginRight: 10 }} />

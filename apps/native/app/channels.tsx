@@ -421,7 +421,9 @@ export default function ChannelsScreen() {
                 <Text style={styles.title}>Channels & Showcase</Text>
             </View>
 
-            <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={64} style={{ flex: 1 }}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
                     {loading ? (
                         <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />

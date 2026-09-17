@@ -255,7 +255,9 @@ export default function GroupPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     {/* Unmistakable Scope Banner */}
                     <View style={styles.audienceBanner}>

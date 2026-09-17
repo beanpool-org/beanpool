@@ -179,6 +179,7 @@ export default function ProposeProjectModal() {
                             accessibilityLabel="Enterprise name or project title"
                             style={[styles.input, fieldBorder('title')]}
                             placeholder="e.g. Community Tool Shed or Shade House"
+                            placeholderTextColor={colors.text.muted}
                             value={title}
                             onChangeText={(v) => { setTitle(v); if (validationErrors.has('title')) { const n = new Set(validationErrors); n.delete('title'); setValidationErrors(n); } }}
                             maxLength={60}
@@ -192,6 +193,7 @@ export default function ProposeProjectModal() {
                             accessibilityLabel="Purpose statement"
                             style={[styles.input, styles.textarea, fieldBorder('description')]}
                             placeholder="State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')."
+                            placeholderTextColor={colors.text.muted}
                             value={description}
                             onChangeText={(v) => { setDescription(v); if (validationErrors.has('description')) { const n = new Set(validationErrors); n.delete('description'); setValidationErrors(n); } }}
                             multiline
@@ -209,6 +211,7 @@ export default function ProposeProjectModal() {
                                     accessibilityLabel="Funding goal amount"
                                     style={[styles.input, styles.priceInput, fieldBorder('goalAmount')]}
                                     placeholder="0"
+                                    placeholderTextColor={colors.text.muted}
                                     keyboardType="numeric"
                                     value={goalAmount}
                                     onChangeText={(v) => { setGoalAmount(v); if (validationErrors.has('goalAmount')) { const n = new Set(validationErrors); n.delete('goalAmount'); setValidationErrors(n); } }}

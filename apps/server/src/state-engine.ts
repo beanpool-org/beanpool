@@ -261,6 +261,7 @@ import {
     isKeeperOfEnterprise as isKeeperOfEnterpriseEngine,
     type EnterpriseThreadMessage
 } from './engine/enterprise-thread.js';
+export { isEnterpriseThreadHidden, isEnterpriseThreadReadOnly } from './engine/enterprise-thread.js';
 import {
     getNodeRole,
     setNodeRole,
@@ -3736,6 +3737,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     }
 
     let sweptAmount = 0;
+    let hadLocation = false;
     const now = new Date().toISOString();
 
     conservingTransaction(() => {
@@ -3762,14 +3764,24 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         // A wound-up enterprise's map location goes with it (PR #839 Blocker A): a keeper may have pinned it
         // on their own house, and once it is completed nobody keeps it any more. The clear is signed by the
         // finalising actor, exactly as a keeper's own clear would be.
+        //
+        // Only when there WAS a location to clear (#839 review note): an enterprise that was never pinned kept
+        // no location signer, and stamping one here recorded a location change that never happened.
+        hadLocation = !!(db.prepare("SELECT 1 FROM members WHERE public_key = ? AND (lat IS NOT NULL OR lng IS NOT NULL)").get(enterprisePubkey));
         db.prepare(`
             UPDATE members
             SET status = 'completed', wind_up_finalised_at = ?,
                 legacy_credit_floor = NULL,
-                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL,
-                lat = NULL, lng = NULL, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
             WHERE public_key = ?
-        `).run(now, actorPubkey, actorPubkey, now, enterprisePubkey);
+        `).run(now, enterprisePubkey);
+        if (hadLocation) {
+            db.prepare(`
+                UPDATE members
+                SET lat = NULL, lng = NULL, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?
+                WHERE public_key = ?
+            `).run(actorPubkey, actorPubkey, now, enterprisePubkey);
+        }
 
         db.prepare(`
             UPDATE deferred_wage_claims
@@ -3785,7 +3797,9 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     });
 
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
-    broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: null, lng: null, authSigner: actorPubkey, updatedAt: now });
+    if (hadLocation) {
+        broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: null, lng: null, authSigner: actorPubkey, updatedAt: now });
+    }
     broadcast({ type: 'enterprise_wound_up', enterprisePubkey, finalisedBy: actorPubkey, finalisedAt: now, sweptAmount });
 
     return {

@@ -23,6 +23,21 @@ export interface EnterpriseThreadMessage {
     editedAt?: string | null;
 }
 
+/**
+ * A pruned or deleted enterprise is hidden everywhere (its detail read is a 404), so its thread is hidden too.
+ */
+export function isEnterpriseThreadHidden(status: string | null | undefined): boolean {
+    return status === 'pruned' || status === 'deleted';
+}
+
+/**
+ * A wound-up, suspended or disabled enterprise is still shown, so its thread still reads — but nobody can post.
+ * Paused is NOT here: pausing is exactly when people need to talk about it.
+ */
+export function isEnterpriseThreadReadOnly(status: string | null | undefined): boolean {
+    return status === 'completed' || status === 'suspended' || status === 'disabled';
+}
+
 export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: string): boolean {
     const cleanKey = typeof actorPubkey === 'string' ? actorPubkey.trim().toLowerCase() : '';
     try {
@@ -128,11 +143,16 @@ export function postEnterpriseThreadMessage(
     const enterprise = db.prepare(
         "SELECT public_key, callsign, is_treasury, status, paused FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
-    if (!enterprise || !enterprise.is_treasury) {
+    if (!enterprise || !enterprise.is_treasury || isEnterpriseThreadHidden(enterprise.status)) {
         throw new Error('Enterprise not found');
     }
     if (enterprise.status === 'completed') {
         throw new Error('Enterprise has wound up — discussion thread is read-only');
+    }
+    // "Enterprise is closed", never the bare status word: the route maps an error naming "suspended" or
+    // "disabled" to the AUTHOR's account being blocked (403), and this is the enterprise, not the author.
+    if (isEnterpriseThreadReadOnly(enterprise.status)) {
+        throw new Error('Enterprise is closed — discussion thread is read-only');
     }
     // Paused enterprise stays open: pausing is exactly when people need to talk about it.
 

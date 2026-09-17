@@ -24,7 +24,7 @@ import {
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
-    isKeeperOfEnterprise, isAdminPubkey,
+    isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -147,11 +147,19 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     const listTreasuriesHandler = async (ctx: any) => {
         const includeBounded = ctx.query?.includeBounded === 'true';
         const whereClause = includeBounded
-            ? "is_treasury = 1 AND status NOT IN ('pruned', 'deleted')"
-            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND status NOT IN ('pruned', 'deleted')";
-        const rows = db.prepare(
+            ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
+            : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
+        // A suspended or disabled enterprise is off the public Commons list (#839 review finding) — neither client
+        // badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
+        // see it when the read is signed: the list card is how a keeper reaches the enterprise's page, which
+        // explains the state. Detail and thread reads stay reachable by direct link for everyone.
+        const viewer = ctx.state?.actor as string | undefined;
+        const rows = (db.prepare(
             `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
-        ).all() as any[];
+        ).all() as any[]).filter(r =>
+            !(r.status === 'suspended' || r.status === 'disabled')
+            || (!!viewer && canAdministerTreasury(viewer, r.public_key))
+        );
         // Links fetched ONCE for the whole page, not per treasury (review finding). Called per row this was
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
         // community with an egg flock and no federation was paying for a feature it does not use.
@@ -262,7 +270,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.get('/api/treasuries/statuses', listEnterpriseStatusesHandler);
 
     // Enterprise map endpoint (docs/the-commons.md §2.2, Slice 6)
-    // Only includes enterprises with a set location; excludes completed enterprises
+    // Only includes enterprises with a set location; excludes completed, suspended, disabled, pruned and deleted
+    // enterprises. The map is public and unsigned, so there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
         const rows = db.prepare(
             `SELECT public_key, callsign, avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
@@ -271,7 +280,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                AND lat IS NOT NULL
                AND lng IS NOT NULL
                AND wind_up_finalised_at IS NULL
-               AND (status IS NULL OR status NOT IN ('completed', 'pruned', 'deleted'))
+               AND (status IS NULL OR status NOT IN ('completed', 'suspended', 'disabled', 'pruned', 'deleted'))
              ORDER BY callsign COLLATE NOCASE`
         ).all() as any[];
         ctx.body = {
@@ -921,6 +930,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.post('/api/enterprise/:treasury/wind-up/finalise', finaliseWindUpHandler);
 
     // Set or clear enterprise location (keeper / admin)
+    //
+    // 403 for a refusal of WHO may act or of the enterprise's state, 400 only for a bad body. The engine's
+    // "Only a node admin may clear..." used to miss the /Only a keeper/ match and come back 400, and the
+    // Settings route's wound-up refusal was 400 while the signed route refused the same thing with 403.
+    const isLocationRefusal = (e: any): boolean =>
+        /Only a keeper|Only a node admin|Not authorised|has wound up/.test(e?.message || '');
     const setLocationHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         let actor = ctx.state?.actor;
@@ -955,8 +970,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 locationUpdatedAt: res.locationUpdatedAt,
             };
         } catch (e: any) {
-            const isAuth = /Only a keeper/.test(e?.message || '') || /Not authorised/.test(e?.message || '');
-            ctx.status = isAuth ? 403 : 400;
+            ctx.status = isLocationRefusal(e) ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to update enterprise location' };
         }
     };
@@ -996,8 +1010,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 locationUpdatedAt: res.locationUpdatedAt,
             };
         } catch (e: any) {
-            const isAuth = /Only a keeper/.test(e?.message || '') || /Not authorised/.test(e?.message || '');
-            ctx.status = isAuth ? 403 : 400;
+            ctx.status = isLocationRefusal(e) ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to clear enterprise location' };
         }
     };
@@ -1373,20 +1386,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // Enterprise Discussion Thread (docs/the-commons.md §2.2, §9, Slice 6)
     // =========================================================================
 
+    // The thread follows the enterprise's own visibility. A pruned or deleted enterprise's detail read is a 404,
+    // so its thread is too. A suspended, disabled or wound-up enterprise is still shown, so its thread still
+    // reads — but read-only (postEnterpriseThreadMessage refuses the post).
+    const threadHidden = (treasury: string): boolean => {
+        if (!isTreasury(treasury)) return true;
+        return isEnterpriseThreadHidden(statusOf(treasury));
+    };
+
     const threadGetHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        if (!isTreasury(treasury)) {
+        if (threadHidden(treasury)) {
             ctx.status = 404;
             ctx.body = { error: 'Enterprise not found' };
             return;
         }
-        const rawLimit = Number(ctx.query.limit);
-        const rawOffset = Number(ctx.query.offset);
-        const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 100) : 50;
-        const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+        // Same clamping as every other paged route (clampLimit / clampOffset), capped at this thread's page of 100.
+        // Passing Number(query) straight through let ?offset=1.5 reach SQLite, which refuses a non-integer
+        // LIMIT/OFFSET and turned the read into a 500.
+        const limit = Math.min(deps.clampLimit(ctx.query.limit), 100);
+        const offset = deps.clampOffset(ctx.query.offset);
 
-        const enterprise = db.prepare("SELECT status FROM members WHERE public_key = ?").get(treasury) as any;
-        const readOnly = enterprise?.status === 'completed';
+        const readOnly = isEnterpriseThreadReadOnly(statusOf(treasury));
 
         const conversation = ensureEnterpriseThread(treasury);
         const messages = getEnterpriseThreadMessages(treasury, limit, offset);
@@ -1403,7 +1424,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const threadPostHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        if (!isTreasury(treasury)) {
+        if (threadHidden(treasury)) {
             ctx.status = 404;
             ctx.body = { error: 'Enterprise not found' };
             return;

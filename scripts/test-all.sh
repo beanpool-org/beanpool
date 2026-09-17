@@ -298,6 +298,7 @@ run_federation_suites() {
       test-enterprise-keepers-slice6
       test-enterprise-location
       test-enterprise-thread
+      test-enterprise-closed-states
     )
     for t in "${SUITES[@]}"; do
       echo "━━━ $t ━━━"

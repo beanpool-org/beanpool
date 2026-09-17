@@ -36,9 +36,16 @@ interface Props {
     pubkey: string;
     onBack: () => void;
     onNavigatePost?: (postId: string) => void;
+    /**
+     * False for a guest — a local key the node has no member for. Enterprise pins are public,
+     * so a guest still gets the page; only the member actions (pledge, keeper request, posting)
+     * and the viewer's own balance are skipped. Omitted means "a member if signed in".
+     */
+    isMember?: boolean;
 }
 
-export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }: Props) {
+export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember }: Props) {
+    const viewerIsMember = !!identity && isMember !== false;
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -78,6 +85,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
     const [threadPosting, setThreadPosting] = useState(false);
     const [threadError, setThreadError] = useState<string | null>(null);
     const [threadRemovingId, setThreadRemovingId] = useState<string | null>(null);
+    const [threadUnavailable, setThreadUnavailable] = useState(false);
 
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
@@ -270,10 +278,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
             const d = await getTreasury(pubkey);
             setDetail(d);
 
-            if (identity?.publicKey) {
-                const b: BalanceInfo = await getBalance(identity.publicKey);
-                const mine: string[] = Array.isArray(b.keeperOf) ? b.keeperOf : [];
+            if (identity?.publicKey && viewerIsMember) {
                 const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
+                // The viewer's balance only refines keeper status. The node answers "Member not
+                // found" for a key it doesn't know, and that must never replace the enterprise.
+                let mine: string[] = [];
+                try {
+                    const b: BalanceInfo = await getBalance(identity.publicKey);
+                    mine = Array.isArray(b.keeperOf) ? b.keeperOf : [];
+                } catch {
+                    // fall back to the keeper list the enterprise itself returned
+                }
                 setIsKeeperOfThis(mine.includes(pubkey) || inKeepers);
             } else {
                 setIsKeeperOfThis(false);
@@ -283,7 +298,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
         } finally {
             setLoading(false);
         }
-    }, [pubkey, identity?.publicKey]);
+    }, [pubkey, identity?.publicKey, viewerIsMember]);
 
     useEffect(() => {
         load();
@@ -322,8 +337,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                 setThreadMessages(res.messages || []);
                 setThreadReadOnly(!!res.readOnly);
             }
+            setThreadUnavailable(false);
         } catch {
-            // ignore
+            setThreadUnavailable(true);
         }
     }, [pubkey]);
 
@@ -887,7 +903,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                             : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
                                     </p>
 
-                                    {/* Inline Pledge Form */}
+                                    {/* Inline Pledge Form — pledging moves the member's own beans */}
+                                    {viewerIsMember && (
                                     <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                             Back this initiative
@@ -918,6 +935,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                             </button>
                                         </div>
                                     </form>
+                                    )}
                                 </div>
                             );
                         })()}
@@ -1584,7 +1602,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                         )}
 
                         {/* Ask to Join as a Keeper (for non-keepers when enterprise is not completed) */}
-                        {identity && !isKeeperOfThis && detail.status !== 'completed' && (
+                        {viewerIsMember && !isKeeperOfThis && detail.status !== 'completed' && (
                             myPendingRequest ? (
                                 <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
                                     <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
@@ -1773,6 +1791,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 <div className="py-8 text-center text-xs text-nature-400 font-medium">
                                     Loading ledger records…
                                 </div>
+                            ) : ledgerError && !viewerIsMember ? (
+                                <div className="py-4 text-center text-xs text-nature-500 dark:text-nature-400 italic" data-testid="ledger-members-only">
+                                    The full income and spend record is visible to members.
+                                </div>
                             ) : ledgerError ? (
                                 <div className="py-4 text-center text-xs text-red-500 font-medium space-y-2">
                                     <p>{ledgerError}</p>
@@ -1958,8 +1980,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             )}
 
-                            {threadMessages.length === 0 ? (
-                                <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2">No messages yet. Start the conversation!</p>
+                            {threadUnavailable && !viewerIsMember ? (
+                                <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2" data-testid="thread-members-only">
+                                    The discussion is open to members.
+                                </p>
+                            ) : threadMessages.length === 0 ? (
+                                <p className="text-xs text-nature-600 dark:text-nature-300 italic py-2">
+                                    {viewerIsMember ? 'No messages yet. Start the conversation!' : 'No messages yet.'}
+                                </p>
                             ) : (
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800">
                                     {threadMessages.map((m) => {
@@ -2008,7 +2036,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost }:
                                 </div>
                             )}
 
-                            {!threadReadOnly && (
+                            {!threadReadOnly && !viewerIsMember && !threadUnavailable && (
+                                <p className="text-xs text-nature-500 dark:text-nature-400 italic" data-testid="thread-guest-note">
+                                    Join the community to post here.
+                                </p>
+                            )}
+
+                            {!threadReadOnly && viewerIsMember && (
                                 <form onSubmit={handlePostThreadMessage} className="mt-2 space-y-2">
                                     {threadError && (
                                         <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">

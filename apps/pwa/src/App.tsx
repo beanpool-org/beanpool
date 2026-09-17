@@ -757,6 +757,7 @@ export function App() {
                     {openTreasuryPubkey && (
                         <TreasuryDetailPage
                             identity={identity}
+                            isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {

@@ -19,7 +19,7 @@ describe('AdminLoginCard component', () => {
     it('renders admin password input and unlock button', () => {
         render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
         expect(screen.getByText('Node Settings')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Enter node admin password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
     });
 
@@ -33,13 +33,28 @@ describe('AdminLoginCard component', () => {
 
     it('toggles password field visibility when Show/Hide is clicked', () => {
         render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
-        const passwordInput = screen.getByPlaceholderText('Enter node admin password') as HTMLInputElement;
+        const passwordInput = screen.getByPlaceholderText('Password') as HTMLInputElement;
         const toggleBtn = screen.getByRole('button', { name: 'Show' });
 
         expect(passwordInput.type).toBe('password');
         fireEvent.click(toggleBtn);
         expect(passwordInput.type).toBe('text');
         expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    });
+
+    it('keeps the Show/Hide button beside the password input rather than drawn over it', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
+        const field = screen.getByTestId('admin-password-field');
+        const passwordInput = screen.getByPlaceholderText('Password');
+        const toggleBtn = screen.getByRole('button', { name: 'Show' });
+
+        // Siblings in one flex row: the input shrinks, the button keeps its own space.
+        expect(field).toHaveClass('flex');
+        expect(passwordInput.parentElement).toBe(field);
+        expect(toggleBtn.parentElement).toBe(field);
+        expect(passwordInput).toHaveClass('flex-1', 'min-w-0');
+        expect(toggleBtn).toHaveClass('shrink-0');
+        expect(toggleBtn.className).not.toMatch(/(^|\s)absolute(\s|$)/);
     });
 
     it('handles successful authentication without 2FA', async () => {
@@ -51,7 +66,7 @@ describe('AdminLoginCard component', () => {
         vi.stubGlobal('fetch', mockFetch);
 
         render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
-        fireEvent.change(screen.getByPlaceholderText('Enter node admin password'), {
+        fireEvent.change(screen.getByPlaceholderText('Password'), {
             target: { value: 'correct-password' },
         });
         fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
@@ -78,7 +93,7 @@ describe('AdminLoginCard component', () => {
         vi.stubGlobal('fetch', mockFetch);
 
         render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
-        fireEvent.change(screen.getByPlaceholderText('Enter node admin password'), {
+        fireEvent.change(screen.getByPlaceholderText('Password'), {
             target: { value: 'password123' },
         });
         fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
@@ -104,7 +119,7 @@ describe('AdminLoginCard component', () => {
         vi.stubGlobal('fetch', mockFetch);
 
         render(<AdminLoginCard nodeUrl={nodeUrl} onAuthenticated={mockOnAuthenticated} />);
-        fireEvent.change(screen.getByPlaceholderText('Enter node admin password'), {
+        fireEvent.change(screen.getByPlaceholderText('Password'), {
             target: { value: 'wrong-pass' },
         });
         fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));

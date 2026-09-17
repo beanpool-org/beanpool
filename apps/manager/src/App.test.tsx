@@ -91,7 +91,7 @@ describe('App Component', () => {
             });
 
             expect(screen.getByText('Node Settings')).toBeInTheDocument();
-            expect(screen.getByPlaceholderText(/enter node admin password/i)).toBeInTheDocument();
+            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
             expect(screen.getByText('Switch to Legacy Settings Page')).toHaveAttribute('href', '/settings-legacy');
             expect(document.title).not.toContain('Fleet');
@@ -188,7 +188,7 @@ describe('App Component', () => {
                 render(<App isFleetMode={false} />);
             });
 
-            const passInput = screen.getByPlaceholderText(/enter node admin password/i);
+            const passInput = screen.getByPlaceholderText('Password');
             const unlockBtn = screen.getByRole('button', { name: /unlock settings/i });
 
             vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {

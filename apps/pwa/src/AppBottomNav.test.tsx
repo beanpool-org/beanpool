@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { App } from './App';
+import { App, navTabWeight, NAV_LABEL_FONT_SIZE } from './App';
 import type { BeanPoolIdentity } from './lib/identity';
 
 if (typeof window !== 'undefined') {
@@ -183,5 +183,37 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(false);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('');
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('');
+    });
+});
+
+describe('App mobile bottom nav labels on a 320px phone at 1.3x text', () => {
+    it('gives each tab a share of the row that follows its label, with a floor for the emoji', () => {
+        expect(navTabWeight('Map')).toBe(4);
+        expect(navTabWeight('Chat')).toBe(4);
+        expect(navTabWeight('Pulse')).toBe(5);
+        expect(navTabWeight('Market')).toBe(6);
+        expect(navTabWeight('Commons')).toBe(7);
+    });
+
+    it('caps the label size by viewport width so whole labels fit, full 0.6rem on wider screens', () => {
+        expect(NAV_LABEL_FONT_SIZE).toBe('min(0.6rem, 3.3vw)');
+    });
+
+    it('renders every tab with its full label and a weighted width', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+
+        const bottomNav = screen.getByTestId('mobile-bottom-nav');
+        const labels = Array.from(bottomNav.querySelectorAll<HTMLElement>('[data-nav-label]'));
+        expect(labels.map(l => l.textContent?.trim())).toEqual(['Market', 'Pulse', 'Map', 'Commons', 'Chat', 'People', 'Ledger']);
+
+        for (const label of labels) {
+            const button = label.closest('button') as HTMLButtonElement;
+            expect(button.style.flexGrow).toBe(String(navTabWeight(label.textContent!.trim())));
+            expect(button.style.flexBasis).toBe('0px');
+            expect(button.style.minWidth).toBe('0px');
+        }
     });
 });

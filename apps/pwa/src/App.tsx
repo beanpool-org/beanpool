@@ -80,6 +80,15 @@ function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenP
 
 type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
+// Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
+// Each tab's share of the row follows its label length, with a floor for the emoji above it.
+export function navTabWeight(label: string): number {
+    return Math.max(4, label.length);
+}
+// Measured in headless Chrome at 320px: "Commons" in extrabold needs ~4.9px of row per px of
+// font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.
+export const NAV_LABEL_FONT_SIZE = 'min(0.6rem, 3.3vw)';
+
 // What the header reads out of GET /api/community/health. `online` is ours, not the
 // node's: it records whether that call answered at all.
 interface NodeHealthState {
@@ -757,6 +766,7 @@ export function App() {
                     {openTreasuryPubkey && (
                         <TreasuryDetailPage
                             identity={identity}
+                            isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
@@ -785,7 +795,7 @@ export function App() {
                     padding: '0.2rem 4px calc(0.2rem + env(safe-area-inset-bottom, 0px))',
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-                    <div className="relative z-10 w-full flex gap-0.5 sm:gap-1">
+                    <div className="relative z-10 w-full flex gap-px sm:gap-1">
                     {TABS.map((tab) => {
                         const isActive = activeTab === tab.id && !showSettings;
                         return (
@@ -803,7 +813,11 @@ export function App() {
                                 setOpenProfilePubkey(null);
                             }}
                             style={{
-                                flex: 1,
+                                // Width follows label length (floor 4, the emoji's width), so "Commons"
+                                // gets the room it needs instead of every tab shrinking to fit it.
+                                flexGrow: navTabWeight(tab.label),
+                                flexShrink: 1,
+                                flexBasis: 0,
                                 minWidth: 0,
                                 padding: 0,
                                 background: 'transparent',
@@ -819,7 +833,7 @@ export function App() {
                                 margin: '0 auto',
                                 width: '100%',
                                 gap: '0.1rem',
-                                padding: '0.15rem 2px',
+                                padding: '0.15rem 0',
                                 borderRadius: '10px',
                                 background: 'rgba(0,0,0,0.45)',
                                 border: '1px solid rgba(255,255,255,0.05)',
@@ -876,7 +890,10 @@ export function App() {
                                         </span>
                                     )}
                                 </span>
-                                <span className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: '0.6rem', lineHeight: 1.1 }}>
+                                {/* 0.6rem alone scales with the user's text size and cut "Market"/"Commons"
+                                    to "Mar…"/"Co…" on a 320px phone at 1.3x. The vw cap keeps whole labels
+                                    there; wider screens still get the full 0.6rem. */}
+                                <span data-nav-label className={`${isActive ? 'text-rainbow text-dark-aura font-extrabold' : 'text-dark-aura font-semibold'} truncate max-w-full text-center`} style={{ fontSize: NAV_LABEL_FONT_SIZE, lineHeight: 1.1 }}>
                                     {tab.label}
                                 </span>
                             </div>

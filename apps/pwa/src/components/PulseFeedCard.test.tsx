@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PulseFeedCard } from './PulseFeedCard';
-import { type PulseFeedItem } from '../lib/api';
+import { type PulseFeedItem, reportAbuse } from '../lib/api';
+
+vi.mock('../lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/api')>()),
+    reportAbuse: vi.fn().mockResolvedValue({ success: true }),
+}));
 
 const mockItem: PulseFeedItem = {
     id: 'pulse-123',
@@ -51,5 +56,34 @@ describe('PulseFeedCard Accessibility', () => {
         const deleteBtn = screen.getByRole('button', { name: 'Delete this post' });
         expect(deleteBtn.className).toContain('min-h-[44px]');
         expect(deleteBtn.className).toContain('focus-visible:ring-2');
+    });
+});
+
+describe('PulseFeedCard Report', () => {
+    it('does not offer Report on your own item, or when signed out', () => {
+        const { unmount } = render(<PulseFeedCard item={mockItem} currentPubkey="pubkey-owner" onMute={vi.fn()} onDelete={vi.fn()} />);
+        expect(screen.queryByRole('button', { name: 'Report this post' })).not.toBeInTheDocument();
+        unmount();
+
+        render(<PulseFeedCard item={mockItem} />);
+        expect(screen.queryByRole('button', { name: 'Report this post' })).not.toBeInTheDocument();
+    });
+
+    it("reports someone else's item with its Pulse item id through the existing report dialog", async () => {
+        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        render(<PulseFeedCard item={mockItem} currentPubkey="pubkey-viewer" />);
+
+        const reportBtn = screen.getByRole('button', { name: 'Report this post' });
+        expect(reportBtn.className).toContain('min-h-[48px]');
+        expect(reportBtn.className).toContain('min-w-[48px]');
+
+        fireEvent.click(reportBtn);
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByText(/Report GreenThumb's post/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Report' }));
+        await waitFor(() => expect(reportAbuse).toHaveBeenCalledTimes(1));
+        expect(reportAbuse).toHaveBeenCalledWith('pubkey-viewer', 'pubkey-owner', 'Spam or scam', undefined, 'pulse-123');
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 });

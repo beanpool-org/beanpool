@@ -1192,8 +1192,8 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
 
 // ===================== REPORTS =====================
 
-export async function reportAbuse(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/reports', { reporterPubkey, targetPubkey, reason, targetPostId });
+export async function reportAbuse(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/reports', { reporterPubkey, targetPubkey, reason, targetPostId, targetPulseItemId });
 }
 
 // ===================== FRIENDS =====================

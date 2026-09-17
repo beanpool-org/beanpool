@@ -8,6 +8,8 @@ interface Props {
     targetPubkey: string;
     targetName: string;
     targetPostId?: string;
+    /** Reporting a Pulse item: the node resolves the reported member from the item's owner. */
+    targetPulseItemId?: string;
     onReported?: () => void;
 }
 
@@ -25,6 +27,7 @@ export function ReportModal({
     targetPubkey,
     targetName,
     targetPostId,
+    targetPulseItemId,
     onReported,
 }: Props) {
     const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
@@ -71,7 +74,7 @@ export function ReportModal({
                 ? `${selectedReason}: ${details.trim()}`
                 : selectedReason;
 
-            await reportAbuse(reporterPubkey, targetPubkey, finalReason, targetPostId);
+            await reportAbuse(reporterPubkey, targetPubkey, finalReason, targetPostId, targetPulseItemId);
             alert('Report submitted. Thank you for helping keep the community safe.');
             onReported?.();
             onClose();

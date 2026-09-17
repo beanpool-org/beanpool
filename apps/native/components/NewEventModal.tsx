@@ -157,7 +157,9 @@ export function NewEventModal({ visible, onClose, onSuccess }: NewEventModalProp
 
     const placePinAtMyLocation = async () => {
         try {
-            let { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
+            const permission = await Location.getForegroundPermissionsAsync();
+            let status = permission.status;
+            const canAskAgain = permission.canAskAgain;
             if (status !== 'granted' && canAskAgain) {
                 status = (await Location.requestForegroundPermissionsAsync()).status;
             } else if (status !== 'granted') {

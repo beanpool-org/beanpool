@@ -43,7 +43,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
 
     useEffect(() => {
         if (!pending) setCounts(countsOf(post));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Re-sync from the post only when its counts or my RSVP change, not on every render of a new post object.
     }, [post.id, post.goingCount, post.interestedCount, post.event_going_count, post.event_interested_count, post.myRsvp]);
 
     const when = formatEventWhen(post.event_start_at ?? post.eventStartAt, post.event_end_at ?? post.eventEndAt);

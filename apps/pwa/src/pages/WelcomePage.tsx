@@ -123,13 +123,18 @@ const BUNDLED_AVATARS = [
     { id: 'crystal',      label: 'Crystal' },
 ];
 
-function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
+/**
+ * Four equal columns that may shrink, with labels that wrap. The old row gave each step a fixed
+ * 4.5rem with unwrappable labels — 18rem plus connectors, which at 1.3x text pushed the first
+ * screen a new member sees out to 376px on a 320px phone.
+ */
+export function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
     const steps = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
     return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+        <div data-testid="onboarding-stepper" style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+            columnGap: '2px',
             marginBottom: '1.5rem',
             width: '100%',
         }}>
@@ -138,51 +143,53 @@ function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
                 const isActive = stepNum === step;
                 const isCompleted = stepNum < step;
                 return (
-                    <React.Fragment key={i}>
+                    <div key={i} style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        position: 'relative',
+                        minWidth: 0,
+                    }}>
                         {i > 0 && (
-                            <div style={{
-                                flex: 1,
+                            // Connector from the previous step's dot to this one's, 4px clear of each.
+                            <div aria-hidden="true" style={{
+                                position: 'absolute',
+                                top: '5px',
+                                right: 'calc(50% + 10px)',
+                                width: 'calc(100% - 18px)',
                                 height: '2px',
                                 backgroundColor: isCompleted || isActive ? '#22c55e' : '#e5e7eb',
-                                marginLeft: '4px',
-                                marginRight: '4px',
-                                marginTop: '-14px',
                             }} />
                         )}
                         <div style={{
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '6px',
+                            backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
+                            marginBottom: '6px',
                             display: 'flex',
-                            flexDirection: 'column',
                             alignItems: 'center',
-                            position: 'relative',
-                            width: '4.5rem',
+                            justifyContent: 'center',
+                            transition: 'all 0.3s',
                         }}>
-                            <div style={{
-                                width: '12px',
-                                height: '12px',
-                                borderRadius: '6px',
-                                backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
-                                marginBottom: '6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.3s',
-                            }}>
-                                {isCompleted && (
-                                    <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
-                                )}
-                            </div>
-                            <span style={{
-                                fontSize: '10px',
-                                color: isActive ? 'var(--text-primary)' : '#6b7280',
-                                fontWeight: isActive ? '700' : '500',
-                                transition: 'color 0.3s',
-                                whiteSpace: 'nowrap',
-                                textAlign: 'center',
-                            }}>
-                                {label}
-                            </span>
+                            {isCompleted && (
+                                <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
+                            )}
                         </div>
-                    </React.Fragment>
+                        <span style={{
+                            fontSize: '10px',
+                            lineHeight: 1.2,
+                            color: isActive ? 'var(--text-primary)' : '#6b7280',
+                            fontWeight: isActive ? '700' : '500',
+                            transition: 'color 0.3s',
+                            whiteSpace: 'normal',
+                            overflowWrap: 'anywhere',
+                            textAlign: 'center',
+                            maxWidth: '100%',
+                        }}>
+                            {label}
+                        </span>
+                    </div>
                 );
             })}
         </div>

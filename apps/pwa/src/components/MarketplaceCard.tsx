@@ -22,9 +22,10 @@ interface Props {
     viewMode?: 'grid' | 'list' | 'compact';
     onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
+    onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -52,6 +53,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     ) : null;
 
     const elderCard = isElder(authorEnergy);
+    const isGroupScope = post.audienceScope === 'group' || !!post.targetGroupId;
+    const targetGroupName = post.targetGroupName || 'Group';
+    const groupScopeBadge = isGroupScope ? `🔒 Only ${targetGroupName} can see this` : null;
     const elderStyleGrid = isPulse
         ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
@@ -81,19 +85,26 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     🌱 FOUNDING
                                 </span>
                             )}
+                            {groupScopeBadge && (
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 shrink-0">
+                                    {groupScopeBadge}
+                                </span>
+                            )}
                         </span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                     {/* Compact Price */}
-                    <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
-                        {post.credits !== undefined ? post.credits : '?'}
-                        <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
-                        <span className="text-[9px] text-nature-500 font-normal">
-                            {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
+                            {post.credits !== undefined ? post.credits : '?'}
+                            <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt="B" />
+                            <span className="text-[9px] text-nature-500 font-normal">
+                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                            </span>
                         </span>
-                    </span>
+                    )}
 
                     {/* Daily Pulse or Needs/Offers pill */}
                     {isPulse ? (
@@ -122,7 +133,28 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Left Thumbnail */}
                 <div className="w-16 h-16 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
                     {hasPhoto ? (
-                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                if (onPhotoClick) {
+                                    e.stopPropagation();
+                                    onPhotoClick(post.photos!, 0, e);
+                                }
+                            }}
+                            onKeyDown={(e) => {
+                                if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    onPhotoClick(post.photos!, 0, e as any);
+                                }
+                            }}
+                            aria-label={`View enlarged photo: ${post.title}`}
+                            className={`w-full h-full block rounded-xl overflow-hidden ${
+                                onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
+                            }`}
+                        >
+                            <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        </button>
                     ) : (
                         <div className="w-full h-full bg-oat-50 dark:bg-nature-800 flex justify-center items-center">
                             <span className="text-2xl opacity-40">{emoji}</span>
@@ -134,12 +166,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 <div className="flex-1 flex flex-col justify-center min-w-0">
                     <div className="flex justify-between items-center mb-1">
                         <div className="flex gap-2 items-center">
-                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                : 'bg-orange-105 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400'
-                            }`}>
-                                {post.type}
-                            </span>
+                            {!isPulse && (
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                    post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                    : 'bg-orange-105 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400'
+                                }`}>
+                                    {post.type}
+                                </span>
+                            )}
                             {pulsePill}
                             {youPill}
                             {pausedPill}
@@ -169,18 +203,25 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     🌱 FOUNDING TRADE
                                 </span>
                             )}
+                            {groupScopeBadge && (
+                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50">
+                                    {groupScopeBadge}
+                                </span>
+                            )}
                         </div>
                         
                         {/* Compact Price Header */}
-                        <div className="flex items-center">
-                            <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                {post.credits !== undefined ? post.credits : '?'}
-                                <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
-                                <span className="text-[10px] text-nature-500 ml-0.5">
-                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                        {!isPulse && (
+                            <div className="flex items-center">
+                                <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                    {post.credits !== undefined ? post.credits : '?'}
+                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
+                                    <span className="text-[10px] text-nature-500 ml-0.5">
+                                        {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                    </span>
                                 </span>
-                            </span>
-                        </div>
+                            </div>
+                        )}
                     </div>
 
                     <h3 className="font-bold text-md text-nature-950 dark:text-white truncate mb-1">
@@ -232,6 +273,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {pulsePill && <div className="mt-1">{pulsePill}</div>}
                     {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
+                    {groupScopeBadge && (
+                        <div className="mt-1">
+                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 block truncate">
+                                {groupScopeBadge}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div className={`flex items-center shrink-0 bg-oat-50 dark:bg-nature-900 rounded-lg gap-0.5 px-1.5 py-0.5`}>
@@ -242,7 +290,28 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             {/* Image Area */}
             {hasPhoto ? (
                 <div className={`relative w-full rounded-xl overflow-hidden shadow-sm h-[110px] mb-3`}>
-                    <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            if (onPhotoClick) {
+                                e.stopPropagation();
+                                onPhotoClick(post.photos!, 0, e);
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                onPhotoClick(post.photos!, 0, e as any);
+                            }
+                        }}
+                        aria-label={`View enlarged photo: ${post.title}`}
+                        className={`w-full h-full block rounded-xl overflow-hidden ${
+                            onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
+                        }`}
+                    >
+                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                    </button>
 
                     {/* Status Overlays */}
                     <div className={`absolute left-2 flex flex-col gap-1 items-start top-1.5`}>
@@ -264,15 +333,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
 
                     {/* Price Overlay */}
-                    <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
-                        <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                            <span>{post.credits !== undefined ? post.credits : '?'}</span>
-                            <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
+                            <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                </span>
                             </span>
-                        </span>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
@@ -304,15 +375,17 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         )}
                     </div>
 
-                    <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
-                        <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                            <span>{post.credits !== undefined ? post.credits : '?'}</span>
-                            <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
-                                <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
-                                {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                    {!isPulse && (
+                        <div className={`absolute right-2 bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm`}>
+                            <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
+                                <span>{post.credits !== undefined ? post.credits : '?'}</span>
+                                <span className="text-[10px] font-normal opacity-80 pl-0.5 flex items-center" style={{ flexShrink: 0 }}>
+                                    <img src="/assets/bean.png" style={{ width: '12px', height: '12px', marginLeft: '2px', marginRight: '2px', flexShrink: 0 }} alt="B" />
+                                    {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
+                                </span>
                             </span>
-                        </span>
-                    </div>
+                        </div>
+                    )}
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
@@ -330,12 +403,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
             {/* Action Button */}
             <div
-                className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${post.type === 'offer'
+                className={`w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto ${
+                    isPulse
+                        ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default'
+                        : post.type === 'offer'
                         ? 'bg-terra-500 text-white hover:bg-terra-600'
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
-                    }`}
+                }`}
             >
-                VIEW
+                {isPulse ? 'DAILY PULSE' : 'VIEW'}
             </div>
         </div>
     );

@@ -10,6 +10,7 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
+import { MESSAGE_REMOVED_EDIT_ERROR, THREAD_MESSAGE_EDIT_ERROR } from '../engine/messaging.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -22,6 +23,15 @@ export function createMessagingRoutes(deps: RouteDeps): Router {
 
 // ===================== MESSAGING API (PUBLIC) =====================
 
+/** Upper bound on people in one group conversation. Each one is a synchronous INSERT
+ *  inside the creation transaction, so this is what stops a single request holding the
+ *  SQLite write lock against the whole node. */
+const MAX_CONVERSATION_PARTICIPANTS = 50;
+
+/** Ed25519 public keys are 64 hex characters; 128 leaves room without allowing a
+ *  megabyte of text to reach the members lookup. */
+const MAX_PARTICIPANT_KEY_LENGTH = 128;
+
 router.post('/api/messages/conversation', async (ctx) => {
     const { type, participants, createdBy, name, postId } = (ctx as any).requestBody || {};
     if (!type || !participants || !createdBy) {
@@ -29,9 +39,38 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'type, participants, and createdBy are required' };
         return;
     }
-    if (type === 'dm' && participants.length !== 2) {
+    // The engine types `type` as 'dm' | 'group', but TypeScript is not present at
+    // runtime and conversations.type has no CHECK constraint, so any other string
+    // sailed past both length rules below and re-opened the very hole the group cap
+    // closes: type "bulk" with 5,000 participants took the exclusive write lock for
+    // 5,000 INSERTs. Whitelist first, then the caps mean something.
+    if (type !== 'dm' && type !== 'group') {
         ctx.status = 400;
-        ctx.body = { error: 'DM conversations must have exactly 2 participants' };
+        ctx.body = { error: 'type must be either "dm" or "group"' };
+        return;
+    }
+    if (!Array.isArray(participants)) {
+        ctx.status = 400;
+        ctx.body = { error: 'participants must be an array' };
+        return;
+    }
+    if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= MAX_PARTICIPANT_KEY_LENGTH)) {
+        ctx.status = 400;
+        ctx.body = { error: 'All participants must be valid public keys' };
+        return;
+    }
+    // conversation_participants is keyed on (conversation_id, public_key), so a repeated
+    // participant made the INSERT loop throw UNIQUE constraint failed and surfaced the raw
+    // SQLite error to the caller. De-duplicate and count distinct people.
+    const uniqueParticipants: string[] = Array.from(new Set<string>(participants));
+    if (type === 'dm' && uniqueParticipants.length !== 2) {
+        ctx.status = 400;
+        ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
+        return;
+    }
+    if (type === 'group' && uniqueParticipants.length > MAX_CONVERSATION_PARTICIPANTS) {
+        ctx.status = 400;
+        ctx.body = { error: `Group conversations can have at most ${MAX_CONVERSATION_PARTICIPANTS} participants` };
         return;
     }
     // A2-15: the creator (bound to the verified signer by the spoof check) must
@@ -41,18 +80,23 @@ router.post('/api/messages/conversation', async (ctx) => {
     // this public route only — internal/system conversation creation
     // (ensureTransactionConversation, injectSystemMessage) calls
     // createConversation directly with a system actor and is unaffected.
-    if (!Array.isArray(participants) || !participants.includes(createdBy)) {
+    if (!uniqueParticipants.includes(createdBy)) {
         ctx.status = 403;
         ctx.body = { error: 'Creator must be a participant of the conversation' };
         return;
     }
-    const conv = createConversation(type, participants, createdBy, name, postId);
-    if (!conv) {
+    try {
+        const conv = createConversation(type, uniqueParticipants, createdBy, name, postId);
+        if (!conv) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
+            return;
+        }
+        ctx.body = { success: true, conversation: conv };
+    } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
-        return;
+        ctx.body = { error: e.message || 'Failed to create conversation' };
     }
-    ctx.body = { success: true, conversation: conv };
 });
 
 router.post('/api/messages/send', async (ctx) => {
@@ -60,6 +104,11 @@ router.post('/api/messages/send', async (ctx) => {
     if (!conversationId || !authorPubkey || !ciphertext || !nonce) {
         ctx.status = 400;
         ctx.body = { error: 'conversationId, authorPubkey, ciphertext, and nonce are required' };
+        return;
+    }
+    if (ctx.state.actor && ctx.state.actor !== authorPubkey) {
+        ctx.status = 403;
+        ctx.body = { error: 'authorPubkey must match authenticated signer' };
         return;
     }
     // Optional client-generated message id (see sendMessage). Strict UUID v4
@@ -83,7 +132,9 @@ router.post('/api/messages/send', async (ctx) => {
             ctx.body = { error: 'Message id already exists' };
             return;
         }
-        throw e;
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to send message' };
+        return;
     }
     if (!msg) {
         ctx.status = 400;
@@ -141,17 +192,25 @@ router.post('/api/messages/edit', async (ctx) => {
     const { messageId, ciphertext, nonce } = (ctx as any).requestBody || {};
     // The author is the verified request signer (ctx.state.actor) — not a client-supplied
     // field — so nobody can edit someone else's message.
-    const actor = ctx.state.actor || (ctx as any).requestBody?.authorPubkey;
-    if (!messageId || !ciphertext || !nonce || !actor) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || !ciphertext || !nonce) {
         ctx.status = 400;
         ctx.body = { error: 'messageId, ciphertext, and nonce are required' };
         return;
     }
     try {
-        const msg = editMessage(messageId, actor as string, ciphertext, nonce);
+        const msg = editMessage(messageId, actor, ciphertext, nonce);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
-        ctx.status = 400;
+        // Thread and removed messages are refused outright (403) so the client can say why;
+        // every other failure keeps its existing 400.
+        const refused = e?.message === THREAD_MESSAGE_EDIT_ERROR || e?.message === MESSAGE_REMOVED_EDIT_ERROR;
+        ctx.status = refused ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to edit message' };
     }
 });
@@ -176,13 +235,30 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
-    const { pubkey, conversationId } = (ctx as any).requestBody || {};
-    if (!pubkey || !conversationId) {
-        ctx.status = 400;
-        ctx.body = { error: 'Missing pubkey or conversationId' };
+    const actor = ctx.state.actor as string | undefined;
+    const { conversationId } = (ctx as any).requestBody || {};
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
-    markConversationRead(pubkey, conversationId);
+    if (!conversationId) {
+        ctx.status = 400;
+        ctx.body = { error: 'Missing conversationId' };
+        return;
+    }
+    const conv = getConversation(conversationId);
+    if (!conv) {
+        ctx.status = 404;
+        ctx.body = { error: 'Conversation not found' };
+        return;
+    }
+    if (!conv.participants.includes(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'You are not a participant in this conversation' };
+        return;
+    }
+    markConversationRead(actor, conversationId);
     ctx.body = { success: true };
 });
 
@@ -199,7 +275,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // it to be in this conversation. Without this, any member could read any
     // thread by id (group/system messages are still plaintext-v1, and
     // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && !conv.participants.includes(ctx.state.actor as string)) {
+    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;
@@ -214,13 +290,19 @@ router.get('/api/messages/:conversationId', async (ctx) => {
 
 router.post('/api/messages/react', async (ctx) => {
     const { messageId, authorPubkey, emoji } = (ctx as any).requestBody || {};
-    if (!messageId || !authorPubkey || !emoji) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!messageId || !emoji || typeof emoji !== 'string' || !emoji.trim() || emoji.length > 32) {
         ctx.status = 400;
-        ctx.body = { error: 'messageId, authorPubkey, and emoji are required' };
+        ctx.body = { error: 'messageId, authorPubkey, and a valid emoji (<=32 chars) are required' };
         return;
     }
     try {
-        const result = toggleMessageReaction(messageId, authorPubkey, emoji);
+        const result = toggleMessageReaction(messageId, actor, emoji.trim());
         if (!result) {
             ctx.status = 404;
             ctx.body = { error: 'Message not found' };

@@ -18,11 +18,11 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, createConversation, sendMessage } from './state-engine.js';
+import { initStateEngine, createConversation, sendMessage, toggleMessageReaction } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8547;
+const PORT = 8573;
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -75,6 +75,34 @@ async function main() {
     catch { threw = true; }
     assert(!threw, 'send to an unknown id does not throw despite a malformed-metadata row');
     assert(res === null, 'send to a genuinely unknown conversation returns null');
+
+    // 4. toggleMessageReaction with non-object message metadata (string, number, array)
+    const msgPrimitiveMeta = crypto.randomUUID();
+    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(msgPrimitiveMeta, Y, A, 'ct', 'nc', 'text', '12345', new Date().toISOString());
+    let reactionThrew = false;
+    let reactionRes: any = null;
+    try {
+        reactionRes = toggleMessageReaction(msgPrimitiveMeta, A, '👍');
+    } catch (e: any) {
+        reactionThrew = true;
+        console.error('Reaction threw error:', e);
+    }
+    assert(!reactionThrew, 'toggleMessageReaction does not throw when message metadata is a primitive number');
+    assert(!!reactionRes && reactionRes.success === true, 'toggleMessageReaction succeeds and initializes reactions array');
+
+    const msgArrayMeta = crypto.randomUUID();
+    db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(msgArrayMeta, Y, A, 'ct', 'nc', 'text', '[1, 2, 3]', new Date().toISOString());
+    reactionThrew = false;
+    reactionRes = null;
+    try {
+        reactionRes = toggleMessageReaction(msgArrayMeta, A, '🔥');
+    } catch (e: any) {
+        reactionThrew = true;
+    }
+    assert(!reactionThrew, 'toggleMessageReaction does not throw when message metadata is a JSON array');
+    assert(!!reactionRes && reactionRes.success === true, 'toggleMessageReaction succeeds on array metadata');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

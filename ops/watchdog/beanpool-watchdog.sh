@@ -43,9 +43,11 @@ declare -A FAILS LAST_RESTART RESTART_TIMES RECOVERIES LAST_RECOVERY
 log(){ printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >> "$LOG"; }
 
 # Host path of the container's /data mount, so we can drop a status file the
-# node itself serves via /api/community/health (the fleet manager already polls
-# that endpoint — this is how watchdog activity becomes visible + alertable
-# without the node being able to reach the manager).
+# node itself serves via /api/community/health — this is how watchdog activity
+# becomes visible + alertable without the node being able to reach the manager.
+# (The fleet manager reads it from POST /api/local/admin/data, not from here;
+# the public endpoint is what lets plain uptime monitoring see it without
+# admin credentials.)
 data_dir(){ docker inspect "$1" --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null; }
 
 # Write a heartbeat + recovery tally into the node's data dir. The node reads

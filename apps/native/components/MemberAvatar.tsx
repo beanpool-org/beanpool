@@ -15,6 +15,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { avatarUri } from '../utils/image-processing';
+import { anchorUrl, getCachedAnchorUrl } from '../utils/node-post';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
 import { colors, palette } from '../constants/colors';
 
@@ -61,10 +62,19 @@ function MemberAvatarBase({
     enlargeable = false,
 }: MemberAvatarProps) {
     const [viewerOpen, setViewerOpen] = React.useState(false);
+    const [anchor, setAnchor] = React.useState<string | null>(getCachedAnchorUrl());
+    React.useEffect(() => {
+        if (!anchor) {
+            anchorUrl().then(u => {
+                if (u) setAnchor(u.replace(/\/+$/, ''));
+            });
+        }
+    }, [anchor]);
+
     const radius = borderRadius ?? size / 2;
     // Defensively clean raw string inputs to prevent invalid rendering on iOS
     const cleanedAvatarUrl = (avatarUrl && avatarUrl !== 'null' && avatarUrl !== 'undefined' && avatarUrl.trim() !== '') ? avatarUrl : null;
-    let uri = avatarUri(cleanedAvatarUrl, pubkey, updatedAt);
+    let uri = avatarUri(cleanedAvatarUrl, pubkey, updatedAt, anchor);
     const fontSize = Math.max(Math.round(size * 0.42), 10);
 
     // Resolve the image source once, so the small avatar and the enlarged view

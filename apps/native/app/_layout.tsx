@@ -499,10 +499,10 @@ function RootLayoutNav() {
                 recoveryNavPrompted.current = true;
                 Alert.alert(
                     'Account recovery reported',
-                    'The node you are connected to reports a recovery in progress for your account. This may be a legitimate guardian recovery — or a node trying to mislead you. Open the recovery screen to review?',
+                    'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
                     [
                         { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace('/recover-identity'); } },
+                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
                     ],
                 );
             }
@@ -519,7 +519,23 @@ function RootLayoutNav() {
             // brief window before createRecoveryRequest lands and the node starts
             // reporting 'recovering'. They're on that screen on purpose.
             if (root !== 'node-mismatch' && root !== 'welcome' && root !== 'recover-identity') {
-                router.replace('/node-mismatch');
+                // Nor a deliberate guest. Browsing a community you haven't joined is a
+                // real state, and it probes identically to a mistyped address — so it is
+                // distinguished by recorded intent, not by the probe. Without this the
+                // watcher ejects the member from the Register screen that would let them
+                // join (the 2026-09-02 lockout).
+                void (async () => {
+                    try {
+                        const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+                        if (anchor) {
+                            const { isGuestNode } = await import('../utils/nodes');
+                            if (await isGuestNode(anchor)) return;
+                        }
+                    } catch {
+                        // Fall through to the divert: node-mismatch is now escapable.
+                    }
+                    if (isComponentMounted.current) router.replace('/node-mismatch');
+                })();
             }
             return;
         }
@@ -659,11 +675,18 @@ export default function RootLayout() {
                 const lastRunVersion = await AsyncStorage.getItem('beanpool_last_run_version');
                 const currentVersion = appConfig.expo.version;
                 if (lastRunVersion !== currentVersion) {
-                    await AsyncStorage.removeItem('beanpool_latest_known_version');
-                    await AsyncStorage.removeItem('beanpool_last_version_check_time');
-                    if (lastRunVersion) {
-                        await AsyncStorage.removeItem(`beanpool_dismissed_update_${lastRunVersion}`);
-                    }
+                    // Dismissals are keyed by the STORE version, never by the app's own, so
+                    // removing the key named after the version we just left cleared the wrong
+                    // one and the right ones accumulated forever. After an update every stored
+                    // dismissal is spent anyway, and each node's floor is re-sent within 30s.
+                    const staleKeys = (await AsyncStorage.getAllKeys()).filter(
+                        k => k.startsWith('beanpool_dismissed_update_') || k.startsWith('beanpool_min_app_version')
+                    );
+                    await AsyncStorage.multiRemove([
+                        'beanpool_latest_known_version',
+                        'beanpool_last_version_check_time',
+                        ...staleKeys,
+                    ]);
                     await AsyncStorage.setItem('beanpool_last_run_version', currentVersion);
                 }
             } catch (e) {

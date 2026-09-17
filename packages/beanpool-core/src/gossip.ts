@@ -48,10 +48,12 @@ export class GossipManager {
 
             const incomingPins = payload.pins || [];
             const localPins = this.routerManager.getPins();
+            // ⚡ Bolt: Pre-compute Map for O(1) lookup to eliminate O(N*M) nested array scan
+            const localPinsById = new Map(localPins.map(p => [p.id, p]));
 
             for (const incomingPin of incomingPins) {
                 // Last-Write-Wins Logic based on updatedAt or expiresAt fallback
-                const existingPin = localPins.find(p => p.id === incomingPin.id);
+                const existingPin = localPinsById.get(incomingPin.id);
 
                 if (existingPin) {
                     const incomingTime = new Date(incomingPin.updatedAt || incomingPin.expiresAt).getTime();

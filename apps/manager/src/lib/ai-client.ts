@@ -29,9 +29,16 @@ export function saveAiConfig(config: AiConfig): void {
     } catch {}
 }
 
+export interface CopilotContextData {
+    telemetry?: unknown;
+    gateway?: unknown;
+    members?: unknown[] | null;
+    logs?: unknown[] | null;
+}
+
 export async function askAiCopilot(
     prompt: string,
-    contextData: { telemetry?: any; gateway?: any; members?: any; logs?: any[] },
+    contextData: CopilotContextData,
     config: AiConfig = loadAiConfig()
 ): Promise<string> {
     const systemPrompt = `You are BeanPool Sovereign Fleet AI Copilot — an autonomous node diagnostics and community assistant.
@@ -58,16 +65,20 @@ Provide clear, professional, concise, actionable advice in Markdown format.`;
             if (!res.ok) throw new Error(`Ollama HTTP ${res.status}: ${res.statusText}`);
             const data = await res.json();
             return data.response || 'No response received from Ollama.';
-        } catch (e: any) {
+        } catch {
             // Fallback simulation / helpful guidance if Ollama local server is not reachable right now
+            const telemetryStatus = (contextData.telemetry as { status?: string } | undefined)?.status || 'ONLINE';
+            const dbSizeBytes = (contextData.telemetry as { dbSizeBytes?: number } | undefined)?.dbSizeBytes || 0;
+            const activeWs = (contextData.telemetry as { activeWsConnections?: number } | undefined)?.activeWsConnections || 0;
+            const p2pPeers = (contextData.telemetry as { p2pActivePeers?: number } | undefined)?.p2pActivePeers || 0;
             return `### 🤖 Sovereign AI Copilot Analysis (Local Diagnostic Mode)
 
 *Notice: Could not connect to local Ollama server at \`${config.baseUrl}\`. Running offline diagnostic synthesis:*
 
 **Node Health Assessment:**
-- **Status:** Target node status is \`${contextData.telemetry?.status || 'ONLINE'}\`.
-- **Database Storage:** ${(contextData.telemetry?.dbSizeBytes ? contextData.telemetry.dbSizeBytes / (1024 * 1024) : 0).toFixed(2)} MB.
-- **WebSocket & P2P Connections:** ${contextData.telemetry?.activeWsConnections || 0} active WebSocket streams, ${contextData.telemetry?.p2pActivePeers || 0} P2P peers.
+- **Status:** Target node status is \`${telemetryStatus}\`.
+- **Database Storage:** ${(dbSizeBytes / (1024 * 1024)).toFixed(2)} MB.
+- **WebSocket & P2P Connections:** ${activeWs} active WebSocket streams, ${p2pPeers} P2P peers.
 
 **Recommendations:**
 1. Maintain active WAL checkpoints to keep SQLite memory usage optimized.
@@ -93,8 +104,9 @@ Provide clear, professional, concise, actionable advice in Markdown format.`;
             if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${res.statusText}`);
             const data = await res.json();
             return data.choices?.[0]?.message?.content || 'No response from OpenRouter.';
-        } catch (e: any) {
-            return `❌ OpenRouter API Request Failed: ${e.message}. Please verify your API key and network connection.`;
+        } catch (e: unknown) {
+            const errMessage = e instanceof Error ? e.message : String(e);
+            return `❌ OpenRouter API Request Failed: ${errMessage}. Please verify your API key and network connection.`;
         }
     }
 

@@ -5,7 +5,7 @@
  * Mirrors the native app's Trust Level and Financials tab layout and visualizations.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, getMembers,
@@ -14,18 +14,26 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
+import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { withJitter } from '../lib/jitter';
+import { onSyncActivity } from '../lib/sync';
 
 interface Props {
     identity: BeanPoolIdentity;
     onNavigate?: (tab: string, contextId?: string) => void;
+    /**
+     * False for a guest — a local key the node has no member for. The node answers "Member not found"
+     * for its balance, so a guest's balance is not fetched and no error is shown. Omitted means a member.
+     */
+    isMember?: boolean;
 }
 
 // Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
 // (floors slide continuously between them). `min` = earned+granted credit needed.
 const TIERS = [
-    { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: -20,
-      blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — a small welcome voucher gets you moving.",
-      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits when your balance is positive'] },
+    { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: 0,
+      blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
+      perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
     { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
       perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
@@ -41,7 +49,7 @@ const TIERS = [
 // qualified, diversity-capped trade VALUE. Floors slide continuously; gifts build no trust.
 const CREDIT_MAX_EARNED = 1920;
 const TRUST_CURVE_K = 5000;
-const PER_COUNTERPARTY_CAP = 5000;
+const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP; // canonical 500 from @beanpool/core
 // Inverse of the curve: qualified value needed to reach a target earned credit.
 function valueForEarned(target: number): number {
     if (target <= 0) return 0;
@@ -49,7 +57,12 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember }: Props) {
+    const viewerIsMember = isMember !== false;
+    // App learns guest status after mount, so a member-style refresh can still be in flight when this
+    // flips to false; its failure must not put an error in front of the guest.
+    const viewerIsMemberRef = useRef(viewerIsMember);
+    viewerIsMemberRef.current = viewerIsMember;
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
@@ -97,28 +110,109 @@ export function LedgerPage({ identity, onNavigate }: Props) {
         return sanitized;
     }
 
+    const lastRefreshTimeRef = useRef<number>(0);
+    const refreshPromiseRef = useRef<Promise<void> | null>(null);
+    // Guards the state writes below: this refresh is now also triggered by the socket, so it can
+    // easily still be in flight when the member navigates away from the ledger.
+    const isMountedRef = useRef(true);
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => { isMountedRef.current = false; };
+    }, []);
+
     const refresh = useCallback(async () => {
-        try {
-            const [bal, txn, mem] = await Promise.all([
-                getBalance(identity.publicKey).catch(() => null),
-                getTransactions(identity.publicKey).catch(() => []),
-                getMembers().catch(() => []),
-            ]);
-            if (bal) setBalanceInfo(bal);
-            setTxns(txn);
-            setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+        if (!viewerIsMember) {
+            // Same approach as the enterprise page: a guest has no balance on the node, so don't ask.
             setError(null);
-        } catch (e: any) {
-            setError(e.message || 'Failed to load');
-        } finally {
             setLoading(false);
+            lastRefreshTimeRef.current = Date.now();
+            return;
         }
-    }, [identity.publicKey]);
+        if (refreshPromiseRef.current) return refreshPromiseRef.current;
+        const p = (async () => {
+            try {
+                const [bal, txn, mem] = await Promise.all([
+                    getBalance(identity.publicKey).catch(() => null),
+                    getTransactions(identity.publicKey).catch(() => []),
+                    getMembers().catch(() => []),
+                ]);
+                // The balance is the point of this screen, so a balance that failed to load is a
+                // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
+                // fail meant a blip on getBalance alone left the previous balance on screen,
+                // stamped the refresh as successful, and started the cooldown — so the stale
+                // number could stand until the 300s backstop with no error shown.
+                if (!bal) {
+                    throw new Error('Failed to load balance');
+                }
+                if (!isMountedRef.current) return;
+                setBalanceInfo(bal);
+                setTxns(txn);
+                setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                setError(null);
+                // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
+                // so the cooldown then suppressed the retry — a blip could leave the view stale
+                // until the 300s backstop, which is exactly the window this stage widened.
+                lastRefreshTimeRef.current = Date.now();
+            } catch (e: any) {
+                if (viewerIsMemberRef.current) setError(e.message || 'Failed to load');
+                throw e;
+            } finally {
+                setLoading(false);
+                refreshPromiseRef.current = null;
+            }
+        })();
+        refreshPromiseRef.current = p;
+        return p;
+    }, [identity.publicKey, viewerIsMember]);
 
     useEffect(() => {
-        refresh();
-        const interval = setInterval(refresh, 10_000);
-        return () => clearInterval(interval);
+        let interval: ReturnType<typeof setInterval> | null = null;
+
+        const startPolling = () => {
+            if (!interval) {
+                refresh().catch(() => {});
+                interval = setInterval(() => {
+                    refresh().catch(() => {});
+                }, withJitter(300_000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Fast path: WebSocket broadcasts trigger coordinated sync.
+        // Returns the in-flight or fresh promise to coordinator so delta cursor advances only on success.
+        // Coalesces with visibilitychange / reconnect sync if already in-flight or refreshed within 2000ms.
+        const unsubscribe = onSyncActivity(() => {
+            if (document.hidden) return;
+            if (refreshPromiseRef.current) return refreshPromiseRef.current;
+            if (Date.now() - lastRefreshTimeRef.current < 2000) return;
+            return refresh();
+        });
+
+        return () => {
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            unsubscribe();
+        };
     }, [refresh]);
 
     async function handleSend() {
@@ -146,7 +240,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     }
 
     const balance = balanceInfo?.balance ?? 0;
-    const floor = balanceInfo?.floor ?? -80;              // earned credit LIMIT (how deep you could go)
+    const floor = balanceInfo?.floor ?? 0;              // earned credit LIMIT (how deep you could go)
     const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
     const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
@@ -158,7 +252,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
-    const canSend = balance > 0;                        // gate: positive balance (tiers are merit badges, not gates)
+    const canSend = balance > 0 && earned > 0;          // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
@@ -188,7 +282,9 @@ export function LedgerPage({ identity, onNavigate }: Props) {
     const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
 
-    const selectedMember = members.find(m => m.publicKey === sendTo);
+    // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
+    const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
+    const selectedMember = membersMap.get(sendTo);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
 
     return (
@@ -303,11 +399,11 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
                             <button
                                 onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 text-nature-400 cursor-default'}`}
-                                style={{ background: 'none', font: 'inherit' }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 cursor-default'}`}
+                                style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? 'Send Credits' : 'Send (needs +ve balance)'}</span>
+                                <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
                             </button>
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
                                 <span>✓</span>
@@ -351,13 +447,15 @@ export function LedgerPage({ identity, onNavigate }: Props) {
 
                     {/* ── Selected-level detail ── */}
                     <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
-                        <div className="flex items-center gap-3 mb-4">
+                        {/* Wraps: at 320px with 1.3x text the level name and badge ran 22px past the card and
+                            dragged the whole Ledger page sideways. */}
+                        <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
                             <span className="text-3xl leading-none">{sel.emoji}</span>
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-[7rem]">
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
                                 {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
                             </span>
                         </div>
@@ -392,7 +490,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!selReached && selNeeded > 0 && (
                             <p className="text-[11px] text-nature-400 italic mt-4">Reach {sel.min} trust ({selNeeded} to go) from the real value you trade.</p>
                         )}
-                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Anyone with a positive balance can send. Higher levels mean a deeper credit line and community recognition.</p>
+                        <p className="text-[11px] text-nature-400 italic mt-2">Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.</p>
                     </div>
 
                     {/* How to reach next tier */}
@@ -419,19 +517,19 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                     )}
 
                     {/* What builds trust: value traded, a diverse circle of partners, and reputation */}
-                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 shadow-sm">
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-3 gap-1.5 sm:gap-3" data-testid="trust-builders">
                             {[
                                 { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: '#10b981' },
                                 { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
                                 { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (
-                                <div key={a.label} className="p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
+                                <div key={a.label} className="min-w-0 px-1.5 py-2 sm:p-3 border border-nature-200 dark:border-nature-800 rounded-xl flex flex-col justify-between">
                                     <div>
                                         <span className="text-xl">{a.icon}</span>
                                         <div className="text-lg font-black text-nature-950 dark:text-white mt-1 leading-none">{a.big}</div>
-                                        <div className="text-[9px] font-bold text-nature-400 uppercase tracking-wider mt-1">{a.label}</div>
+                                        <div className="text-[9px] font-bold text-nature-400 uppercase sm:tracking-wider mt-1 [overflow-wrap:anywhere]">{a.label}</div>
                                     </div>
                                     <div className="mt-3">
                                         <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full overflow-hidden">
@@ -474,7 +572,7 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                                 {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>
-                            <p className="text-nature-450 dark:text-nature-450 text-[10px] mt-1 font-semibold">
+                            <p className="text-nature-500 dark:text-nature-400 text-[10px] mt-1 font-semibold">
                                 🌱 View Solvency & Tax
                             </p>
                         </button>
@@ -485,19 +583,23 @@ export function LedgerPage({ identity, onNavigate }: Props) {
                         {!canSend && (
                             <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
-                                    🔒 You can send credits whenever your balance is positive — earn some by completing a trade on the Marketplace.
+                                    {earned <= 0
+                                        ? '🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.'
+                                        : '🔒 You can only send beans you currently hold — direct sends require a positive balance.'}
                                 </p>
                             </div>
                         )}
                         <button
                             onClick={() => canSend && setShowSend(!showSend)}
                             disabled={!canSend}
-                            className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer transition-all shadow-md ${
-                                !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-450 cursor-not-allowed opacity-60' :
+                            className={`w-full p-4 rounded-xl text-sm sm:text-[15px] break-words font-bold border-none cursor-pointer transition-all shadow-md ${
+                                !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-[#d97757] text-white hover:bg-[#c26749]'
                             }`}
                         >
-                            {!canSend ? '🔒 Send Credits (needs positive balance)' : showSend ? '✕ Cancel' : '💸 Send Credits'}
+                            {!canSend
+                                ? (earned <= 0 ? '🔒 Send Credits (needs 1 completed trade)' : '🔒 Send Credits (needs positive balance)')
+                                : showSend ? '✕ Cancel' : '💸 Send Credits'}
                         </button>
 
                         {/* Send Form */}

@@ -15,7 +15,8 @@ export enum SystemMessageType {
     REVIEW_LEFT = 'REVIEW_LEFT',
     COMMONS_GRANT = 'COMMONS_GRANT',
     VOUCH_GRANTED = 'VOUCH_GRANTED',
-    VOUCH_REVOKED = 'VOUCH_REVOKED'
+    VOUCH_REVOKED = 'VOUCH_REVOKED',
+    ESCROW_DISPUTE_RESOLVED = 'ESCROW_DISPUTE_RESOLVED'
 }
 
 export type SystemMessageTypeVal = SystemMessageType | string;
@@ -31,6 +32,10 @@ export interface TypedMessagePayload {
     targetPubkey?: string;
     vouchLevel?: number;
     creditFloor?: number;
+    resolution?: string;
+    authSigner?: string;
+    reason?: string;
+    transactionId?: string;
 }
 
 export interface Message {
@@ -49,7 +54,7 @@ export interface Message {
 
 export interface Conversation {
     id: string;
-    type: 'dm' | 'group' | string;
+    type: 'dm' | 'group' | 'enterprise_thread' | string;
     postId?: string;
     postTitle?: string;
     postStatus?: string;
@@ -99,7 +104,7 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
         LEFT JOIN messages m ON m.rowid = (
             SELECT MAX(rowid) FROM messages WHERE conversation_id = c.id
         )
-        WHERE cp.public_key = ?
+        WHERE cp.public_key = ? AND c.type != 'enterprise_thread'
         ORDER BY (m.rowid IS NULL) ASC, m.rowid DESC, c.created_at DESC
     `).all(pubkey) as any[];
 
@@ -162,7 +167,11 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
             const peerMember = membersByPubkey.get(peerPubkey);
             if (peerMember) {
                 peerCallsign = peerMember.callsign;
-                peerAvatar = peerMember.avatar_url || null;
+                peerAvatar = peerMember.avatar_url
+                    ? (peerMember.avatar_url.startsWith('bundled://')
+                        ? peerMember.avatar_url
+                        : `/api/avatar/${peerMember.public_key}?size=thumb`)
+                    : null;
             }
         }
 
@@ -247,7 +256,8 @@ export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> 
                   AND (cp.last_read_at IS NULL OR m.timestamp > cp.last_read_at)
                ) as unread_count
         FROM conversation_participants cp
-        WHERE cp.public_key = ?
+        JOIN conversations c ON cp.conversation_id = c.id
+        WHERE cp.public_key = ? AND c.type != 'enterprise_thread'
     `).all(pubkey, pubkey) as any[];
 
     const counts: Record<string, number> = {};

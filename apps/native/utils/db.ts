@@ -252,8 +252,53 @@ async function _doInitDB() {
             reach TEXT DEFAULT 'local',
             reach_peers TEXT,
             author_energy_cycled INTEGER DEFAULT 0,
-            author_founding_needed INTEGER DEFAULT 1
+            author_founding_needed INTEGER DEFAULT 1,
+            poll_options TEXT,
+            poll_closes_at DATETIME,
+            audience_scope TEXT DEFAULT 'public',
+            target_group_id TEXT,
+            target_pubkey TEXT,
+            assigned_to TEXT,
+            target_archetypes TEXT
         );
+
+        -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
+        -- A group is an audience scope and NOTHING else. Roles: convenor | member | observer.
+        CREATE TABLE IF NOT EXISTS groups (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            description TEXT,
+            avatar_url TEXT,
+            category TEXT DEFAULT 'general',
+            created_by TEXT NOT NULL,
+            join_policy TEXT DEFAULT 'open',
+            is_official INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id TEXT NOT NULL,
+            member_pubkey TEXT NOT NULL,
+            role TEXT DEFAULT 'member',
+            status TEXT DEFAULT 'active',
+            joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            invited_by TEXT,
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (group_id, member_pubkey)
+        );
+        CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
+
+        CREATE TABLE IF NOT EXISTS poll_votes (
+            post_id TEXT NOT NULL,
+            voter_pubkey TEXT NOT NULL,
+            option_id TEXT NOT NULL,
+            signature TEXT,
+            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (post_id, voter_pubkey)
+        );
+        CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -399,6 +444,13 @@ async function _doInitDB() {
         // Add post caching column to marketplace_transactions table
         try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
 
+        // Add audience scoping columns to posts table
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
+
         // Add price_type column if not exists
         try {
             await database.execAsync(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed';`);
@@ -430,6 +482,22 @@ async function _doInitDB() {
         // #143 step 4: per-listing reach control for federation
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
+        // Community Polls migrations
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
+        try {
+            await database.execAsync(`
+                CREATE TABLE IF NOT EXISTS poll_votes (
+                    post_id TEXT NOT NULL,
+                    voter_pubkey TEXT NOT NULL,
+                    option_id TEXT NOT NULL,
+                    signature TEXT,
+                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (post_id, voter_pubkey)
+                );
+                CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+            `);
+        } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
         try { 
             await database.execAsync(`
@@ -502,7 +570,7 @@ export async function clearDB() {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
     const database = await getDb();
-    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings;');
+    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes;');
     
     // Reset flags to force schema recreation
     dbInitialized = false;
@@ -514,12 +582,13 @@ export async function clearDB() {
 /**
  * PWA Fetch Equivalents executed cleanly across the Local Disk
  */
-export async function getPosts(filter?: { type?: string; category?: string }) {
+export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string }) {
     let database = await waitForInit();
     let query = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
+        LEFT JOIN groups g ON p.target_group_id = g.id
         WHERE p.status IN ('active', 'pending', 'completed')
     `;
     const params: any[] = [];
@@ -531,6 +600,16 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
     if (filter?.category) {
         query += ' AND p.category = ?';
         params.push(filter.category);
+    }
+    if (filter?.targetGroupId) {
+        query += ' AND p.target_group_id = ?';
+        params.push(filter.targetGroupId);
+    }
+    if (filter?.audienceScope) {
+        query += ' AND p.audience_scope = ?';
+        params.push(filter.audienceScope);
+    } else if (!filter?.targetGroupId) {
+        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
     }
     query += ' ORDER BY p.created_at DESC';
     
@@ -557,9 +636,49 @@ export async function getPosts(filter?: { type?: string; category?: string }) {
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
 
+    // Fetch local user votes for poll rows so userVotedOptionId is preserved across reloads
+    const pollRows = rows.filter(r => r.type === 'poll');
+    const localVotes = new Map<string, string>();
+    if (pollRows.length > 0) {
+        try {
+            const identity = await loadIdentity();
+            if (identity?.publicKey) {
+                const voteRows = await database.getAllAsync(
+                    `SELECT post_id, option_id FROM poll_votes WHERE voter_pubkey = ?`,
+                    [identity.publicKey]
+                ) as any[];
+                for (const v of voteRows) {
+                    localVotes.set(v.post_id, v.option_id);
+                }
+            }
+        } catch { }
+    }
+
     return rows.map(r => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        r.audienceScope = r.audience_scope || 'public';
+        r.targetGroupId = r.target_group_id || null;
+        r.targetGroupName = r.target_group_name || null;
+        r.targetPubkey = r.target_pubkey || null;
+        r.assignedTo = r.assigned_to || null;
+        r.targetArchetypes = r.target_archetypes || null;
+
+        if (r.type === 'poll') {
+            if (typeof r.poll_options === 'string') {
+                try { r.pollOptions = JSON.parse(r.poll_options); } catch { r.pollOptions = []; }
+            } else if (Array.isArray(r.poll_options)) {
+                r.pollOptions = r.poll_options;
+            } else if (Array.isArray(r.pollOptions)) {
+                // already array
+            } else {
+                r.pollOptions = [];
+            }
+            r.pollClosesAt = r.poll_closes_at || r.pollClosesAt;
+            if (localVotes.has(r.id)) {
+                r.userVotedOptionId = localVotes.get(r.id);
+            }
+        }
 
         if (typeof r.photos === 'string') {
             try {
@@ -608,7 +727,7 @@ export async function getPost(id: string) {
     // server response never deletes local rows — deletion is applyDelta's job
     // (the server tombstones deleted posts with active=0).
     if (anchorUrl) {
-        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true&_t=${Date.now()}`)
+        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`)
             .then(res => res.json())
             .then(async posts => {
                 if (!Array.isArray(posts) || posts.length === 0) return;
@@ -619,7 +738,7 @@ export async function getPost(id: string) {
                 await acquireSyncLock();
                 try {
                     await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [
                             p.id ?? id,
                             p.type ?? null,
@@ -647,7 +766,9 @@ export async function getPost(id: string) {
                             p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
                             p.reach || 'local',
-                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null
+                            (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null,
+                            p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
+                            p.poll_closes_at || p.pollClosesAt || null
                         ]
                     );
                 } finally {
@@ -813,6 +934,7 @@ export async function getConversations(myPubkey: string) {
         LEFT JOIN posts p ON c.post_id = p.id
         LEFT JOIN marketplace_transactions mt ON mt.post_id = p.id AND mt.status = 'pending'
         WHERE c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+          AND (c.type IS NULL OR c.type != 'enterprise_thread')
         GROUP BY c.id
         ORDER BY timestamp DESC
     `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
@@ -1010,7 +1132,9 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
         SELECT COUNT(m.id) as count
         FROM messages m
         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
+        JOIN conversations c ON c.id = m.conversation_id
         WHERE cp.public_key = ? 
+        AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
     `, [myPubkey, myPubkey]);
@@ -1021,7 +1145,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) return;
     try {
-        const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}?_t=${Date.now()}`);
+        const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}`);
         if (!res.ok) return;
         const balData = await res.json();
         const database = await getDb();
@@ -1178,7 +1302,7 @@ export async function getTransactions(pubkey: string) {
     AsyncStorage.getItem('beanpool_anchor_url').then(async (anchorUrl: string | null) => {
         if (!anchorUrl) return;
         try {
-            const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20&_t=${Date.now()}`);
+            const res = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubkey}&limit=20`);
             if (res.ok) {
                 const txns = await res.json();
                 if (Array.isArray(txns) && txns.length > 0) {
@@ -1382,64 +1506,18 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
             });
         }
     } catch { /* canonical mirror is best-effort */ }
+
+    // GlobalHeader loaded the avatar once, keyed on identity.publicKey — which never changes
+    // during a session — so a new profile picture only appeared after the header happened to
+    // remount. Every profile write funnels through here, so this is the one place to say so.
+    // Lazy require, matching the other emitters in this file: db.ts is also loaded by the
+    // vitest suite in plain Node, where a top-level react-native import would blow up.
+    try {
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('profile_updated', { pubkey });
+    } catch { /* not in a RN runtime */ }
 }
 
-export async function getProjects() {
-    const database = await getDb();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
-    const rows = await database.getAllAsync<any>(`
-        SELECT p.*, m.callsign as creator_callsign, m.avatar_url as creator_avatar
-        FROM projects p
-        LEFT JOIN members m ON p.creator_pubkey = m.public_key
-        ORDER BY p.created_at DESC
-    `);
-    return rows.map(row => {
-        let parsedPhotos = row.photos;
-        if (typeof row.photos === 'string') {
-            try { 
-                parsedPhotos = JSON.parse(row.photos); 
-                if (Array.isArray(parsedPhotos)) {
-                    parsedPhotos = parsedPhotos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
-                }
-            } catch (e) { parsedPhotos = []; }
-        }
-        return {
-            ...row,
-            photos: parsedPhotos,
-            goal: row.goal_amount,
-            current: row.current_amount,
-            type: 'community' // fallback mapping
-        };
-    });
-}
-
-export async function getProjectById(id: string) {
-    const database = await getDb();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
-    const row = await database.getFirstAsync<any>(`
-        SELECT p.*, m.callsign as creator_callsign, m.avatar_url as creator_avatar
-        FROM projects p
-        LEFT JOIN members m ON p.creator_pubkey = m.public_key
-        WHERE p.id = ?;
-    `, [id]);
-    if (!row) return null;
-    let parsedPhotos = row.photos;
-    if (typeof row.photos === 'string') {
-        try { 
-            parsedPhotos = JSON.parse(row.photos); 
-            if (Array.isArray(parsedPhotos)) {
-                parsedPhotos = parsedPhotos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
-            }
-        } catch (e) { parsedPhotos = []; }
-    }
-    return {
-        ...row,
-        photos: parsedPhotos,
-        goal: row.goal_amount,
-        current: row.current_amount,
-        type: 'community'
-    };
-}
 
 /** #143 step 4 — which communities a listing can be aimed at (peers this node settles with).
  *  Returns empty on non-federated nodes, which hides the reach chooser in the composer. */
@@ -1495,6 +1573,16 @@ export async function createPost(post: any) {
         // #143 step 4 — per-listing reach. Omitted fields default to 'local' on the server.
         ...(post.reach ? { reach: post.reach } : {}),
         ...(post.reach === 'peers' && post.reachPeers ? { reachPeers: post.reachPeers } : {}),
+        // Flatten poll parameters to top-level request body
+        ...(post.type === 'poll' ? {
+            pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
+            durationDays: post.durationDays || 7
+        } : {}),
+        ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
+        ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
+        ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(post.targetArchetypes || post.target_archetypes ? { targetArchetypes: post.targetArchetypes || post.target_archetypes } : {})
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);
@@ -1550,163 +1638,159 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
-         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null]
+         post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
+         post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
+         post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null),
+         post.audienceScope || post.audience_scope || 'public',
+         post.targetGroupId || post.target_group_id || null]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
+}
+
+export async function votePoll(postId: string, optionId: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline.');
+    }
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+    const body = {
+        postId,
+        optionId,
+        voterPublicKey: identity.publicKey
+    };
+    const bodyString = JSON.stringify(body);
+    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`, {
+        method: 'POST',
+        headers,
+        body: bodyString
+    });
+    if (!res.ok) {
+        const txt = await res.text();
+        let errMsg = 'Failed to record vote';
+        try {
+            const j = JSON.parse(txt);
+            if (j.error) errMsg = j.error;
+        } catch {
+            if (txt) errMsg = txt;
+        }
+        throw new Error(errMsg);
+    }
+    const json = await res.json();
+    if (json?.post) {
+        try {
+            const database = await waitForInit();
+            await database.runAsync(
+                `UPDATE posts SET poll_options = ?, status = ?, updated_at = ? WHERE id = ?`,
+                [
+                    JSON.stringify(json.post.pollOptions || []),
+                    json.post.status,
+                    json.post.updatedAt || new Date().toISOString(),
+                    postId
+                ]
+            );
+            await database.runAsync(
+                `INSERT OR REPLACE INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at) VALUES (?, ?, ?, ?, ?)`,
+                [postId, identity.publicKey, optionId, '', new Date().toISOString()]
+            );
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to persist vote locally:', dbErr);
+        }
+    }
+    return json;
+}
+
+export async function closePoll(postId: string) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline.');
+    }
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+    const body = {
+        postId,
+        authorPublicKey: identity.publicKey
+    };
+    const bodyString = JSON.stringify(body);
+    const headers = await buildSignedHeaders('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/close`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/close`, {
+        method: 'POST',
+        headers,
+        body: bodyString
+    });
+    if (!res.ok) {
+        const txt = await res.text();
+        let errMsg = 'Failed to close poll';
+        try {
+            const j = JSON.parse(txt);
+            if (j.error) errMsg = j.error;
+        } catch {
+            if (txt) errMsg = txt;
+        }
+        throw new Error(errMsg);
+    }
+    const json = await res.json();
+    if (json?.post) {
+        try {
+            const database = await waitForInit();
+            await database.runAsync(
+                `UPDATE posts SET status = ?, updated_at = ? WHERE id = ?`,
+                [json.post.status, json.post.updatedAt || new Date().toISOString(), postId]
+            );
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to persist poll close locally:', dbErr);
+        }
+    }
+    return json;
+}
+
+export async function createEnterpriseApi(data: {
+    name: string;
+    purpose?: string;
+    description?: string;
+    lifecycle?: 'ongoing' | 'bounded';
+    goalAmount?: number | null;
+    deadlineAt?: string | null;
+    avatar?: string;
+    photos?: string[];
+}) {
+    return _signedRequest('/api/enterprise', data);
 }
 
 export async function createProject(project: {
     title: string;
     description: string;
-    goal_amount: number;
+    goal_amount?: number;
     photos?: string[];
     deadline_at?: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
 }) {
-    await waitForInit();
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to propose your project.');
-    }
-
-    const identity = await loadIdentity();
-    if (!identity) {
-        throw new Error('No identity found.');
-    }
-
-    const projectId = Crypto.randomUUID();
-
-    const body = {
-        id: projectId,
-        creatorPubkey: identity.publicKey,
-        title: project.title,
+    return createEnterpriseApi({
+        name: project.title,
+        purpose: project.description,
         description: project.description,
-        photos: project.photos || [],
+        lifecycle: project.lifecycle || (project.goal_amount ? 'bounded' : 'ongoing'),
         goalAmount: project.goal_amount,
-        deadlineAt: project.deadline_at || null,
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects', bodyString, identity.privateKey, identity.publicKey);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-        res = await fetch(`${anchorUrl}/api/crowdfund/projects`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-            signal: controller.signal,
-        });
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to propose projects.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) {
-        const txt = await res.text();
-        let errMsg = 'Network request failed or server rejected the project.';
-        try {
-            const json = JSON.parse(txt);
-            if (json.error) errMsg = json.error;
-        } catch (e) {
-            if (txt) errMsg = txt;
-        }
-        throw new Error(errMsg);
-    }
-
-    // Save to SQLite
-    await acquireSyncLock({ urgent: true }); // user pressed "create" — jump the sync queue
-    try {
-        const database = await getDb();
-        await database.runAsync(
-             `INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, status, created_at, deadline_at)
-              VALUES (?, ?, ?, ?, ?, ?, 0, 'ACTIVE', ?, ?)`,
-             [projectId, identity.publicKey, project.title, project.description, JSON.stringify(project.photos || []), project.goal_amount, new Date().toISOString(), project.deadline_at || null]
-        );
-    } finally {
-        releaseSyncLock();
-    }
-}
-
-
-export async function updateCrowdfundProjectApi(
-    projectId: string,
-    title: string,
-    description: string,
-    photos: string[],
-    goalAmount: number,
-    deadlineAt?: string | null
-) {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to update your project.');
-    }
-
-    const identity = await loadIdentity();
-    if (!identity) {
-        throw new Error('No identity found.');
-    }
-
-    const body = {
-        id: projectId,
-        creatorPubkey: identity.publicKey,
-        title,
-        description,
-        photos,
-        goalAmount,
-        deadlineAt: deadlineAt || null,
-    };
-    const bodyString = JSON.stringify(body);
-    const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/update', bodyString, identity.privateKey, identity.publicKey);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-        res = await fetch(`${anchorUrl}/api/crowdfund/projects/update`, {
-            method: 'POST',
-            headers,
-            body: bodyString,
-            signal: controller.signal,
-        });
-    } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to update projects.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || 'Failed to update project.');
-    }
-
-    // Update local SQLite
-    const database = await getDb();
-    if (deadlineAt !== undefined) {
-         await database.runAsync(
-             `UPDATE projects SET title = ?, description = ?, photos = ?, goal_amount = ?, deadline_at = ?
-              WHERE id = ? AND creator_pubkey = ?`,
-             [title, description, JSON.stringify(photos), goalAmount, deadlineAt, projectId, identity.publicKey]
-         );
-    } else {
-         await database.runAsync(
-             `UPDATE projects SET title = ?, description = ?, photos = ?, goal_amount = ?
-              WHERE id = ? AND creator_pubkey = ?`,
-             [title, description, JSON.stringify(photos), goalAmount, projectId, identity.publicKey]
-         );
-    }
+        deadlineAt: project.deadline_at,
+        photos: project.photos,
+        avatar: project.photos && project.photos.length > 0 ? project.photos[0] : undefined,
+    });
 }
 
 export async function deleteCrowdfundProjectApi(projectId: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
-        throw new Error('You are currently offline. Please connect to a BeanPool Node to delete your project.');
+        throw new Error('You are currently offline. Please connect to a BeanPool Node to cancel your initiative.');
     }
 
     const identity = await loadIdentity();
@@ -1716,7 +1800,7 @@ export async function deleteCrowdfundProjectApi(projectId: string) {
 
     const body = {
         id: projectId,
-        creatorPubkey: identity.publicKey
+        creatorPubkey: identity.publicKey,
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/crowdfund/projects/delete', bodyString, identity.privateKey, identity.publicKey);
@@ -1732,44 +1816,20 @@ export async function deleteCrowdfundProjectApi(projectId: string) {
             signal: controller.signal,
         });
     } catch (e: any) {
-        throw new Error(e.message || 'Network request failed. You must be connected to a node to delete projects.');
+        throw new Error(e.message || 'Network request failed. You must be connected to a node to cancel initiatives.');
     } finally {
         clearTimeout(timeoutId);
     }
-    
+
     if (!res.ok) {
         const errorText = await res.text();
-        throw new Error(`Failed to delete project: ${errorText}`);
+        throw new Error(`Failed to cancel initiative: ${errorText}`);
     }
-    
-    // Local SQLite Cascade Delete
-    const database = await getDb();
-    await database.runAsync(`DELETE FROM projects WHERE id = ?;`, [projectId]);
-}
 
-export async function pledgeToCrowdfundProjectApi(projectId: string, amount: number, memo: string) {
-    const identity = await loadIdentity();
-    if (!identity) throw new Error("No identity block found");
-
-    const res = await _signedRequest(`/api/crowdfund/projects/${projectId}/pledge`, { 
-        fromPubkey: identity.publicKey, 
-        amount: amount, 
-        memo: memo 
-    });
-
-    const database = await getDb();
-    await database.runAsync(
-        'UPDATE projects SET current_amount = current_amount + ? WHERE id = ?',
-        [amount, projectId]
-    );
-
-    const txId = Crypto.randomUUID();
-    const dt = new Date().toISOString();
-    await database.runAsync('INSERT INTO ledger_entries (id, timestamp, pubkey, amount, balance_after, memo, reference_id, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [
-        txId, dt, identity.publicKey, -Math.abs(amount), 0, memo, projectId, 'pledge'
-    ]);
-
-    return res;
+    try {
+        const database = await getDb();
+        await database.runAsync(`DELETE FROM projects WHERE id = ?;`, [projectId]);
+    } catch { }
 }
 
 export async function getActiveVotingRound(): Promise<{ id: string; status: string; closesAt: string; projectIds: string[]; createdAt: string } | null> {
@@ -1787,8 +1847,29 @@ export async function getActiveVotingRound(): Promise<{ id: string; status: stri
 
 // ===================== COMMUNITY TREASURIES =====================
 export interface TreasurySummary {
-    publicKey: string; name: string; avatar?: string | null;
-    balance: number; creditLine: number; liveOffers: number;
+    publicKey: string;
+    name: string;
+    callsign?: string;
+    avatar?: string | null;
+    avatarUrl?: string | null;
+    balance: number;
+    creditLine: number;
+    liveOffers: number;
+    earnedSurplus?: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    goalAmount?: number | null;
+    currentAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: string;
+    status?: string;
+    paused?: boolean;
+    keepers?: Array<{ pubkey: string; callsign: string; role: string }>;
+    link?: any;
+}
+
+export async function treasuryPledge(treasury: string, amount: number, memo?: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
 }
 
 export async function getTreasuries(): Promise<TreasurySummary[]> {
@@ -1804,11 +1885,8 @@ export async function getTreasuries(): Promise<TreasurySummary[]> {
 }
 
 export async function getTreasuryDetail(publicKey: string): Promise<any | null> {
-    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!rawUrl) return null;
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/treasury/${encodeURIComponent(publicKey)}`);
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(publicKey)}`);
         if (!res.ok) return null;
         return await res.json();
     } catch { return null; }
@@ -1825,26 +1903,305 @@ export async function treasuryPostNeed(treasury: string, body: { category: strin
 export async function treasuryApprove(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
 }
-export async function treasuryComplete(treasury: string, transactionId: string) {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+export async function treasuryComplete(treasury: string, transactionId: string, hours?: number) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
+}
+export async function treasuryReject(treasury: string, transactionId: string) {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
+export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+}
+export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+}
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {
+    try {
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
 
-export async function voteForProjectApi(projectId: string, votes: number) {
-    const identity = await loadIdentity();
-    if (!identity) throw new Error("No identity block found");
+// Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+}
 
-    const res = await _signedRequest(`/api/crowdfund/projects/vote`, {
-        projectId,
-        pubkey: identity.publicKey,
-        votes
-    });
+export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending') {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch { return null; }
+}
 
-    // In a local-first system, we might want to optimistically update the local DB
-    // but the node's sync will update the project votes anyway.
-    return res;
+export async function approveKeeperRequest(treasury: string, requestId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`, {});
+}
+
+export async function declineKeeperRequest(treasury: string, requestId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/decline`, {});
+}
+
+export async function getEnterpriseSuccession(treasury: string) {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/succession`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch { return null; }
+}
+
+export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, {});
+}
+
+export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: any[]; readOnly: boolean } | null> {
+    try {
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: any } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: any } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
+}
+
+// Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the
+// actor from the signature only and decides who may act; these throw the server's own error message.
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/pause`, {});
+}
+
+export async function resumeEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; alreadyActive?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/resume`, {});
+}
+
+export async function initiateWindUp(treasury: string): Promise<{ success: boolean; status: string; initiatedAt: string; initiatedBy: string; graceEndsAt: string; alreadyInitiated?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/initiate`, {});
+}
+
+export async function cancelWindUp(treasury: string): Promise<{ success: boolean; status: string }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`, {});
+}
+
+export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`, {});
+}
+
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance: number };
+    period: { since: string | null; until: string | null };
+    summary: {
+        totalIncome: number;
+        totalSpend: number;
+        netChange: number;
+        startingBalance: number;
+        endingBalance: number;
+        transactionCount: number;
+    };
+    entries: EnterpriseLedgerEntry[];
+}
+
+/**
+ * The enterprise's income & spend (P&L), public to every member. Throws rather than returning null so the
+ * screen can say it could not load and offer a retry, instead of showing an empty ledger as if nothing happened.
+ */
+export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {
+    const params = new URLSearchParams();
+    if (opts?.since) params.set('since', opts.since);
+    if (opts?.until) params.set('until', opts.until);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({} as any));
+        throw new Error(errJson?.error || `Could not load enterprise ledger (${res.status})`);
+    }
+    return await res.json();
+}
+
+// ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
+
+export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionFranchise = '1m1v' | 'quadratic_trade';
+export type DecisionStatus =
+    | 'open'
+    | 'passed'
+    | 'failed'
+    | 'unresolved'
+    | 'passed_queued_for_funds'
+    | 'execution_pending_grace'
+    | 'execution_blocked'
+    | 'execution_void'
+    | 'executed'
+    | 'admin_halted';
+
+export type DecisionEffect =
+    | 'suspend_member'
+    | 'unsuspend_member'
+    | 'freeze_credit'
+    | 'unfreeze_credit'
+    | 'grant_voucher'
+    | 'revoke_voucher'
+    | 'grant_tier'
+    | 'revoke_tier'
+    | 'grant_elder'
+    | 'revoke_elder'
+    | 'remove_lead_keeper'
+    | 'reinstate_member'
+    | 'remove_member'
+    | 'grant_enterprise'
+    | 'grant_hardship'
+    | 'write_off_deficit'
+    | 'set_levy'
+    | 'set_rule'
+    | 'poll';
+
+export interface Decision {
+    id: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject: string | null;
+    params: any | null;
+    franchise: DecisionFranchise;
+    status: DecisionStatus;
+    opensAt: string;
+    closesAt: string;
+    gracePeriodEndsAt: string | null;
+    createdAt: string;
+    executedAt: string | null;
+    executionError: string | null;
+    executionReason: string | null;
+    adminHaltedAt: string | null;
+    adminHaltedBy: string | null;
+    adminHaltReason: string | null;
+    updatedAt: string;
+}
+
+export interface DecisionVote {
+    decisionId: string;
+    voterPubkey: string;
+    support: number; // 1 = yes, 0 = no
+    weight: number;
+    creditsUsed: number;
+    signature?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DecisionTally {
+    decisionId: string;
+    status: DecisionStatus;
+    totalVoters: number;
+    quorumRequired: number;
+    quorumMet: boolean;
+    yesWeight: number;
+    noWeight: number;
+    totalWeight: number;
+    supportRatio: number;
+    thresholdRequired: number;
+    passed: boolean;
+}
+
+export interface DecisionWithTally extends Decision {
+    tally: DecisionTally;
+}
+
+export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return { decisions: [], activeMembers30d: 0 };
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const url = `${anchorUrl}/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`;
+        const res = await fetch(url);
+        if (!res.ok) return { decisions: [], activeMembers30d: 0 };
+        const data = await res.json();
+        return {
+            decisions: data.decisions || [],
+            activeMembers30d: data.activeMembers30d || 0,
+        };
+    } catch {
+        return { decisions: [], activeMembers30d: 0 };
+    }
+}
+
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[] } | null> {
+    const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!rawUrl) return null;
+    const anchorUrl = rawUrl.replace(/\/$/, '');
+    try {
+        const res = await fetch(`${anchorUrl}/api/commons/decisions/${encodeURIComponent(id)}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+export async function createDecision(payload: {
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject?: string | null;
+    params?: any;
+    closesAt?: string;
+}): Promise<{ success: boolean; decision: Decision }> {
+    return _signedRequest('/api/commons/decisions', payload);
+}
+
+export async function castDecisionVote(decisionId: string, payload: {
+    voterPubkey: string;
+    support: boolean;
+    voteCount?: number;
+    signature?: string;
+}): Promise<{ success: boolean; creditsUsed: number }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, payload);
+}
+
+export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
+    try {
+        const res = await signedGet(`/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
+        if (!res.ok) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
+        return await res.json();
+    } catch {
+        return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
+    }
 }
 
 export async function updatePost(id: string, updates: any) {
@@ -2022,7 +2379,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             // Deleted posts are transmitted with active=0 and tombstoned here natively.
             for (const p of delta.posts) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         p.id ?? null,
                         p.type ?? null,
@@ -2047,7 +2404,9 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                         p.updated_at || p.updatedAt || null,
                         p.origin_node || p.originNode || null,
                         p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0)
+                        p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
+                        p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
+                        p.poll_closes_at || p.pollClosesAt || null
                     ]
                 );
             }
@@ -2144,7 +2503,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                     if (!localSet.has(fpk)) {
                         await txn.runAsync(
                             'INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at, is_guardian) VALUES (?, ?, ?, ?)',
-                            [identity.publicKey, fpk, f.addedAt || f.added_at || new Date().toISOString(), f.isGuardian ? 1 : 0]
+                            [identity.publicKey, fpk, f.addedAt || f.added_at || new Date().toISOString(), 0]
                         );
                     }
                 }
@@ -4103,17 +4462,14 @@ export async function getEscrowTotal(pubkey: string): Promise<number> {
 export async function getFriendsLocal(ownerPubkey: string): Promise<any[]> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
-        `SELECT f.friend_pubkey as publicKey, m.callsign, m.avatar_url, f.added_at as addedAt, f.is_guardian as isGuardian, m.joined_at as joinedAt
+        `SELECT f.friend_pubkey as publicKey, m.callsign, m.avatar_url, f.added_at as addedAt, m.joined_at as joinedAt
          FROM friends f
          INNER JOIN members m ON f.friend_pubkey = m.public_key
          WHERE f.owner_pubkey = ?
          ORDER BY f.added_at DESC`,
         [ownerPubkey]
     );
-    return rows.map((r: any) => ({
-        ...r,
-        isGuardian: !!r.isGuardian,
-    }));
+    return rows;
 }
 
 /** Check if a pubkey is a friend */
@@ -4185,120 +4541,7 @@ export async function getRecentChatMembers(myPubkey: string, limit = 10): Promis
     );
 }
 
-// ======================== SOCIAL RECOVERY & GUARDIANS ========================
 
-export async function setGuardianApi(friendPubkey: string, isGuardian: boolean): Promise<boolean> {
-    const identity = await loadIdentity();
-    if (!identity) return false;
-
-    // Locally update DB first
-    const database = await getDb();
-    await database.runAsync(`UPDATE friends SET is_guardian=? WHERE owner_pubkey=? AND friend_pubkey=?`,
-        [isGuardian ? 1 : 0, identity.publicKey, friendPubkey]);
-
-    try {
-        await _signedRequest('/api/friends/guardian', { friendPubkey, isGuardian });
-        return true;
-    } catch (e) {
-        console.warn('[Guardians] Server sync failed:', e);
-        return false;
-    }
-}
-
-export async function lookupRecoveryCallsign(callsign: string): Promise<any[]> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const res = await fetch(`${anchorUrl}/api/recovery/lookup/${encodeURIComponent(callsign)}`);
-    if (!res.ok) throw new Error('Lookup failed');
-    return res.json();
-}
-
-export async function createRecoveryRequest(oldPubkey: string, guardianGuess: string, newIdentity: any): Promise<any> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-
-    const bodyObj = { oldPubkey, guardianGuess, newPubkey: newIdentity.publicKey };
-    const bodyStr = JSON.stringify(bodyObj);
-    const headers = await buildSignedHeaders('POST', '/api/recovery/request', bodyStr, newIdentity.privateKey, newIdentity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/request`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
-    return data;
-}
-
-export async function getPendingRecoveryRequests(): Promise<any[]> {
-    const identity = await loadIdentity();
-    if (!identity) return [];
-
-    const res = await signedGet(`/api/recovery/pending/${identity.publicKey}`);
-    if (!res.ok) throw new Error('Failed to fetch requests');
-    return res.json();
-}
-
-export async function approveRecoveryRequest(requestId: string): Promise<void> {
-    await sendRecoveryDecision(requestId, 'approve');
-}
-
-export async function rejectRecoveryRequest(requestId: string): Promise<void> {
-    await sendRecoveryDecision(requestId, 'reject');
-}
-
-async function sendRecoveryDecision(requestId: string, decision: 'approve' | 'reject' | 'cancel'): Promise<void> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const identity = await loadIdentity();
-    if (!identity) throw new Error('No identity');
-
-    const bodyStr = JSON.stringify({ requestId });
-    const headers = await buildSignedHeaders('POST', `/api/recovery/${decision}`, bodyStr, identity.privateKey, identity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/${decision}`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || `Failed to ${decision} request`);
-    }
-}
-
-export async function cancelRecoveryRequest(requestId: string, identityToUse?: any): Promise<void> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('Not connected');
-    const identity = identityToUse || await loadIdentity();
-    if (!identity) throw new Error('No identity');
-
-    const bodyStr = JSON.stringify({ requestId });
-    const headers = await buildSignedHeaders('POST', '/api/recovery/cancel', bodyStr, identity.privateKey, identity.publicKey);
-
-    const res = await fetch(`${anchorUrl}/api/recovery/cancel`, {
-        method: 'POST',
-        headers,
-        body: bodyStr,
-    });
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to cancel request');
-    }
-}
-
-export async function getRecoveryStatus(pubkey: string): Promise<any> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return { status: 'none' };
-    try {
-        const res = await fetch(`${anchorUrl}/api/recovery/status/${pubkey}`);
-        if (!res.ok) return { status: 'none' };
-        return res.json();
-    } catch {
-        return { status: 'none' };
-    }
-}
 
 export async function getMemberPosts(pubkey: string) {
     const database = await waitForInit();
@@ -4396,5 +4639,267 @@ export async function getDatabaseStats() {
         messages: msgCount,
         integrity
     };
+}
+
+// ===================== GROUPS & AUDIENCE SCOPING =====================
+// Docs: docs/the-commons.md §9 (Item 10)
+// Hard rules: roles are convenor / member / observer. Never "steward", never "admin".
+// A group is an audience scope and NOTHING else.
+
+export type GroupRole = 'convenor' | 'member' | 'observer';
+export type JoinPolicy = 'open' | 'request_to_join' | 'invite_only';
+export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+
+export interface GroupItem {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    avatarUrl: string | null;
+    category: GroupCategory;
+    createdBy: string;
+    joinPolicy: JoinPolicy;
+    createdAt: string;
+    updatedAt: string;
+    memberCount?: number;
+    viewerRole?: GroupRole | null;
+    viewerStatus?: GroupMemberStatus | null;
+    convenorPubkey?: string;
+    convenorCallsign?: string;
+    convenorAvatarUrl?: string | null;
+}
+
+export interface GroupMemberItem {
+    groupId: string;
+    memberPubkey: string;
+    callsign?: string;
+    avatarUrl?: string | null;
+    role: GroupRole;
+    status: GroupMemberStatus;
+    joinedAt: string;
+    invitedBy: string | null;
+    updatedAt?: string;
+}
+
+/** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
+
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+
+    const bodyString = payload !== undefined ? JSON.stringify(payload) : '';
+    const signPath = endpoint.split('?')[0];
+    const headers = await buildSignedHeaders(method, signPath, bodyString, identity.privateKey, identity.publicKey);
+
+    const res = await fetch(`${anchorUrl}${endpoint}`, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...headers
+        },
+        body: payload !== undefined ? bodyString : undefined,
+    });
+
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.message || `Request failed: ${res.status}`);
+    }
+    return await res.json();
+}
+
+export async function fetchGroups(filter?: { category?: string; memberPubkey?: string; search?: string }): Promise<GroupItem[]> {
+    const params = new URLSearchParams();
+    if (filter?.category) params.set('category', filter.category);
+    if (filter?.memberPubkey) params.set('member', filter.memberPubkey);
+    if (filter?.search) params.set('q', filter.search);
+
+    try {
+        const res = await signedGet(`/api/groups${params.toString() ? '?' + params.toString() : ''}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                // Update local cache
+                const database = await getDb();
+                const identity = await loadIdentity();
+                for (const g of data) {
+                    await database.runAsync(`
+                        INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            name = excluded.name,
+                            slug = excluded.slug,
+                            description = excluded.description,
+                            avatar_url = excluded.avatar_url,
+                            category = excluded.category,
+                            join_policy = excluded.join_policy,
+                            updated_at = excluded.updated_at
+                    `, [
+                        g.id, g.name, g.slug, g.description || null, g.avatarUrl || null,
+                        g.category || 'general', g.createdBy, g.joinPolicy || 'open',
+                        g.createdAt, g.updatedAt || g.createdAt
+                    ]);
+
+                    if (identity?.publicKey) {
+                        if (g.viewerRole || g.viewerStatus) {
+                            await database.runAsync(`
+                                INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
+                                    role = excluded.role,
+                                    status = excluded.status,
+                                    updated_at = excluded.updated_at
+                            `, [
+                                g.id, identity.publicKey, g.viewerRole || 'member',
+                                g.viewerStatus || 'active', g.createdAt, g.updatedAt || g.createdAt
+                            ]);
+                        } else {
+                            await database.runAsync(`
+                                DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?
+                            `, [g.id, identity.publicKey]);
+                        }
+                    }
+                }
+                return data;
+            }
+        }
+    } catch (e) {
+        console.warn('[Groups] Remote fetch failed, falling back to local DB:', e);
+    }
+
+    // Local fallback
+    const database = await getDb();
+    let query = `
+        SELECT g.*,
+            (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as memberCount,
+            (SELECT gm2.role FROM group_members gm2 WHERE gm2.group_id = g.id AND gm2.member_pubkey = ?) as viewerRole,
+            (SELECT gm3.status FROM group_members gm3 WHERE gm3.group_id = g.id AND gm3.member_pubkey = ?) as viewerStatus
+        FROM groups g
+        WHERE 1=1
+    `;
+    const identity = await loadIdentity();
+    const myPubkey = identity?.publicKey || filter?.memberPubkey || '';
+    const queryParams: any[] = [myPubkey, myPubkey];
+    if (filter?.category) {
+        query += ' AND g.category = ?';
+        queryParams.push(filter.category);
+    }
+    if (filter?.search) {
+        query += ' AND (g.name LIKE ? OR g.description LIKE ?)';
+        queryParams.push(`%${filter.search}%`, `%${filter.search}%`);
+    }
+    query += ' ORDER BY g.updated_at DESC';
+
+    const rows = await database.getAllAsync<any>(query, queryParams);
+    return rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        slug: r.slug,
+        description: r.description,
+        avatarUrl: r.avatar_url,
+        category: r.category,
+        createdBy: r.created_by,
+        joinPolicy: r.join_policy,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        memberCount: r.memberCount || 0,
+        viewerRole: r.viewerRole || null,
+        viewerStatus: r.viewerStatus || null,
+    }));
+}
+
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] } | null> {
+    try {
+        const [groupRes, membersRes] = await Promise.all([
+            signedGet(`/api/groups/${encodeURIComponent(id)}`),
+            signedGet(`/api/groups/${encodeURIComponent(id)}/members`)
+        ]);
+        if (groupRes.ok) {
+            const group = await groupRes.json();
+            const members = membersRes.ok ? await membersRes.json() : [];
+            return { group, members: Array.isArray(members) ? members : [] };
+        }
+    } catch (e) {
+        console.warn('[Groups] Failed to fetch group detail:', e);
+    }
+    return null;
+}
+
+export async function createGroupApi(groupData: {
+    name: string;
+    slug?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: string;
+    joinPolicy?: JoinPolicy;
+}): Promise<GroupItem> {
+    return signedRequestWithMethod('POST', '/api/groups', groupData);
+}
+
+export async function joinGroupApi(groupId: string): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+}
+
+export async function approveGroupMemberApi(groupId: string, memberPubkey: string): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        action: 'approve'
+    });
+}
+
+export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
+    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        role,
+        action: 'invite'
+    });
+}
+
+export async function setGroupMemberRoleApi(groupId: string, memberPubkey: string, role: GroupRole): Promise<any> {
+    return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`, {
+        role
+    });
+}
+
+export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+    if (res?.success) {
+        try {
+            const database = await getDb();
+            await database.runAsync('DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?', [groupId, memberPubkey]);
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to remove group member locally:', dbErr);
+        }
+    }
+    return Boolean(res?.success);
+}
+
+export async function updateGroupApi(groupId: string, data: {
+    name?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: string;
+    joinPolicy?: JoinPolicy;
+}): Promise<{ success: boolean; group: GroupItem }> {
+    return signedRequestWithMethod('PATCH', `/api/groups/${encodeURIComponent(groupId)}`, data);
+}
+
+export async function deleteGroupPostApi(groupId: string, postId: string): Promise<boolean> {
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
+    if (res?.success) {
+        try {
+            const database = await getDb();
+            await database.runAsync('DELETE FROM posts WHERE id = ?', [postId]);
+            await database.runAsync('DELETE FROM post_photos WHERE post_id = ?', [postId]);
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('sync_data_updated');
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to delete group post locally:', dbErr);
+        }
+    }
+    return Boolean(res?.success);
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
-import { KEEPER_LABELS, protectionFrom } from '../protection-state';
+import { KEEPER_LABELS, protectionFrom, thresholdFor } from '../protection-state';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
 
 const result = (over: Partial<KeeperEnrolmentResult> = {}): KeeperEnrolmentResult => ({
@@ -34,6 +34,55 @@ describe('SSO-tier member (hub + sso)', () => {
         expect(p.tier).toBe('sso');
         expect(p.spare).toBe(1);
         expect(p.showWords).toBe(false);
+    });
+
+    it('is covered with single-blob SSO (no hub) at threshold 1', () => {
+        const p = protectionFrom(result({ enrolled: ['sso'], generation: 1, available: 1 }));
+        expect(p.state).toBe('covered');
+        expect(p.tier).toBe('sso');
+        expect(p.stillNeeded).toBe(0);
+        expect(p.spare).toBe(0);
+        expect(p.holding).toEqual([KEEPER_LABELS.sso]);
+        expect(p.showWords).toBe(false);
+    });
+
+    it('gains a spare when 2 single-blob SSO providers are enrolled', () => {
+        const p = protectionFrom(result({ enrolled: ['sso', 'sso'], generation: 1, available: 2, enrolledSso: ['google', 'apple'] }));
+        expect(p.state).toBe('covered');
+        expect(p.tier).toBe('sso');
+        expect(p.stillNeeded).toBe(0);
+        expect(p.spare).toBe(1);
+    });
+
+    it('does not inflate threshold to 2 or spare to 1 when orphaned hub is present on single-blob account', () => {
+        const p = protectionFrom(result({
+            enrolled: ['hub', 'sso'],
+            generation: 1,
+            available: 2,
+            enrolledSso: ['google'],
+            isSingleBlob: true,
+            threshold: 1,
+        }));
+        expect(p.state).toBe('covered');
+        expect(p.tier).toBe('sso');
+        expect(p.stillNeeded).toBe(0);
+        expect(p.spare).toBe(0); // 1 provider = 0 spare, not 1!
+        expect(thresholdFor(['hub', 'sso'], { isSingleBlob: true })).toBe(1);
+    });
+
+    it('calculates correct spare with 2 single-blob providers even if orphaned hub is present', () => {
+        const p = protectionFrom(result({
+            enrolled: ['hub', 'sso', 'sso'],
+            generation: 1,
+            available: 3,
+            enrolledSso: ['google', 'apple'],
+            isSingleBlob: true,
+            threshold: 1,
+        }));
+        expect(p.state).toBe('covered');
+        expect(p.tier).toBe('sso');
+        expect(p.stillNeeded).toBe(0);
+        expect(p.spare).toBe(1); // 2 providers = 1 spare
     });
 });
 

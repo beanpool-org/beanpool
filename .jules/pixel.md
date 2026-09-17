@@ -48,6 +48,25 @@ Pixel's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager
 ```
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-12 — Do NOT file against keeper / guardian / social-recovery components. Closed #730.
+Keeper (social/guardian) recovery was scrapped. #713 DELETES these files on both clients:
+`IncomingRecoveryApprovalModal.tsx`, `KeeperProtectionPanel.tsx` (PWA), `RecoveryPinModal.tsx`,
+`FriendPickerSheet.tsx`, `info-content/GuardianInfoModal.tsx`. Work filed against any of them
+is spent twice — once on review, once on the merge conflict. The only recovery paths now are
+the member's 12 words and SSO.
+
+`RecoveryAlertBanner.tsx` is the exception: it SURVIVES on both clients and is fair game.
+
+The underlying a11y pattern is real and still wanted — a button whose visible content is an
+icon, or whose label vanishes behind a loading spinner, needs an `accessibilityLabel` that
+matches the VISIBLE text (WCAG 2.5.3) plus `accessibilityState={{ busy }}`. That has produced
+three genuine findings on live screens recently: the recovery alert kill-switch, the project
+pledge button, and the recover-identity option rows. Target screens that survive.
+
+### 2026-09-09 — AvatarPickerSheet accessibility labels LANDED in #680.
+Added explicit `accessibilityLabel` attributes to camera and gallery source buttons in `apps/native/components/AvatarPickerSheet.tsx`, cleanly masking decorative emojis for screen readers. Do not re-file.
+When creating touchable components (`Pressable`, `TouchableOpacity`) that contain decorative or standalone emoji icons, always supply an explicit `accessibilityLabel` to ensure screen readers do not read raw emoji glyphs.
+
 ### 2026-08-25 — `GlobalHeader.tsx` is a protected file. Do not edit it.
 #411 (a one-line `accessibilityLabel`) is held for human review rather than merged, purely because
 of where it lands. GlobalHeader, `logo.png`, `map.tsx` and `UnifiedMapPin` are fragile and have
@@ -78,3 +97,19 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-08-28 - Add accessibilityLabel and hint to My Deals button in marketplace header
 **Learning:** Header buttons with badges like 'My Deals' read disjointed badge counts to screen readers unless explicit dynamic labels are provided.
 **Action:** Include dynamic state summaries (e.g. `My Deals, 2 pending`) in `accessibilityLabel` and concise guidance in `accessibilityHint`.
+
+## 2026-08-29 - Add accessibilityLabel to Close button in Blocked Users modal
+**Learning:** Close buttons rendering symbolic glyphs like '✕' inside modal headers lack explicit accessibility labels, leaving screen readers with ambiguous text.
+**Action:** Always provide `accessibilityLabel="Close ..."` on icon or symbol close buttons inside modals.
+
+## 2026-09-02 - Add accessibilityLabel to trust filter items in TrustPickerSheet
+**Learning:** Selection buttons with emoji and text labels read raw emoji characters or omit filter labels on screen readers unless an explicit `accessibilityLabel` is assigned.
+**Action:** Always provide explicit `accessibilityLabel={f.label}` on selection items containing emoji icons.
+
+## 2026-09-03 - Add accessibilityLabel to camera and gallery source buttons in AvatarPickerSheet
+**Learning:** Source selection buttons containing emoji icons and text labels read unannounced or disjointed emoji characters to screen readers unless provided with an explicit `accessibilityLabel`.
+**Action:** Always provide explicit descriptive `accessibilityLabel` attributes on image source selection buttons.
+
+## 2026-09-11 - Add accessibilityLabel, hint, and busy state to pledge button
+**Learning:** Action buttons with loading states replacing text with ActivityIndicator leave screen readers with empty or ambiguous labels during async operations.
+**Action:** Provide dynamic accessibilityLabel and accessibilityState={{ disabled, busy }} on buttons that conditionally render ActivityIndicator.

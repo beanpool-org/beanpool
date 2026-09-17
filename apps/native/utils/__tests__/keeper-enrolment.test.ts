@@ -26,48 +26,30 @@ vi.mock('../node-post', () => ({
 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-    enrolKeepers, enrolFriendKeepers, enrolSsoKeeper, disconnectSsoKeeper,
+    enrolKeepers, enrolSsoKeeper, disconnectSsoKeeper,
 } from '../keeper-enrolment';
 import { signedPost, signedDelete, anchorUrl } from '../node-post';
-import { readHubShare, recordShareForHub } from '@beanpool/core';
-
-const HUB_FRAGMENT_PATH = '/api/recovery/shares/hub-fragment';
+import { openShareFromSso, isSingleBlobSso, toEd25519Pkcs8 } from '@beanpool/core';
 
 /**
- * Route the `signedPost` mock by path.
- *
- * `enrolSsoKeeper` now makes two calls — it asks for the stored hub fragment before it splits —
- * so `mockResolvedValueOnce` alone would hand the deposit's answer to the hub-fragment request
- * and the assertions would be reading the wrong call.
- *
- * @param hubFragment the `A` the node already holds, or null for an account with no split yet
+ * Route the `signedPost` mock.
  */
-function mockNode(opts: { hubFragment?: Uint8Array | null; deposit?: any } = {}) {
-    const { hubFragment = null, deposit = { ok: true, json: async () => ({ generation: 2 }) } } = opts;
-    (signedPost as any).mockImplementation(async (_url: string, path: string) => {
-        if (path === HUB_FRAGMENT_PATH) {
-            return {
-                ok: true,
-                json: async () => (hubFragment
-                    ? { ...recordShareForHub(hubFragment), hubFragment: recordShareForHub(hubFragment).encryptedShare }
-                    : { hubFragment: null }),
-            };
-        }
+function mockNode(opts: { deposit?: any } = {}) {
+    const { deposit = { ok: true, json: async () => ({ generation: 2 }) } } = opts;
+    (signedPost as any).mockImplementation(async (_url: string, _path: string) => {
         return deposit;
     });
 }
 
-/** The hub fragment the client actually deposited, decoded back to bytes. */
-function depositedHub(): Uint8Array {
+/** The SSO share the client actually deposited. */
+function depositedSsoShare(): any {
     const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-    const hub = call[2].shares.find((sh: any) => sh.holderType === 'hub');
-    return readHubShare(hub);
+    return call?.[2]?.shares?.find((sh: any) => sh.holderType === 'sso');
 }
 
 /** The sealed member half as the client built it, decoded back to bytes. */
 function depositedSsoCiphertextLength(): number {
-    const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
-    const sso = call[2].shares.find((sh: any) => sh.holderType === 'sso');
+    const sso = depositedSsoShare();
     return Buffer.from(sso.encryptedShare, 'base64').length;
 }
 
@@ -116,75 +98,6 @@ describe('keeper-enrolment.ts', () => {
     });
 
     // ---------------------------------------------------------------------------
-    // Friend-tier enrolment
-    // ---------------------------------------------------------------------------
-    describe('enrolFriendKeepers', () => {
-        it('rejects if fewer than 2 friends provided', async () => {
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: ['11'.repeat(32)],
-            });
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('need at least 2 friends');
-        });
-
-        it('rejects if identity has no mnemonic', async () => {
-            const result = await enrolFriendKeepers({
-                identity: { ...IDENTITY, mnemonic: undefined },
-                friendPublicKeys: FRIEND_KEYS,
-            });
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('no recovery words');
-        });
-
-        it('successfully splits and deposits shares with friends', async () => {
-            (signedPost as any).mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ generation: 1 }),
-            });
-
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: FRIEND_KEYS,
-            });
-
-            expect(result.enrolled).toEqual(['hub', 'member', 'member', 'member']);
-            expect(result.generation).toBe(1);
-            expect(result.available).toBe(4);
-            expect(result.error).toBeUndefined();
-            expect(signedPost).toHaveBeenCalledWith(
-                'https://test.beanpool.org',
-                '/api/recovery/shares',
-                expect.objectContaining({
-                    shares: expect.arrayContaining([
-                        expect.objectContaining({ holderType: 'hub', shareIndex: 1 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 2 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 3 }),
-                        expect.objectContaining({ holderType: 'member', shareIndex: 4 }),
-                    ]),
-                }),
-                IDENTITY,
-            );
-        });
-
-        it('handles node HTTP error gracefully', async () => {
-            (signedPost as any).mockResolvedValueOnce({
-                ok: false,
-                status: 400,
-                text: async () => 'Invalid share format',
-            });
-
-            const result = await enrolFriendKeepers({
-                identity: IDENTITY,
-                friendPublicKeys: FRIEND_KEYS,
-            });
-
-            expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('node refused the fragments (400)');
-        });
-    });
-
-    // ---------------------------------------------------------------------------
     // SSO-tier enrolment
     // ---------------------------------------------------------------------------
     describe('enrolSsoKeeper', () => {
@@ -200,7 +113,7 @@ describe('keeper-enrolment.ts', () => {
             expect(result.error).toContain('no recovery words');
         });
 
-        it('successfully splits and deposits SSO shares', async () => {
+        it('successfully seals and deposits single-blob SSO share', async () => {
             mockNode();
 
             const result = await enrolSsoKeeper({
@@ -211,9 +124,9 @@ describe('keeper-enrolment.ts', () => {
                 nonce: 'mock-nonce',
             });
 
-            expect(result.enrolled).toEqual(['hub', 'sso']);
+            expect(result.enrolled).toEqual(['sso']);
             expect(result.generation).toBe(2);
-            expect(result.available).toBe(2);
+            expect(result.available).toBe(1);
             expect(result.error).toBeUndefined();
             expect(signedPost).toHaveBeenCalledWith(
                 'https://test.beanpool.org',
@@ -222,20 +135,16 @@ describe('keeper-enrolment.ts', () => {
                     provider: 'google',
                     idToken: 'mock-jwt-token',
                     nonce: 'mock-nonce',
-                    shares: expect.arrayContaining([
-                        expect.objectContaining({ holderType: 'hub', shareIndex: 1 }),
-                        expect.objectContaining({ holderType: 'sso', shareIndex: 2 }),
-                    ]),
+                    shares: [
+                        expect.objectContaining({ holderType: 'sso', shareIndex: 1 }),
+                    ],
                 }),
                 IDENTITY,
             );
         });
 
         it('handles network throw gracefully without throwing', async () => {
-            (signedPost as any).mockImplementation(async (_u: string, path: string) => {
-                if (path === HUB_FRAGMENT_PATH) return { ok: true, json: async () => ({ hubFragment: null }) };
-                throw new Error('Network connection timeout');
-            });
+            (signedPost as any).mockRejectedValueOnce(new Error('Network connection timeout'));
 
             const result = await enrolSsoKeeper({
                 identity: IDENTITY,
@@ -249,15 +158,13 @@ describe('keeper-enrolment.ts', () => {
             expect(result.error).toContain('could not reach the node');
         });
 
-        // ---------------------------------------------------------------------
-        // Multi-provider consistency. The bug these cover destroyed accounts:
-        // enrolling a SECOND provider used to mint a fresh `A`, which silently
-        // invalidated the FIRST provider's fragment, and recovery through it
-        // rebuilt a keypair for an account that never existed.
-        // ---------------------------------------------------------------------
-        it('splits against the hub fragment the account already has', async () => {
-            const storedHub = new Uint8Array(32).map((_, i) => (i * 11 + 5) & 0xff);
-            mockNode({ hubFragment: storedHub });
+        it('maps multiple enrolled SSO providers so spare counter does not desync', async () => {
+            mockNode({
+                deposit: {
+                    ok: true,
+                    json: async () => ({ generation: 3, enrolledSso: ['google', 'apple'], threshold: 1 }),
+                },
+            });
 
             const result = await enrolSsoKeeper({
                 identity: IDENTITY,
@@ -267,52 +174,119 @@ describe('keeper-enrolment.ts', () => {
                 nonce: 'mock-nonce',
             });
 
-            expect(result.error).toBeUndefined();
-            // Byte-identical, not merely present: any other value strands whichever
-            // provider was enrolled first.
-            expect(Array.from(depositedHub())).toEqual(Array.from(storedHub));
+            expect(result.enrolled).toEqual(['sso', 'sso']);
+            expect(result.available).toBe(2);
+            expect(result.enrolledSso).toEqual(['google', 'apple']);
+            expect(result.threshold).toBe(1);
         });
 
-        it('asks the node for the existing fragment before it splits', async () => {
+        it('deposits single-blob SSO share with explicit single-blob algorithm in kdfParams', async () => {
             mockNode();
+
             await enrolSsoKeeper({
-                identity: IDENTITY, provider: 'google', sub: 's', idToken: 't', nonce: 'n',
-            });
-            const paths = (signedPost as any).mock.calls.map((c: any[]) => c[1]);
-            expect(paths[0]).toBe(HUB_FRAGMENT_PATH);
-            expect(paths[1]).toBe('/api/recovery/shares/sso');
-        });
-
-        it('mints a fresh hub fragment when the account has none yet', async () => {
-            mockNode({ hubFragment: null });
-
-            const result = await enrolSsoKeeper({
-                identity: IDENTITY, provider: 'google', sub: 's', idToken: 't', nonce: 'n',
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
             });
 
-            expect(result.error).toBeUndefined();
-            expect(depositedHub().length).toBe(32);
+            const sso = depositedSsoShare();
+            expect(sso).toBeDefined();
+            expect(isSingleBlobSso(sso.kdfParams)).toBe(true);
             expect(depositedSsoCiphertextLength()).toBeGreaterThan(0);
         });
 
-        it('refuses to split rather than replace a hub fragment it cannot read', async () => {
-            (signedPost as any).mockImplementation(async (_u: string, path: string) => {
-                if (path === HUB_FRAGMENT_PATH) {
-                    // A fragment written by a newer client, or a different keeper type.
-                    return { ok: true, json: async () => ({ hubFragment: 'AAAA', kdfParams: '{"alg":"something-else"}' }) };
-                }
-                return { ok: true, json: async () => ({ generation: 3 }) };
+        it('does not request a hub fragment or include a hub row in deposit', async () => {
+            mockNode();
+
+            await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
             });
 
+            const call = (signedPost as any).mock.calls.find((c: any[]) => c[1] === '/api/recovery/shares/sso');
+            expect(call[2].shares.length).toBe(1);
+            expect(call[2].shares.some((sh: any) => sh.holderType === 'hub')).toBe(false);
+        });
+
+        it('deposited share can be decrypted back to the original seed', async () => {
+            mockNode();
+
+            await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+
+            const sso = depositedSsoShare();
+            const opened = await openShareFromSso(sso, 'google', 'google-sub-12345');
+            expect(Array.from(opened)).toEqual(Array.from(new Uint8Array(32).fill(9)));
+        });
+
+        it('enrols with a 48-byte PKCS8 key (PWA-origin) and produces the same decrypted seed as the equivalent 32-byte seed', async () => {
+            mockNode();
+
+            // 1. Enrol with 32-byte seed identity
+            const rawResult = await enrolSsoKeeper({
+                identity: IDENTITY,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+            const rawSso = depositedSsoShare();
+            const rawOpened = await openShareFromSso(rawSso, 'google', 'google-sub-12345');
+
+            // 2. Enrol with 48-byte PKCS8 identity
+            vi.clearAllMocks();
+            mockNode();
+
+            const pkcs8Bytes = toEd25519Pkcs8(Buffer.from(IDENTITY.privateKey, 'hex'));
+            expect(pkcs8Bytes.length).toBe(48);
+            const pwaIdentity = {
+                ...IDENTITY,
+                privateKey: Buffer.from(pkcs8Bytes).toString('hex'),
+            };
+            expect(pwaIdentity.privateKey.length).toBe(96); // 48 hex bytes
+
+            const pkcs8Result = await enrolSsoKeeper({
+                identity: pwaIdentity,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
+            });
+
+            expect(pkcs8Result.error).toBeUndefined();
+            expect(pkcs8Result.enrolled).toEqual(rawResult.enrolled);
+            expect(pkcs8Result.generation).toEqual(rawResult.generation);
+            expect(pkcs8Result.available).toEqual(rawResult.available);
+
+            const pkcs8Sso = depositedSsoShare();
+            const pkcs8Opened = await openShareFromSso(pkcs8Sso, 'google', 'google-sub-12345');
+            expect(Array.from(pkcs8Opened)).toEqual(Array.from(rawOpened));
+        });
+
+        it('rejects an invalid private key with a clear error', async () => {
+            const invalidIdentity = {
+                ...IDENTITY,
+                privateKey: '12345678', // 4 bytes
+            };
             const result = await enrolSsoKeeper({
-                identity: IDENTITY, provider: 'google', sub: 's', idToken: 't', nonce: 'n',
+                identity: invalidIdentity,
+                provider: 'google',
+                sub: 'google-sub-12345',
+                idToken: 'mock-jwt-token',
+                nonce: 'mock-nonce',
             });
-
             expect(result.enrolled).toEqual([]);
-            expect(result.error).toContain('could not split the seed');
-            // The deposit must not have happened at all.
-            const paths = (signedPost as any).mock.calls.map((c: any[]) => c[1]);
-            expect(paths).not.toContain('/api/recovery/shares/sso');
+            expect(result.error).toContain('could not read the private key');
         });
     });
 

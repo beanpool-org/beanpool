@@ -107,4 +107,15 @@ describe('discoverAnchor() via performSync()', () => {
         expect(result.success).toBe(false);
         expect(result.errorMessage).toBe('All node URLs failed the health check connection.');
     });
+
+    it('rejects saved cleartext public node URL', async () => {
+        vi.mocked(AsyncStorage.getItem).mockImplementation(async (key) => {
+            if (key === 'beanpool_anchor_url') return 'http://public.beanpool.org';
+            return null;
+        });
+
+        const result = await performSync();
+        expect(result.success).toBe(false);
+        expect(result.errorMessage).toBe('All node URLs failed the health check connection.');
+    });
 });

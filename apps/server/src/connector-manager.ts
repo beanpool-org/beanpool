@@ -419,32 +419,36 @@ function pruneTombstones(): void {
  */
 function startRetryLoop(): void {
     retryTimer = setInterval(async () => {
-        if (!p2pNode) return;
+        try {
+            if (!p2pNode) return;
 
-        for (const connector of connectors) {
-            if (!connector.enabled) continue;
+            for (const connector of connectors) {
+                if (!connector.enabled) continue;
 
-            const status = statuses.get(connector.address);
-            if (status?.connected) continue; // Already connected
+                const status = statuses.get(connector.address);
+                if (status?.connected) continue; // Already connected
 
-            // Check backoff
-            const retry = retryState.get(connector.address) || { count: 0, nextRetry: 0 };
-            if (Date.now() < retry.nextRetry) continue; // Not time yet
+                // Check backoff
+                const retry = retryState.get(connector.address) || { count: 0, nextRetry: 0 };
+                if (Date.now() < retry.nextRetry) continue; // Not time yet
 
-            logger.info('P2P', `[Connectors] 🔄 Retry #${retry.count + 1} → ${connector.callsign || connector.address}`);
-            const success = await connectToAddress(connector.address);
+                logger.info('P2P', `[Connectors] 🔄 Retry #${retry.count + 1} → ${connector.callsign || connector.address}`);
+                const success = await connectToAddress(connector.address);
 
-            if (success) {
-                retryState.delete(connector.address);
-                logger.info('P2P', `[Connectors] ✅ Reconnected to ${connector.callsign || connector.address}`);
-            } else {
-                // Exponential backoff
-                retry.count++;
-                const delay = Math.min(RETRY_INTERVAL_MS * Math.pow(2, retry.count - 1), MAX_RETRY_DELAY_MS);
-                retry.nextRetry = Date.now() + delay;
-                retryState.set(connector.address, retry);
-                logger.info('P2P', `[Connectors] ⏳ Next retry for ${connector.callsign || connector.address} in ${Math.round(delay / 1000)}s`);
+                if (success) {
+                    retryState.delete(connector.address);
+                    logger.info('P2P', `[Connectors] ✅ Reconnected to ${connector.callsign || connector.address}`);
+                } else {
+                    // Exponential backoff
+                    retry.count++;
+                    const delay = Math.min(RETRY_INTERVAL_MS * Math.pow(2, retry.count - 1), MAX_RETRY_DELAY_MS);
+                    retry.nextRetry = Date.now() + delay;
+                    retryState.set(connector.address, retry);
+                    logger.info('P2P', `[Connectors] ⏳ Next retry for ${connector.callsign || connector.address} in ${Math.round(delay / 1000)}s`);
+                }
             }
+        } catch (e: any) {
+            logger.error('P2P', `[Connectors] Error in retry loop: ${e?.message || e}`);
         }
     }, RETRY_INTERVAL_MS);
 }

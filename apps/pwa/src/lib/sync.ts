@@ -7,6 +7,25 @@
 
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
+import {
+    requestSync,
+    registerSyncActivityListener,
+    setOnSyncCompletedCallback,
+    getSyncCursor,
+    saveSyncCursor,
+    clearSyncCursor,
+    computeUpdatedAfter,
+    SYNC_CURSOR_KEY,
+} from './sync-coordinator';
+
+export {
+    requestSync,
+    getSyncCursor,
+    saveSyncCursor,
+    clearSyncCursor,
+    computeUpdatedAfter,
+    SYNC_CURSOR_KEY,
+};
 
 export interface SyncState {
     connected: boolean;
@@ -18,13 +37,103 @@ export interface SyncState {
 type SyncCallback = (state: SyncState) => void;
 
 const STORAGE_KEY = 'beanpool-sync-state';
-const RECONNECT_INTERVAL = 5000;
 
 let ws: WebSocket | null = null;
+let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+/** Armed on open; resets the backoff only if the socket is still up 10s later. */
+let stabilityTimeoutId: ReturnType<typeof setTimeout> | null = null;
+let pingIntervalId: ReturnType<typeof setInterval> | null = null;
+let reconnectDelay = 1000;
+let isConnecting = false;
+let currentUrl: string | null = null;
+
+export const HEARTBEAT_INTERVAL_MS = 30_000;
+/**
+ * Pong watchdog timeout (75s = 2.5x ping interval).
+ * Allows 2 consecutive missed pings plus a 15-second grace period for mobile RTT/retransmission.
+ * Tighter (e.g. 30-45s) risks false disconnects on temporary packet loss / cell handover;
+ * looser (>90s) leaves clients sitting on stale data too long.
+ */
+export const PONG_TIMEOUT_MS = 75_000;
+
+let lastPongAt: number | null = null;
+let watchdogArmed = false;
+let watchdogTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function sendPing(socket: WebSocket): void {
+    if (ws === socket && socket.readyState === WebSocket.OPEN) {
+        try {
+            socket.send(JSON.stringify({ type: 'ping', wantPong: true }));
+        } catch (err) {
+            console.warn('[WS Sync] Failed to send heartbeat', err);
+        }
+    }
+}
+
+function handlePong(socket: WebSocket): void {
+    if (ws !== socket) return;
+    lastPongAt = Date.now();
+    // Trap 2: Only arms after seeing at least one pong on this connection
+    watchdogArmed = true;
+    resetWatchdogTimer(socket);
+}
+
+function resetWatchdogTimer(socket: WebSocket): void {
+    if (watchdogTimeoutId) {
+        clearTimeout(watchdogTimeoutId);
+        watchdogTimeoutId = null;
+    }
+    if (!watchdogArmed) return;
+    if (typeof document !== 'undefined' && (document.hidden || document.visibilityState === 'hidden')) return;
+
+    watchdogTimeoutId = setTimeout(() => {
+        if (ws === socket && socket.readyState === WebSocket.OPEN) {
+            console.warn('[WS Sync] Watchdog timeout: no pong received within limit. Closing dead socket.');
+            try { socket.close(); } catch {}
+        }
+    }, PONG_TIMEOUT_MS);
+}
+
+function stopHeartbeat(): void {
+    if (pingIntervalId) {
+        clearInterval(pingIntervalId);
+        pingIntervalId = null;
+    }
+    if (watchdogTimeoutId) {
+        clearTimeout(watchdogTimeoutId);
+        watchdogTimeoutId = null;
+    }
+}
+
+function startHeartbeat(socket: WebSocket): void {
+    stopHeartbeat();
+    if (typeof document !== 'undefined' && (document.hidden || document.visibilityState === 'hidden')) return;
+
+    sendPing(socket);
+    pingIntervalId = setInterval(() => {
+        sendPing(socket);
+    }, HEARTBEAT_INTERVAL_MS);
+
+    if (watchdogArmed) {
+        resetWatchdogTimer(socket);
+    }
+}
+
 let listeners: SyncCallback[] = [];
 let announcementListeners: ((a: any) => void)[] = [];
-let activityListeners: (() => void)[] = [];
 let currentState: SyncState = loadCachedState();
+
+function updateLastSyncTime(time: number): void {
+    currentState = {
+        ...currentState,
+        lastSyncTime: time,
+    };
+    cacheState(currentState);
+    notify();
+}
+
+// Keep SyncStatus and UI updated whenever coordinator completes a sync run
+setOnSyncCompletedCallback(updateLastSyncTime);
 
 function loadCachedState(): SyncState {
     try {
@@ -35,7 +144,9 @@ function loadCachedState(): SyncState {
 }
 
 function cacheState(state: SyncState): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch { /* ignore */ }
 }
 
 function notify(): void {
@@ -43,23 +154,71 @@ function notify(): void {
 }
 
 function establishConnection(wsUrl: string, originalUrl: string): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        isConnecting = false;
+        return;
+    }
+
+    let socket: WebSocket;
     try {
-        ws = new WebSocket(wsUrl);
+        socket = new WebSocket(wsUrl);
+        ws = socket;
     } catch {
+        isConnecting = false;
         currentState = { ...currentState, connected: false };
         notify();
         scheduleReconnect(originalUrl);
         return;
     }
 
-    ws.onopen = () => {
+    socket.onopen = () => {
+        if (ws !== socket) return;
+        // Backoff resets only once the connection has PROVEN stable, not the instant it opens.
+        // A socket that flaps — opening and dropping within milliseconds against a node that is
+        // up but unhealthy — used to reset the delay to 1s on every handshake, so the
+        // exponential backoff never engaged. That was merely wasteful before; now that opening
+        // also triggers a sync, a flapping socket would drive a sync roughly once a second.
+        if (stabilityTimeoutId) clearTimeout(stabilityTimeoutId);
+        stabilityTimeoutId = setTimeout(() => {
+            stabilityTimeoutId = null;
+            if (ws === socket && socket.readyState === WebSocket.OPEN) {
+                reconnectDelay = 1000;
+            }
+        }, 10_000);
+        if (reconnectTimeoutId) {
+            clearTimeout(reconnectTimeoutId);
+            reconnectTimeoutId = null;
+        }
+        watchdogArmed = false;
+        lastPongAt = null;
+        if (watchdogTimeoutId) {
+            clearTimeout(watchdogTimeoutId);
+            watchdogTimeoutId = null;
+        }
+
         currentState = { ...currentState, connected: true };
         notify();
+
+        // Fix sync-on-reconnect: trigger coordinated sync immediately
+        requestSync().catch(err => {
+            console.warn('[WS Sync] Reconnect sync error:', err);
+        });
+
+        // Start 30s heartbeat keep-alive with opt-in pong
+        startHeartbeat(socket);
     };
 
-    ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+        if (ws !== socket) return;
         try {
             const data = JSON.parse(event.data);
+
+            // Trap 1: Exclude pong from the doorbell so watchdog's own keepalive
+            // does not drive a sync every 30s.
+            if (data.type === 'pong') {
+                handlePong(socket);
+                return;
+            }
             
             if (data.type === 'system_announcement') {
                 announcementListeners.forEach(cb => cb(data));
@@ -75,23 +234,48 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
             cacheState(currentState);
             notify();
 
-            // Doorbell: any non-snapshot broadcast means something changed.
-            // Let open screens (e.g. the active chat) refresh immediately
-            // instead of waiting for their polling interval.
+            // Doorbell: non-snapshot broadcasts signal data changed. Routed through the
+            // coordinator rather than firing every listener directly, so bursts coalesce
+            // (150ms debounce), only one run is ever in flight, and a request arriving
+            // mid-run queues exactly one trailing run.
+            //
+            // `new_message` is deliberately NOT excluded, which departs from native. Native
+            // skips requestSync() on new_message because THERE performSync is a heavy
+            // multi-endpoint delta pull, and running one per received message hammered the
+            // node and churned the sync lock. The PWA coordinator is not that: its work is
+            // firing the registered listeners, which on a new message are exactly the right
+            // things to run — loadConversations, and the open chat's loadMessages.
+            // Excluding it would kill the fast path MessagesPage documents at its
+            // onSyncActivity subscription: the open conversation would stop updating on
+            // arrival and fall back to its poll tick, which Stage 5 relaxes to a backstop.
             if (data.type !== 'state_snapshot') {
-                activityListeners.forEach(cb => cb());
+                requestSync().catch(err => {
+                    console.warn('[WS Sync] Broadcast sync error:', err);
+                });
             }
         } catch { /* ignore malformed messages */ }
     };
 
-    ws.onclose = () => {
-        currentState = { ...currentState, connected: false };
-        notify();
-        scheduleReconnect(originalUrl);
+    socket.onclose = () => {
+        if (ws === socket) {
+            ws = null;
+            stopHeartbeat();
+            watchdogArmed = false;
+            lastPongAt = null;
+            // Dropped before it proved stable, so the backoff must keep growing.
+            if (stabilityTimeoutId) {
+                clearTimeout(stabilityTimeoutId);
+                stabilityTimeoutId = null;
+            }
+            currentState = { ...currentState, connected: false };
+            notify();
+            scheduleReconnect(originalUrl);
+        }
     };
 
-    ws.onerror = () => {
-        ws?.close();
+    socket.onerror = () => {
+        if (ws !== socket) return;
+        socket.close();
     };
 }
 
@@ -99,7 +283,12 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
  * Connect to the BeanPool node's WebSocket state feed.
  */
 export function connectToAnchor(url?: string): void {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    if (isConnecting) return;
+    isConnecting = true;
+
     const baseWsUrl = url ?? getNodeWsUrl('/ws');
+    currentUrl = baseWsUrl;
 
     loadIdentity()
         .then(async (ident) => {
@@ -118,11 +307,57 @@ export function connectToAnchor(url?: string): void {
         })
         .catch(() => {
             establishConnection(baseWsUrl, baseWsUrl);
+        })
+        .finally(() => {
+            isConnecting = false;
         });
 }
 
 function scheduleReconnect(url: string): void {
-    setTimeout(() => connectToAnchor(url), RECONNECT_INTERVAL);
+    if (reconnectTimeoutId) return;
+
+    const jitter = Math.random() * 1000;
+    const delay = reconnectDelay + jitter;
+
+    reconnectTimeoutId = setTimeout(() => {
+        reconnectTimeoutId = null;
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        connectToAnchor(url);
+    }, delay);
+}
+
+// Page visibility listener — reconnects immediately when tab returns to foreground,
+// and pauses heartbeat / watchdog while hidden so a hidden tab is not kept awake.
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        const isHidden = document.hidden || document.visibilityState === 'hidden';
+        if (isHidden) {
+            stopHeartbeat();
+        } else {
+            const isDead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+            if (isDead) {
+                if (ws) {
+                    try { ws.close(); } catch {}
+                    ws = null;
+                }
+                // Unlinking `ws` above means the old socket's onclose never runs its cleanup, so
+                // the armed flag would survive onto the REPLACEMENT connection and let the
+                // watchdog fire before that connection has ever produced a pong — the exact
+                // invariant the arm-on-first-pong rule exists to hold. Reset it here too.
+                watchdogArmed = false;
+                lastPongAt = null;
+                stopHeartbeat();
+                if (reconnectTimeoutId) {
+                    clearTimeout(reconnectTimeoutId);
+                    reconnectTimeoutId = null;
+                }
+                reconnectDelay = 1000;
+                connectToAnchor(currentUrl ?? undefined);
+            } else if (ws) {
+                startHeartbeat(ws);
+            }
+        }
+    });
 }
 
 /**
@@ -144,14 +379,12 @@ export function getSyncState(): SyncState {
 }
 
 /**
- * Subscribe to WebSocket "activity" — fires on every non-snapshot broadcast,
- * signalling that data changed and an open view should refresh now.
+ * Subscribe to WebSocket "activity" — routed through the sync coordinator.
+ * Fires during coordinated sync runs (e.g. on reconnect and on non-chat broadcasts)
+ * to let open views refresh in a debounced, single-flight manner.
  */
-export function onSyncActivity(cb: () => void): () => void {
-    activityListeners.push(cb);
-    return () => {
-        activityListeners = activityListeners.filter(l => l !== cb);
-    };
+export function onSyncActivity(cb: () => void | Promise<void>): () => void {
+    return registerSyncActivityListener(cb);
 }
 
 /**
@@ -162,4 +395,39 @@ export function onSystemAnnouncement(cb: (a: any) => void): () => void {
     return () => {
         announcementListeners = announcementListeners.filter(l => l !== cb);
     };
+}
+
+/**
+ * Reset sync module state for isolated unit testing.
+ */
+export function resetSyncForTest(): void {
+    if (ws) {
+        try { ws.close(); } catch {}
+        ws = null;
+    }
+    if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId);
+        reconnectTimeoutId = null;
+    }
+    stopHeartbeat();
+    if (stabilityTimeoutId) {
+        clearTimeout(stabilityTimeoutId);
+        stabilityTimeoutId = null;
+    }
+    watchdogArmed = false;
+    lastPongAt = null;
+    reconnectDelay = 1000;
+    isConnecting = false;
+    currentUrl = null;
+    listeners = [];
+    announcementListeners = [];
+    currentState = { connected: false, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
+}
+
+export function getWatchdogArmedForTest(): boolean {
+    return watchdogArmed;
+}
+
+export function getLastPongAtForTest(): number | null {
+    return lastPongAt;
 }

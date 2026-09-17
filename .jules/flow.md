@@ -35,6 +35,10 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 9. **Record outcomes below.**
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — MembersModule catch block unknown typing LANDED in #675.
+Replaced `catch (e: any)` with `catch (e: unknown)` and `instanceof Error` type guards across all six catch blocks in `apps/manager/src/components/modules/MembersModule.tsx`. Do not re-file.
+In component event handlers and async catch blocks, never use `catch (e: any)`. Use `catch (e: unknown)` with an `e instanceof Error ? e.message : String(e)` fallback guard.
+
 ### 2026-08-25 — LogsModule `any` → `LogEntry` LANDED in #359. Raised three times.
 #382 and #398 closed. #382 kept `[key: string]: any`, which defeated its own stated purpose.
 
@@ -71,3 +75,11 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-08-25 - Replace any types in ThreatReviewModal
 **Learning:** `ThreatReviewModal.tsx` relied on `any` types for `threat`, `profiles`, `members`, and callback props, weakening type safety in security review dialogs.
 **Action:** Define strict interfaces (`ThreatItem`, `MemberItem`) for modal props and lookup maps to enhance DX and autocompletion.
+
+## 2026-08-25 - Replace any types in ai-client, node-client and EditNodeModal
+**Learning:** `lib/ai-client.ts`, `lib/node-client.ts`, and `EditNodeModal.tsx` relied on `any` types for parameters, response payloads, and catch error variables, weakening type safety across manager API clients and modals.
+**Action:** Replace `any` types with strict `unknown` types and typed interfaces to enhance autocompletion and prevent runtime type mismatches.
+
+## 2026-09-10 - Replace any types with strict interfaces in App.tsx and node-client.ts
+**Learning:** `App.tsx` and `node-client.ts` relied on `any` types for `fleetNodeData`, `nodeData`, `nodeLogs`, and filter parameters, bypassing type checking for node health flags and user reports.
+**Action:** Defined `NodeHealthFlag`, `NodeReport`, `MemberItem`, and `NodeDataPayload` interfaces in `node-client.ts` and updated state and filter callbacks in `App.tsx` with strict types.

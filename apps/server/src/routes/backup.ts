@@ -8,7 +8,7 @@ import path from 'node:path';
 import {
     getNodeRole, exportSyncState,
     getConversationsByMember, getConversationMessages,
-    getAdminPubkey, recordReplicationAccess, getReplicationAccessLog,
+    recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig,
@@ -399,7 +399,9 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         return;
     }
     ctx.set('Content-Type', 'application/octet-stream');
-    ctx.set('Content-Disposition', `attachment; filename="${path.basename(target)}"`);
+    // eslint-disable-next-line no-control-regex
+    const safeName = path.basename(target).replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
+    ctx.set('Content-Disposition', `attachment; filename="${safeName}"`);
     ctx.body = fs.createReadStream(target);
 });
 
@@ -412,6 +414,39 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
         ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })
         : getAutoSnapshotConfig();
     ctx.body = { success: true, config };
+});
+
+// Verify SQLite integrity check on active database or snapshot (PRAGMA integrity_check)
+router.post('/api/local/admin/backup/verify', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { name } = (ctx as any).requestBody || {};
+    try {
+        if (name) {
+            const target = resolveSnapshotPath(name);
+            if (!target || !fs.existsSync(target)) {
+                ctx.status = 404;
+                ctx.body = { error: 'Snapshot not found' };
+                return;
+            }
+            const Database = (await import('better-sqlite3')).default;
+            const snapDb = new Database(target, { readonly: true });
+            let check: any[];
+            try {
+                check = snapDb.pragma('integrity_check') as any[];
+            } finally {
+                snapDb.close();
+            }
+            const ok = Array.isArray(check) && check.length === 1 && check[0]?.integrity_check === 'ok';
+            ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
+        } else {
+            const check = db.pragma('integrity_check') as any[];
+            const ok = Array.isArray(check) && check.length === 1 && check[0]?.integrity_check === 'ok';
+            ctx.body = { success: true, ok, result: check, verifiedAt: new Date().toISOString() };
+        }
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { error: e.message || 'Integrity check failed' };
+    }
 });
 
 // Backup pull cadence — operator-tunable from the fleet manager. GET returns the

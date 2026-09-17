@@ -21,12 +21,16 @@
 #
 # "Registered" means a name appears in a real INVOCATION, never in prose. Comments in test-all.sh
 # mention suite names freely (there is a `test-x hangs` example in one), so a naive grep over the
-# file reports false positives. Only two shapes actually run a suite:
+# file reports false positives. Only these shapes actually run a suite:
 #
-#     for t in a b c; do ... tsx "src/$t.ts"     ← the batch loops
+#     SUITES=(                                   ← the batch lists, one name per line,
+#       test-a                                     iterated by `for t in "${SUITES[@]}"`
+#       test-b
+#     )
+#     for t in a b c; do ... tsx "src/$t.ts"     ← a short inline batch loop
 #     tsx src/test-name.ts                       ← the env-flag variants
 #
-# Both are matched below. Prose is not.
+# All three shapes are matched below. Prose is not.
 #
 # It also flags the reverse — a registered name with no file — which is how a typo in the list
 # turns into a suite that quietly never runs.
@@ -46,14 +50,18 @@ ALLOW=(
 
 on_disk=$(find "$SUITE_DIR" -maxdepth 1 -name 'test-*.ts' -exec basename {} .ts \; | sort)
 
-# Names reached by a batch loop: pull each `for t in ...; do` list and split it.
+# Names in a batch list: every line between a `...SUITES=(` line and its closing `)`.
+array_names=$(awk '/^[[:space:]]*[A-Z_]*SUITES=\([[:space:]]*$/ { inside = 1; next }
+                   inside && /^[[:space:]]*\)/ { inside = 0 }
+                   inside { sub(/#.*/, ""); print }' "$RUNNER" | tr -s ' \t' '\n\n')
+# Names reached by an inline batch loop: pull each `for t in ...; do` list and split it.
 loop_names=$(grep -oE '^[[:space:]]*for t in [a-z0-9 _-]+;' "$RUNNER" \
              | sed -E 's/^[[:space:]]*for t in //; s/;$//' | tr ' ' '\n')
 # Names invoked directly, with or without quotes.
 direct_names=$(grep -oE 'tsx "?src/test-[a-z0-9-]+\.ts' "$RUNNER" \
                | sed -E 's|.*src/||; s|\.ts$||')
 
-registered=$(printf '%s\n%s\n' "$loop_names" "$direct_names" \
+registered=$(printf '%s\n%s\n%s\n' "$array_names" "$loop_names" "$direct_names" \
              | grep -E '^test-[a-z0-9-]+$' | sort -u)
 
 allowed=$(printf '%s\n' "${ALLOW[@]}" | grep -E '^test-' | sort -u)
@@ -68,9 +76,9 @@ if [ -n "$unregistered" ]; then
   echo "❌ Test suites exist that CI never runs:"
   echo "$unregistered" | sed 's/^/     /'
   echo ""
-  echo "   Add each to a batch loop in $RUNNER — or, if it needs an env flag, to its own"
-  echo "   invocation beside the other flag variants. If a suite genuinely should not run in"
-  echo "   CI, add it to ALLOW in $0 with a reason."
+  echo "   Add each, on its own line, to the SUITES list in $RUNNER — or, if it needs an env"
+  echo "   flag, to its own invocation beside the other flag variants. If a suite genuinely should"
+  echo "   not run in CI, add it to ALLOW in $0 with a reason."
   rc=1
 fi
 

@@ -1,9 +1,12 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Platform, Linking, Modal, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, AndroidSoftInputModes, useKeyboardHandler, useKeyboardState } from 'react-native-keyboard-controller';
+import { withJitter } from '../../utils/jitter';
 import { scheduleOnRN } from 'react-native-worklets';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, useFocusEffect, Stack } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -97,7 +100,7 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 
 export default function ChatScreen() {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
+    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
@@ -631,7 +634,8 @@ export default function ChatScreen() {
             setEditingMessage(null);
             // Fresh window on each (re)open — a long thread starts at one page again.
             msgLimitRef.current = MESSAGE_PAGE_SIZE;
-            let interval: ReturnType<typeof setInterval>;
+            let interval: ReturnType<typeof setInterval> | null = null;
+            let appStateSub: any = null;
             promptedRef.current = false;
 
             let sub: any = null;
@@ -651,13 +655,41 @@ export default function ChatScreen() {
                 });
 
                 // Background Poll
-                interval = setInterval(() => {
+                const pollSingle = () => {
                     syncSingleConversation(id as string).then(() => {
                         loadConversationData();
                         loadMessages(true);
                         loadDeals();
                     });
-                }, 3000);
+                };
+
+                const startPolling = () => {
+                    if (!interval) {
+                        pollSingle();
+                        interval = setInterval(pollSingle, withJitter(3000));
+                    }
+                };
+
+                const stopPolling = () => {
+                    if (interval) {
+                        clearInterval(interval);
+                        interval = null;
+                    }
+                };
+
+                const handleAppStateChange = (nextState: AppStateStatus) => {
+                    if (nextState === 'active') {
+                        startPolling();
+                    } else {
+                        stopPolling();
+                    }
+                };
+
+                if (AppState.currentState === 'active') {
+                    startPolling();
+                }
+
+                appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
                 const { DeviceEventEmitter } = require('react-native');
                 sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
@@ -672,15 +704,18 @@ export default function ChatScreen() {
                 // than waiting for the heavier full reconciliation (requestSync)
                 // to finish and emit 'sync_data_updated'.
                 wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
-                    syncSingleConversation(id as string).then(() => {
-                        loadConversationData();
-                        loadMessages(true);
-                        loadDeals();
-                    });
+                    if (AppState.currentState === 'active') {
+                        syncSingleConversation(id as string).then(() => {
+                            loadConversationData();
+                            loadMessages(true);
+                            loadDeals();
+                        });
+                    }
                 });
             }
             return () => {
                 if (interval) clearInterval(interval);
+                if (appStateSub) appStateSub.remove();
                 if (sub) sub.remove();
                 if (wsSub) wsSub.remove();
             };

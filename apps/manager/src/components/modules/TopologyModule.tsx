@@ -14,6 +14,7 @@ import {
     approveRegistrarClaim,
     revokeRegistrarClaim,
     downloadAdminFile,
+    getTfaSessionToken,
     type HarvesterNodeState,
     type HistoryFileItem,
     type SnapshotItem,
@@ -69,10 +70,15 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setRegistrarLoading(true);
         setRegistrarError(null);
         try {
-            const items = await getRegistrarPending(activeNode?.url, activeNode?.adminPassword);
+            const items = await getRegistrarPending(
+                activeNode?.url,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setRegistrarAllocations(items);
-        } catch (e: any) {
-            setRegistrarError(e.message || 'Failed to load registrar claims');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setRegistrarError(msg || 'Failed to load registrar claims');
         } finally {
             setRegistrarLoading(false);
         }
@@ -93,34 +99,52 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     const handleApproveClaim = async (name: string) => {
         try {
-            await approveRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await approveRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to approve domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to approve domain ${name}: ${msg}` });
         }
     };
 
     const handleRejectClaim = async (name: string) => {
         try {
-            await revokeRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await revokeRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to reject domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to reject domain ${name}: ${msg}` });
         }
     };
 
     const handleRevokeAllocation = async (name: string) => {
         try {
-            await revokeRegistrarClaim(activeNode?.url, name, activeNode?.adminPassword);
+            await revokeRegistrarClaim(
+                activeNode?.url,
+                name,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
             setConfirmAction(null);
             await loadRegistrar();
-        } catch (e: any) {
-            setActionToast({ type: 'error', message: `❌ Failed to revoke domain ${name}: ${e.message}` });
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setActionToast({ type: 'error', message: `❌ Failed to revoke domain ${name}: ${msg}` });
         }
     };
 
@@ -128,7 +152,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus(activeNode?.adminPassword);
+            const data = await fetchHarvesterStatus(
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -148,7 +175,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!targetSnapshotNode) return;
         setSnapshotLoading(true);
         try {
-            const items = await fetchNodeSnapshots(targetSnapshotNode.url, targetSnapshotNode.adminPassword);
+            const items = await fetchNodeSnapshots(
+                targetSnapshotNode.url,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             setSnapshots(items);
         } catch {
             setSnapshots([]);
@@ -192,17 +223,19 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 kind === 'db'
                     ? `beanpool-backup-${slug}.db`
                     : `identity-bundle-${slug}.tar.gz`,
+                node ? getTfaSessionToken(node.id) : undefined,
             );
-        } catch (e: any) {
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
             // "Failed to fetch" is what a browser says when the request never got an answer
             // at all, and on its own it leaves the operator unable to tell that from a
             // rejected password. These endpoints are same-origin — served by the node this
             // dashboard is loaded from, or proxied there in dev — so there is no CORS
             // preflight in the picture and no remote hop to blame: it means the backend
             // behind this page did not respond.
-            const detail = /failed to fetch|networkerror|load failed/i.test(e?.message || '')
+            const detail = /failed to fetch|networkerror|load failed/i.test(msg)
                 ? "no response from the server behind this dashboard — check it's still running"
-                : (e?.message || String(e));
+                : msg;
             alert(`${kind === 'db' ? 'Database' : 'Identity bundle'} download failed: ${detail}`);
         } finally {
             setDownloadingKey(null);
@@ -212,10 +245,17 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(nodeId, node?.url, node?.adminPassword, activeNode?.adminPassword);
+            await triggerHarvesterSync(
+                nodeId,
+                node?.url,
+                node?.adminPassword,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             await loadHarvester();
-        } catch (e: any) {
-            alert(`Harvest sync failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Harvest sync failed: ${msg}`);
         } finally {
             setHarvestingNodeId(null);
         }
@@ -229,9 +269,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { name: snapName },
                 targetSnapshotNode.adminPassword,
                 snapName,
+                getTfaSessionToken(targetSnapshotNode.id),
             );
-        } catch (e: any) {
-            alert(`Snapshot download failed: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Snapshot download failed: ${msg}`);
         }
     };
 
@@ -243,9 +285,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { nodeId, filename },
                 historyNode?.adminPassword,
                 filename,
+                historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
-        } catch (e: any) {
-            alert(`Archive download failed: ${e.message || String(e)}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Archive download failed: ${msg}`);
         }
     };
 
@@ -254,7 +298,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(nodeId, activeNode?.adminPassword);
+            const items = await fetchNodeHistory(
+                nodeId,
+                activeNode?.adminPassword,
+                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+            );
             setHistoryList(items);
         } catch {
             setHistoryList([]);
@@ -268,10 +316,15 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!targetSnapshotNode) return;
         setCreatingSnapshot(true);
         try {
-            await createNodeSnapshot(targetSnapshotNode.url, targetSnapshotNode.adminPassword);
+            await createNodeSnapshot(
+                targetSnapshotNode.url,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             await loadSnapshots();
-        } catch (e: any) {
-            alert(`Snapshot creation failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Snapshot creation failed: ${msg}`);
         } finally {
             setCreatingSnapshot(false);
         }
@@ -281,10 +334,16 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const handleDeleteSnapshot = async (name: string) => {
         if (!targetSnapshotNode || !confirm(`Delete snapshot ${name}?`)) return;
         try {
-            await deleteNodeSnapshot(targetSnapshotNode.url, name, targetSnapshotNode.adminPassword);
+            await deleteNodeSnapshot(
+                targetSnapshotNode.url,
+                name,
+                targetSnapshotNode.adminPassword,
+                getTfaSessionToken(targetSnapshotNode.id),
+            );
             await loadSnapshots();
-        } catch (e: any) {
-            alert(`Failed to delete snapshot: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed to delete snapshot: ${msg}`);
         }
     };
 
@@ -294,10 +353,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setCadenceSaving(true);
         setCadenceMsg(null);
         try {
-            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword);
+            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setCadenceMsg('✅ Replication cadence updated!');
-        } catch (e: any) {
-            setCadenceMsg(`❌ Error: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            setCadenceMsg(`❌ Error: ${msg}`);
         } finally {
             setCadenceSaving(false);
         }
@@ -308,10 +368,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!activeNode || !confirm(`Force full resync for ${activeNode.name}? This discards drifted rows on standby.`)) return;
         setResyncing(true);
         try {
-            await forceNodeResync(activeNode.url, activeNode.adminPassword);
+            await forceNodeResync(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             alert('Replication resync requested.');
-        } catch (e: any) {
-            alert(`Resync failed: ${e.message}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Resync failed: ${msg}`);
         } finally {
             setResyncing(false);
         }
@@ -369,7 +430,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         return id;
     };
 
-    const fleetNodesList = profiles.length > 0 ? profiles : [activeNode];
+    const fleetNodesList = profiles.length > 0 ? profiles : (activeNode ? [activeNode] : []);
     const totalFleetBackupBytes = Object.values(harvesterState).reduce((acc, curr) => acc + (curr.dbSizeBytes || 0), 0);
 
     return (
@@ -495,7 +556,19 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
                         </div>
-                        {harvestLoading && Object.keys(harvesterState).length === 0 ? (
+                        {fleetNodesList.length === 0 ? (
+                            <div className="p-8 text-center space-y-3 font-sans">
+                                <div className="w-12 h-12 rounded-2xl bg-nature-900 border border-nature-800 text-terra-400 flex items-center justify-center text-xl font-bold mx-auto shadow-inner">
+                                    📦
+                                </div>
+                                <div>
+                                    <h5 className="text-sm font-bold text-white m-0">No Fleet Nodes Configured</h5>
+                                    <p className="text-xs text-nature-400 m-0 mt-1 max-w-sm mx-auto">
+                                        Configure or select a sovereign node profile in Fleet Settings to view harvested fleet backups.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : harvestLoading && Object.keys(harvesterState).length === 0 ? (
                             <div className="p-8 text-center text-xs text-sky-400 font-mono animate-pulse">
                                 🔄 Loading harvested fleet backup status...
                             </div>
@@ -954,7 +1027,11 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </span>
                         </div>
 
-                        {registrarAllocations.filter(a => a.status === 'pending').length === 0 ? (
+                        {registrarLoading && registrarAllocations.length === 0 ? (
+                            <div className="p-8 text-center text-xs text-sky-400 font-mono animate-pulse">
+                                🔄 Loading domain registrar claims...
+                            </div>
+                        ) : registrarAllocations.filter(a => a.status === 'pending').length === 0 ? (
                             <div className="p-8 text-center text-xs text-nature-400">
                                 No pending domain name claims requiring approval at this time.
                             </div>

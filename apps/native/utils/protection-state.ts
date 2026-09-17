@@ -88,8 +88,16 @@ export const KEEPER_LABELS: Record<string, string> = {
  *
  * Uses TWO_LAYER_THRESHOLD from @beanpool/core — never a hardcoded number.
  */
-function thresholdFor(enrolled: readonly string[]): number {
-    if (enrolled.includes('sso')) return TWO_LAYER_THRESHOLD;
+export function thresholdFor(
+    enrolled: readonly string[],
+    options?: { threshold?: number; isSingleBlob?: boolean } | number,
+): number {
+    if (typeof options === 'number') return options;
+    if (options?.threshold !== undefined) return options.threshold;
+    if (options?.isSingleBlob) return 1;
+    if (enrolled.includes('sso')) {
+        return enrolled.includes('hub') ? TWO_LAYER_THRESHOLD : 1;
+    }
     return TWO_LAYER_THRESHOLD + 1;
 }
 
@@ -137,11 +145,19 @@ export function protectionFrom(result: KeeperEnrolmentResult | null): Protection
         };
     }
 
-    const threshold = thresholdFor(result.enrolled);
+    const isSingleBlob = result.isSingleBlob ?? (result.threshold === 1);
+    const threshold = thresholdFor(result.enrolled, { threshold: result.threshold, isSingleBlob });
     const tier = tierFrom(result.enrolled);
 
-    if (result.enrolled.length < threshold) {
-        const stillNeeded = threshold - result.enrolled.length;
+    // In single-blob mode, an orphaned/carried hub is not an active keeper that adds to
+    // redundancy. Filter it out when determining coverage and spare count so that a member
+    // with 1 provider and an orphaned hub sees spare: 0 rather than 1.
+    const effectiveEnrolled = (isSingleBlob && tier === 'sso')
+        ? result.enrolled.filter(k => k !== 'hub')
+        : result.enrolled;
+
+    if (effectiveEnrolled.length < threshold) {
+        const stillNeeded = threshold - effectiveEnrolled.length;
         if (stillNeeded === 1) {
             return {
                 state: 'almost',
@@ -164,7 +180,7 @@ export function protectionFrom(result: KeeperEnrolmentResult | null): Protection
         };
     }
 
-    const spare = Math.max(0, result.enrolled.length - threshold);
+    const spare = Math.max(0, effectiveEnrolled.length - threshold);
 
     return {
         state: 'covered',

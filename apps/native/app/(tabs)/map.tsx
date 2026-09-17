@@ -220,7 +220,7 @@ export default function MapScreen() {
         map: { width: '100%', height: '100%' },
 
         // Floating Filter Bar
-        filterBarWrapper: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', zIndex: 90, paddingTop: 100 },
+        filterBarWrapper: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 90 },
         filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 4, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
         filterChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
         filterChipActive: { backgroundColor: colors.border.strong },
@@ -993,7 +993,7 @@ export default function MapScreen() {
 
             {/* Floating Filter Bar */}
             {!showNewPost && !selectedPostPreview && (
-                <SafeAreaView style={styles.filterBarWrapper} pointerEvents="box-none">
+                <View style={styles.filterBarWrapper} pointerEvents="box-none">
                     <View style={styles.filterBar}>
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => setMapTypeFilter('all')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>All</Text>
@@ -1017,7 +1017,7 @@ export default function MapScreen() {
                             </Pressable>
                         )}
                     </View>
-                </SafeAreaView>
+                </View>
             )}
 
             <CategoryPickerSheet

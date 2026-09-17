@@ -1,89 +1,118 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-    getCrowdfundProjects, createCrowdfundProject, pledgeToCrowdfundProject,
-    type CrowdfundProject, getAllMembers, request,
-    getTreasuries, type Treasury
+    getTreasuries, getBalance, type Treasury, type BalanceInfo,
+    createEnterprise,
+    getDecisions, type DecisionWithTally,
+    getCommonsBalance,
+    getAllMembers, type MemberSummary,
+    getGroups, type Group,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { DecideSection } from '../components/DecideSection';
+import { ProposeDecisionModal } from '../components/ProposeDecisionModal';
+import { CreateGroupModal } from '../components/CreateGroupModal';
+import { GroupDetailModal } from '../components/GroupDetailModal';
 
 interface Props {
     identity: BeanPoolIdentity | null;
+    onOpenTreasury?: (publicKey: string) => void;
+    initialSection?: 'decide' | 'enterprises' | 'groups';
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
-export function ProjectsPage({ identity }: Props) {
-    const [projects, setProjects] = useState<CrowdfundProject[]>([]);
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate }: Props) {
+    const [treasuries, setTreasuries] = useState<Treasury[]>([]);
+    // Avatar URLs that failed to load; those cards show the no-avatar placeholder instead of alt text.
+    const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
+    const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     // UI States
-    const [selectedProject, setSelectedProject] = useState<CrowdfundProject | null>(null);
-    const [showNewProject, setShowNewProject] = useState(false);
-    
-    // New Project Form
+    const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
+    const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
+    const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
+    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    const [commonsBalance, setCommonsBalance] = useState<number>(0);
+    const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
+    const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+
+    // Groups State
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
+    const [groupCategoryFilter, setGroupCategoryFilter] = useState<string>('all');
+    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
+
+    // Filter: all | ongoing | bounded
+    const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
+
+    // Propose / New Enterprise modal
+    const [showNewModal, setShowNewModal] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newDescription, setNewDescription] = useState('');
+    const [newLifecycle, setNewLifecycle] = useState<'ongoing' | 'bounded'>('bounded');
     const [newGoal, setNewGoal] = useState<number | ''>('');
     const [newDeadline, setNewDeadline] = useState('');
     const [newPhotos, setNewPhotos] = useState<string[]>([]);
     const [creating, setCreating] = useState(false);
-    
-    // Pledge Form
-    const [pledgeAmount, setPledgeAmount] = useState<number | ''>('');
-    const [pledgeMemo, setPledgeMemo] = useState('');
-    const [pledging, setPledging] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
 
-    const [isEditingProject, setIsEditingProject] = useState(false);
-    const [editTitle, setEditTitle] = useState('');
-    const [editDescription, setEditDescription] = useState('');
-    const [editGoal, setEditGoal] = useState<number | ''>('');
-    const [editDeadline, setEditDeadline] = useState('');
-    const [editPhotos, setEditPhotos] = useState<string[]>([]);
-    const [updating, setUpdating] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+    // Keyboard accessibility: Escape closes modal
+    useEffect(() => {
+        if (!showNewModal) return;
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowNewModal(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [showNewModal]);
 
-    // Profile Cache
-    const [profiles, setProfiles] = useState<Record<string, { callsign: string, homeNodeUrl?: string }>>({});
-    const [maxExpiryDays, setMaxExpiryDays] = useState<number>(365);
-    const [treasuries, setTreasuries] = useState<Treasury[]>([]);
-
-    const maxDateString = useMemo(() => {
-        const d = new Date();
-        d.setDate(d.getDate() + maxExpiryDays);
-        return d.toISOString().split('T')[0];
-    }, [maxExpiryDays]);
-
-    const minDateString = useMemo(() => {
-        return new Date().toISOString().split('T')[0];
-    }, []);
-
-    const fetchProjects = async () => {
+    const fetchEnterprises = async () => {
         try {
             setLoading(true);
-            const [data, members, tres] = await Promise.all([
-                getCrowdfundProjects(),
-                getAllMembers(),
-                getTreasuries().catch(() => ({ treasuries: [] })), // graceful on older nodes
+            setError(null);
+            const [tresData, decData, commonsData, membersData, balData] = await Promise.all([
+                getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
+                getDecisions ? getDecisions().catch(() => ({ decisions: [], activeMembers30d: 0 })) : { decisions: [], activeMembers30d: 0 },
+                getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
+                getAllMembers ? getAllMembers().catch(() => []) : [],
+                identity?.publicKey && getBalance ? getBalance(identity.publicKey).catch(() => null) : null,
             ]);
-            setProjects(data.projects);
-            setTreasuries(tres.treasuries || []);
-            if (data.maxProjectExpiryDays) setMaxExpiryDays(data.maxProjectExpiryDays);
-            
-            const profs: Record<string, { callsign: string, homeNodeUrl?: string }> = {};
-            members.forEach(m => {
-                profs[m.publicKey] = { callsign: m.callsign };
-            });
-            setProfiles(profs);
+            setTreasuries(tresData.treasuries || []);
+            setDecisions(decData.decisions || []);
+            setActiveMembers30d(decData.activeMembers30d || 0);
+            setCommonsBalance(commonsData.balance || 0);
+            if (balData) setBalanceInfo(balData);
+            if (Array.isArray(membersData)) {
+                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+            }
         } catch (err: any) {
-            setError(err.message || 'Failed to fetch projects');
+            setError(err.message || 'Failed to fetch community enterprises');
         } finally {
             setLoading(false);
         }
     };
 
+    const canProposeDecision = (balanceInfo?.earnedCredit || 0) > 0;
+    const hasOpenDecision = useMemo(() => {
+        if (!identity?.publicKey) return false;
+        return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
+    }, [decisions, identity]);
+    const openDecisionsCount = useMemo(() => {
+        return decisions.filter(d => d.status === 'open').length;
+    }, [decisions]);
+
     useEffect(() => {
-        fetchProjects();
-    }, []);
+        fetchEnterprises();
+        if (identity?.publicKey && getBalance) {
+            getBalance(identity.publicKey).then(setBalanceInfo).catch(() => {});
+        }
+    }, [identity?.publicKey]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
@@ -95,149 +124,97 @@ export function ProjectsPage({ identity }: Props) {
             reader.onload = (event) => {
                 const base64 = event.target?.result as string;
                 if (base64) {
-                    setNewPhotos(prev => [...prev, base64].slice(0, 3)); // Max 3 photos
-                }
-            };
-            // Resize image before uploading (basic implementation)
-            reader.readAsDataURL(file); 
-        });
-        e.target.value = ''; // Reset
-    };
-
-    const handleEditPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files) return;
-        
-        Array.from(files).forEach((file) => {
-            if (!file.type.startsWith('image/')) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const base64 = event.target?.result as string;
-                if (base64) {
-                    setEditPhotos(prev => [...prev, base64].slice(0, 3)); // Max 3 photos
+                    setNewPhotos([base64]); // Single avatar
                 }
             };
             reader.readAsDataURL(file); 
         });
-        e.target.value = ''; 
+        e.target.value = '';
     };
 
-    const submitNewProject = async () => {
-        if (!identity) return;
-        if (!newTitle.trim() || !newGoal || Number(newGoal) <= 0) return;
-        
+    const submitNewEnterprise = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!identity || creating) return;
+        if (!newTitle.trim()) {
+            setCreateError('Title is required');
+            return;
+        }
+        if (!newDescription.trim()) {
+            setCreateError('Purpose statement is required (docs/the-commons.md §2.1)');
+            return;
+        }
+        if (newLifecycle === 'bounded' && (!newGoal || Number(newGoal) <= 0)) {
+            setCreateError('Goal amount must be a positive number for a bounded project');
+            return;
+        }
+
         let deadlineAt = null;
-        if (newDeadline) {
+        if (newLifecycle === 'bounded' && newDeadline) {
             deadlineAt = new Date(newDeadline).toISOString();
         }
 
         setCreating(true);
+        setCreateError(null);
         try {
-            await createCrowdfundProject(identity.publicKey, newTitle, newDescription, newPhotos, Number(newGoal), deadlineAt);
-            setShowNewProject(false);
+            await createEnterprise({
+                name: newTitle.trim(),
+                purpose: newDescription.trim(),
+                description: newDescription.trim(),
+                lifecycle: newLifecycle,
+                goalAmount: newLifecycle === 'bounded' ? Number(newGoal) : null,
+                deadlineAt,
+                photos: newPhotos,
+                avatar: newPhotos.length > 0 ? newPhotos[0] : undefined,
+            });
+            setShowNewModal(false);
             setNewTitle('');
             setNewDescription('');
             setNewGoal('');
             setNewDeadline('');
             setNewPhotos([]);
-            fetchProjects();
+            await fetchEnterprises();
         } catch (err: any) {
-            alert(err.message || 'Failed to create project');
+            setCreateError(err.message || 'Failed to propose enterprise');
         } finally {
             setCreating(false);
         }
     };
 
-    const submitPledge = async () => {
-        if (!identity || !selectedProject) return;
-        if (!pledgeAmount || Number(pledgeAmount) <= 0) return;
-
-        setPledging(true);
+    const fetchGroups = useCallback(async () => {
+        setLoadingGroups(true);
         try {
-            await pledgeToCrowdfundProject(selectedProject.id, identity.publicKey, Number(pledgeAmount), pledgeMemo);
-            setPledgeAmount('');
-            setPledgeMemo('');
-            
-            // Refresh instantly
-            const { project } = await import('../lib/api').then(m => m.getCrowdfundProject(selectedProject.id));
-            if (project) {
-                setSelectedProject(project);
-                setProjects(prev => prev.map(p => p.id === project.id ? project : p));
-            }
-        } catch (err: any) {
-            alert(err.message || 'Pledge failed');
+            const list = await getGroups();
+            setGroups(Array.isArray(list) ? list : []);
+        } catch (e) {
+            console.warn('[ProjectsPage] Failed to fetch groups:', e);
         } finally {
-            setPledging(false);
+            setLoadingGroups(false);
         }
-    };
+    }, []);
 
-    const startEditing = () => {
-        if (!selectedProject) return;
-        setEditTitle(selectedProject.title);
-        setEditDescription(selectedProject.description || '');
-        setEditGoal(selectedProject.goal_amount);
-        setEditDeadline(selectedProject.deadline_at ? new Date(selectedProject.deadline_at).toISOString().split('T')[0] : '');
-        try { setEditPhotos(JSON.parse(selectedProject.photos) || []); } catch { setEditPhotos([]); }
-        setIsEditingProject(true);
-    };
-
-    const submitUpdateProject = async () => {
-        if (!identity || !selectedProject) return;
-        if (!editTitle.trim() || !editGoal || Number(editGoal) <= 0) return;
-
-        let deadlineAt = null;
-        if (editDeadline) {
-            deadlineAt = new Date(editDeadline).toISOString();
+    useEffect(() => {
+        if (activeSection === 'groups') {
+            fetchGroups();
         }
+    }, [activeSection, fetchGroups]);
 
-        setUpdating(true);
-        try {
-            const { project } = await import('../lib/api').then(m => m.updateCrowdfundProject(
-                selectedProject.id,
-                identity.publicKey,
-                editTitle.trim(),
-                editDescription.trim(),
-                editPhotos,
-                Number(editGoal),
-                deadlineAt
-            ));
-            setSelectedProject(project);
-            setProjects(prev => prev.map(p => p.id === project.id ? project : p));
-            setIsEditingProject(false);
-        } catch (err: any) {
-            alert(err.message || 'Update failed');
-        } finally {
-            setUpdating(false);
+    const filteredGroups = useMemo(() => {
+        if (groupCategoryFilter === 'all') return groups;
+        if (groupCategoryFilter === 'my_groups') {
+            return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
         }
-    };
+        return groups.filter(g => g.category === groupCategoryFilter);
+    }, [groups, groupCategoryFilter]);
 
-    // Calculate progress helpers
-    const getProgress = (current: number, goal: number) => Math.min(100, (current / goal) * 100);
-
-    /**
-     * A federation link's energy balance, in plain language (#143 step 3).
-     *
-     * THE SIGN IS NOT INTUITIVE and is worth stating: `getEnergyBalance` documents positive as "we owe them
-     * work" and negative as "they owe us work (we extended credit)". Our member buying from theirs pushes
-     * the tab POSITIVE — their community did the work, ours has not returned it yet.
-     *
-     * Written as a sentence rather than a signed number because a bare "-5" on a card is exactly the kind of
-     * thing a member has to guess at, and the whole point of surfacing this is that they should not have to.
-     */
     const energySentence = (energyBalance: number): string => {
-        // Rounded here even though the server already sends 2dp, because a client should not depend on a
-        // server's presentation choices — a raw 12.3456789 arriving would otherwise land on the card.
         const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
         if (beans === 0) return 'Square — nothing owed either way';
-        // The WORD "beans" in prose, and the 🫘 glyph only in the numeric badges where it reads as a unit
-        // (review finding). A screen reader saying "we owe them 8 beans of work" is the sentence; "8 beans
-        // symbol of work" is not.
         return energyBalance > 0
             ? `We owe them ${beans} bean${beans === 1 ? '' : 's'} of work`
             : `They owe us ${beans} bean${beans === 1 ? '' : 's'} of work`;
     };
 
-    const getDaysRemaining = (deadline: string | null) => {
+    const getDaysRemaining = (deadline: string | null | undefined) => {
         if (!deadline) return null;
         const diff = new Date(deadline).getTime() - new Date().getTime();
         const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
@@ -246,186 +223,451 @@ export function ProjectsPage({ identity }: Props) {
         return `${days} days left`;
     };
 
+    const filteredEnterprises = useMemo(() => {
+        let list = [...treasuries];
+        if (filter === 'ongoing') {
+            list = list.filter(t => t.lifecycle !== 'bounded' && (!t.goalAmount || t.goalAmount <= 0));
+        } else if (filter === 'bounded') {
+            list = list.filter(t => t.lifecycle === 'bounded' || (t.goalAmount != null && t.goalAmount > 0));
+        }
+        return list;
+    }, [treasuries, filter]);
+
     return (
-        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: '4rem' }}>
-            <header className="sticky top-0 z-40 bg-nature-900 border-b border-nature-800 p-4 shadow-sm flex flex-col gap-3">
+        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
+            {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
+                on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list. */}
+            <header className="bg-nature-900 px-4 pt-4 pb-3 flex flex-col gap-3">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                            <span>🌱</span> Community Projects
+                            <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Crowdfund shared goals with Beans</p>
+                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, pooled circulation, and shared enterprises</p>
                     </div>
                     {identity && (
                         <button
-                            onClick={() => setShowNewProject(true)}
+                            onClick={() => {
+                                if (activeSection === 'decide') {
+                                    if (!canProposeDecision) {
+                                        alert('You can propose a Decision once you have completed a trade.');
+                                        return;
+                                    }
+                                    if (hasOpenDecision) {
+                                        alert('You already have an open decision (limit 1 open decision per author).');
+                                        return;
+                                    }
+                                    setShowProposeDecision(true);
+                                } else if (activeSection === 'groups') {
+                                    setShowCreateGroupModal(true);
+                                } else {
+                                    setShowNewModal(true);
+                                    setCreateError(null);
+                                }
+                            }}
                             className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
-                            + Propose
+                            {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
                     )}
                 </div>
-            </header>
 
-            {treasuries.length > 0 && (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
-                    <h2 className="text-white font-bold text-sm mb-2 flex items-center gap-2"><span>🏛️</span> Community Treasuries</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {treasuries.map(t => (
-                            <div key={t.publicKey} className={`bg-nature-900 border rounded-xl p-3 flex items-center gap-3 ${t.link ? 'border-sky-900/60' : 'border-nature-800'}`}>
-                                {t.avatar ? (
-                                    <img src={t.avatar} alt="" className="w-10 h-10 rounded-full object-cover" />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-nature-800 flex items-center justify-center" aria-hidden="true">{t.link ? '🔗' : '🏛️'}</div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-white font-semibold text-sm truncate">{t.name}</div>
-                                    {/* A LINK'S HEADLINE IS THE ENERGY BALANCE, not its offer count — #143 §7: "we have
-                                        delivered 480 beans of work to Byron and had none back" is the fact that makes
-                                        anyone call a favour in, and it is the reason the card exists. */}
-                                    {t.link ? (
-                                        <div className="text-nature-400 text-xs">{energySentence(t.link.energyBalance)}</div>
-                                    ) : (
-                                        <div className="text-nature-400 text-xs">{t.liveOffers} live offer{t.liveOffers === 1 ? '' : 's'}</div>
-                                    )}
-                                </div>
-                                <div className="text-right">
-                                    {/* aria-label, not title: a `title` on a non-interactive div is invisible
-                                        to touch and unreachable by keyboard, so on a phone — which is how this
-                                        app is used — the deficit/surplus meaning was carried by colour alone. */}
-                                    <div
-                                        className={`font-bold text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}
-                                        aria-label={`${t.balance} beans — ${t.balance < 0 ? 'running a deficit on its credit line' : 'in surplus'}`}
-                                    >
-                                        {t.balance} 🫘
-                                    </div>
-                                    {/* The ceiling sits beside the balance because §7 makes it the safety on
-                                        commissioning: "the ceiling is the safety, and it must be visible alongside
-                                        the balance". A link starts at 0, so say so plainly rather than showing "0".
-
-                                        text-xs, not text-[0.65rem] (~10.4px): below the 12px floor, and this app
-                                        targets 320dp at 1.3× font scaling, so a hand-tuned size that small is
-                                        unreadable exactly where it matters most. */}
-                                    {/* THE ALLOWANCE, not the ceiling (#143 step 5). This read
-                                        "commissioning off" whenever the ceiling was 0, and that is wrong in
-                                        the case §3 is entirely about: a ceiling of 0 still permits calling in
-                                        credit the community has already earned. A link showing "They owe us
-                                        480 beans of work" directly above the words "commissioning off" told
-                                        the keeper the opposite of the truth.
-
-                                        Server-computed, so this cannot disagree with the route that enforces
-                                        it. Falls back to the ceiling on a node that predates the field. */}
-                                    {t.link && (
-                                        <div className="text-nature-400 text-xs mt-0.5">
-                                            {(t.link.commissionAllowance ?? t.link.commissionCeiling) > 0
-                                                ? `up to ${t.link.commissionAllowance ?? t.link.commissionCeiling} 🫘 to commission`
-                                                : 'nothing to commission'}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                {/* Commons Pool & Available Governance Credits */}
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
+                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                            Commons Pool
+                        </div>
+                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                            {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
+                        </div>
+                    </div>
+                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                            My Governance Credits
+                        </div>
+                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                            {balanceInfo?.earnedCredit ?? 0}
+                        </div>
                     </div>
                 </div>
-            )}
+            </header>
 
-            {loading ? (
-                <div className="p-8 text-center text-nature-500">Loading projects...</div>
-            ) : error ? (
-                <div className="p-8 text-center text-red-500">{error}</div>
-            ) : projects.length === 0 ? (
-                <div className="p-8 text-center text-nature-500">
-                    <p className="mb-4">No projects have been proposed yet.</p>
-                    <p className="text-4xl opacity-50">🌱</p>
+            {/* Section Switcher: Decide vs Enterprises vs Groups — the one sticky row */}
+            <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
+                {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
+                    Groups off a 320px screen at 1.3x text. */}
+                <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
+                    {([
+                        { key: 'decide', emoji: '🗳️', label: 'Decide' },
+                        { key: 'enterprises', emoji: '🏛️', label: 'Enterprises' },
+                        { key: 'groups', emoji: '👥', label: 'Groups' },
+                    ] as const).map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveSection(tab.key)}
+                            className={`flex-1 min-w-0 py-1.5 px-1 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 transition-colors ${
+                                activeSection === tab.key
+                                    ? 'bg-nature-800 text-white shadow-sm'
+                                    : 'text-nature-400 hover:text-white'
+                            }`}
+                        >
+                            <span className="flex items-center gap-1">
+                                <span>{tab.emoji}</span>
+                                {tab.key === 'decide' && openDecisionsCount > 0 && (
+                                    <span className="bg-accent text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
+                                        {openDecisionsCount}
+                                    </span>
+                                )}
+                            </span>
+                            <span className="leading-tight">{tab.label}</span>
+                        </button>
+                    ))}
                 </div>
-            ) : (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {projects.map(project => {
-                        const commonsAlloc = project.commons_allocation || 0;
-                        const pledgeAmount = project.current_amount - commonsAlloc;
-                        const progress = getProgress(project.current_amount, project.goal_amount);
-                        const pledgeProgress = getProgress(pledgeAmount, project.goal_amount);
-                        const commonsProgress = getProgress(commonsAlloc, project.goal_amount);
-                        const isFunded = project.current_amount >= project.goal_amount;
-                        const callsign = profiles[project.creator_pubkey]?.callsign || 'Unknown';
-                        
-                        let photosArr: string[] = [];
-                        try { photosArr = JSON.parse(project.photos); } catch {}
-                        // A2-19 (PWA-2): the project photo is server-controlled and is
-                        // interpolated into a CSS url(); run it through the same
-                        // allowlist/sanitizer as avatars (rejects scheme/CSS-breakout
-                        // chars) so it can't break out of url() to inject CSS / a beacon.
-                        const bgImage = photosArr.length > 0 ? resolveAvatarUrl(photosArr[0]) : null;
+            </div>
 
-                        return (
-                            <div 
-                                key={project.id} 
-                                onClick={() => setSelectedProject(project)}
-                                className="bg-bg-card border border-border-secondary rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col active:scale-[0.99]"
+            {/* Filters scroll away with the content */}
+            <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
+                {/* Filter Controls: All / Ongoing / Bounded */}
+                {activeSection === 'enterprises' && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1 overflow-x-auto scrollbar-none" data-testid="enterprise-filter-chips">
+                        {(['all', 'ongoing', 'bounded'] as const).map(option => (
+                            <button
+                                key={option}
+                                onClick={() => setFilter(option)}
+                                className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                                    filter === option
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                }`}
                             >
-                                {/* Banner Image Strip */}
-                                <div 
-                                    className="h-24 w-full bg-nature-800 relative"
-                                    style={{
-                                        backgroundImage: bgImage ? `url("${bgImage}")` : 'none',
-                                        backgroundSize: 'cover',
-                                        backgroundPosition: 'center',
-                                    }}
+                                {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Filter Controls: Groups Category */}
+                {activeSection === 'groups' && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
+                        <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
+                            {[
+                                { key: 'all', label: 'All Groups' },
+                                { key: 'my_groups', label: 'My Groups' },
+                                { key: 'working_group', label: '🤝 Working Groups' },
+                                { key: 'project', label: '🛠️ Projects' },
+                                { key: 'guild', label: '🛡️ Guilds' },
+                                { key: 'social', label: '☕ Social' },
+                            ].map(option => (
+                                <button
+                                    key={option.key}
+                                    onClick={() => setGroupCategoryFilter(option.key)}
+                                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                                        groupCategoryFilter === option.key
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                    }`}
                                 >
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                                    {isFunded && (
-                                        <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-md shadow-sm">
-                                            🎉 FUNDED
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {activeSection === 'decide' ? (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
+                    <DecideSection
+                        decisions={decisions}
+                        activeMembers30d={activeMembers30d}
+                        identity={identity}
+                        balanceInfo={balanceInfo}
+                        commonsBalance={commonsBalance}
+                        onRefresh={fetchEnterprises}
+                        onOpenPropose={() => {
+                            if (!canProposeDecision) {
+                                alert('You can propose a Decision once you have completed a trade.');
+                                return;
+                            }
+                            if (hasOpenDecision) {
+                                alert('You already have an open decision (limit 1 open decision per author).');
+                                return;
+                            }
+                            setShowProposeDecision(true);
+                        }}
+                        canPropose={canProposeDecision}
+                        hasOpenDecision={hasOpenDecision}
+                        activeView={activeDecideView}
+                        onChangeView={setActiveDecideView}
+                    />
+                </div>
+            ) : activeSection === 'groups' ? (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4">
+                    <div className="p-3 bg-nature-950/60 border border-nature-800 rounded-xl text-xs text-nature-300 leading-relaxed">
+                        👥 <strong>Groups & Teams:</strong> A group is a place to talk to some people rather than everyone. Groups do not hold beans and do not confer trust or voting standing.
+                    </div>
+
+                    {loadingGroups ? (
+                        <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
+                    ) : filteredGroups.length === 0 ? (
+                        <div className="text-center py-16 px-4 bg-nature-950/40 rounded-2xl border border-nature-800/80">
+                            <div className="text-4xl mb-3">👥</div>
+                            <h3 className="text-base font-bold text-white mb-1">No groups found</h3>
+                            <p className="text-xs text-nature-400 max-w-xs mx-auto mb-4">
+                                {groupCategoryFilter === 'my_groups'
+                                    ? 'You have not joined any groups yet.'
+                                    : 'Start a working group, guild, or team to coordinate discussions.'}
+                            </p>
+                            <button
+                                onClick={() => setShowCreateGroupModal(true)}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                            >
+                                + Create a Group
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {filteredGroups.map(g => (
+                                <div
+                                    key={g.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`View details for group ${g.name}`}
+                                    onClick={() => setSelectedGroupForDetail(g)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setSelectedGroupForDetail(g);
+                                        }
+                                    }}
+                                    className="p-4 bg-nature-950/70 hover:bg-nature-900/80 border border-nature-800 hover:border-nature-700 rounded-2xl cursor-pointer transition-all space-y-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <h4 className="font-extrabold text-base text-white truncate">{g.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-[11px] font-bold text-nature-400 capitalize">
+                                                    🏷️ {g.category.replace(/_/g, ' ')}
+                                                </span>
+                                                <span className="text-nature-600">•</span>
+                                                <span className="text-[11px] text-nature-400">
+                                                    {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
+                                                </span>
+                                            </div>
                                         </div>
+                                        {g.viewerRole ? (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                g.viewerRole === 'convenor'
+                                                    ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-700/60'
+                                                    : 'bg-nature-800 text-nature-300'
+                                            }`}>
+                                                {g.viewerRole}
+                                            </span>
+                                        ) : g.viewerStatus === 'pending_approval' ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-950/60 text-amber-300 border border-amber-700/60">
+                                                Pending
+                                            </span>
+                                        ) : null}
+                                    </div>
+
+                                    {g.description && (
+                                        <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
+                                            {g.description}
+                                        </p>
                                     )}
-                                    <div className="absolute bottom-2 left-3 right-3 flex justify-between items-end">
-                                        <h2 className="text-white font-bold tracking-tight text-lg line-clamp-1 flex-1 drop-shadow-md">{project.title}</h2>
+
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500">
+                                        <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
+                                        <span className="text-emerald-500 font-bold hover:underline">View Details →</span>
                                     </div>
                                 </div>
-                                
-                                <div className="p-4 flex flex-col gap-3">
-                                    <p className="text-text-secondary text-sm line-clamp-2 leading-relaxed">
-                                        {project.description || 'No description provided.'}
-                                    </p>
-                                    
-                                    <div className="flex items-center text-xs text-nature-500 font-medium">
-                                        <span>Proposed by <span className="text-accent">{callsign}</span></span>
-                                    </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ) : loading ? (
+                <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
+                ) : error ? (
+                    <div className="p-8 text-center text-red-500">{error}</div>
+                ) : filteredEnterprises.length === 0 ? (
+                    <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
+                        <p className="text-4xl opacity-50 mb-3">🌱</p>
+                        <p className="text-base font-bold text-white mb-1">No enterprises found</p>
+                        <p className="text-sm text-nature-400 mb-6">
+                            Got an idea that benefits the community? Start an enterprise or propose a project to get started.
+                        </p>
+                        {identity && (
+                            <button
+                                onClick={() => {
+                                    setShowNewModal(true);
+                                    setCreateError(null);
+                                }}
+                                className="bg-accent hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                            >
+                                + Propose a Project
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {filteredEnterprises.map(t => {
+                            const hasGoal = t.goalAmount != null && t.goalAmount > 0;
+                            const currentRaised = t.currentAmount != null ? t.currentAmount : Math.max(0, t.balance);
+                            const goal = t.goalAmount || 1;
+                            const progress = Math.min(100, (currentRaised / goal) * 100);
+                            const isFunded = hasGoal && (currentRaised >= goal || t.status === 'funded' || t.status === 'completed');
+                            const daysRemaining = getDaysRemaining(t.deadlineAt);
+                            const resolvedAvatar = resolveAvatarUrl(t.avatar || t.avatarUrl);
+                            const avatarSrc = resolvedAvatar && !failedAvatars.has(resolvedAvatar) ? resolvedAvatar : null;
 
-                                    {/* Progress Goal Bar */}
-                                    <div className="mt-1">
-                                        <div className="flex justify-between text-xs font-bold mb-1.5 items-end flex-wrap gap-1">
-                                            <span className={isFunded ? 'text-emerald-500' : 'text-text-primary'}>
-                                                {project.current_amount} B <span className="text-nature-500 font-normal">raised</span>
-                                            </span>
-                                            <div className="text-right">
-                                                <span className="text-nature-500">Goal: {project.goal_amount} B</span>
-                                                {project.deadline_at && (
-                                                    <div className={`mt-0.5 text-[10px] ${getDaysRemaining(project.deadline_at) === 'Expired' ? 'text-red-500' : 'text-accent'}`}>{getDaysRemaining(project.deadline_at)}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="h-2 w-full bg-nature-200 dark:bg-nature-800 rounded-full overflow-hidden flex">
-                                            <div 
-                                                className={`h-full transition-all duration-1000 ${isFunded ? 'bg-emerald-500' : 'bg-emerald-400'}`}
-                                                style={{ width: `${pledgeProgress}%` }}
-                                                title={`Pledges: ${pledgeAmount.toFixed(0)} B`}
-                                            />
-                                            {commonsAlloc > 0 && (
-                                                <div 
-                                                    className="h-full transition-all duration-1000 bg-blue-500"
-                                                    style={{ width: `${commonsProgress}%` }}
-                                                    title={`Commons: ${commonsAlloc.toFixed(0)} B`}
+                            return (
+                            <div
+                                key={t.publicKey}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => onOpenTreasury?.(t.publicKey)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onOpenTreasury?.(t.publicKey);
+                                    }
+                                }}
+                                className="bg-nature-900 border border-nature-800 hover:border-emerald-500/50 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl p-5 transition-all cursor-pointer shadow-sm hover:shadow-md flex flex-col justify-between group"
+                            >
+                                <div className="space-y-3">
+                                    {/* Top row: Avatar + Name + Lifecycle Tag */}
+                                    <div className="flex items-start gap-3">
+                                        <div className="w-12 h-12 rounded-xl bg-nature-800 border border-nature-700 flex items-center justify-center overflow-hidden shrink-0 text-xl font-bold text-emerald-400">
+                                            {avatarSrc ? (
+                                                <img
+                                                    src={avatarSrc}
+                                                    alt={t.name}
+                                                    onError={() => setFailedAvatars(prev => new Set(prev).add(avatarSrc))}
+                                                    className="w-full h-full object-cover"
                                                 />
+                                            ) : (
+                                                <span>🌱</span>
                                             )}
                                         </div>
-                                        {commonsAlloc > 0 && (
-                                            <div className="flex items-center gap-3 mt-1.5 text-[10px] font-bold">
-                                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />Pledges</span>
-                                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />Commons</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <h3 className="font-bold text-base text-white group-hover:text-emerald-400 transition-colors truncate">
+                                                    {t.name}
+                                                </h3>
+                                                {t.paused && t.status !== 'winding_up' && t.status !== 'completed' && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/40">
+                                                        ⏸️ Paused
+                                                    </span>
+                                                )}
+                                                {t.status === 'winding_up' && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-400 border-rose-500/40">
+                                                        ⏳ Winding up
+                                                    </span>
+                                                )}
+                                                {t.status === 'completed' && (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-stone-700 text-stone-300 border-stone-600">
+                                                        Closed
+                                                    </span>
+                                                )}
+                                                {isFunded ? (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-950/50 text-emerald-300 border-emerald-800/60">
+                                                        🎉 Funded
+                                                    </span>
+                                                ) : hasGoal || t.lifecycle === 'bounded' ? (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-950/50 text-amber-300 border-amber-800/60">
+                                                        🌱 Project
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
+                                                        🏛️ Ongoing
+                                                    </span>
+                                                )}
                                             </div>
-                                        )}
+                                            <p className="text-xs text-nature-400 mt-0.5">
+                                                {t.callsign ? `@${t.callsign} · ` : ''}
+                                                {t.status === 'completed'
+                                                    ? 'Completed · Closed'
+                                                    : t.status === 'winding_up'
+                                                        ? 'Winding up'
+                                                        : t.paused
+                                                            ? 'Paused for season'
+                                                            : `${t.liveOffers ?? 0} live offer${(t.liveOffers ?? 0) === 1 ? '' : 's'}`}
+                                                {t.keepers && t.keepers.length > 0 ? ` · ${t.keepers.length} keeper${t.keepers.length === 1 ? '' : 's'}` : ''}
+                                            </p>
+                                        </div>
                                     </div>
+
+                                    {/* Purpose statement (docs/the-commons.md §2.1) */}
+                                    <p className="text-xs text-nature-300 line-clamp-2 leading-relaxed">
+                                        {t.purpose || t.description || 'Community enterprise'}
+                                    </p>
+
+                                    {/* Energy Balance sentence (docs/the-commons.md §2.2) */}
+                                    {t.balance != null && (
+                                        <p className="text-[11px] text-nature-400 italic">
+                                            {energySentence(t.balance)}
+                                        </p>
+                                    )}
+
+                                    {/* Financial Ceiling indicator if surplus exists */}
+                                    {t.earnedSurplus != null && t.earnedSurplus > 0 && (
+                                        <div className="flex items-center gap-1 text-[11px] text-emerald-400">
+                                            <span>📈</span>
+                                            <span>Earned Surplus: {t.earnedSurplus} 🫘</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-4 pt-3 border-t border-nature-800 space-y-2">
+                                    {/* Balance Row */}
+                                    <div className="flex justify-between items-center text-xs">
+                                        <div>
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                                                Balance
+                                            </div>
+                                            {t.balance < 0 && (
+                                                <div className="text-[11px] font-bold text-amber-400">
+                                                    in deficit (keepers eat last)
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className={`font-black text-sm ${t.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                            {t.balance} 🫘
+                                        </div>
+                                    </div>
+
+                                    {/* Funding progress if Bounded Project */}
+                                    {hasGoal && (
+                                        <div className="space-y-1.5 pt-1">
+                                            <div className="flex justify-between items-end text-xs">
+                                                <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>
+                                                    {currentRaised} 🫘 <span className="font-normal text-nature-400">raised of {t.goalAmount} 🫘</span>
+                                                </span>
+                                                {daysRemaining && (
+                                                    <span className={`text-[11px] font-bold ${daysRemaining === 'Expired' ? 'text-red-400' : 'text-nature-400'}`}>
+                                                        ⏳ {daysRemaining}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="w-full bg-nature-800 h-2 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full transition-all ${isFunded ? 'bg-emerald-500' : 'bg-emerald-600'}`}
+                                                    style={{ width: `${progress}%` }}
+                                                />
+                                            </div>
+
+                                            {/* Primary CTA if has goal and not funded */}
+                                            {!isFunded && (
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
+                                                >
+                                                    <span>🌱</span> Pledge Beans
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -433,383 +675,209 @@ export function ProjectsPage({ identity }: Props) {
                 </div>
             )}
 
-            {/* FULL SCREEN MODAL: New Project */}
-            {showNewProject && (
-                <div className="fixed inset-0 z-50 bg-bg-primary flex flex-col" style={{ overflowY: 'auto' }}>
-                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-4 shadow-sm z-10">
-                        <div className="max-w-lg sm:max-w-xl mx-auto w-full flex items-center justify-between">
-                            <h2 className="text-white font-bold text-lg">Propose Project</h2>
-                            <button onClick={() => setShowNewProject(false)} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full" aria-label="Close new project proposal">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                    </header>
-                    <div className="p-5 max-w-lg sm:max-w-xl mx-auto w-full flex flex-col gap-4 flex-1">
-                        <p className="text-sm text-nature-500 dark:text-nature-400">
-                            Pitch an idea to the community. Beans pledged will be instantly credited to your account to fund the work.
-                        </p>
-                        
-                        <div>
-                            <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Project Title</label>
-                            <input 
-                                value={newTitle} onChange={e => setNewTitle(e.target.value)}
-                                className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none"
-                                placeholder="E.g., Solar Panel Installation for Community Hall"
-                                maxLength={100}
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Funding Goal (Beans)</label>
-                            <input 
-                                type="number" value={newGoal} onChange={e => setNewGoal(e.target.value ? Number(e.target.value) : '')}
-                                className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none font-mono text-lg"
-                                placeholder="1000"
-                                min="1"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Funding Deadline (Optional)</label>
-                            <input 
-                                type="date" value={newDeadline} onChange={e => setNewDeadline(e.target.value)}
-                                className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none font-medium text-lg"
-                                min={minDateString} max={maxDateString}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Description</label>
-                            <textarea 
-                                value={newDescription} onChange={e => setNewDescription(e.target.value)}
-                                className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none resize-none h-32"
-                                placeholder="Describe why this project matters and what the funds will be used for..."
-                                maxLength={2000}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Photos (Up to 3)</label>
-                            <div className="flex gap-2 overflow-x-auto pb-2">
-                                {newPhotos.map((photo, i) => (
-                                    <div key={i} className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden border border-border-secondary">
-                                        <img src={photo} className="w-full h-full object-cover" alt={`Upload ${i}`} />
-                                        <button 
-                                            onClick={() => setNewPhotos(prev => prev.filter((_, idx) => idx !== i))}
-                                            className="absolute top-1 right-1 bg-black/50 p-1 rounded-full text-white"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                ))}
-                                {newPhotos.length < 3 && (
-                                    <label className="w-24 h-24 shrink-0 rounded-lg border-2 border-dashed border-border-secondary flexflex-col items-center justify-center cursor-pointer hover:bg-bg-input transition-colors flex flex-col items-center justify-center">
-                                        <svg className="w-6 h-6 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                        </svg>
-                                        <input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                                    </label>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mt-8">
-                            <button
-                                onClick={submitNewProject}
-                                disabled={creating || !newTitle.trim() || !newGoal || Number(newGoal) <= 0}
-                                className={`w-full py-3.5 rounded-xl font-bold text-white shadow-md transition-all ${
-                                    (creating || !newTitle.trim() || !newGoal || Number(newGoal) <= 0)
-                                        ? 'bg-nature-300 dark:bg-nature-700 cursor-not-allowed opacity-70'
-                                        : 'bg-accent hover:bg-emerald-500'
-                                }`}
-                            >
-                                {creating ? 'Publishing...' : 'Propose Project'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* FULL SCREEN MODAL: Project Detail */}
-            {selectedProject && (
-                <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', overflowY: 'auto' }}>
-                    <header className="sticky top-0 bg-nature-900 border-b border-nature-800 p-3 shadow-md z-10 transition-colors">
-                        <div className="max-w-lg sm:max-w-xl mx-auto w-full flex items-center gap-3">
-                            <button onClick={() => { setSelectedProject(null); setIsEditingProject(false); }} className="p-2 text-nature-400 hover:text-white bg-nature-800 hover:bg-nature-700 rounded-full transition-colors" aria-label="Close project details">
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                </svg>
-                            </button>
-                            <h2 className="text-white font-bold text-lg leading-tight flex-1 tracking-tight truncate">
-                                {isEditingProject ? 'Edit Project' : 'Project Details'}
+            {/* Propose Enterprise / Project Modal */}
+            {showNewModal && (
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => setShowNewModal(false)}
+                    style={{ overflowY: 'auto', paddingBottom: 'calc(var(--bottom-nav-offset) + 2rem)' }}
+                >
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="propose-modal-title"
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-nature-900 border border-nature-800 rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4 animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto"
+                        style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
+                    >
+                        <div className="flex justify-between items-center">
+                            <h2 id="propose-modal-title" className="text-lg font-black text-white">
+                                Propose an Enterprise / Project
                             </h2>
-                            {identity && identity.publicKey === selectedProject.creator_pubkey && !isEditingProject && (
-                                <button onClick={startEditing} className="px-3 py-1.5 bg-nature-800 hover:bg-nature-700 text-nature-300 hover:text-white rounded-lg text-sm font-bold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer ml-auto active:scale-95 z-50 relative pointer-events-auto">
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                    </svg>
-                                    Edit
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                aria-label="Close dialog"
+                                onClick={() => setShowNewModal(false)}
+                                className="text-nature-400 hover:text-white text-lg font-bold min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
+                            >
+                                ✕
+                            </button>
                         </div>
-                    </header>
-                    
-                    <div className="flex-1 pb-24 max-w-lg sm:max-w-xl mx-auto w-full">
-                        {isEditingProject ? (
-                            <div className="p-5 flex flex-col gap-4">
-                                {selectedProject.current_amount > 0 ? (
-                                    <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-xl flex items-start gap-3 shadow-sm">
-                                        <span className="text-red-400 mt-0.5 text-lg">🔒</span>
-                                        <p className="text-sm text-red-200 leading-relaxed font-medium">
-                                            This project has already received community pledges. The funding goal is permanently locked to protect backers.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="p-4 bg-accent/10 border border-accent/20 rounded-xl flex items-start gap-3 shadow-sm">
-                                        <span className="text-accent mt-0.5 text-lg">ℹ️</span>
-                                        <p className="text-sm text-emerald-100 leading-relaxed font-medium">
-                                            You may edit the funding goal because no pledges have been made yet.
-                                        </p>
-                                    </div>
-                                )}
 
-                                <div>
-                                    <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Project Title</label>
-                                    <input 
-                                        value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                                        className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none font-medium shadow-inner"
-                                        maxLength={100}
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Funding Goal (Beans)</label>
-                                    <input 
-                                        type="number" value={editGoal} onChange={e => setEditGoal(e.target.value ? Number(e.target.value) : '')}
-                                        className={`w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none font-mono text-lg shadow-inner ${selectedProject.current_amount > 0 ? 'opacity-50 cursor-not-allowed bg-nature-800' : ''}`}
-                                        disabled={selectedProject.current_amount > 0}
-                                        min="1"
-                                    />
-                                </div>
+                        {createError && (
+                            <div className="p-3 bg-red-950/40 border border-red-800 text-red-300 rounded-xl text-xs font-semibold">
+                                {createError}
+                            </div>
+                        )}
 
-                                <div>
-                                    <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Funding Deadline (Optional)</label>
-                                    <input 
-                                        type="date" value={editDeadline} onChange={e => setEditDeadline(e.target.value)}
-                                        className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none font-medium text-lg shadow-inner"
-                                        min={minDateString} max={maxDateString}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Description</label>
-                                    <textarea 
-                                        value={editDescription} onChange={e => setEditDescription(e.target.value)}
-                                        className="w-full bg-bg-input border border-border-secondary p-3 rounded-xl text-text-primary focus:border-accent outline-none resize-none h-32 leading-relaxed shadow-inner"
-                                        maxLength={2000}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-nature-500 uppercase mb-1">Photos (Up to 3)</label>
-                                    <div className="flex gap-2 overflow-x-auto pb-2">
-                                        {editPhotos.map((photo, i) => (
-                                            <div key={i} className="relative w-24 h-24 shrink-0 rounded-xl overflow-hidden border border-border-secondary shadow-sm">
-                                                <img src={photo} className="w-full h-full object-cover" alt={`Edit ${i}`} />
-                                                <button 
-                                                    onClick={() => setEditPhotos(prev => prev.filter((_, idx) => idx !== i))}
-                                                    className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-sm p-1.5 rounded-full text-white hover:bg-red-500/80 transition-colors"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {editPhotos.length < 3 && (
-                                            <label className="w-24 h-24 shrink-0 rounded-xl border-2 border-dashed border-border-secondary flex items-center justify-center cursor-pointer hover:bg-bg-input transition-colors group">
-                                                <svg className="w-8 h-8 text-nature-500 group-hover:text-accent transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                                </svg>
-                                                <input type="file" multiple accept="image/*" className="hidden" onChange={handleEditPhotoUpload} />
-                                            </label>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="mt-6 flex gap-3">
-                                    <button 
-                                        onClick={() => setIsEditingProject(false)}
-                                        className="flex-1 py-3.5 rounded-xl font-bold bg-nature-800 text-white hover:bg-nature-700 transition-colors shadow-sm"
-                                    >
-                                        Cancel
-                                    </button>
+                        <form onSubmit={submitNewEnterprise} className="space-y-4">
+                            {/* Lifecycle choice: Bounded Project vs Ongoing Enterprise */}
+                            <div>
+                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-2">
+                                    Initiative Type
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={submitUpdateProject}
-                                        disabled={updating || !editTitle.trim() || !editGoal || Number(editGoal) <= 0}
-                                        className={`flex-1 py-3.5 rounded-xl font-bold text-white shadow-md transition-all ${
-                                            (updating || !editTitle.trim() || !editGoal || Number(editGoal) <= 0)
-                                                ? 'bg-nature-300 dark:bg-nature-700 cursor-not-allowed opacity-70'
-                                                : 'bg-accent hover:bg-emerald-500 hover:shadow-lg active:scale-95'
+                                        type="button"
+                                        onClick={() => setNewLifecycle('bounded')}
+                                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col gap-0.5 ${
+                                            newLifecycle === 'bounded'
+                                                ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                                                : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        {updating ? 'Saving...' : 'Save Changes'}
+                                        <span>⏱️ Bounded Project</span>
+                                        <span className="text-[10px] font-normal opacity-80">Has funding goal & deadline</span>
                                     </button>
-                                </div>
-
-                                <div className="mt-6 pt-6 border-t border-red-900/30">
                                     <button
-                                        onClick={async () => {
-                                            if (window.confirm("CRITICAL WARNING: This will immediately delete your project and automatically refund all current backers from the Trust Wallet. This action cannot be undone. Are you sure you want to proceed?")) {
-                                                setDeleting(true);
-                                                try {
-                                                    await request('POST', '/api/crowdfund/projects/delete', { id: selectedProject.id, creatorPubkey: identity!.publicKey });
-                                                    alert("Project deleted and funds refunded to backers.");
-                                                    setIsEditingProject(false);
-                                                    setSelectedProject(null);
-                                                    fetchProjects();
-                                                } catch (e: any) {
-                                                    alert(e.message || "Failed to delete project");
-                                                } finally {
-                                                    setDeleting(false);
-                                                }
-                                            }
-                                        }}
-                                        disabled={deleting}
-                                        className="w-full py-3.5 rounded-xl font-bold bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-500 hover:text-white transition-colors"
+                                        type="button"
+                                        onClick={() => setNewLifecycle('ongoing')}
+                                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col gap-0.5 ${
+                                            newLifecycle === 'ongoing'
+                                                ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                                                : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
+                                        }`}
                                     >
-                                        {deleting ? 'Deleting...' : 'Delete Project & Refund Backers'}
+                                        <span>🏛️ Ongoing Enterprise</span>
+                                        <span className="text-[10px] font-normal opacity-80">Permanent co-op or facility</span>
                                     </button>
                                 </div>
                             </div>
-                        ) : (
-                            <>
-                                {/* Hero Images */}
-                                {(() => {
-                            let photosArr: string[] = [];
-                            try { photosArr = JSON.parse(selectedProject.photos); } catch {}
-                            
-                            if (photosArr.length > 0) {
-                                return (
-                                    <div className="w-full flex overflow-x-auto snap-x snap-mandatory">
-                                        {photosArr.map((photo, i) => (
-                                            <div key={i} className="w-full shrink-0 snap-center h-64 bg-black relative">
-                                                <img src={photo} className="w-full h-full object-cover" alt={`Project ${i}`} />
-                                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-white text-[10px] font-bold">
-                                                    {i + 1} / {photosArr.length}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                );
-                            }
-                            return (
-                                <div className="w-full h-32 bg-gradient-to-br from-nature-800 to-nature-900 flex items-center justify-center border-b border-border-secondary">
-                                    <span className="text-5xl opacity-40 drop-shadow-md">🌱</span>
-                                </div>
-                            );
-                        })()}
 
-                        <div className="p-5 flex flex-col gap-6">
-                            {/* Title & Creator */}
+                            {/* Title */}
                             <div>
-                                {selectedProject.current_amount >= selectedProject.goal_amount && (
-                                    <div className="inline-block px-3 py-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-bold text-xs rounded-full mb-3 border border-emerald-200 dark:border-emerald-800/50">
-                                        🎉 SUCCESSFULLY FUNDED
+                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                    Name / Title
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. Community Tool Shed or Shade House"
+                                    value={newTitle}
+                                    onChange={(e) => setNewTitle(e.target.value)}
+                                    className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                            </div>
+
+                            {/* Purpose Statement (required per docs §2.1) */}
+                            <div>
+                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                    Purpose Statement <span className="text-emerald-400">*</span>
+                                </label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    placeholder="State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')"
+                                    value={newDescription}
+                                    onChange={(e) => setNewDescription(e.target.value)}
+                                    className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                            </div>
+
+                            {/* Bounded Project Fields: Goal & Deadline */}
+                            {newLifecycle === 'bounded' && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                            Goal Amount (🫘 Beans)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            required
+                                            min="1"
+                                            step="1"
+                                            placeholder="e.g. 500"
+                                            value={newGoal}
+                                            onChange={(e) => setNewGoal(e.target.value === '' ? '' : Number(e.target.value))}
+                                            className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                            Deadline (Optional)
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={newDeadline}
+                                            onChange={(e) => setNewDeadline(e.target.value)}
+                                            className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Photo / Avatar upload */}
+                            <div>
+                                <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
+                                    Cover Photo / Avatar (Optional)
+                                </label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handlePhotoUpload}
+                                    className="text-xs text-nature-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-nature-800 file:text-nature-200 hover:file:bg-nature-700 cursor-pointer"
+                                />
+                                {newPhotos.length > 0 && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <img src={newPhotos[0]} alt="Preview" className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
+                                        <button
+                                            type="button"
+                                            onClick={() => setNewPhotos([])}
+                                            className="text-xs text-red-400 hover:underline"
+                                        >
+                                            Remove photo
+                                        </button>
                                     </div>
                                 )}
-                                <h1 className="text-2xl font-black text-text-primary tracking-tight leading-tight drop-shadow-sm mb-2">
-                                    {selectedProject.title}
-                                </h1>
-                                <p className="text-sm font-medium text-nature-500">
-                                    Proposed by <span className="text-accent underline decoration-accent/30 underline-offset-4">{profiles[selectedProject.creator_pubkey]?.callsign || 'Unknown'}</span>
-                                </p>
                             </div>
 
-                            {/* Progress Bar Large */}
-                            <div className="bg-bg-card p-5 rounded-2xl border border-border-secondary shadow-sm mt-2">
-                                <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-                                    <div className="flex flex-col gap-1">
-                                        <span className={`text-3xl font-black ${selectedProject.current_amount >= selectedProject.goal_amount ? 'text-emerald-500' : 'text-text-primary'} drop-shadow-sm`}>
-                                            {selectedProject.current_amount} <span className="text-sm font-bold text-nature-500">B raised</span>
-                                        </span>
-                                        <span className="text-sm font-bold text-nature-500">
-                                            Goal: <span className="text-text-primary">{selectedProject.goal_amount} B</span>
-                                        </span>
-                                    </div>
-                                    {selectedProject.deadline_at && (
-                                        <div className={`font-bold text-sm px-3 py-1.5 rounded-lg border shadow-sm whitespace-nowrap ${getDaysRemaining(selectedProject.deadline_at) === 'Expired' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-accent/10 text-accent border-accent/20'}`}>
-                                            ⏳ {getDaysRemaining(selectedProject.deadline_at)}
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                <div className="h-3 w-full bg-nature-200 dark:bg-nature-800 rounded-full overflow-hidden shadow-inner mb-3">
-                                    <div 
-                                        className={`h-full transition-all duration-1000 ${selectedProject.current_amount >= selectedProject.goal_amount ? 'bg-emerald-500' : 'bg-gradient-to-r from-accent to-emerald-400'}`}
-                                        style={{ width: `${getProgress(selectedProject.current_amount, selectedProject.goal_amount)}%` }}
-                                    />
-                                </div>
-
-                                <p className="text-[11px] text-nature-500 leading-relaxed bg-nature-900/30 p-2.5 rounded-lg border border-border-secondary">
-                                    🔒 <span className="font-bold text-nature-400">Held in Trust:</span> Pledges are securely held in a Trust Wallet and only released when the goal is met. If deleted, Beans are automatically refunded.
-                                </p>
-                            </div>
-
-                            {/* Description */}
-                            <div>
-                                <h3 className="text-lg font-bold text-text-primary mb-2">About the Project</h3>
-                                <p className="text-text-secondary leading-relaxed whitespace-pre-wrap">
-                                    {selectedProject.description || 'No description provided.'}
-                                </p>
-                            </div>
-                            </div>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Pledge Sticky Footer */}
-                    {identity?.publicKey !== selectedProject.creator_pubkey && !isEditingProject && (
-                        <div className="fixed bottom-0 left-0 right-0 bg-bg-card border-t border-border-secondary p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:shadow-[0_-5px_20px_rgba(0,0,0,0.5)] z-20">
-                            <div className="max-w-md mx-auto">
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="number" 
-                                        value={pledgeAmount}
-                                        onChange={e => setPledgeAmount(e.target.value ? Number(e.target.value) : '')}
-                                        placeholder="Amount"
-                                        className="w-24 bg-bg-input border border-border-secondary rounded-xl text-center font-black text-lg focus:border-accent outline-none shadow-inner text-nature-900 dark:text-white p-2.5"
-                                        style={{ color: '#1a1a1a' }}
-                                    />
-                                    <input 
-                                        type="text"
-                                        value={pledgeMemo}
-                                        onChange={e => setPledgeMemo(e.target.value)}
-                                        placeholder="Optional memo..."
-                                        className="flex-1 bg-bg-input border border-border-secondary rounded-xl px-3 py-2.5 focus:border-accent outline-none text-sm text-nature-900 dark:text-white"
-                                        style={{ color: '#1a1a1a' }}
-                                    />
-                                </div>
+                            <div className="flex gap-3 pt-3">
                                 <button
-                                    onClick={submitPledge}
-                                    disabled={pledging || !pledgeAmount || Number(pledgeAmount) <= 0}
-                                    className={`w-full mt-3 py-3.5 rounded-xl font-bold text-white shadow-md transition-all ${
-                                        (pledging || !pledgeAmount || Number(pledgeAmount) <= 0)
-                                            ? 'bg-nature-300 dark:bg-nature-700 cursor-not-allowed opacity-70'
-                                            : 'bg-accent hover:bg-emerald-500 hover:shadow-lg active:scale-[0.98]'
-                                    }`}
+                                    type="button"
+                                    onClick={() => setShowNewModal(false)}
+                                    className="flex-1 py-2.5 rounded-xl border border-nature-700 text-nature-300 font-bold text-sm hover:bg-nature-800"
                                 >
-                                    {pledging ? 'Sending Pledge...' : 'Pledge Beans 🌱'}
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={creating}
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                >
+                                    {creating ? 'Submitting…' : 'Propose Enterprise 🌱'}
                                 </button>
                             </div>
-                        </div>
-                    )}
+                        </form>
+                    </div>
                 </div>
             )}
+            <ProposeDecisionModal
+                isOpen={showProposeDecision}
+                onClose={() => setShowProposeDecision(false)}
+                onCreated={fetchEnterprises}
+                identity={identity}
+                commonsBalance={commonsBalance}
+                treasuries={treasuries}
+                members={allMembersList}
+            />
+
+            <CreateGroupModal
+                isOpen={showCreateGroupModal}
+                onClose={() => setShowCreateGroupModal(false)}
+                onCreated={() => fetchGroups()}
+            />
+
+            <GroupDetailModal
+                group={selectedGroupForDetail}
+                isOpen={!!selectedGroupForDetail}
+                onClose={() => setSelectedGroupForDetail(null)}
+                myPubkey={identity?.publicKey}
+                onMembershipChanged={() => fetchGroups()}
+                onPostToGroup={(group) => {
+                    setSelectedGroupForDetail(null);
+                    onNavigate?.('map-post', group.id);
+                }}
+            />
         </div>
     );
 }

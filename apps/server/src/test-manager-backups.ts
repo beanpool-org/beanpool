@@ -60,6 +60,11 @@ async function main(): Promise<void> {
     });
     assert(downloadDbNotFound.status === 404, `download-db returns 404 for missing backup DB (got ${downloadDbNotFound.status})`);
 
+    const downloadDbTraversal = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=../../secret`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadDbTraversal.status === 400, `download-db rejects path-traversal nodeId (got ${downloadDbTraversal.status})`);
+
     // 3. GET /api/manager/backups/history
     const historyNoNode = await fetch(`${BASE}/api/manager/backups/history`, {
         headers: { 'X-Admin-Password': ADMIN_PW },
@@ -83,6 +88,22 @@ async function main(): Promise<void> {
         headers: { 'X-Admin-Password': ADMIN_PW },
     });
     assert(downloadHistoryTraversal.status === 400, `download-history rejects path-traversal filename (got ${downloadHistoryTraversal.status})`);
+
+    const downloadHistoryBackslash = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=node1&filename=..\\secret.txt`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadHistoryBackslash.status === 400, `download-history rejects backslash traversal filename (got ${downloadHistoryBackslash.status})`);
+
+    const downloadHistoryInvalidPattern = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=node1&filename=arbitrary.txt`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadHistoryInvalidPattern.status === 400, `download-history rejects non-snapshot filename pattern (got ${downloadHistoryInvalidPattern.status})`);
+
+    // 5. GET /api/manager/backups/download-identity
+    const downloadIdentityTraversal = await fetch(`${BASE}/api/manager/backups/download-identity?nodeId=../../secret`, {
+        headers: { 'X-Admin-Password': ADMIN_PW },
+    });
+    assert(downloadIdentityTraversal.status === 400, `download-identity rejects path-traversal nodeId (got ${downloadIdentityTraversal.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

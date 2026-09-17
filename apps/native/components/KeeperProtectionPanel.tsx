@@ -1,6 +1,11 @@
+/**
+ * KeeperProtectionPanel — SSO Enrolment Panel
+ *
+ * NOTE: Friend / keeper recovery has been removed. This panel now hosts SSO enrolment only
+ * (Sign-In Recovery Providers: Apple, Google, Facebook, GitHub).
+ */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
-import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 import { colors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
@@ -13,21 +18,46 @@ const PROVIDER_NAMES: Record<SsoProvider, string> = {
     github: 'GitHub',
 };
 
+export function formatCommunityName(raw?: string | null): string | null {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === 'Detecting...' || trimmed === 'Local discovery (or offline)') {
+        return null;
+    }
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        try {
+            const url = new URL(trimmed);
+            return url.host || url.hostname || trimmed;
+        } catch {
+            return trimmed.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+        }
+    }
+    return trimmed;
+}
+
 export function KeeperProtectionPanel({ 
     protection,
+    communityName,
     onProtectSso,
     onDisconnectSso,
-    onProtectFriends,
 }: { 
     protection: Protection;
+    /**
+     * The community this protection describes. Keepers are enrolled PER NODE, so a
+     * panel that names no community reads as a property of the account and is how a
+     * member ends up attempting recovery on a node that holds nothing for them.
+     */
+    communityName?: string;
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
-    onProtectFriends?: () => void;
 }): React.JSX.Element {
     const enrolledSso = protection.enrolledSso ?? [];
     const allProviders: SsoProvider[] = Platform.OS === 'ios'
         ? ['apple', 'google', 'facebook', 'github']
         : ['google', 'facebook', 'github'];
+
+    const community = formatCommunityName(communityName);
+    const coveredHeading = community ? `🛡️ You're covered on ${community}` : "🛡️ You're covered";
 
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
@@ -36,7 +66,7 @@ export function KeeperProtectionPanel({
             <View style={styles.ssoGroup}>
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    Connect multiple accounts for redundant backup. Any single connected account can restore your 12 words.
+                    Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It does not hand your 12 words back, and it only works while your hub is running — so keep the words written down.
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -54,7 +84,7 @@ export function KeeperProtectionPanel({
                                 <View
                                     style={styles.providerInfo}
                                     accessible={true}
-                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery keeper`}
+                                    accessibilityLabel={`${PROVIDER_NAMES[prov]} connected as a recovery provider`}
                                 >
                                     <Text
                                         style={styles.tick}
@@ -122,66 +152,21 @@ export function KeeperProtectionPanel({
     };
 
     if (protection.state === 'covered') {
-        if (protection.tier === 'sso') {
-            return (
-                <View style={[styles.panel, styles.covered]}>
-                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
-                    {protection.holding.map((label, i) => (
-                        <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
-                            <Text style={styles.tick}>✅</Text>
-                            <Text style={styles.rowLabel}>{label}</Text>
-                        </View>
-                    ))}
-                    <Text style={styles.footnote}>
-                        {enrolledSso.length > 1
-                            ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account can recover your seed.`
-                            : 'Neither of them can open your account alone — it takes both.'}
-                    </Text>
-
-                    {renderSsoProviders()}
-
-                    {onProtectFriends && (
-                        <TouchableOpacity
-                            onPress={onProtectFriends}
-                            accessibilityRole="button"
-                            accessibilityLabel="Add a trusted friend for extra protection"
-                            style={{ marginTop: 14 }}
-                        >
-                            <Text style={styles.offer}>
-                                Want extra protection? Add a trusted friend — then you can recover without sign-in accounts too.
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            );
-        }
-
-        if (protection.tier === 'friends') {
-            return (
-                <View style={[styles.panel, styles.covered]}>
-                    <Text style={styles.heading} accessibilityRole="header">🛡️ You're covered</Text>
-                    {protection.holding.map((label, i) => (
-                        <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
-                            <Text style={styles.tick}>✅</Text>
-                            <Text style={styles.rowLabel}>{label}</Text>
-                        </View>
-                    ))}
-                    <Text style={styles.footnote}>
-                        No single piece can open your account — it takes the hub plus any {TWO_LAYER_THRESHOLD} friends.
-                    </Text>
-                    {renderSsoProviders()}
-                </View>
-            );
-        }
-    }
-
-    if (protection.state === 'almost') {
         return (
-            <View style={[styles.panel, styles.almost]}>
-                <Text style={styles.heading} accessibilityRole="header">🔑 Almost there</Text>
-                <Text style={styles.body}>
-                    You need one more keeper before your account can be split. Until then, these 12 words are how you get back in.
+            <View style={[styles.panel, styles.covered]}>
+                <Text style={styles.heading} accessibilityRole="header">{coveredHeading}</Text>
+                {protection.holding.map((label, i) => (
+                    <View key={`${label}-${i}`} style={styles.row} accessible accessibilityLabel={`${label}: holding a piece`}>
+                        <Text style={styles.tick}>✅</Text>
+                        <Text style={styles.rowLabel}>{label}</Text>
+                    </View>
+                ))}
+                <Text style={styles.footnote}>
+                    {enrolledSso.length > 1
+                        ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account, together with the hub, restores your account.`
+                        : 'Neither of them can open your account alone — it takes both.'}
                 </Text>
+
                 {renderSsoProviders()}
             </View>
         );
@@ -189,26 +174,13 @@ export function KeeperProtectionPanel({
 
     return (
         <View style={[styles.panel, styles.wordsOnly]}>
-            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are the only way back</Text>
+            <Text style={styles.heading} accessibilityRole="header">🔑 Your 12 words are your primary recovery</Text>
             <Text style={styles.body}>
-                Right now these 12 words are the only way back into your account. No email, no
-                password reset — nobody, including your hub, can restore it for you.
+                Your 12 words are your primary key to your account. Write them down safely. Without them or a connected sign-in provider, restoring your account requires operator-assisted re-enrolment by your node administrator.
             </Text>
 
             <View style={styles.buttonContainer}>
                 {renderSsoProviders()}
-                {onProtectFriends && (
-                    <View style={[styles.actionBlock, { marginTop: 12 }]}>
-                        <TouchableOpacity
-                            style={styles.buttonSecondary}
-                            onPress={onProtectFriends}
-                            accessibilityRole="button"
-                            accessibilityLabel="Protect with trusted friends"
-                        >
-                            <Text style={styles.buttonSecondaryText}>🛡️ Protect with trusted friends</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
             </View>
         </View>
     );
@@ -217,7 +189,6 @@ export function KeeperProtectionPanel({
 const styles = StyleSheet.create({
     panel: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
     covered: { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border },
-    almost: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
     wordsOnly: { backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },
     heading: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
     body: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginBottom: 8 },
@@ -225,9 +196,7 @@ const styles = StyleSheet.create({
     tick: { fontSize: 15, marginRight: 8 },
     rowLabel: { flex: 1, fontSize: 14, color: colors.text.body, flexWrap: 'wrap' },
     footnote: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 10, marginBottom: 4 },
-    offer: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginTop: 8 },
     buttonContainer: { marginTop: 12 },
-    actionBlock: { marginBottom: 8 },
     ssoGroup: {
         marginTop: 14,
         paddingTop: 12,
@@ -282,22 +251,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: colors.feedback.danger.fg,
-    },
-    buttonSecondary: {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: colors.text.secondary,
-        paddingVertical: 12,
-        minHeight: 44,
-        paddingHorizontal: 16,
-        borderRadius: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    buttonSecondaryText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: colors.text.heading,
     },
     actionNote: {
         fontSize: 12,

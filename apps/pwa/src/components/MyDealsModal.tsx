@@ -9,7 +9,9 @@
  * History sub-filter: All | Received | Given
  */
 
+import { useState, useEffect, useRef, type KeyboardEvent } from 'react';
 import type { MarketplacePost } from '../lib/api';
+import { ImageLightbox } from './ImageLightbox';
 
 interface MarketplaceTransaction {
     id: string;
@@ -27,8 +29,6 @@ interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-import { useState, useEffect } from 'react';
-
 interface Props {
     visible: boolean;
     identity: { publicKey: string } | null;
@@ -43,6 +43,100 @@ interface Props {
 export function MyDealsModal({ visible, identity, onClose, posts, transactions, initialTab = 'pending', onNavigateToPost, onPromptReview }: Props) {
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
+    const [lightboxState, setLightboxState] = useState<{
+        isOpen: boolean;
+        photos: string[];
+        initialIndex: number;
+        title?: string;
+        triggerElement?: HTMLElement | null;
+    } | null>(null);
+
+    const modalRef = useRef<HTMLDivElement>(null);
+    const closeBtnRef = useRef<HTMLButtonElement>(null);
+    const lightboxOpenRef = useRef(false);
+    lightboxOpenRef.current = !!lightboxState?.isOpen;
+
+    const openLightbox = (photos: string[], title?: string, triggerElement?: HTMLElement | null) =>
+        setLightboxState({ isOpen: true, photos, initialIndex: 0, title, triggerElement });
+
+    // Both deal cards are themselves keyboard-activatable and call preventDefault() on
+    // Enter/Space, which suppresses the synthetic click on any nested button. So a photo
+    // button has to handle the key itself AND stop the event reaching the card — otherwise
+    // a keyboard user asking to enlarge the photo gets navigated away to the post instead.
+    const photoKeyDown = (photos: string[], title?: string) => (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.stopPropagation();
+            e.preventDefault();
+            openLightbox(photos, title, e.currentTarget as HTMLElement);
+        }
+    };
+
+    // Accessibility: Focus trap & Escape key handling for MyDealsModal
+    useEffect(() => {
+        if (!visible) return;
+
+        // Capture previous active element to restore when deals modal closes
+        const prevActive = document.activeElement as HTMLElement | null;
+
+        // Focus close button initially
+        const focusTimer = setTimeout(() => {
+            closeBtnRef.current?.focus();
+        }, 30);
+
+        const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+            // If the lightbox is open, its own trap and Escape listener take precedence
+            if (lightboxOpenRef.current) return;
+
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+                return;
+            }
+
+            if (e.key === 'Tab') {
+                const container = modalRef.current;
+                if (!container) return;
+
+                const focusable = container.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                );
+                if (focusable.length === 0) return;
+
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+
+                // If focus managed to escape behind the overlay, bring it back
+                if (!container.contains(document.activeElement)) {
+                    e.preventDefault();
+                    first.focus();
+                    return;
+                }
+
+                if (e.shiftKey) {
+                    if (document.activeElement === first) {
+                        e.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (document.activeElement === last) {
+                        e.preventDefault();
+                        first.focus();
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            clearTimeout(focusTimer);
+            window.removeEventListener('keydown', handleKeyDown);
+            if (prevActive && typeof prevActive.focus === 'function') {
+                prevActive.focus();
+            }
+        };
+    }, [visible, onClose]);
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
@@ -86,25 +180,28 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
     const listData = getData();
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
-            <div
-                className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-[80vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Handle bar (mobile) */}
-                <div className="w-10 h-1 rounded-full bg-nature-300 dark:bg-nature-700 mx-auto mt-3 sm:hidden" />
+        <>
+            <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" role="dialog" aria-modal="true" aria-labelledby="my-deals-title" onClick={onClose}>
+                <div
+                    ref={modalRef}
+                    className="bg-white dark:bg-nature-950 w-full sm:w-[90vw] sm:max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col h-[85vh] sm:h-[80vh] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-10 duration-300"
+                    onClick={e => e.stopPropagation()}
+                >
+                    {/* Handle bar (mobile) */}
+                    <div className="w-10 h-1 rounded-full bg-nature-300 dark:bg-nature-700 mx-auto mt-3 sm:hidden" />
 
-                {/* Header */}
-                <div className="flex justify-between items-center px-6 py-4 border-b border-nature-100 dark:border-nature-800 shrink-0">
-                    <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">My Deals</h3>
-                    <button
-                        onClick={onClose}
-                        aria-label="Close My Deals"
-                        className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
-                    >
-                        ✕
-                    </button>
-                </div>
+                    {/* Header */}
+                    <div className="flex justify-between items-center px-6 py-4 border-b border-nature-100 dark:border-nature-800 shrink-0">
+                        <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">My Deals</h3>
+                        <button
+                            ref={closeBtnRef}
+                            onClick={onClose}
+                            aria-label="Close My Deals"
+                            className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500"
+                        >
+                            ✕
+                        </button>
+                    </div>
 
                 {/* Tab bar */}
                 <div className="px-4 pt-4 pb-3 border-b border-nature-100 dark:border-nature-800 shrink-0 bg-nature-50/50 dark:bg-nature-900/20">
@@ -217,7 +314,18 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                         >
                                             <div className="flex gap-3 mb-2">
                                                 {item.coverImage ? (
-                                                    <img src={item.coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
+                                                        }}
+                                                        onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
+                                                        aria-label={`View enlarged photo: ${item.postTitle}`}
+                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                    >
+                                                        <img src={item.coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                    </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                         <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
@@ -304,7 +412,18 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                     >
                                         <div className="flex gap-4">
                                             {coverImage ? (
-                                                <img src={coverImage} alt="Cover" className="w-14 h-14 rounded-xl object-cover border border-nature-100 dark:border-nature-800 shrink-0" />
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
+                                                    }}
+                                                    onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
+                                                    aria-label={`View enlarged photo: ${item.title}`}
+                                                    className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                >
+                                                    <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
+                                                </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                     <span className="text-xl opacity-50">📦</span>
@@ -340,6 +459,17 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                     )}
                 </div>
             </div>
-        </div>
+            </div>
+            {lightboxState?.isOpen && (
+                <ImageLightbox
+                    isOpen={lightboxState.isOpen}
+                    photos={lightboxState.photos}
+                    initialIndex={lightboxState.initialIndex}
+                    title={lightboxState.title}
+                    triggerElement={lightboxState.triggerElement}
+                    onClose={() => setLightboxState(null)}
+                />
+            )}
+        </>
     );
 }

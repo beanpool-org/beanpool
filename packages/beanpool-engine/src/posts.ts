@@ -8,15 +8,30 @@ import {
     getTier,
     grantedCreditForTier,
     parseReachPeers,
-    type PostReach
+    type PostReach,
+    type AudienceScope
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 
 type Db = Database.Database;
 
+export interface PollOption {
+    id: string;
+    text: string;
+    votes?: number;
+    percentage?: number;
+}
+
+export interface PollVoteRecord {
+    voterPubkey: string;
+    voterCallsign?: string;
+    optionId: string;
+    createdAt: string;
+}
+
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -47,6 +62,19 @@ export interface MarketplacePost {
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
     authorAvatarUrl?: string | null;
+    createdBy?: string;
+    pollOptions?: PollOption[];
+    pollClosesAt?: string;
+    totalVotes?: number;
+    userVotedOptionId?: string;
+    pollVotes?: PollVoteRecord[];
+    // Audience scoping (docs/the-commons.md §9, Item 10)
+    audienceScope?: AudienceScope;
+    targetGroupId?: string;
+    targetGroupName?: string;
+    targetPubkey?: string;
+    assignedTo?: string;
+    targetArchetypes?: string;
 }
 
 export interface PostFilter {
@@ -64,6 +92,11 @@ export interface PostFilter {
     /** #108: exclude listings with a cash outlay — the beans-only browse. */
     beansOnly?: boolean;
     includeInactive?: boolean;
+    includeAllScopes?: boolean;
+    audienceScope?: AudienceScope | string;
+    targetGroupId?: string;
+    assignedTo?: string;
+    targetArchetype?: string;
 }
 
 // Server-side photo limits. Clients resize to ≤800px JPEG at 0.7 quality.
@@ -185,7 +218,20 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: row.author_avatar ?? null
+        authorAvatarUrl: row.author_avatar
+            ? (row.author_avatar.startsWith('bundled://')
+                ? row.author_avatar
+                : `/api/avatar/${row.author_pubkey}?size=thumb`)
+            : null,
+        createdBy: row.created_by || undefined,
+        pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
+        pollClosesAt: row.poll_closes_at || undefined,
+        audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
+        targetGroupId: row.target_group_id || undefined,
+        targetGroupName: row.target_group_name || undefined,
+        targetPubkey: row.target_pubkey || undefined,
+        assignedTo: row.assigned_to || undefined,
+        targetArchetypes: row.target_archetypes || undefined
     };
 }
 
@@ -223,6 +269,7 @@ export function usableFloor(db: Db, publicKey: string): number {
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+               g.name as target_group_name,
                COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = m.public_key), 0) as author_energy_cycled,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
@@ -238,6 +285,7 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
+        LEFT JOIN groups g ON p.target_group_id = g.id
         WHERE 1=1
     `;
     const params: any[] = [];
@@ -246,11 +294,14 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         const selfView = !!filter?.authorPubkey && filter.authorPubkey === filter.viewerPubkey;
         if (!filter?.includeInactive) {
             query += selfView
-                ? " AND p.active = 1 AND p.status IN ('active', 'pending', 'paused')"
-                : " AND p.active = 1 AND p.status IN ('active', 'pending')";
+                ? " AND p.active = 1 AND (p.status IN ('active', 'pending', 'paused') OR (p.type = 'poll' AND p.status = 'completed'))"
+                : " AND p.active = 1 AND (p.status IN ('active', 'pending') OR (p.type = 'poll' AND p.status = 'completed'))";
         }
         if (!filter?.authorPubkey) {
             query += " AND p.author_pubkey NOT IN (SELECT public_key FROM member_preferences WHERE pref_key='holiday_mode' AND pref_value='true')";
+            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+        } else if (!selfView && !filter?.includeInactive) {
+            query += " AND (m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
         }
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
@@ -267,12 +318,66 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { query += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
 
+    // Audience scoping (docs/the-commons.md §9, Item 10)
+    // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
+    const viewer = filter?.viewerPubkey;
+    if (filter?.includeAllScopes) {
+        // Internal engine lookup bypasses feed scoping
+    } else if (filter?.audienceScope === 'public') {
+        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+    } else if (filter?.audienceScope === 'group') {
+        query += " AND p.audience_scope = 'group'";
+        if (!viewer) {
+            query += " AND 1=0";
+        } else {
+            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
+            params.push(viewer, viewer);
+        }
+    } else if (filter?.audienceScope === 'direct') {
+        query += " AND p.audience_scope = 'direct'";
+        if (!viewer) {
+            query += " AND 1=0";
+        } else {
+            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
+            params.push(viewer, viewer, viewer);
+        }
+    } else {
+        if (!viewer) {
+            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        } else {
+            query += ` AND (
+                (p.audience_scope IS NULL OR p.audience_scope = 'public')
+                OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
+                OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
+            )`;
+            params.push(viewer, viewer, viewer, viewer, viewer);
+        }
+    }
+
+    if (filter?.targetGroupId) {
+        query += " AND p.target_group_id = ?";
+        params.push(filter.targetGroupId);
+    }
+    if (filter?.assignedTo) {
+        query += " AND p.assigned_to = ?";
+        params.push(filter.assignedTo);
+    }
+    if (filter?.targetArchetype) {
+        const escaped = filter.targetArchetype.replace(/[%_\\]/g, '\\$&');
+        query += " AND (p.target_archetypes LIKE ? ESCAPE '\\' OR p.target_archetypes LIKE ? ESCAPE '\\')";
+        params.push(`%"${escaped}"%`, `%${escaped}%`);
+    }
+
     if (filter?.query && filter.query.trim()) {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
         if (searchTerms.length > 0) {
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
             query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
+            // Goods search isolation: searching marketplace keywords must not return polls unless explicitly asked
+            if (filter.type !== 'poll') {
+                query += " AND p.type != 'poll'";
+            }
         }
     }
 
@@ -301,6 +406,30 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
         photosByPost.get(p.post_id)!.push(p);
     }
 
+    // Community Polls: batch fetch votes for all poll rows
+    const pollRows = rows.filter(r => r.type === 'poll');
+    const pollVotesByPost = new Map<string, any[]>();
+    if (pollRows.length > 0) {
+        try {
+            const pollIds = pollRows.map(r => r.id);
+            const votes = selectInChunks(db, pollIds, ph => `
+                SELECT pv.post_id, pv.voter_pubkey, pv.option_id, pv.created_at, m.callsign as voter_callsign
+                FROM poll_votes pv
+                LEFT JOIN members m ON pv.voter_pubkey = m.public_key
+                WHERE pv.post_id IN (${ph})
+                ORDER BY pv.created_at ASC
+            `);
+            for (const v of votes as any[]) {
+                if (!pollVotesByPost.has(v.post_id)) {
+                    pollVotesByPost.set(v.post_id, []);
+                }
+                pollVotesByPost.get(v.post_id)!.push(v);
+            }
+        } catch {
+            // Safe fallback if poll_votes table does not exist in testing handle
+        }
+    }
+
     // #143 step 4. `reachPeers` names WHICH NEIGHBOURING COMMUNITIES a member singled out, and that is the
     // poster's business, not the board's — in a community small enough to know everyone, "she offers this to
     // Gippsland but not to Castlemaine" is socially loaded in a way the listing itself is not. This board is
@@ -311,33 +440,113 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     //
     // `reach` itself stays. It is a property of the listing rather than a fact about third parties, and the
     // cached copy a peer stores needs to be 'local' for loop prevention to hold.
-    const viewer = filter?.viewerPubkey;
+    const nowIso = new Date().toISOString();
     return rows.map(r => {
         const post = rowToPost(db, r, photosByPost);
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+
+        if (post.type === 'poll') {
+            // Check auto-close if expired (projected in memory; DB writes handled in write paths/hygiene)
+            if (post.pollClosesAt && post.pollClosesAt <= nowIso && post.status === 'active') {
+                post.status = 'completed';
+            }
+            const votes = pollVotesByPost.get(post.id) || [];
+            const totalVotes = votes.length;
+            post.totalVotes = totalVotes;
+            const voteCounts = new Map<string, number>();
+            let userVotedOptionId: string | undefined;
+            for (const v of votes) {
+                voteCounts.set(v.option_id, (voteCounts.get(v.option_id) || 0) + 1);
+                if (viewer && v.voter_pubkey === viewer) {
+                    userVotedOptionId = v.option_id;
+                }
+            }
+            post.userVotedOptionId = userVotedOptionId;
+            if (post.pollOptions) {
+                post.pollOptions = post.pollOptions.map((opt: any) => {
+                    const count = voteCounts.get(opt.id) || 0;
+                    const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                    return { ...opt, votes: count, percentage };
+                });
+            }
+            post.pollVotes = votes.map((v: any) => ({
+                voterPubkey: v.voter_pubkey,
+                voterCallsign: v.voter_callsign || 'Anonymous',
+                optionId: v.option_id,
+                createdAt: v.created_at
+            }));
+        }
+
         return post;
     });
 }
 
 export function getActivePostCount(db: Db): number {
-    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active'").get() as any;
+    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND (audience_scope IS NULL OR audience_scope = 'public')").get() as any;
     return row?.c || 0;
 }
 
-export function getPostCount(db: Db, filter?: { type?: string; category?: string; status?: string; query?: string }): number {
-    let query = "SELECT COUNT(*) as c FROM posts WHERE active = 1";
+export function getPostCount(db: Db, filter?: {
+    type?: string;
+    category?: string;
+    status?: string;
+    query?: string;
+    audienceScope?: AudienceScope | string;
+    viewerPubkey?: string;
+    targetGroupId?: string;
+    includeAllScopes?: boolean;
+}): number {
+    let query = "SELECT COUNT(*) as c FROM posts p WHERE p.active = 1";
     const params: any[] = [];
 
-    if (filter?.type && filter.type !== 'all') { query += " AND type = ?"; params.push(filter.type); }
-    if (filter?.category && filter.category !== 'all') { query += " AND category = ?"; params.push(filter.category); }
-    if (filter?.status) { query += " AND status = ?"; params.push(filter.status); }
+    const viewer = filter?.viewerPubkey;
+    if (filter?.includeAllScopes) {
+        // Internal lookup bypasses feed scoping
+    } else if (filter?.audienceScope === 'public') {
+        query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+    } else if (filter?.audienceScope === 'group') {
+        query += " AND p.audience_scope = 'group'";
+        if (!viewer) {
+            query += " AND 1=0";
+        } else {
+            query += " AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))";
+            params.push(viewer, viewer);
+        }
+    } else if (filter?.audienceScope === 'direct') {
+        query += " AND p.audience_scope = 'direct'";
+        if (!viewer) {
+            query += " AND 1=0";
+        } else {
+            query += " AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?)";
+            params.push(viewer, viewer, viewer);
+        }
+    } else {
+        if (!viewer) {
+            query += " AND (p.audience_scope IS NULL OR p.audience_scope = 'public')";
+        } else {
+            query += ` AND (
+                (p.audience_scope IS NULL OR p.audience_scope = 'public')
+                OR (p.audience_scope = 'group' AND (p.author_pubkey = ? OR p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active')))
+                OR (p.audience_scope = 'direct' AND (p.author_pubkey = ? OR p.target_pubkey = ? OR p.assigned_to = ?))
+            )`;
+            params.push(viewer, viewer, viewer, viewer, viewer);
+        }
+    }
+
+    if (filter?.targetGroupId) { query += " AND p.target_group_id = ?"; params.push(filter.targetGroupId); }
+    if (filter?.type && filter.type !== 'all') { query += " AND p.type = ?"; params.push(filter.type); }
+    if (filter?.category && filter.category !== 'all') { query += " AND p.category = ?"; params.push(filter.category); }
+    if (filter?.status) { query += " AND p.status = ?"; params.push(filter.status); }
 
     if (filter?.query && filter.query.trim()) {
         const searchTerms = filter.query.trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
         if (searchTerms.length > 0) {
             const ftsQuery = searchTerms.map(t => `"${t}"*`).join(' OR ');
-            query += ` AND rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
+            query += ` AND p.rowid IN (SELECT rowid FROM posts_fts WHERE posts_fts MATCH ?)`;
             params.push(ftsQuery);
+            if (filter?.type !== 'poll') {
+                query += " AND p.type != 'poll'";
+            }
         }
     }
 

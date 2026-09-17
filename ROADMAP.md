@@ -99,7 +99,7 @@
 - ✅ **Recovery Mode** — enter 12 words + callsign to restore identity on any device
 - ✅ **Landing Page Welcome Hub** — 3 clear paths (join, transfer, recover) + admin contact info. Newsletter signup using insert bypassed RLS constraints.
 - ✅ **Admin Community Config** — name, email, phone in Settings → Community tab
-- ✅ **Social Recovery (3-of-N)** — Cryptographically secure identity recovery mechanism requiring quorum approval from trusted friends. Includes Guardian Knowledge Check to prevent spoofing and a 24-hour security cooldown.
+- ⛔ **Social Recovery (3-of-N)** — shipped, then **removed in September 2026**. Client entry points are gone; the server routes remain. See [docs/keeper-recovery-parked.md](docs/keeper-recovery-parked.md).
 - ✅ **Native App (Expo)** — 7-tab React Native companion app achieving PWA parity: Map, Projects, Market (14 categories), Chat, People, Ledger, Settings
 - ✅ **Native SQLite + SecureStore** — local data persistence and self-managed identity storage on device
 - ✅ **Community Projects Tab** — native-only crowdfunding feature with progress tracking, atomic editing, and destructive rollback for escrow.

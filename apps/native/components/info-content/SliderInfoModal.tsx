@@ -268,7 +268,7 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
 
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>HOW YOUR FLOOR GROWS</Text>
-                        <ListItem prefix="1.">Everyone starts with a small <Text style={styles.boldWhiteText}>-20B</Text> welcome voucher after their first trade.</ListItem>
+                        <ListItem prefix="1.">Credit begins at 0 and opens as you complete trades (or receive an explicit vouch of 25, 50, or 100B).</ListItem>
                         <ListItem prefix="2.">It deepens <Text style={styles.boldWhiteText}>smoothly</Text> the more genuine value you trade — no fixed steps.</ListItem>
                         <ListItem prefix="3."><Text style={styles.boldWhiteText}>Diverse</Text> trade (many partners) counts for more than repeat trade with one person.</ListItem>
                         <ListItem prefix="4.">It's capped at <Text style={styles.boldWhiteText}>-2,000B</Text> — the deepest the system allows.</ListItem>
@@ -279,15 +279,15 @@ export function SliderInfoModal({ isOpen, onClose }: Props) {
 
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>~500B traded</Text>
-                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -255B</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -174B</Text>
                         </View>
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>~2,000B traded</Text>
-                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -630B</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -548B</Text>
                         </View>
                         <View style={styles.bracketRow}>
                             <Text style={styles.bracketRange}>~10,000B traded</Text>
-                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -1,360B</Text>
+                            <Text style={[styles.bracketRate, { color: colors.text.body }]}>≈ -1,280B</Text>
                         </View>
 
                         <Text style={[styles.zoneDesc, { marginTop: 10 }]}>

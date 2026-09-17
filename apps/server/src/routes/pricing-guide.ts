@@ -101,6 +101,12 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         }
 
         const ok = updatePricingReportStatus(id, status);
+        if (!ok) {
+            // Forge reliability fix: return 404 Not Found when price report does not exist
+            ctx.status = 404;
+            ctx.body = { error: 'Price report not found' };
+            return;
+        }
         ctx.body = { success: ok };
     });
 
@@ -145,6 +151,12 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
 
         const id = ctx.params.id;
         const ok = deletePricingGuideItem(id);
+        if (!ok) {
+            // Forge reliability fix: return 404 Not Found status when catalog item does not exist
+            ctx.status = 404;
+            ctx.body = { error: 'Item not found' };
+            return;
+        }
         ctx.body = { success: ok };
     });
 
@@ -163,6 +175,12 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
         }
 
         const ok = pinPricingGuideItem(id, isPinned);
+        if (!ok) {
+            // Forge reliability fix: return 404 Not Found when catalog item to pin does not exist
+            ctx.status = 404;
+            ctx.body = { error: 'Item not found' };
+            return;
+        }
         ctx.body = { success: ok };
     });
 

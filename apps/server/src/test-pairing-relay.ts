@@ -46,6 +46,12 @@ async function main() {
     const badInit2 = initPairingSession('1234567890abcdef', 'not-64-hex');
     assert(!badInit2.ok, 'Rejects invalid desktopPubHex length');
 
+    const pollEmpty = pollPairingSession('');
+    assert(pollEmpty.status === 'expired', 'Polling empty sessionId returns status "expired"');
+
+    const pollInvalid = pollPairingSession('invalid-session-id!');
+    assert(pollInvalid.status === 'expired', 'Polling invalid sessionId format returns status "expired"');
+
     // 2. Lifecycle: Init -> Poll Waiting -> Cancel
     const desktopSession1 = createPairingSession();
     const initRes = initPairingSession(desktopSession1.sessionId, desktopSession1.publicKeyHex);

@@ -155,32 +155,32 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.newcomer.fg }]}>
                         <Text style={styles.tierTitle}>🌱 Newcomer</Text>
-                        <ListItem>A <Text style={styles.boldWhiteText}>-20B</Text> welcome voucher opens your floor after your 1st trade</ListItem>
+                        <ListItem>Credit floor opens after your 1st completed trade (or via a starter vouch of 25, 50, or 100B)</ListItem>
                         <ListItem>Browse & trade the marketplace, receive credits</ListItem>
                         <ListItem><Text style={styles.boldWhiteText}>Sending credits</Text> unlocks the moment you complete that first trade</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.resident.fg }]}>
                         <Text style={styles.tierTitle}>🏠 Resident</Text>
-                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-200B</Text> as you trade more value</ListItem>
+                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-200B</Text> (up to -599B)</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.steward.fg }]}>
                         <Text style={styles.tierTitle}>🏛️ Steward</Text>
-                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-600B</Text></ListItem>
+                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-600B</Text> (up to -1399B)</ListItem>
                         <ListItem>Trusted-trader recognition across the community</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
                         <Text style={styles.tierTitle}>⛰️ Elder</Text>
-                        <ListItem>Credit floor deepens toward <Text style={styles.boldWhiteText}>-1400B</Text> (max <Text style={styles.boldWhiteText}>-2000B</Text>)</ListItem>
+                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-1400B</Text> (max <Text style={styles.boldWhiteText}>-2000B</Text>)</ListItem>
                         <ListItem>Recognised as a long-standing, high-trust member</ListItem>
                     </View>
 
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>OPEN TO EVERYONE — NO TIER REQUIRED</Text>
                         <ListItem><Text style={styles.boldWhiteText}>Inviting new members</Text> — share BeanPool freely from day one.</ListItem>
-                        <ListItem><Text style={styles.boldWhiteText}>A governance voice</Text> — voting power scales with the value you trade, so anyone who trades has a say.</ListItem>
+                        <ListItem><Text style={styles.boldWhiteText}>A governance voice</Text> — 1 member 1 vote on community polls and roles, plus quadratic voting on pool spending based on earned trade standing.</ListItem>
                         <ListItem><Text style={styles.boldWhiteText}>No daily spending limits</Text> — your credit floor is the only guardrail.</ListItem>
                     </View>
                 </View>

@@ -52,3 +52,5 @@ export function resolveAvatarUrl(url: string | null | undefined): string | null 
     if (/["'()\\\s<>]/.test(url)) return null;
     return url;
 }
+
+export const resolveImageUrl = resolveAvatarUrl;

@@ -10,6 +10,7 @@ import { useState, useEffect } from 'react';
 import { onSyncChange, type SyncState } from '../lib/sync';
 import { checkMembership } from '../lib/api';
 import { loadIdentity } from '../lib/identity';
+import { withJitter } from '../lib/jitter';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -20,7 +21,11 @@ function formatTimeAgo(timestamp: number): string {
     return `${hours}h ago`;
 }
 
-export function SyncStatus() {
+interface SyncStatusProps {
+    isMember?: boolean | null;
+}
+
+export function SyncStatus({ isMember: propIsMember }: SyncStatusProps = {}) {
     const [sync, setSync] = useState<SyncState>({
         connected: false,
         lastSyncTime: null,
@@ -35,9 +40,21 @@ export function SyncStatus() {
         return unsub;
     }, []);
 
-    // Membership probe — probe HTTP API continuously regardless of WebSocket state
+    // Membership probe — frequent when the WebSocket is closed, slow when it is open.
+    //
+    // This deliberately does NOT suppress the probe entirely while connected. A browser
+    // WebSocket whose NAT mapping has expired, or whose server vanished, accepts `send()` into
+    // the OS buffer without throwing: `readyState` stays OPEN and `sync.connected` stays true.
+    // There is no pong watchdog, so a dead socket reads as healthy indefinitely — and skipping
+    // the probe would leave the indicator falsely green next to a "last synced 45m ago" that
+    // contradicts it. A slow probe keeps it honest and still removes most of the requests:
+    // one per two minutes instead of one per thirty seconds.
+    const probeIntervalMs = sync.connected ? 120_000 : 30_000;
+
     useEffect(() => {
         let cancelled = false;
+        let interval: ReturnType<typeof setInterval> | null = null;
+
         const probe = async () => {
             try {
                 const identity = await loadIdentity();
@@ -51,26 +68,88 @@ export function SyncStatus() {
                 if (!cancelled) setIsHttpOnline(false);
             }
         };
-        probe();
-        const interval = setInterval(probe, 5000);
-        return () => { cancelled = true; clearInterval(interval); };
-    }, []);
 
-    // Auto-update the "time ago" label
+        const startPolling = () => {
+            if (interval) return;
+            probe();
+            interval = setInterval(probe, withJitter(probeIntervalMs));
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        };
+
+        if (!document.hidden) {
+            startPolling();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            cancelled = true;
+            stopPolling();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [probeIntervalMs]);
+
+    // Auto-update the "time ago" label (pauses when hidden)
     const [, setTick] = useState(0);
     useEffect(() => {
-        const timer = setInterval(() => setTick((t) => t + 1), 10000);
-        return () => clearInterval(timer);
+        let timer: ReturnType<typeof setInterval> | null = null;
+
+        const startTimer = () => {
+            if (!timer) {
+                timer = setInterval(() => setTick((t) => t + 1), 10000);
+            }
+        };
+
+        const stopTimer = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                stopTimer();
+            } else {
+                setTick((t) => t + 1);
+                startTimer();
+            }
+        };
+
+        if (!document.hidden) {
+            startTimer();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => {
+            stopTimer();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     // Resolve display state
-    // Online if either WebSocket or HTTP probe confirms connectivity and membership
-    const isMemberConfirmed = isMember === true;
-    const isReachable = sync.connected || isHttpOnline === true;
+    // If the WebSocket is OPEN, derive statusMode directly from socket state.
+    // Fall back to HTTP probe state only when the socket is closed.
+    const effectiveIsMember = propIsMember !== undefined ? propIsMember : isMember;
 
-    const statusMode = (isReachable && isMemberConfirmed)
+    const statusMode = sync.connected
+        ? (effectiveIsMember === false ? 'guest' : 'online')
+        : (isHttpOnline && effectiveIsMember === true)
         ? 'online'
-        : (isReachable && isMember === false)
+        : (isHttpOnline && effectiveIsMember === false)
         ? 'guest'
         : 'offline';
 

@@ -21,6 +21,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, createPost, acceptPost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance, adminSetOperator, canOperate,
+    adminAssignTreasuryOperator,
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -58,10 +59,13 @@ async function main() {
     // ---- 3. Pay the tender FIRST, from 0 → bounded deficit on the credit line ------------
     const F = 'tender-fiona-000000000000000000000000000000';
     seedMember(F, 'Fiona-Tender');
+    const K = 'keeper-kyle-000000000000000000000000000000';
+    seedMember(K, 'Kyle-Keeper');
+    adminAssignTreasuryOperator(T, K);
     const req = requestPost(tend!.id, F);                 // tender bids to help
-    approvePostRequest(req.id, T);                        // treasury approves → funds escrow (T → escrow 20)
+    approvePostRequest(req.id, T, { authSigner: K });     // keeper approves → funds escrow (T → escrow 20)
     assert(bal(T) === -20, '3. treasury funds tending from 0 → -20 (bounded overdraft in action)');
-    completePostTransaction(req.id, T);                   // treasury releases → tender paid
+    completePostTransaction(req.id, T, undefined, { authSigner: K }); // keeper releases → tender paid
     // 20 − 1.5% = 19.7. The tender is the SELLER here (selling labour), and #165 charges the
     // community fee on the escrow payout, so they net the same as any other seller. This test
     // was written 2026-07-26, while escrow payouts were still wrongly passing isFeeExempt=true,

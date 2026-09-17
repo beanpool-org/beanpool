@@ -1,28 +1,114 @@
 import React, { useState } from 'react';
-import { ThreatReviewModal } from './ThreatReviewModal';
-import { MemberDetailModal } from './MemberDetailModal';
+import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
+import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
+import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
+import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
 
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    displayName?: string;
+    callsign?: string;
+    handle?: string;
+    avatarUrl?: string;
+    avatar?: string;
+    tier?: string;
+    standing?: string;
+    role?: string;
+    nodeRole?: MemberNodeRole | null;
+    earnedCredit?: number;
+    earned_credit?: number;
+    canVouch?: boolean;
+    isVoucher?: boolean;
+    canOperate?: boolean;
+    can_operate?: boolean;
+    isOperator?: boolean;
+    creditFrozen?: boolean;
+    isFrozen?: boolean;
+    status?: string;
+    platform?: string;
+    [key: string]: unknown;
+}
+
+export interface ProfileItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    displayName?: string;
+    callsign?: string;
+    handle?: string;
+    avatarUrl?: string;
+    avatar?: string;
+}
+
+export interface SecurityFlagItem {
+    id?: string;
+    type?: string;
+    severity?: string;
+    description?: string;
+    [key: string]: unknown;
+}
+
+export interface UserReportItem {
+    id?: string;
+    targetPubkey?: string;
+    reason?: string;
+    isReport?: boolean;
+    [key: string]: unknown;
+}
+
+export interface NodeDataPayload {
+    members?: MemberItem[];
+    profiles?: ProfileItem[];
+    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
+    posts?: unknown[];
+    flags?: SecurityFlagItem[];
+    reports?: UserReportItem[];
+    health?: {
+        healthScore?: number;
+        flags?: SecurityFlagItem[];
+        version?: string;
+        isConsensusHealthy?: boolean;
+        ledgerDrift?: number;
+        activeWsConnections?: number;
+        p2pPeersCount?: number;
+        dbSizeBytes?: number;
+        walSizeBytes?: number;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+}
+
 interface MembersModuleProps {
-    nodeData: any | null;
+    nodeData: NodeDataPayload | null;
     nodeDataLoading: boolean;
     activeNodeUrl?: string;
     adminPassword?: string;
+    tfaToken?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     onPruneUser?: (pubkey: string) => Promise<void>;
+    onPruneBranch?: (pubkey: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
     onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
+    onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
+    onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
 }
 
-export function getMemberAvatar(m: any, profiles: any[] | Map<string, any> = []): string | null {
+export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
     const pub = m?.publicKey || m?.pubkey || '';
     const profile = profiles instanceof Map
         ? profiles.get(pub)
         : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    const raw = profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+    return profile?.avatar || profile?.avatarUrl || m?.avatarUrl || m?.avatar || null;
+}
+
+export function getMemberAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
+    const raw = getMemberRawAvatar(m, profiles);
     return resolveAvatarUrl(raw);
 }
 
@@ -45,38 +131,62 @@ export function fmtLastActive(iso?: string | null): string {
     return `Active ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
 }
 
-export function getMemberDisplayName(m: any, profiles: any[] | Map<string, any> = []): string {
-    const pub = m?.publicKey || m?.pubkey || '';
+export function getMemberDisplayName(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string {
+    const rawPub = m?.publicKey || m?.pubkey || (m as any)?.public_key || (m as any)?.member_pubkey || (m as any)?.memberPubkey;
+    const pub = typeof rawPub === 'string' ? rawPub.trim() : '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'System Node Operator';
 
     // Look up in profiles Map or array
-    const profile = profiles instanceof Map
-        ? profiles.get(pub)
-        : profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
-    if (profile?.name?.trim()) return profile.name.trim();
-    if (profile?.displayName?.trim()) return profile.displayName.trim();
-    if (profile?.callsign?.trim()) return profile.callsign.trim();
-    if (profile?.handle?.trim()) return `@${profile.handle.trim()}`;
-
-    // Direct properties on member object
-    if (m?.name?.trim()) return m.name.trim();
-    if (m?.displayName?.trim()) return m.displayName.trim();
-    if (m?.callsign?.trim()) return m.callsign.trim();
-    if (m?.handle?.trim()) return `@${m.handle.trim()}`;
-
-    if (pub.includes('-')) {
-        const prefix = pub.split('-')[0];
-        return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Member`;
+    let profile: ProfileItem | undefined;
+    if (profiles instanceof Map) {
+        profile = profiles.get(pub);
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            for (const [k, v] of profiles.entries()) {
+                if (k.toLowerCase() === lower) {
+                    profile = v;
+                    break;
+                }
+            }
+        }
+    } else if (Array.isArray(profiles) && pub) {
+        profile = profiles.find((p) => p && (p.publicKey === pub || p.pubkey === pub));
+        if (!profile && pub) {
+            const lower = pub.toLowerCase();
+            profile = profiles.find((p) => {
+                if (!p) return false;
+                const pk = p.publicKey || p.pubkey || (p as any).public_key || (p as any).member_pubkey || (p as any).memberPubkey;
+                return typeof pk === 'string' && pk.trim().toLowerCase() === lower;
+            });
+        }
     }
 
-    if (pub.length > 8) {
+    if (typeof profile?.name === 'string' && profile.name.trim()) return profile.name.trim();
+    if (typeof profile?.displayName === 'string' && profile.displayName.trim()) return profile.displayName.trim();
+    if (typeof profile?.callsign === 'string' && profile.callsign.trim()) return profile.callsign.trim();
+    if (typeof profile?.handle === 'string' && profile.handle.trim()) return `@${profile.handle.trim()}`;
+
+    // Direct properties on member object
+    if (typeof m?.callsign === 'string' && m.callsign.trim()) return m.callsign.trim();
+    if (typeof m?.name === 'string' && m.name.trim()) return m.name.trim();
+    if (typeof m?.displayName === 'string' && m.displayName.trim()) return m.displayName.trim();
+    if (typeof m?.handle === 'string' && m.handle.trim()) return `@${m.handle.trim()}`;
+
+    if (pub && pub.includes('-')) {
+        const prefix = pub.split('-')[0];
+        if (prefix) {
+            return `${prefix.charAt(0).toUpperCase() + prefix.slice(1)} Member`;
+        }
+    }
+
+    if (pub && pub.length > 8) {
         return `Member (${pub.slice(0, 8)})`;
     }
 
     return pub || 'Sovereign Member';
 }
 
-export function getMemberTier(m: any): string {
+export function getMemberTier(m: MemberItem | null | undefined): string {
     if (!m) return 'Citizen';
     const pub = m.publicKey || m.pubkey || '';
     if (pub === 'SYSTEM' || pub.startsWith('SYSTEM')) return 'Elder';
@@ -95,11 +205,26 @@ export function getMemberTier(m: any): string {
     return 'Citizen';
 }
 
-export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminPassword, onRefresh, onFreezeUser, onPruneUser, onUpdateTier, onToggleVoucher, onToggleOperator }: MembersModuleProps) {
+export function MembersModule({
+    nodeData,
+    nodeDataLoading,
+    activeNodeUrl,
+    adminPassword,
+    tfaToken,
+    onRefresh,
+    onFreezeUser,
+    onPruneUser,
+    onPruneBranch,
+    onUpdateTier,
+    onToggleVoucher,
+    onToggleOperator,
+    onGrantNodeRole,
+    onRevokeNodeRole,
+}: MembersModuleProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [activeThreat, setActiveThreat] = useState<any | null>(null);
-    const [selectedMember, setSelectedMember] = useState<any | null>(null);
-    const [tierEditMember, setTierEditMember] = useState<any | null>(null);
+    const [activeThreat, setActiveThreat] = useState<ThreatItem | null>(null);
+    const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
+    const [tierEditMember, setTierEditMember] = useState<MemberItem | null>(null);
     const [selectedTierValue, setSelectedTierValue] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
     const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
@@ -138,8 +263,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             await onPruneUser(pubkey);
             onRefresh();
             setSelectedMember(null);
-        } catch (e: any) {
-            alert(`Failed to prune member: ${e.message || e}`);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(`Failed to prune member: ${msg}`);
         }
     };
 
@@ -153,8 +279,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             await onUpdateTier(pubkey, selectedTierValue);
             setTierEditMember(null);
             onRefresh();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to update member tier');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to update member tier');
         } finally {
             setIsUpdatingTier(false);
         }
@@ -164,25 +291,25 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         if (nodeData?.members) {
             const serverFrozen = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.creditFrozen || m.isFrozen || m.status === 'frozen')
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setFrozenPubkeys(serverFrozen);
 
             const serverVouchers = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.canVouch || m.isVoucher)
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.canVouch || m.isVoucher)
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setCustomVouchers(serverVouchers);
 
             const serverOperators = new Set<string>(
                 nodeData.members
-                    .filter((m: any) => m.canOperate || m.isOperator || m.can_operate)
-                    .map((m: any) => m.publicKey || m.pubkey)
-                    .filter(Boolean)
+                    .filter((m: MemberItem) => m.canOperate || m.isOperator || m.can_operate)
+                    .map((m: MemberItem) => m.publicKey || m.pubkey)
+                    .filter((pk): pk is string => Boolean(pk))
             );
             setCustomOperators(serverOperators);
         }
@@ -246,8 +373,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             try {
                 await onToggleVoucher(pubkey, nextState);
                 onRefresh();
-            } catch (e: any) {
-                alert(e?.message || 'Failed to update voucher status on server');
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                alert(msg || 'Failed to update voucher status on server');
             }
         }
     };
@@ -270,8 +398,9 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             try {
                 await onToggleOperator(pubkey, nextState);
                 onRefresh();
-            } catch (e: any) {
-                alert(e?.message || 'Failed to update operator role on server');
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                alert(msg || 'Failed to update operator role on server');
             }
         }
     };
@@ -285,12 +414,13 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                 : 'data:image/svg+xml,' + encodeURIComponent(
                     `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">${newTreasuryAvatar || '🏛️'}</text></svg>`
                 );
-            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword);
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine: Number(newTreasuryCredit) || 0 }, adminPassword, tfaToken);
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to create treasury');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to create treasury');
         } finally {
             setCreatingTreasury(false);
         }
@@ -306,13 +436,14 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                 credits: Number(offerCredits) || 0,
                 description: offerDescription.trim(),
                 repeatable: true
-            }, adminPassword);
+            }, adminPassword, tfaToken);
             setOfferTreasury(null);
             setOfferTitle('');
             setOfferDescription('');
             reloadTreasuries();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to seed offer');
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            alert(msg || 'Failed to seed offer');
         } finally {
             setSeedingOffer(false);
         }
@@ -328,7 +459,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         return new Set();
     });
 
-    const handleDismissThreat = (threat: any) => {
+    const handleDismissThreat = (threat: ThreatItem | null) => {
         if (!threat) return;
         const key = threat.id || threat.type || threat.description || threat.targetPubkey || threat.reason;
         setDismissedFlags((prev) => {
@@ -348,7 +479,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
 
     // O(1) profile lookup map derived from profiles array to avoid O(N*M) nested scans during render & search
     const profilesMap = React.useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, ProfileItem>();
         if (Array.isArray(profiles)) {
             for (const p of profiles) {
                 if (!p) continue;
@@ -363,13 +494,13 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
     const rawFlags = health?.flags || [];
 
     const flags = rawFlags.filter(
-        (f: any) => !dismissedFlags.has(f.id || f.type || f.description)
+        (f: SecurityFlagItem) => !dismissedFlags.has(f.id || f.type || f.description || '')
     );
     const reports = rawReports.filter(
-        (r: any) => !dismissedFlags.has(r.id || r.targetPubkey || r.reason)
+        (r: UserReportItem) => !dismissedFlags.has(r.id || r.targetPubkey || r.reason || '')
     );
 
-    const filteredMembers = members.filter((m: any) => {
+    const filteredMembers = members.filter((m: MemberItem) => {
         if (m.status === 'pruned') return false;
         const name = getMemberDisplayName(m, profilesMap).toLowerCase();
         const pub = (m.publicKey || '').toLowerCase();
@@ -383,7 +514,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
         let pwa = 0;
         let unknown = 0;
 
-        members.forEach((m: any) => {
+        members.forEach((m: MemberItem) => {
             const plat = (m.platform || '').toLowerCase();
             if (plat === 'ios') ios++;
             else if (plat === 'android') android++;
@@ -446,13 +577,12 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                         {treasuries.map((t) => (
                             <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    {t.avatar ? (
-                                        <img src={t.avatar} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-amber-500/40 shrink-0" />
-                                    ) : (
-                                        <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center font-bold text-lg shrink-0">
-                                            🏛️
-                                        </div>
-                                    )}
+                                    <Avatar
+                                        src={t.avatar}
+                                        alt={t.name}
+                                        className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden"
+                                        fallbackGlyph="🏛️"
+                                    />
                                     <div className="min-w-0">
                                         <div className="font-bold text-white text-xs truncate">{t.name}</div>
                                         <div className="text-[11px] text-nature-400 font-mono">
@@ -491,7 +621,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                     </div>
 
                     <div className="space-y-2 text-xs">
-                        {flags.map((flag: any, idx: number) => (
+                        {flags.map((flag: SecurityFlagItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
@@ -513,14 +643,23 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                             </div>
                         ))}
 
-                        {reports.map((report: any, idx: number) => (
+                        {reports.map((report: UserReportItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-amber-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
                                         <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold uppercase font-mono">
                                             USER REPORT
                                         </span>
-                                        <span className="font-mono text-amber-300">Target: {report.targetPubkey?.slice(0, 12)}...</span>
+                                        <span className="font-mono text-amber-300">
+                                            {(() => {
+                                                const target = typeof report.targetPubkey === 'string'
+                                                    ? report.targetPubkey
+                                                    : (typeof report.target_pubkey === 'string'
+                                                        ? report.target_pubkey
+                                                        : '');
+                                                return `Target: ${target ? `${target.slice(0, 12)}...` : 'Unknown'}`;
+                                            })()}
+                                        </span>
                                     </div>
                                     <p className="text-nature-200 m-0">Reason: {report.reason || 'Abuse or spam reported by member'}</p>
                                 </div>
@@ -561,7 +700,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Vouchers</span>
                             <span className="text-2xl font-black text-emerald-400 font-mono">
-                                {members.filter((m: any) => {
+                                {members.filter((m: MemberItem) => {
                                     const pk = m.publicKey || m.pubkey || '';
                                     const frozen = Array.from(frozenPubkeys).some(f => pk === f || (pk && f && (pk.startsWith(f) || f.startsWith(pk))));
                                     if (frozen) return false;
@@ -606,7 +745,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                     <div className="col-span-2 text-right">Actions</div>
                                 </div>
                                 <div className="divide-y divide-nature-800/60">
-                                    {filteredMembers.map((m: any, idx: number) => {
+                                    {filteredMembers.map((m: MemberItem, idx: number) => {
                                         const displayName = getMemberDisplayName(m, profilesMap);
                                         const pubkey = m.publicKey || m.pubkey || '';
                                         const initial = displayName.charAt(0).toUpperCase();
@@ -637,27 +776,16 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                 }`}
                                             >
                                                 <div className="col-span-4 flex items-center gap-2.5">
-                                                    {(() => {
-                                                        const avatar = getMemberAvatar(m, profilesMap);
-                                                        if (avatar) {
-                                                            return (
-                                                                <img
-                                                                    src={avatar}
-                                                                    alt={displayName}
-                                                                    className="w-7 h-7 rounded-full object-cover shrink-0 border border-terra-500/40 shadow-sm"
-                                                                />
-                                                            );
-                                                        }
-                                                        return (
-                                                            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
-                                                                isMemberFrozen
-                                                                    ? 'bg-red-950 text-red-400 border-red-800'
-                                                                    : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
-                                                            }`}>
-                                                                {initial}
-                                                            </div>
-                                                        );
-                                                    })()}
+                                                    <Avatar
+                                                        src={getMemberRawAvatar(m, profilesMap)}
+                                                        alt={displayName}
+                                                        className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border overflow-hidden ${
+                                                            isMemberFrozen
+                                                                ? 'bg-red-950 text-red-400 border-red-800'
+                                                                : 'bg-terra-600/30 text-terra-300 border-terra-500/30'
+                                                        }`}
+                                                        fallbackGlyph={initial}
+                                                    />
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>
@@ -679,9 +807,22 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                                         : '🌐 PWA'}
                                                                 </span>
                                                             )}
+                                                            {m.nodeRole && (
+                                                                <span
+                                                                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border shrink-0 ${
+                                                                        m.nodeRole === 'owner'
+                                                                            ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                                                                            : m.nodeRole === 'admin'
+                                                                            ? 'bg-sky-950/80 text-sky-300 border-sky-800/80'
+                                                                            : 'bg-purple-950/80 text-purple-300 border-purple-800/80'
+                                                                    }`}
+                                                                >
+                                                                    {m.nodeRole === 'owner' ? '👑 Owner' : m.nodeRole === 'admin' ? '⚡ Admin' : '🛡️ Moderator'}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <code className="text-[10px] text-nature-500 font-mono truncate block">
-                                                            {pubkey ? `${pubkey.slice(0, 20)}...` : ''}
+                                                            {typeof pubkey === 'string' && pubkey ? `${pubkey.slice(0, 20)}...` : ''}
                                                         </code>
                                                     </div>
                                                 </div>
@@ -696,10 +837,10 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                                 e.stopPropagation();
                                                                 setTierEditMember(m);
                                                                 const currentTier = getMemberTier(m);
-                                                                const valid = ['Newcomer', 'Resident', 'Steward', 'Elder'].find(
+                                                                const valid = (['Newcomer', 'Resident', 'Steward', 'Elder'] as const).find(
                                                                     (t) => t.toLowerCase() === currentTier.toLowerCase()
                                                                 );
-                                                                setSelectedTierValue((valid as any) || 'Elder');
+                                                                setSelectedTierValue(valid || 'Elder');
                                                             }}
                                                             title="Click to upgrade or edit member standing tier"
                                                             className="px-2.5 py-1 rounded bg-nature-900 hover:bg-nature-800 text-amber-400 hover:text-amber-300 font-bold text-xs border border-nature-800 transition-all hover:scale-105 flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -822,20 +963,20 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
             {activeThreat && (
                 <ThreatReviewModal
                     threat={activeThreat}
-                    profiles={profiles}
+                    profiles={profiles as NodeProfile[]}
                     members={members}
                     frozenPubkeys={frozenPubkeys}
                     onClose={() => setActiveThreat(null)}
                     onDismiss={handleDismissThreat}
                     onFreezePubkeys={handleFreezePubkeys}
-                    onInspectMember={(m) => setSelectedMember(m)}
+                    onInspectMember={(m) => setSelectedMember(m as MemberItem)}
                 />
             )}
 
             {selectedMember && (
                 <MemberDetailModal
                     member={selectedMember}
-                    profiles={profiles}
+                    profiles={profiles as Record<string, unknown>[]}
                     flags={flags}
                     isFrozen={
                         Array.from(frozenPubkeys).some((f) => {
@@ -864,7 +1005,24 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                     onToggleFreeze={handleToggleFreezeMember}
                     onToggleVouch={(pk, isV) => handleToggleVouchMember(pk, isV)}
                     onToggleOperator={(pk, isOp) => handleToggleOperatorMember(pk, isOp)}
+                    onGrantNodeRole={onGrantNodeRole}
+                    onRevokeNodeRole={onRevokeNodeRole}
+                    nodeRole={selectedMember.nodeRole}
+                    members={members}
+                    accounts={nodeData?.accounts}
+                    nodeUrl={activeNodeUrl}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    onRekeySuccess={() => {
+                        // Refresh data in background without unmounting modal while user reviews confirmation
+                        onRefresh?.();
+                    }}
+                    onOffboardSuccess={() => {
+                        setSelectedMember(null);
+                        onRefresh?.();
+                    }}
                     onPrune={(pk) => handlePruneMember(pk)}
+                    onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}
                 />
             )}
@@ -911,7 +1069,7 @@ export function MembersModule({ nodeData, nodeDataLoading, activeNodeUrl, adminP
                                                 name="tier"
                                                 value={t.id}
                                                 checked={selectedTierValue === t.id}
-                                                onChange={() => setSelectedTierValue(t.id as any)}
+                                                onChange={() => setSelectedTierValue(t.id as 'Newcomer' | 'Resident' | 'Steward' | 'Elder')}
                                                 className="mt-0.5 accent-terra-500"
                                             />
                                             <div>

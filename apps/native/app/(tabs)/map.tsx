@@ -257,6 +257,9 @@ export default function MapScreen() {
 
         // Floating Filter Bar
         filterBarWrapper: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center', zIndex: 90 },
+        // The scroll container shrink-wraps the pills and caps at the screen, so the row centres when it
+        // fits and scrolls when it does not. The pill look (fill, radius, shadow) stays on the content.
+        filterBarScroll: { maxWidth: '92%', flexGrow: 0, borderRadius: 24 },
         filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 4, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
         filterChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
         filterChipActive: { backgroundColor: colors.border.strong },
@@ -561,9 +564,10 @@ export default function MapScreen() {
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
-    // Pre-compute unique marker variants for off-screen capture
+    // Pre-compute unique marker variants for off-screen capture. Events are left out: they draw their own
+    // violet pin, so feeding them here would only capture offer/need images nothing renders.
     const markerVariants = useMemo(
-        () => buildVariantList(posts, CATEGORIES),
+        () => buildVariantList(posts.filter(p => (p.type || '').toLowerCase() !== 'event'), CATEGORIES),
         [posts]
     );
 
@@ -1140,7 +1144,15 @@ export default function MapScreen() {
             {/* Floating Filter Bar */}
             {!showNewPost && !selectedPostPreview && (
                 <View style={styles.filterBarWrapper} pointerEvents="box-none">
-                    <View style={styles.filterBar}>
+                    {/* Scrollable: a fourth pill takes the row past the screen at 320dp with 1.3x text,
+                        where All and Category were clipped at both ends with no way to reach them. It
+                        still shrink-wraps and centres at normal sizes. */}
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.filterBarScroll}
+                        contentContainerStyle={styles.filterBar}
+                    >
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => setMapTypeFilter('all')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>All</Text>
                         </Pressable>
@@ -1165,7 +1177,7 @@ export default function MapScreen() {
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}
-                    </View>
+                    </ScrollView>
 
                     {/* Date chips, only while Events is on — the pill row has to stay readable at 320dp
                         with 1.3x text, and four more chips in it would not. Horizontally scrollable for

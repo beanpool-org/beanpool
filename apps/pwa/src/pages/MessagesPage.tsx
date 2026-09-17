@@ -1557,7 +1557,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)', paddingBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            {/* Wraps instead of scrolling: at 320px with 1.3x text the three chips need ~390px, and a sideways
+                scroller hid "Direct" behind a grey scrollbar. scrollbar-none in case a translation still overflows. */}
+            <div className="scrollbar-none" data-testid="conversation-filter-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-primary)', paddingBottom: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <button
                     onClick={() => setActiveTab('all')}
                     style={{ whiteSpace: 'nowrap', background: activeTab === 'all' ? 'var(--text-primary)' : 'var(--bg-hover)', color: activeTab === 'all' ? 'var(--bg-primary)' : 'var(--text-primary)', border: 'none', padding: '0.5rem 1.25rem', borderRadius: '20px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}

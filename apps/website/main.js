@@ -238,8 +238,8 @@ const STEP_DETAILS = [
         subtitle: 'Own your keys and your trust reputation, with hardware-backed custody and a 12-word phrase that restores your account anywhere.',
         points: [
             { title: 'Ed25519 Cryptographic Keys', text: 'Your unique cryptographic identity is generated directly on your mobile device, signed and anchored in the community web of trust.' },
-            { title: 'Dual-Custody Protection', text: 'Keys held in your device\'s secure hardware behind biometrics, with your 12-word phrase as the backup that depends on nobody.' },
-            { title: 'Sign-In Recovery', text: 'On the phone app, optionally link an Apple or Google account so your community node can help you back onto a new device. Your 12 words remain the way back that depends on nobody.' }
+            { title: 'Dual-Custody Protection', text: 'On the phone apps your key sits in the operating system\'s secure storage, with an optional biometric lock on the app itself; in the browser app it sits in that browser\'s own storage. Your 12-word phrase is the backup that depends on nobody.' },
+            { title: 'Sign-In Recovery', text: 'On the phone app, optionally link an Apple, Google, Facebook or GitHub account so your community node can help you back onto a new device. That path is custodial — your node\'s operator can use it. Your 12 words remain the way back that depends on nobody.' }
         ],
         primaryAction: { label: 'Read Identity Guide (§3) →', href: 'getting-started.html#3' },
         secondaryAction: { label: '▶ Watch Mobile Pairing Walkthrough', href: 'https://www.youtube.com/@beanpool' }
@@ -269,7 +269,7 @@ const STEP_DETAILS = [
             { title: 'Progressive Demurrage', text: 'A gentle progressive circulation incentive on idle surplus balances encourages active spending and prevents speculative hoarding.' },
             { title: 'Community Commons Pool', text: '100% of circulation and trade charges flow into a shared Commons — funding projects members vote for, and absorbing bad debt so the ledger always balances.' }
         ],
-        primaryAction: { label: 'View Federation Rules (§7) →', href: 'rules.html#7' },
+        primaryAction: { label: 'View Federation Rules (§10) →', href: 'rules.html#10' },
         secondaryAction: { label: '▶ Watch Keynesian Clearing Video', href: 'https://www.youtube.com/@beanpool' }
     }
 ];

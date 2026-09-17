@@ -385,7 +385,7 @@
         <div class="container">
             <div class="cta-card">
                 <h2>Start Your Community Node</h2>
-                <p>BeanPool runs anywhere Docker runs. Grab the source, configure your node identity, and bootstrap your community instantly.</p>
+                <p>BeanPool is published as a Docker image for Intel/AMD and ARM64, so a node runs on a small server, a Mini PC, a NAS or a Raspberry Pi. These three commands fetch the compose file, pull the published image and start the node. You name your community and set its contact details afterwards, in the node's own settings app &mdash; there is nothing to configure before it boots.</p>
                 
                 <!-- macOS Style Terminal Window -->
                 <div class="terminal-window">
@@ -399,22 +399,22 @@
                     </div>
                     <div class="terminal-body">
                         <div class="cta-step">
-                            <span class="cta-step-label">Step 1: Clone Repository</span>
-                            <code>git clone https://github.com/beanpool-org/beanpool.git</code>
+                            <span class="cta-step-label">Step 1: Get the compose file</span>
+                            <code>git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                         <div class="cta-step">
-                            <span class="cta-step-label">Step 2: Configure Environment</span>
-                            <code>cp .env.example .env  # Set community name & domain</code>
+                            <span class="cta-step-label">Step 2: Pull the published image</span>
+                            <code>docker compose pull</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                         <div class="cta-step">
-                            <span class="cta-step-label">Step 3: Launch Node Service</span>
-                            <code>docker compose up -d</code>
+                            <span class="cta-step-label">Step 3: Start the node</span>
+                            <code>docker compose -p beanpool up -d</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>

@@ -1983,6 +1983,74 @@ export async function removeEnterpriseThreadMessage(treasury: string, messageId:
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
 }
 
+// Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the
+// actor from the signature only and decides who may act; these throw the server's own error message.
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/pause`, {});
+}
+
+export async function resumeEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; alreadyActive?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/resume`, {});
+}
+
+export async function initiateWindUp(treasury: string): Promise<{ success: boolean; status: string; initiatedAt: string; initiatedBy: string; graceEndsAt: string; alreadyInitiated?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/initiate`, {});
+}
+
+export async function cancelWindUp(treasury: string): Promise<{ success: boolean; status: string }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`, {});
+}
+
+export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`, {});
+}
+
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance: number };
+    period: { since: string | null; until: string | null };
+    summary: {
+        totalIncome: number;
+        totalSpend: number;
+        netChange: number;
+        startingBalance: number;
+        endingBalance: number;
+        transactionCount: number;
+    };
+    entries: EnterpriseLedgerEntry[];
+}
+
+/**
+ * The enterprise's income & spend (P&L), public to every member. Throws rather than returning null so the
+ * screen can say it could not load and offer a retry, instead of showing an empty ledger as if nothing happened.
+ */
+export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {
+    const params = new URLSearchParams();
+    if (opts?.since) params.set('since', opts.since);
+    if (opts?.until) params.set('until', opts.until);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
+    if (!res.ok) {
+        const errJson = await res.json().catch(() => ({} as any));
+        throw new Error(errJson?.error || `Could not load enterprise ledger (${res.status})`);
+    }
+    return await res.json();
+}
+
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
 
 export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';

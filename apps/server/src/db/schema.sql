@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS posts (
     target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
     target_pubkey TEXT REFERENCES members(public_key),
     assigned_to TEXT REFERENCES members(public_key),
-    target_archetypes TEXT,
+    target_archetypes TEXT, -- dormant: never read or written (archetypes gate nothing)
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);

@@ -1,8 +1,10 @@
 /**
  * Community Working Style & Archetype Engine
  *
- * Grounded in the 9 collaborative energies (Enneagram dynamics), translated
- * into positive, actionable community roles. Avoids raw numbers or clinical labels.
+ * Grounded in the 9 collaborative energies (Enneagram dynamics), written as
+ * working preferences ("You prefer…", "Works best when…"), not identities.
+ * A member sees their own type; nothing shown about another member names one.
+ * Archetypes gate nothing. See docs/the-commons.md, "Working-style archetypes".
  */
 
 export type ArchetypeKey =
@@ -34,7 +36,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Weaver',
         emoji: '🏛️',
         tagline: 'Craft, Quality & Purpose',
-        description: 'You bring thoughtful craftsmanship and structure to community initiatives. You care deeply about doing things well and setting up durable foundations.',
+        description: 'You prefer work with structure and care, built to last. Works best when standards are agreed up front and there is time to do things well.',
         superpowers: [
             'Turning loose ideas into structured, high-quality plans',
             'Spotting ways to improve shared processes and agreements',
@@ -49,7 +51,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Connector',
         emoji: '🤝',
         tagline: 'Warmth, Empathy & Mutual Aid',
-        description: 'You naturally notice the human side of every project. You connect people who need help with people who can offer it, fostering a welcoming, supportive culture.',
+        description: 'You prefer work that looks after people and links those who need help with those who can offer it. Works best when members check in on each other.',
         superpowers: [
             'Intuitive sense for who needs support or encouragement',
             'Weaving strong social bonds across community members',
@@ -64,7 +66,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Catalyst',
         emoji: '⚡',
         tagline: 'Momentum, Drive & Progress',
-        description: 'You are energized by getting things off the ground. You break down complex goals into milestones and keep community momentum moving forward.',
+        description: 'You prefer getting things off the ground: clear goals, milestones and visible progress. Works best when decisions come quickly and next steps are concrete.',
         superpowers: [
             'Transforming discussions into actionable milestones',
             'Unblocking logjams and keeping energy high',
@@ -79,7 +81,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Artisan',
         emoji: '🎨',
         tagline: 'Creativity, Depth & Authenticity',
-        description: 'You bring soul, aesthetic care, and original perspective to whatever you touch. You help the community stay true to its unique identity and deeper purpose.',
+        description: 'You prefer work with meaning, craft and a personal touch. Works best when there is room for original ideas and the deeper purpose stays in view.',
         superpowers: [
             'Infusing projects with authentic meaning and creative flair',
             'Seeing unique possibilities others might overlook',
@@ -94,7 +96,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Sage',
         emoji: '🧭',
         tagline: 'Insight, Systems & Deep Knowledge',
-        description: 'You love understanding how things work beneath the surface. You research, design tools, and bring clarity to complex systems so everyone benefits.',
+        description: 'You prefer to understand how things work before acting, and to build tools others can use. Works best with time to think and clear written information.',
         superpowers: [
             'Synthesizing complex information into practical insights',
             'Designing scalable tools, guides, and decentralized systems',
@@ -109,7 +111,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Guardian',
         emoji: '🛡️',
         tagline: 'Loyalty, Trust & Resilience',
-        description: 'You are the community anchor. You anticipate hurdles, protect shared resources, and build the trust networks that keep the ecosystem secure.',
+        description: 'You prefer to plan ahead, look after shared resources and keep commitments. Works best when roles are clear and people follow through on what they say.',
         superpowers: [
             'Anticipating risks and preparing backup solutions',
             'Fierce loyalty to community members and shared commitments',
@@ -124,7 +126,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Spark',
         emoji: '✨',
         tagline: 'Vision, Possibility & Optimism',
-        description: 'You bring creative energy and contagious enthusiasm. You love exploring new horizons, initiating fresh community projects, and connecting unexpected ideas.',
+        description: 'You prefer starting fresh projects and connecting unexpected ideas. Works best when there is room to explore and others help carry things through.',
         superpowers: [
             'Igniting fresh excitement and rallying interest',
             'Synthesizing cross-disciplinary ideas into novel initiatives',
@@ -139,7 +141,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Champion',
         emoji: '🪵',
         tagline: 'Advocacy, Courage & Direct Action',
-        description: 'You stand up for fairness and aren\'t afraid of tough challenges. You protect vulnerable members, cut through red tape, and get things done.',
+        description: 'You prefer direct action, plain talk and standing up for what is fair. Works best when people say what they mean and stand behind their word.',
         superpowers: [
             'Cutting through ambiguity with decisive, candid leadership',
             'Advocating fiercely for community equity and fairness',
@@ -154,7 +156,7 @@ export const ARCHETYPES: Record<ArchetypeKey, ArchetypeInfo> = {
         name: 'The Harmonizer',
         emoji: '🕊️',
         tagline: 'Balance, Consensus & Flow',
-        description: 'You create calm, inclusive spaces where everyone feels heard. You balance different viewpoints, resolve tension, and help the community stay united.',
+        description: 'You prefer calm, inclusive work where everyone is heard. Works best when there is patience for different views and no needless pressure.',
         superpowers: [
             'Unifying diverse opinions into common ground',
             'Bringing grounding calm to stressful or high-stakes moments',
@@ -646,6 +648,11 @@ export function parseArchetype(raw?: string | null): QuizResult | null {
 /**
  * Calculates privacy-preserving relational chemistry between two members.
  * Avoids raw numbers or clinical labels; focuses on collaborative synergy.
+ *
+ * Everything returned is shown to the viewer about ANOTHER member, so no field
+ * names a type or quotes a type's tagline, not even in the kindred case, where
+ * naming "your" type would name theirs too. The tip stays (archetype decision
+ * note, 2026-09-17, decision 3).
  */
 export function calculateSynergy(
     viewerArchetypeKey: ArchetypeKey,
@@ -668,16 +675,15 @@ export function calculateSynergy(
 
     // Case 1: Kindred Spirits (Same archetype or close shared values)
     if (viewerArchetypeKey === memberArchetypeKey) {
-        const baseName = me.name.replace(/^The\s+/i, '');
         return {
             relationshipType: 'kindred_spirits',
             title: 'Kindred Rhythms',
             emoji: '🌱',
-            headline: `Shared ${baseName} intuition`,
-            summary: `You both share the ${baseName} rhythm. Conversations tend to flow effortlessly because you naturally prioritize similar values and community care.`,
+            headline: 'Similar ways of working',
+            summary: 'You both prefer similar ways of working. Conversations tend to flow easily because you prioritize similar things.',
             strengths: [
                 `Instant mutual understanding of working style`,
-                `High alignment on ${me.tagline.toLowerCase()}`,
+                `Shared sense of what matters in the work`,
                 `Shared appreciation for how tasks should be approached`,
             ],
             collaborationTip: `Because you think alike, you'll reach decisions quickly. Be sure to seek an outside perspective for blind spots!`,
@@ -694,7 +700,7 @@ export function calculateSynergy(
             relationshipType: 'dynamic_complements',
             title: 'Complementary Synergy',
             emoji: '⚡',
-            headline: `${me.name} + ${other.name}`,
+            headline: 'Strengths that complement',
             summary: `You two have high collaboration chemistry. Your strengths naturally cover each other's blind spots — where one brings the spark or vision, the other brings structure and execution.`,
             strengths: [
                 `Natural balance of ideation and follow-through`,
@@ -710,7 +716,7 @@ export function calculateSynergy(
         relationshipType: 'balanced_allies',
         title: 'Balanced Collaboration',
         emoji: '✨',
-        headline: `${me.name} & ${other.name}`,
+        headline: 'Different, compatible styles',
         summary: `You bring different, harmonious approaches to collaboration. Working together brings balanced depth to any project.`,
         strengths: [
             `Complementary contributions to community discussions`,

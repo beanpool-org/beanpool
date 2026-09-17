@@ -449,6 +449,7 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
+        // Dormant: nothing reads or writes target_archetypes any more (archetypes gate nothing).
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
 
         // Add price_type column if not exists
@@ -662,7 +663,6 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         r.targetGroupName = r.target_group_name || null;
         r.targetPubkey = r.target_pubkey || null;
         r.assignedTo = r.assigned_to || null;
-        r.targetArchetypes = r.target_archetypes || null;
 
         if (r.type === 'poll') {
             if (typeof r.poll_options === 'string') {
@@ -1581,8 +1581,7 @@ export async function createPost(post: any) {
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
-        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
-        ...(post.targetArchetypes || post.target_archetypes ? { targetArchetypes: post.targetArchetypes || post.target_archetypes } : {})
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {})
     };
     const bodyString = JSON.stringify(body);
     const headers = await buildSignedHeaders('POST', '/api/marketplace/posts', bodyString, identity.privateKey, identity.publicKey);

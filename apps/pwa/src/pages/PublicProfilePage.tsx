@@ -375,7 +375,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         <div className="text-base font-extrabold text-nature-950 dark:text-white truncate">
                                             {synergy.title}
                                         </div>
-                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 break-words">
                                             {synergy.headline}
                                         </div>
                                     </div>
@@ -404,9 +404,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     type="button"
                                     aria-label={`Collaborate with ${profile?.callsign || 'member'}`}
                                     onClick={() => {
-                                        const viewerName = viewerArchetype ? (ARCHETYPES[viewerArchetype.primary]?.name || viewerArchetype.primary) : '';
-                                        const targetName = targetArchetype ? (ARCHETYPES[targetArchetype.primary]?.name || targetArchetype.primary) : '';
-                                        const message = buildSynergyCollabMessage(profile?.callsign, synergy.headline, viewerName, targetName);
+                                        const message = buildSynergyCollabMessage(profile?.callsign);
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
@@ -428,7 +426,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                    Take the 60-second quiz to get tips for working with {profile?.callsign || 'this member'}.
                                 </p>
                                 <button
                                     type="button"
@@ -455,11 +453,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    {profile?.callsign || 'This member'} hasn't taken their Archetype quiz yet. Send them a friendly nudge in chat to discover your working style alignment!
+                                    {profile?.callsign || 'This member'} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.
                                 </p>
                                 <button
                                     type="button"
-                                    aria-label={`Nudge ${profile?.callsign || 'member'} to take Archetype quiz`}
+                                    aria-label={`Nudge ${profile?.callsign || 'member'} to take the working style quiz`}
                                     onClick={() => {
                                         const message = buildSynergyNudgeMessage(profile?.callsign);
                                         setChatPrefill(message, pubkey);
@@ -483,7 +481,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     </div>
                                 </div>
                                 <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                    Take the 60-second quiz to discover your working style alignment and project synergy with {profile?.callsign || 'this member'}.
+                                    Take the 60-second quiz to get tips for working with {profile?.callsign || 'this member'}.
                                 </p>
                                 <button
                                     type="button"
@@ -634,7 +632,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 </div>
                             </div>
                             <p className="text-xs sm:text-sm text-nature-600 dark:text-nature-400 leading-relaxed m-0">
-                                Take the 60-second quiz to uncover your collaborative superpowers. Neighbours can then see how the two of you work together.
+                                Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.
                             </p>
                             <button
                                 type="button"

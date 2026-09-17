@@ -37,8 +37,11 @@ describe('Posts Search Keyword Expansion', () => {
     });
 });
 
-describe('Posts Archetype Filtering & LIKE Metacharacter Escaping', () => {
-    it('escapes LIKE metacharacters (% and _) in targetArchetype filter', () => {
+// Archetypes gate nothing (docs/the-commons.md, "Working-style archetypes"). #823 added a
+// targetArchetype filter over posts.target_archetypes; it was removed before anything used it.
+// The column stays in live databases, so the test table keeps it too.
+describe('Posts ignore archetypes', () => {
+    it('lists every post whatever targetArchetype is asked for, and never returns the column', () => {
         const db = new Database(':memory:');
         db.exec(`
             CREATE TABLE members (
@@ -131,14 +134,17 @@ describe('Posts Archetype Filtering & LIKE Metacharacter Escaping', () => {
             );
             INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');
             INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, target_archetypes)
-            VALUES ('p1', 'offer', 'tools', 'Hammer', 'A hammer', 5, 'author1', datetime('now'), '["builder"]');
+            VALUES ('p1', 'offer', 'tools', 'Hammer', 'A hammer', 5, 'author1', datetime('now'), '["guardian"]'),
+                   ('p2', 'offer', 'tools', 'Saw', 'A saw', 5, 'author1', datetime('now'), NULL);
         `);
 
-        // Without escaping, '%' matches any archetype, leaking posts that don't literally contain '%'
-        const wildcardMatches = getPosts(db, { targetArchetype: '%' });
-        assert.strictEqual(wildcardMatches.length, 0, 'Wildcard % must not match posts without literal % archetype');
-
-        const singleCharMatches = getPosts(db, { targetArchetype: '_' });
-        assert.strictEqual(singleCharMatches.length, 0, 'Wildcard _ must not match posts without literal _ archetype');
+        // A caller still sending the old filter (a stale client, or a hand-built URL) gets the full list.
+        const filter = { targetArchetype: 'sage' } as Parameters<typeof getPosts>[1];
+        const posts = getPosts(db, filter);
+        assert.deepStrictEqual(posts.map(p => p.id).sort(), ['p1', 'p2']);
+        assert.strictEqual(getPosts(db, { targetArchetype: 'guardian' } as Parameters<typeof getPosts>[1]).length, 2);
+        for (const post of posts) {
+            assert.ok(!('targetArchetypes' in post), 'post must not carry targetArchetypes');
+        }
     });
 });

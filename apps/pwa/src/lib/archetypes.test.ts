@@ -108,26 +108,45 @@ describe('Archetype Quiz Parity & Logic', () => {
         expect(res.mode).toBe('deep');
     });
 
-    it('builds synergy collaboration outreach message with headline and archetypes', () => {
-        const msg = buildSynergyCollabMessage('Alice', 'Strong Synergy', 'Catalyst', 'Weaver');
-        expect(msg).toBe("Hey Alice! I saw on your profile that we have Strong Synergy (Catalyst + Weaver). Let's collaborate! 🤝");
+    it('builds the collaboration outreach message', () => {
+        const msg = buildSynergyCollabMessage('Alice');
+        expect(msg).toBe("Hey Alice! I saw on your profile that we could work well together. Let's collaborate! 🤝");
 
-        const msgFallback = buildSynergyCollabMessage(undefined, 'High Resonance', 'Sage', 'Guardian');
-        expect(msgFallback).toBe("Hey there! I saw on your profile that we have High Resonance (Sage + Guardian). Let's collaborate! 🤝");
+        const msgFallback = buildSynergyCollabMessage(undefined);
+        expect(msgFallback).toBe("Hey there! I saw on your profile that we could work well together. Let's collaborate! 🤝");
+    });
+
+    // No public archetype labels (docs/the-commons.md): what a member sees or sends about ANOTHER
+    // member names no type. The headline used to read "The Weaver + The Catalyst" and the outreach
+    // message ended "(Weaver + Catalyst)".
+    it('names no archetype in the synergy card or outreach message, for any pair', () => {
+        const keys = Object.keys(ARCHETYPES) as ArchetypeKey[];
+        const names = keys.flatMap((k) => [ARCHETYPES[k].name, ARCHETYPES[k].name.replace(/^The\s+/, '')]);
+        for (const viewer of keys) {
+            for (const member of keys) {
+                const synergy = calculateSynergy(viewer, member);
+                const shown = [synergy.title, synergy.headline, synergy.summary, ...synergy.strengths, buildSynergyCollabMessage('Bob')];
+                for (const text of shown) {
+                    for (const name of names) {
+                        expect(text, `${viewer}→${member}`).not.toContain(name);
+                    }
+                }
+            }
+        }
     });
 
     it('builds synergy quiz nudge message matching native verbatim', () => {
         const msg = buildSynergyNudgeMessage('Bob');
-        expect(msg).toBe('Hey Bob! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡');
+        expect(msg).toBe('Hey Bob! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
 
         const msgFallback = buildSynergyNudgeMessage(undefined);
-        expect(msgFallback).toBe('Hey there! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡');
+        expect(msgFallback).toBe('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
     });
 
     it('stores and consumes recipient-scoped chat prefill preventing cross-chat leaks', () => {
         const alicePubkey = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
         const bobPubkey = 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
-        const message = buildSynergyCollabMessage('Alice', 'Strong Synergy', 'Catalyst', 'Weaver');
+        const message = buildSynergyCollabMessage('Alice');
 
         // Store prefill targeted specifically to Alice
         setChatPrefill(message, alicePubkey);

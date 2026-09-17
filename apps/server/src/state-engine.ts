@@ -3242,7 +3242,6 @@ export function createPost(
         targetGroupId?: string;
         targetPubkey?: string;
         assignedTo?: string;
-        targetArchetypes?: string;
     }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);

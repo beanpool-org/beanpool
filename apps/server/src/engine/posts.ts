@@ -121,7 +121,6 @@ export function createPost(
         targetGroupId?: string;
         targetPubkey?: string;
         assignedTo?: string;
-        targetArchetypes?: string;
     },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
@@ -249,8 +248,8 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to, target_archetypes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -259,8 +258,7 @@ export function createPost(
             audienceScope,
             audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
-            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
-            options?.targetArchetypes ?? null
+            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null
         );
 
         if (photos && photos.length > 0) {

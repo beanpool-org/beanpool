@@ -293,6 +293,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT REFERENCES members(public_key)`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN assigned_to TEXT REFERENCES members(public_key)`).run(); } catch { }
+    // Dormant: nothing reads or writes target_archetypes (archetypes gate nothing, docs/the-commons.md).
+    // Kept because dropping a column means rebuilding posts on every node.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT`).run(); } catch { }
     try { db.prepare(`UPDATE posts SET audience_scope = 'public' WHERE audience_scope IS NULL`).run(); } catch { }
 

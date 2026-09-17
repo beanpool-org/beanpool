@@ -521,7 +521,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
 
                                             <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
                                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
-                                                    🌟 Your Community Superpowers
+                                                    🌟 What you tend to enjoy
                                                 </div>
                                                 <ul className="space-y-1.5 m-0 p-0 list-none">
                                                     {primary.superpowers.map((p, i) => (
@@ -573,10 +573,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="text-[15px] font-bold text-nature-950 dark:text-white mb-1">
-                                                    Discover Your Archetype
+                                                    How you like to work
                                                 </div>
                                                 <p className="text-xs text-nature-600 dark:text-nature-400 leading-normal m-0">
-                                                    Take the 60-second quiz to uncover your collaborative superpowers and see relational synergy with neighbours.
+                                                    Take the 60-second quiz on how you prefer to work, and get tips for working well with neighbours.
                                                 </p>
                                             </div>
                                         </div>

@@ -8,16 +8,12 @@ export interface ChatPrefillPayload {
 }
 
 /**
- * Builds the personalized outreach message when two members share high synergy.
+ * Builds the outreach message from the Collaboration Chemistry card. It names no archetype:
+ * nothing a member sends or sees about another member carries a type (docs/the-commons.md).
  */
-export function buildSynergyCollabMessage(
-    callsign: string | undefined,
-    synergyHeadline: string,
-    viewerArchetypeName: string,
-    targetArchetypeName: string
-): string {
+export function buildSynergyCollabMessage(callsign: string | undefined): string {
     const name = callsign || 'there';
-    return `Hey ${name}! I saw on your profile that we have ${synergyHeadline} (${viewerArchetypeName} + ${targetArchetypeName}). Let's collaborate! 🤝`;
+    return `Hey ${name}! I saw on your profile that we could work well together. Let's collaborate! 🤝`;
 }
 
 /**
@@ -26,7 +22,7 @@ export function buildSynergyCollabMessage(
  */
 export function buildSynergyNudgeMessage(callsign: string | undefined): string {
     const name = callsign || 'there';
-    return `Hey ${name}! Take the 60-second Archetype quiz on your profile so we can unlock our Collaboration Chemistry! ⚡`;
+    return `Hey ${name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡`;
 }
 
 /**

@@ -806,7 +806,6 @@ export interface MarketplacePost {
     targetGroupName?: string;
     targetPubkey?: string;
     assignedTo?: string;
-    targetArchetypes?: string;
 }
 
 export interface MarketplaceTransaction {
@@ -877,7 +876,6 @@ export async function createMarketplacePost(post: {
     targetGroupId?: string;
     targetPubkey?: string;
     assignedTo?: string;
-    targetArchetypes?: string;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
 }

@@ -2,7 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadIdentity } from './identity';
 import * as Crypto from 'expo-crypto';
-import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders } from './crypto';
+import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
+import { eventCacheColumns, rsvpSignedMessage, type EventRsvpStatus } from './events';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -259,7 +260,13 @@ async function _doInitDB() {
             target_group_id TEXT,
             target_pubkey TEXT,
             assigned_to TEXT,
-            target_archetypes TEXT
+            target_archetypes TEXT,
+            event_start_at DATETIME,
+            event_end_at DATETIME,
+            event_place_name TEXT,
+            event_state TEXT,
+            event_going_count INTEGER DEFAULT 0,
+            event_interested_count INTEGER DEFAULT 0
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -299,6 +306,17 @@ async function _doInitDB() {
             PRIMARY KEY (post_id, voter_pubkey)
         );
         CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+
+        -- Events (docs/events-on-the-map.md): THIS phone's own RSVPs, as poll_votes holds its own votes. The
+        -- sync pull is unsigned, so the server never sends "my status" there; it comes from the RSVP response
+        -- and the signed detail fetch. Counts live on the posts row.
+        CREATE TABLE IF NOT EXISTS event_rsvps (
+            post_id TEXT NOT NULL,
+            member_pubkey TEXT NOT NULL,
+            status TEXT NOT NULL,
+            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            PRIMARY KEY (post_id, member_pubkey)
+        );
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -499,6 +517,24 @@ async function _doInitDB() {
                 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
             `);
         } catch (e) {}
+        // Events migrations (docs/events-on-the-map.md, slice 3)
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_at DATETIME;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_place_name TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_state TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_going_count INTEGER DEFAULT 0;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_interested_count INTEGER DEFAULT 0;`); } catch (e) {}
+        try {
+            await database.execAsync(`
+                CREATE TABLE IF NOT EXISTS event_rsvps (
+                    post_id TEXT NOT NULL,
+                    member_pubkey TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                    PRIMARY KEY (post_id, member_pubkey)
+                );
+            `);
+        } catch (e) {}
         // Ratings table migration for legacy setups where Schema wasn't ran
         try { 
             await database.execAsync(`
@@ -571,7 +607,7 @@ export async function clearDB() {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
     const database = await getDb();
-    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes;');
+    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
     
     // Reset flags to force schema recreation
     dbInitialized = false;
@@ -583,7 +619,12 @@ export async function clearDB() {
 /**
  * PWA Fetch Equivalents executed cleanly across the Local Disk
  */
-export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string }) {
+/**
+ * `includeEvents`: events are opt-in here as they are on the server's list route. Only screens that know how
+ * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
+ * otherwise show an event as a trade listing (the native map layer is its own, later slice).
+ */
+export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean }) {
     let database = await waitForInit();
     let query = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
@@ -597,6 +638,9 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
     if (filter?.type) {
         query += ' AND p.type = ?';
         params.push(filter.type);
+    }
+    if (!filter?.includeEvents && filter?.type !== 'event') {
+        query += " AND p.type != 'event'";
     }
     if (filter?.category) {
         query += ' AND p.category = ?';
@@ -655,10 +699,31 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         } catch { }
     }
 
+    // This phone's own RSVPs, so the card shows my status across reloads (as poll votes above)
+    const eventRows = rows.filter(r => r.type === 'event');
+    const localRsvps = new Map<string, string>();
+    if (eventRows.length > 0) {
+        try {
+            const identity = await loadIdentity();
+            if (identity?.publicKey) {
+                const rsvpRows = await database.getAllAsync(
+                    `SELECT post_id, status FROM event_rsvps WHERE member_pubkey = ?`,
+                    [identity.publicKey]
+                ) as any[];
+                for (const v of rsvpRows) localRsvps.set(v.post_id, v.status);
+            }
+        } catch { }
+    }
+
     return rows.map(r => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
         r.audienceScope = r.audience_scope || 'public';
+        if (r.type === 'event') {
+            r.goingCount = r.event_going_count ?? 0;
+            r.interestedCount = r.event_interested_count ?? 0;
+            r.myRsvp = localRsvps.get(r.id) ?? null;
+        }
         r.targetGroupId = r.target_group_id || null;
         r.targetGroupName = r.target_group_name || null;
         r.targetPubkey = r.target_pubkey || null;
@@ -700,7 +765,7 @@ export async function getMyPosts(pubkey: string) {
         SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
-        WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused')
+        WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
         ORDER BY p.created_at DESC
     `, [pubkey]) as any[];
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -738,7 +803,7 @@ export async function getPost(id: string) {
                 await acquireSyncLock();
                 try {
                     await database.runAsync(
-                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                         [
                             p.id ?? id,
                             p.type ?? null,
@@ -768,7 +833,8 @@ export async function getPost(id: string) {
                             p.reach || 'local',
                             (p.reach_peers || p.reachPeers) ? JSON.stringify(p.reach_peers || p.reachPeers) : null,
                             p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
-                            p.poll_closes_at || p.pollClosesAt || null
+                            p.poll_closes_at || p.pollClosesAt || null,
+                            ...eventCacheColumns(p)
                         ]
                     );
                 } finally {
@@ -1578,6 +1644,13 @@ export async function createPost(post: any) {
             pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
             durationDays: post.durationDays || 7
         } : {}),
+        // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
+        ...(post.type === 'event' ? {
+            eventStartAt: post.eventStartAt,
+            eventEndAt: post.eventEndAt,
+            eventPlaceName: post.eventPlaceName,
+            ...(post.eventPrivateNote ? { eventPrivateNote: post.eventPrivateNote } : {}),
+        } : {}),
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
@@ -1637,8 +1710,8 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
@@ -1646,7 +1719,8 @@ export async function createPost(post: any) {
          post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
          post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null),
          post.audienceScope || post.audience_scope || 'public',
-         post.targetGroupId || post.target_group_id || null]
+         post.targetGroupId || post.target_group_id || null,
+         ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
 }
@@ -1705,6 +1779,84 @@ export async function votePoll(postId: string, optionId: string) {
         }
     }
     return json;
+}
+
+/**
+ * Reflect the node's reader view of an event into the local cache: counts, times and state on the posts row,
+ * and "my status" in the phone's `event_rsvps`. The private note is deliberately not written anywhere.
+ */
+export async function persistEventView(post: any, memberPubkey: string) {
+    if (!post || post.type !== 'event' || !post.id) return;
+    try {
+        const database = await waitForInit();
+        const [, , , state, going, interested] = eventCacheColumns(post);
+        await database.runAsync(
+            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
+            [post.eventStartAt ?? post.event_start_at ?? null, post.eventEndAt ?? post.event_end_at ?? null,
+             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested,
+             post.status ?? null, post.updatedAt ?? post.updated_at ?? null, post.id]
+        );
+        if (post.myRsvp === 'going' || post.myRsvp === 'interested') {
+            await database.runAsync(
+                `INSERT OR REPLACE INTO event_rsvps (post_id, member_pubkey, status, updated_at) VALUES (?, ?, ?, ?)`,
+                [post.id, memberPubkey, post.myRsvp, new Date().toISOString()]
+            );
+        } else if (post.myRsvp === null) {
+            await database.runAsync(`DELETE FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?`, [post.id, memberPubkey]);
+        }
+    } catch (dbErr) {
+        console.warn('[SQLite] Failed to persist event view locally:', dbErr);
+    }
+}
+
+/**
+ * Going / Interested / not going (null) for the signed-in member (docs/events-on-the-map.md §2.2). The body
+ * carries a signature over `postId:status` that the server checks against the member's key.
+ */
+export async function rsvpEvent(postId: string, status: EventRsvpStatus | null) {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) {
+        throw new Error('You are currently offline.');
+    }
+    const identity = await loadIdentity();
+    if (!identity) {
+        throw new Error('No identity found.');
+    }
+    const sig = await signData(encodeUtf8(rsvpSignedMessage(postId, status)), hexToBytes(identity.privateKey));
+    const path = `/api/marketplace/posts/${encodeURIComponent(postId)}/rsvp`;
+    const bodyString = JSON.stringify({ status, signature: encodeBase64(sig) });
+    const headers = await buildSignedHeaders('POST', path, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}${path}`, { method: 'POST', headers, body: bodyString });
+    if (!res.ok) {
+        const txt = await res.text();
+        let errMsg = 'Could not save your RSVP';
+        try {
+            const j = JSON.parse(txt);
+            if (j.error) errMsg = j.error;
+        } catch {
+            if (txt) errMsg = txt;
+        }
+        throw new Error(errMsg);
+    }
+    const json = await res.json();
+    if (json?.post) await persistEventView(json.post, identity.publicKey);
+    return json as { success: boolean; post: any };
+}
+
+/**
+ * The event as THIS member may see it: counts, my RSVP, the private note (host and Going only) and, for a
+ * host, who has RSVPd. Signed, because the server decides all of that from the requester. The note is kept
+ * in memory by the screen, never written to the local cache.
+ */
+export async function fetchEventDetail(postId: string): Promise<any | null> {
+    const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const post = Array.isArray(data) ? data[0] : null;
+    if (!post || post.type !== 'event') return null;
+    const identity = await loadIdentity();
+    if (identity?.publicKey) await persistEventView(post, identity.publicKey);
+    return post;
 }
 
 export async function closePoll(postId: string) {
@@ -2378,7 +2530,7 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
             // Deleted posts are transmitted with active=0 and tombstoned here natively.
             for (const p of delta.posts) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, poll_options, poll_closes_at, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         p.id ?? null,
                         p.type ?? null,
@@ -2405,7 +2557,8 @@ export async function applyDelta(delta: any, expectedDbName?: string) {
                         p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                         p.author_founding_needed !== undefined ? (p.author_founding_needed ? 1 : 0) : (p.authorFoundingNeeded ? 1 : 0),
                         p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
-                        p.poll_closes_at || p.pollClosesAt || null
+                        p.poll_closes_at || p.pollClosesAt || null,
+                        ...eventCacheColumns(p)
                     ]
                 );
             }

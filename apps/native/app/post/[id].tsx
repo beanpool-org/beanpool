@@ -28,6 +28,7 @@ import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
 import { colors, palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { EventDetail } from '../../components/EventDetail';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -650,6 +651,11 @@ export default function PostDetailModal() {
                 </Pressable>
             </View>
         );
+    }
+
+    // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
+    if (post.type === 'event') {
+        return <EventDetail post={post} />;
     }
 
     const isOperatorOfAuthor = !!(post.author_pubkey && operatedTreasuries.includes(post.author_pubkey));

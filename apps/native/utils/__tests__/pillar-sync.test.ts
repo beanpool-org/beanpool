@@ -65,6 +65,28 @@ describe('discoverAnchor() via performSync()', () => {
         expect(healthCalls.length).toBe(0);
     });
 
+    it('opts in to events on the posts pull (types= names event), so the node sends them to this build', async () => {
+        vi.mocked(AsyncStorage.getItem).mockImplementation(async (key) => {
+            if (key === 'beanpool_anchor_url') return 'https://saved.beanpool.org';
+            return null;
+        });
+        const fetchSpy = vi.fn().mockImplementation(async (url: string) => {
+            if (url.startsWith('https://saved.beanpool.org/api/marketplace/posts')) {
+                return { ok: true, text: async () => '[]' };
+            }
+            return { ok: false, status: 404 };
+        });
+        global.fetch = fetchSpy as any;
+
+        await performSync();
+        const postsCalls = fetchSpy.mock.calls.map(([url]) => String(url)).filter(u => u.includes('/api/marketplace/posts'));
+        expect(postsCalls.length).toBeGreaterThan(0);
+        for (const u of postsCalls) {
+            const types = new URL(u).searchParams.get('types');
+            expect(types?.split(',')).toEqual(expect.arrayContaining(['offer', 'need', 'poll', 'event']));
+        }
+    });
+
     it('probes candidate URLs concurrently and picks the first successful one', async () => {
         // Set __DEV__ global if needed
         (globalThis as any).__DEV__ = true;

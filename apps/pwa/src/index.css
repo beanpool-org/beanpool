@@ -108,6 +108,18 @@ html, body, #root {
   border-radius: 2px;
 }
 
+/* A chip row that scrolls sideways on its own, without drawing a scrollbar under the chips.
+   Both names are already in use across the pages; neither was defined until now. */
+.scrollbar-none,
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Selection color */
 ::selection {
   background: var(--accent);

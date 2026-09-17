@@ -115,6 +115,7 @@ vi.mock('../lib/api', () => ({
     getDecisions: vi.fn(async () => ({ decisions: [], activeMembers30d: 5 })),
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
+    getGroups: vi.fn(async () => []),
     createDecision: vi.fn(async () => ({ success: true, decision: { id: 'dec-1' } })),
     proposeDecision: vi.fn(async () => ({ success: true })),
     castDecisionVote: vi.fn(async () => ({ success: true })),
@@ -313,5 +314,53 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         for (const text of ['The Commons', 'Commons Pool', 'My Governance Credits', 'All Enterprises', 'Bounded Projects']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
+    });
+
+    it('fits the section tabs in a 320px row and never lets the page scroll sideways', async () => {
+        const { container } = render(<ProjectsPage identity={backerIdentity} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        });
+
+        // The page scroller clips sideways overflow instead of dragging the whole page.
+        expect(container.firstElementChild as HTMLElement).toHaveStyle({ overflowX: 'hidden' });
+
+        // Below `sm` each tab stacks its emoji over its label and may shrink, so all three fit.
+        const tabs = within(screen.getByTestId('commons-section-tabs')).getAllByRole('button');
+        expect(tabs).toHaveLength(3);
+        for (const tab of tabs) {
+            expect(tab).toHaveClass('flex-1', 'min-w-0', 'flex-col', 'sm:flex-row', 'px-1');
+            expect(tab.className).not.toMatch(/(^|\s)px-3(\s|$)/);
+        }
+    });
+
+    it('lets the enterprise chips scroll on their own row without a visible scrollbar', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        });
+
+        const row = screen.getByTestId('enterprise-filter-chips');
+        expect(row).toHaveClass('overflow-x-auto', 'scrollbar-none');
+        for (const chip of within(row).getAllByRole('button')) {
+            expect(chip).toHaveClass('shrink-0', 'whitespace-nowrap');
+        }
+    });
+
+    it('lets the group chips scroll on their own row without a visible scrollbar', async () => {
+        render(<ProjectsPage identity={backerIdentity} initialSection="groups" />);
+
+        const row = await screen.findByTestId('group-filter-chips');
+        expect(row).toHaveClass('min-w-0', 'overflow-x-auto', 'scrollbar-none');
+    });
+
+    it('defines the scrollbar-none utility the chip rows rely on', async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf-8');
+        expect(css).toMatch(/\.scrollbar-none[\s\S]*?scrollbar-width:\s*none/);
+        expect(css).toMatch(/\.scrollbar-none::-webkit-scrollbar[\s\S]*?display:\s*none/);
     });
 });

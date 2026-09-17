@@ -232,7 +232,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, [treasuries, filter]);
 
     return (
-        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', paddingBottom: 'var(--bottom-nav-offset)' }}>
+        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
             {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
                 on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list. */}
             <header className="bg-nature-900 px-4 pt-4 pb-3 flex flex-col gap-3">
@@ -293,45 +293,34 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
             {/* Section Switcher: Decide vs Enterprises vs Groups — the one sticky row */}
             <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
+                {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
+                    Groups off a 320px screen at 1.3x text. */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
-                    <button
-                        onClick={() => setActiveSection('decide')}
-                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
-                            activeSection === 'decide'
-                                ? 'bg-nature-800 text-white shadow-sm'
-                                : 'text-nature-400 hover:text-white'
-                        }`}
-                    >
-                        <span>🗳️</span>
-                        <span>Decide</span>
-                        {openDecisionsCount > 0 && (
-                            <span className="bg-accent text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                                {openDecisionsCount}
+                    {([
+                        { key: 'decide', emoji: '🗳️', label: 'Decide' },
+                        { key: 'enterprises', emoji: '🏛️', label: 'Enterprises' },
+                        { key: 'groups', emoji: '👥', label: 'Groups' },
+                    ] as const).map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveSection(tab.key)}
+                            className={`flex-1 min-w-0 py-1.5 px-1 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-bold flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 transition-colors ${
+                                activeSection === tab.key
+                                    ? 'bg-nature-800 text-white shadow-sm'
+                                    : 'text-nature-400 hover:text-white'
+                            }`}
+                        >
+                            <span className="flex items-center gap-1">
+                                <span>{tab.emoji}</span>
+                                {tab.key === 'decide' && openDecisionsCount > 0 && (
+                                    <span className="bg-accent text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
+                                        {openDecisionsCount}
+                                    </span>
+                                )}
                             </span>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => setActiveSection('enterprises')}
-                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
-                            activeSection === 'enterprises'
-                                ? 'bg-nature-800 text-white shadow-sm'
-                                : 'text-nature-400 hover:text-white'
-                        }`}
-                    >
-                        <span>🏛️</span>
-                        <span>Enterprises</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveSection('groups')}
-                        className={`flex-1 py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors ${
-                            activeSection === 'groups'
-                                ? 'bg-nature-800 text-white shadow-sm'
-                                : 'text-nature-400 hover:text-white'
-                        }`}
-                    >
-                        <span>👥</span>
-                        <span>Groups</span>
-                    </button>
+                            <span className="leading-tight">{tab.label}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -339,12 +328,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
                 {/* Filter Controls: All / Ongoing / Bounded */}
                 {activeSection === 'enterprises' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1">
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1 overflow-x-auto scrollbar-none" data-testid="enterprise-filter-chips">
                         {(['all', 'ongoing', 'bounded'] as const).map(option => (
                             <button
                                 key={option}
                                 onClick={() => setFilter(option)}
-                                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                                className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
                                     filter === option
                                         ? 'bg-emerald-600 text-white shadow-sm'
                                         : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
@@ -359,7 +348,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Filter Controls: Groups Category */}
                 {activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
-                        <div className="flex gap-2 overflow-x-auto py-1 scrollbar-none">
+                        <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
                             {[
                                 { key: 'all', label: 'All Groups' },
                                 { key: 'my_groups', label: 'My Groups' },

@@ -261,7 +261,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // it to be in this conversation. Without this, any member could read any
     // thread by id (group/system messages are still plaintext-v1, and
     // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && !conv.participants.includes(ctx.state.actor as string)) {
+    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;

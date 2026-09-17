@@ -22,6 +22,8 @@ import {
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
+    ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
+    isKeeperOfEnterprise,
 } from '../state-engine.js';
 import { db, pledgeToProject, getCrowdfundProject } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
@@ -1217,6 +1219,174 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
     router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
     router.post('/api/enterprise/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
+
+    // =========================================================================
+    // Enterprise Discussion Thread (docs/the-commons.md §2.2, §9, Slice 6)
+    // =========================================================================
+
+    const threadGetHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Enterprise not found' };
+            return;
+        }
+        const rawLimit = Number(ctx.query.limit);
+        const rawOffset = Number(ctx.query.offset);
+        const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 100) : 50;
+        const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+
+        const enterprise = db.prepare("SELECT status FROM members WHERE public_key = ?").get(treasury) as any;
+        const readOnly = enterprise?.status === 'completed';
+
+        const conversation = ensureEnterpriseThread(treasury);
+        const messages = getEnterpriseThreadMessages(treasury, limit, offset);
+
+        ctx.body = {
+            conversation,
+            messages,
+            readOnly,
+        };
+    };
+    router.get('/api/treasury/:treasury/thread', threadGetHandler);
+    router.get('/api/enterprise/:treasury/thread', threadGetHandler);
+    router.get('/api/enterprises/:treasury/thread', threadGetHandler);
+
+    const threadPostHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Enterprise not found' };
+            return;
+        }
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
+        const actorStatus = statusOf(actor);
+        if (!actorStatus || blocked(actorStatus)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot post in this thread.' };
+            return;
+        }
+        const mRow = db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(actor) as any;
+        if (mRow?.credit_frozen === 1) {
+            ctx.status = 403;
+            ctx.body = { error: 'Frozen members cannot post in discussion threads' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
+        const text = typeof body.text === 'string' ? body.text : (typeof body.message === 'string' ? body.message : '');
+
+        let clientId: string | undefined;
+        if (body.clientId !== undefined && body.clientId !== null) {
+            if (typeof body.clientId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.clientId)) {
+                ctx.status = 400;
+                ctx.body = { error: 'clientId must be a UUID v4' };
+                return;
+            }
+            clientId = body.clientId.toLowerCase();
+        }
+
+        if (!text.trim()) {
+            ctx.status = 400;
+            ctx.body = { error: 'Message text cannot be empty' };
+            return;
+        }
+
+        try {
+            const message = postEnterpriseThreadMessage(treasury, actor, text, clientId);
+            ctx.status = 201;
+            ctx.body = {
+                success: true,
+                message,
+            };
+        } catch (e: any) {
+            const msg = e?.message || 'Failed to post message';
+            if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
+                ctx.status = 409;
+                ctx.body = { error: msg };
+                return;
+            }
+            if (msg.includes('Enterprise not found')) {
+                ctx.status = 404;
+            } else if (msg.includes('Frozen') || msg.includes('disabled') || msg.includes('suspended') || msg.includes('pruned') || msg.includes('Device key has been invalidated') || msg.includes('Member not found')) {
+                ctx.status = 403;
+            } else if (msg.includes('read-only') || msg.includes('wound up')) {
+                ctx.status = 400;
+            } else {
+                ctx.status = 400;
+            }
+            ctx.body = { error: msg };
+        }
+    };
+    router.post('/api/treasury/:treasury/thread/message', threadPostHandler);
+    router.post('/api/enterprise/:treasury/thread/message', threadPostHandler);
+    router.post('/api/enterprises/:treasury/thread/message', threadPostHandler);
+
+    const threadRemoveHandler = async (ctx: any) => {
+        const { treasury } = ctx.params;
+        if (!isTreasury(treasury)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Enterprise not found' };
+            return;
+        }
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if (!isKeeperOfEnterprise(actor, treasury)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only a keeper of this enterprise can remove messages from its thread' };
+            return;
+        }
+        const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || (ctx.request as any).body || {};
+        const messageId = ctx.params.messageId || body.messageId || body.id;
+        if (!messageId) {
+            ctx.status = 400;
+            ctx.body = { error: 'messageId is required' };
+            return;
+        }
+
+        try {
+            const message = removeEnterpriseThreadMessage(treasury, String(messageId), actor);
+            ctx.body = {
+                success: true,
+                message,
+            };
+        } catch (e: any) {
+            const msg = e?.message || 'Failed to remove message';
+            if (msg.includes('Enterprise not found')) {
+                ctx.status = 404;
+            } else if (msg.includes('Only a keeper')) {
+                ctx.status = 403;
+            } else if (msg.includes('Message not found')) {
+                ctx.status = 404;
+            } else {
+                ctx.status = 400;
+            }
+            ctx.body = { error: msg };
+        }
+    };
+    router.post('/api/treasury/:treasury/thread/remove', threadRemoveHandler);
+    router.post('/api/enterprise/:treasury/thread/remove', threadRemoveHandler);
+    router.post('/api/enterprises/:treasury/thread/remove', threadRemoveHandler);
+    router.delete('/api/treasury/:treasury/thread/message/:messageId', threadRemoveHandler);
+    router.delete('/api/enterprise/:treasury/thread/message/:messageId', threadRemoveHandler);
+    router.delete('/api/enterprises/:treasury/thread/message/:messageId', threadRemoveHandler);
 
     return router;
 }

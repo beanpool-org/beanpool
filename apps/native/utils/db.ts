@@ -934,6 +934,7 @@ export async function getConversations(myPubkey: string) {
         LEFT JOIN posts p ON c.post_id = p.id
         LEFT JOIN marketplace_transactions mt ON mt.post_id = p.id AND mt.status = 'pending'
         WHERE c.id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = ?)
+          AND (c.type IS NULL OR c.type != 'enterprise_thread')
         GROUP BY c.id
         ORDER BY timestamp DESC
     `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
@@ -1131,7 +1132,9 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
         SELECT COUNT(m.id) as count
         FROM messages m
         JOIN conversation_participants cp ON cp.conversation_id = m.conversation_id
+        JOIN conversations c ON c.id = m.conversation_id
         WHERE cp.public_key = ? 
+        AND (c.type IS NULL OR c.type != 'enterprise_thread')
         AND m.author_pubkey != ?
         AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
     `, [myPubkey, myPubkey]);
@@ -1962,6 +1965,23 @@ export async function voteEnterpriseSuccession(treasury: string, proposalId: str
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, {});
 }
 
+export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: any[]; readOnly: boolean } | null> {
+    try {
+        const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: any } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: any } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
+}
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
 

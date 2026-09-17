@@ -21,6 +21,7 @@ import {
     Linking,
     Alert,
     Platform,
+    useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -47,6 +48,11 @@ interface PulseFeedCardProps {
 export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }: PulseFeedCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
+    const { width: windowWidth, fontScale } = useWindowDimensions();
+    // At 320dp with 1.3x text the header cannot fit the author, a labelled category pill and the
+    // 48dp flag on one row — the author name collapsed to one letter. On narrow text-scaled
+    // screens the pill shows its icon only (as the web card does below its xs breakpoint).
+    const compactHeader = windowWidth / fontScale < 360;
     const [imageFailed, setImageFailed] = useState(false);
     const thumbnailUri = resolvePulseThumbnailUrl(nodeUrl, item);
     const [showReport, setShowReport] = useState(false);
@@ -150,16 +156,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                                 </View>
                             ) : null}
                         </View>
+                        {/* An official source rendered identically to a neighbour's post
+                            reads as the community endorsing it, so it is labelled as a
+                            source rather than by the platform that carried it. "Blog /
+                            RSS" also means nothing to someone reading the local paper.
+                            Both stay on one line: without numberOfLines they wrapped letter by
+                            letter once the column got narrow, and spilled under the pill. The
+                            label gives way first — the footer repeats it, nothing repeats the time. */}
                         <View style={styles.metaRow}>
-                            {/* An official source rendered identically to a neighbour's post
-                                reads as the community endorsing it, so it is labelled as a
-                                source rather than by the platform that carried it. "Blog /
-                                RSS" also means nothing to someone reading the local paper. */}
-                            <Text style={isOfficialSource(item) ? styles.sourceBadge : styles.platformBadge}>
+                            <Text style={isOfficialSource(item) ? styles.sourceBadge : styles.platformBadge} numberOfLines={1}>
                                 {isOfficialSource(item) ? '\u{1F4F0} Local source' : `${platMeta.icon} ${platMeta.label}`}
                             </Text>
                             {timeAgo ? (
-                                <Text style={styles.timeText}> · {timeAgo}</Text>
+                                <Text style={styles.timeText} numberOfLines={1}> · {timeAgo}</Text>
                             ) : null}
                         </View>
                     </View>
@@ -167,8 +176,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
 
                 <View style={styles.headerActions}>
                     <View style={styles.categoryPill} accessibilityLabel={`Category: ${catMeta.label}`}>
-                        <Text style={styles.categoryText} numberOfLines={1}>
-                            {catMeta.icon} {catMeta.label}
+                        <Text style={styles.categoryText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+                            {compactHeader ? catMeta.icon : `${catMeta.icon} ${catMeta.label}`}
                         </Text>
                     </View>
 
@@ -338,11 +347,13 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             flexDirection: 'row',
             alignItems: 'center',
             flex: 1,
+            minWidth: 0,
             marginRight: 8,
         },
         authorInfo: {
             marginLeft: 10,
             flex: 1,
+            minWidth: 0,
             justifyContent: 'center',
         },
         callsignRow: {
@@ -377,16 +388,19 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             marginTop: 2,
         },
         platformBadge: {
+            flexShrink: 1,
             fontSize: 12,
             fontWeight: '600',
             color: colors.text.secondary,
         },
         sourceBadge: {
+            flexShrink: 1,
             fontSize: 12,
             fontWeight: '700',
             color: colors.accent.primary,
         },
         timeText: {
+            flexShrink: 0,
             fontSize: 12,
             color: colors.text.muted,
         },
@@ -394,6 +408,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
+            flexShrink: 0,
         },
         categoryPill: {
             backgroundColor: colors.surface.subtle,

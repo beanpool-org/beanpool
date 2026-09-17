@@ -102,11 +102,11 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onCancel}>
             <View style={styles.container}>
                 <View style={styles.header}>
-                    <Pressable onPress={onCancel} accessibilityRole="button" style={styles.headerBtn}>
+                    <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel location picker" style={styles.headerBtn}>
                         <Text style={styles.cancelText}>Cancel</Text>
                     </Pressable>
                     <Text style={styles.title}>📍 Location & Radius</Text>
-                    <Pressable onPress={onReset} accessibilityRole="button" style={styles.headerBtn}>
+                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel="Reset location and radius" style={styles.headerBtn}>
                         <Text style={styles.resetText}>Reset</Text>
                     </Pressable>
                 </View>
@@ -184,7 +184,13 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
 
                     <Text style={styles.hintText}>Tap the map or drag the pin to move the center point</Text>
 
-                    <Pressable style={styles.applyBtn} accessibilityRole="button" onPress={() => onApply(radius, center.latitude, center.longitude)}>
+                    <Pressable
+                        style={styles.applyBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Apply ${radius < 1 ? `${Math.round(radius * 1000)} metre` : `${radius} kilometre`} radius`}
+                        accessibilityHint="Applies the selected location and search radius"
+                        onPress={() => onApply(radius, center.latitude, center.longitude)}
+                    >
                         <Text style={styles.applyBtnText}>Apply — {radius < 1 ? `${Math.round(radius * 1000)}m` : `${radius}km`} radius</Text>
                     </Pressable>
                 </View>

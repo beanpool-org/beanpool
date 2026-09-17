@@ -2,6 +2,86 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
+export interface ShutdownStatus {
+    uncleanShutdown: boolean;
+    recovered?: boolean;
+    ok?: boolean;
+    powerLossAt?: string;
+    powerLossTimestamp?: string;
+    message?: string;
+    error?: string;
+    checkedAt?: string;
+    acknowledged?: boolean;
+}
+
+export interface DiskBreakdownItem {
+    dbSizeBytes: number;
+    walSizeBytes: number;
+    shmSizeBytes?: number;
+    snapshotsSizeBytes?: number;
+    totalBytes: number;
+}
+
+export interface MediaBreakdownItem {
+    postPhotosBytes: number;
+    postPhotosCount: number;
+    pulseThumbnailsBytes: number;
+    pulseThumbnailsCount: number;
+    totalBytes: number;
+}
+
+export interface LogsBreakdownItem {
+    systemLogsBytes: number;
+    systemLogsCount: number;
+    logFilesBytes?: number;
+    totalBytes: number;
+}
+
+export interface DiskHealth {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    usedPercent: number;
+    warning: boolean; // true if usedPercent >= 80
+    databaseBytes: number;
+    mediaBytes: number;
+    logsBytes: number;
+    breakdown: {
+        database: DiskBreakdownItem;
+        media: MediaBreakdownItem;
+        logs: LogsBreakdownItem;
+    };
+}
+
+export interface StorageCleanPreview {
+    orphanedPostPhotos: {
+        count: number;
+        totalBytes: number;
+    };
+    orphanedThumbnails: {
+        count: number;
+        totalBytes: number;
+    };
+    compressibleLogs: {
+        count: number;
+        totalBytes: number;
+        oldestTimestamp?: string;
+        newestTimestamp?: string;
+    };
+    totalReclaimableBytes: number;
+}
+
+export interface StorageCleanResult {
+    success: boolean;
+    removedPhotosCount: number;
+    removedPhotosBytes: number;
+    removedThumbnailsCount: number;
+    removedThumbnailsBytes: number;
+    compressedLogsCount: number;
+    compressedLogsBytes: number;
+    totalReclaimedBytes: number;
+}
+
 export interface DiagnosticsResponse {
     status: string;
     uptimeSeconds: number;
@@ -15,6 +95,8 @@ export interface DiagnosticsResponse {
     userCount?: number;
     communityName: string;
     callsign: string;
+    shutdownStatus?: ShutdownStatus;
+    diskHealth?: DiskHealth;
 }
 
 export interface GatewayConfig {
@@ -31,6 +113,67 @@ export interface GatewayConfig {
         enabled: boolean;
         maxRequestsPerMinute: number;
     };
+}
+
+export interface NodeHealthFlag {
+    id?: string;
+    type?: string;
+    description?: string;
+    severity?: 'critical' | 'alert' | 'warning' | 'info' | string;
+    [key: string]: unknown;
+}
+
+export interface NodeReport {
+    id?: string;
+    targetPubkey?: string;
+    target_pubkey?: string;
+    reporterPubkey?: string;
+    reporter_pubkey?: string;
+    reason?: string;
+    severity?: string;
+    status?: string;
+    targetPulseItemId?: string;
+    /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
+    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
+    [key: string]: unknown;
+}
+
+export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
+
+export interface MemberItem {
+    publicKey?: string;
+    pubkey?: string;
+    name?: string;
+    callsign?: string;
+    tier?: string;
+    standing?: string;
+    canVouch?: boolean;
+    canOperate?: boolean;
+    creditFrozen?: boolean;
+    isFrozen?: boolean;
+    nodeRole?: MemberNodeRole | null;
+    isTreasury?: boolean;
+    [key: string]: unknown;
+}
+
+export interface NodeDataPayload {
+    health?: {
+        healthScore?: number;
+        flags?: NodeHealthFlag[];
+        [key: string]: unknown;
+    };
+    reports?: NodeReport[];
+    members?: MemberItem[];
+    profiles?: Record<string, unknown>[];
+    posts?: unknown[];
+    reportCount?: number;
+    escrowDisputesCount?: number;
+    memberStats?: Record<string, unknown>;
+    tradeVolume?: number;
+    circulation?: number;
+    commonsBalance?: number;
+    enterprises?: unknown[];
+    [key: string]: unknown;
 }
 
 export function normalizeNodeUrl(rawUrl: string): string {
@@ -146,8 +289,8 @@ export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: stri
 }
 
 /** Check if a response body indicates TOTP is required. */
-export function isTotpRequired(responseBody: any): boolean {
-    return responseBody?.totpRequired === true;
+export function isTotpRequired(responseBody: unknown): boolean {
+    return typeof responseBody === 'object' && responseBody !== null && (responseBody as Record<string, unknown>).totpRequired === true;
 }
 
 /**
@@ -214,11 +357,9 @@ export async function downloadAdminFile(
     params: Record<string, string>,
     adminPassword: string | undefined,
     filename: string,
+    tfaToken?: string,
 ): Promise<void> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);
@@ -292,6 +433,73 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, 
     return res.json();
 }
 
+export async function acknowledgeShutdownStatus(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; shutdownStatus: ShutdownStatus }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/shutdown-status/acknowledge');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchDiskHealth(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; diskHealth: DiskHealth }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/disk-health');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchStorageCleanPreview(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; preview: StorageCleanPreview }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/clean-preview');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        cache: 'no-store',
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function cleanStorageAndCompressLogs(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<StorageCleanResult> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/storage/clean');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
 export interface FunnelRow {
     day: string;
     event: string;
@@ -313,14 +521,11 @@ export async function fetchOnboardingFunnel(
     nodeUrl: string,
     adminPassword?: string,
     days = 30,
+    tfaToken?: string,
 ): Promise<OnboardingFunnelResponse> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/onboarding-funnel', { days: String(days) });
     const res = await fetch(endpoint, {
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         cache: 'no-store',
     });
     if (!res.ok) {
@@ -369,7 +574,127 @@ export async function updateGatewayConfig(
     return data.gateway || data;
 }
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any> {
+export function normalizeKeeperPubkey(keeper: unknown): string {
+    if (typeof keeper === 'string') return keeper.trim();
+    if (typeof keeper === 'object' && keeper !== null) {
+        const obj = keeper as Record<string, unknown>;
+        const candidate = [
+            obj.publicKey,
+            obj.pubkey,
+            obj.public_key,
+            obj.member_pubkey,
+            obj.memberPubkey,
+        ].find((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        if (candidate) return candidate.trim();
+    }
+    return '';
+}
+
+export function normalizeKeepers(rawKeepers: unknown): string[] {
+    if (!Array.isArray(rawKeepers)) return [];
+    return rawKeepers.map(normalizeKeeperPubkey).filter(Boolean);
+}
+
+export function normalizeNodeData(raw: unknown): NodeDataPayload {
+    if (!raw || typeof raw !== 'object') {
+        return {};
+    }
+    const data = raw as Record<string, unknown>;
+    const result: NodeDataPayload = { ...data };
+
+    if (data.members !== undefined) {
+        result.members = Array.isArray(data.members)
+            ? data.members.map((m: any) => {
+                if (!m || typeof m !== 'object') return { publicKey: '', standing: 'Newcomer' };
+                const pubkey = normalizeKeeperPubkey(m);
+                const rawName = typeof m.name === 'string'
+                    ? m.name
+                    : (typeof m.displayName === 'string'
+                        ? m.displayName
+                        : (typeof m.callsign === 'string' ? m.callsign : undefined));
+                const rawCallsign = typeof m.callsign === 'string'
+                    ? m.callsign
+                    : (typeof m.displayName === 'string'
+                        ? m.displayName
+                        : (typeof m.name === 'string' ? m.name : undefined));
+                return {
+                    ...m,
+                    publicKey: pubkey,
+                    pubkey: pubkey,
+                    name: rawName,
+                    callsign: rawCallsign,
+                    tier: typeof m.tier === 'string' ? m.tier : (typeof m.standing === 'string' ? m.standing : 'Newcomer'),
+                    standing: typeof m.standing === 'string' ? m.standing : (typeof m.tier === 'string' ? m.tier : 'Newcomer'),
+                    canVouch: Boolean(m.canVouch ?? m.isVoucher),
+                    canOperate: Boolean(m.canOperate ?? m.isOperator ?? m.can_operate),
+                    nodeRole: (m.nodeRole === 'owner' || m.nodeRole === 'admin' || m.nodeRole === 'moderator') ? m.nodeRole : null,
+                };
+            })
+            : [];
+    }
+
+    if (data.reports !== undefined) {
+        const rawReports = Array.isArray(data.reports) ? data.reports : [];
+        result.reports = rawReports.map((r: any) => {
+            if (!r || typeof r !== 'object') return { id: '', targetPubkey: '', target_pubkey: '' };
+            const targetPubkey = normalizeKeeperPubkey(r.targetPubkey) || normalizeKeeperPubkey(r.target_pubkey);
+            const reporterPubkey = normalizeKeeperPubkey(r.reporterPubkey) || normalizeKeeperPubkey(r.reporter_pubkey);
+            return {
+                ...r,
+                id: r.id !== undefined && r.id !== null ? String(r.id) : undefined,
+                targetPubkey,
+                target_pubkey: targetPubkey,
+                reporterPubkey,
+                reporter_pubkey: reporterPubkey,
+                reason: typeof r.reason === 'string' ? r.reason : (typeof r.description === 'string' ? r.description : ''),
+                severity: typeof r.severity === 'string' ? r.severity : 'Report',
+                status: typeof r.status === 'string' ? r.status : 'pending',
+            };
+        });
+        if (typeof data.reportCount !== 'number') {
+            result.reportCount = result.reports.length;
+        }
+    }
+
+    if (data.profiles !== undefined) {
+        result.profiles = Array.isArray(data.profiles)
+            ? data.profiles.map((p: any) => {
+                if (!p || typeof p !== 'object') return { publicKey: '' };
+                const pub = typeof p.publicKey === 'string' ? p.publicKey : (typeof p.pubkey === 'string' ? p.pubkey : '');
+                return {
+                    ...p,
+                    publicKey: pub,
+                    pubkey: pub,
+                };
+            })
+            : [];
+    }
+
+    if (data.posts !== undefined) {
+        result.posts = Array.isArray(data.posts) ? data.posts : [];
+    }
+
+    if (data.health !== undefined) {
+        const rawHealth = (data.health && typeof data.health === 'object') ? (data.health as Record<string, unknown>) : {};
+        const flags: NodeHealthFlag[] = Array.isArray(rawHealth.flags)
+            ? rawHealth.flags.map((f: any) => (f && typeof f === 'object' ? f : { description: String(f || '') }))
+            : [];
+        const healthScore = typeof rawHealth.healthScore === 'number' ? rawHealth.healthScore : 100;
+        result.health = {
+            ...rawHealth,
+            flags,
+            healthScore,
+        };
+    }
+
+    if (typeof data.escrowDisputesCount === 'number') {
+        result.escrowDisputesCount = data.escrowDisputesCount;
+    }
+
+    return result;
+}
+
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
     const res = await fetch(endpoint, {
         method: 'POST',
@@ -379,7 +704,8 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfa
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    const json = await res.json();
+    return normalizeNodeData(json);
 }
 
 export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<any[]> {
@@ -400,16 +726,13 @@ export async function freezeNodeUser(
     nodeUrl: string,
     pubkey: string,
     freeze: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; frozen: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/freeze`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ freeze, password: adminPassword }),
     });
     if (!res.ok) {
@@ -421,16 +744,13 @@ export async function freezeNodeUser(
 export async function pruneNodeUser(
     nodeUrl: string,
     pubkey: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/prune`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -439,19 +759,86 @@ export async function pruneNodeUser(
     return res.json();
 }
 
+export async function pruneInviteBranch(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    if (!pubkey || typeof pubkey !== 'string' || !pubkey.trim()) {
+        throw new Error('Valid public key is required to prune an invite branch');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey.trim())}/prune`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function deleteNodePost(
+    nodeUrl: string,
+    postId: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    if (!postId || typeof postId !== 'string' || !postId.trim()) {
+        throw new Error('Valid post ID is required to delete a post');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/posts/${encodeURIComponent(postId.trim())}/delete`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+
+/**
+ * Actions a Pulse-item report by taking the item off the Pulse. The owner is not suspended.
+ */
+export async function removeReportedPulseItem(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('Valid report ID is required to remove a Pulse item');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/action`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ removePulseItem: true, password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,
-    type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard'
+    type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard',
+    tfaToken?: string
 ): Promise<{ success: boolean; code: string; type: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/admin/seed-invite');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword, type }),
     });
     if (!res.ok) {
@@ -464,16 +851,13 @@ export async function updateNodeUserTier(
     nodeUrl: string,
     pubkey: string,
     tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder',
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; tier: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/tier`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ tier, password: adminPassword }),
     });
     if (!res.ok) {
@@ -486,16 +870,13 @@ export async function updateNodeUserVoucher(
     nodeUrl: string,
     pubkey: string,
     canVouch: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; granted: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ grant: canVouch, password: adminPassword }),
     });
     if (!res.ok) {
@@ -508,16 +889,13 @@ export async function updateNodeUserOperator(
     nodeUrl: string,
     pubkey: string,
     granted: boolean,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/operator`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ granted, password: adminPassword }),
     });
     if (!res.ok) {
@@ -526,36 +904,168 @@ export async function updateNodeUserOperator(
     return res.json();
 }
 
+export interface NodeRoleRecord {
+    member_pubkey: string;
+    role: 'owner' | 'admin' | 'moderator';
+    granted_at: string;
+    granted_by: string | null;
+    callsign?: string;
+}
+
+export async function fetchNodeRoles(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<NodeRoleRecord[]> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch node roles');
+    }
+    const data = await res.json();
+    return data.roles || [];
+}
+
+export async function grantNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node-roles');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey, role }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to grant node role');
+    }
+    return data;
+}
+
+export async function revokeNodeRoleApi(
+    nodeUrl: string,
+    pubkey: string,
+    role: 'owner' | 'admin' | 'moderator',
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; message?: string }> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/node-roles/${encodeURIComponent(pubkey)}/${encodeURIComponent(role)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke node role');
+    }
+    return data;
+}
+
+export async function fetchTreasuryKeepers(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<any[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error('Failed to fetch keepers');
+    }
+    const data = await res.json().catch(() => ({}));
+    return Array.isArray(data.keepers) ? data.keepers : [];
+}
+
+export async function assignTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<any[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`);
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ pubkey: memberPubkey }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to assign keeper');
+    }
+    return Array.isArray(data.keepers) ? data.keepers : [];
+}
+
+export async function revokeTreasuryKeeper(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    memberPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<any[]> {
+    const url = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(memberPubkey)}`);
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || 'Failed to revoke keeper');
+    }
+    return Array.isArray(data.keepers) ? data.keepers : [];
+}
+
 export interface NodeTreasury {
     publicKey: string;
     name: string;
     avatar?: string;
+    avatarUrl?: string;
     balance: number;
     creditLine: number;
     liveOffers: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    keepers?: any[];
+    lat?: number | null;
+    lng?: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
 }
 
 export async function fetchNodeTreasuries(nodeUrl: string): Promise<NodeTreasury[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/treasuries');
     const res = await fetch(endpoint);
     if (!res.ok) return [];
-    const data = await res.json();
-    return data.treasuries || [];
+    const data = await res.json().catch(() => ({}));
+    const rawList = Array.isArray(data.treasuries) ? data.treasuries : (Array.isArray(data) ? data : []);
+    return rawList.map((t: any) => {
+        if (!t || typeof t !== 'object') return t;
+        const normalized: any = { ...t };
+        if ('keepers' in t && t.keepers !== undefined) {
+            normalized.keepers = Array.isArray(t.keepers) ? t.keepers : normalizeKeepers(t.keepers);
+        }
+        return normalized;
+    });
 }
 
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number },
-    adminPassword?: string
+    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string; lat?: number | null; lng?: number | null },
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/treasury');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...data, password: adminPassword }),
     });
     if (!res.ok) {
@@ -564,20 +1074,56 @@ export async function createNodeTreasury(
     return res.json();
 }
 
+export async function updateEnterpriseLocation(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    location: { lat: number | null; lng: number | null } | null,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; lat: number | null; lng: number | null; locationAuthSigner?: string | null; locationUpdatedAt?: string | null }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/location`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...(location || {}), password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function clearEnterpriseLocation(
+    nodeUrl: string,
+    treasuryPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; lat: null; lng: null; locationAuthSigner?: string | null; locationUpdatedAt?: string | null }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/location`);
+    const res = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function seedTreasuryOffer(
     nodeUrl: string,
     treasuryPubkey: string,
     offer: { title: string; category: string; credits: number; description?: string; priceType?: string; repeatable?: boolean },
-    adminPassword?: string
-): Promise<{ success: boolean; post: any }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
-    }
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; post: Record<string, unknown> }> {
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/offer`);
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...offer, password: adminPassword }),
     });
     if (!res.ok) {
@@ -618,9 +1164,8 @@ export interface HarvesterStatusResponse {
 // The password travels in X-Admin-Password only, never a query parameter (see the note above
 // buildAdminHeaders): checkAdminAuth reads the header ahead of ?password= in its fallback chain,
 // and a credential in a URL ends up in access logs and browser history.
-export async function fetchHarvesterStatus(adminPassword?: string): Promise<HarvesterStatusResponse> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchHarvesterStatus(adminPassword?: string, tfaToken?: string): Promise<HarvesterStatusResponse> {
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const res = await fetch('/api/manager/backups/status', { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -639,10 +1184,10 @@ export async function triggerHarvesterSync(
     url?: string,
     adminPassword?: string,
     managerPassword?: string,
+    tfaToken?: string,
 ): Promise<any> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     const managerAuth = managerPassword ?? adminPassword;
-    if (managerAuth) headers['X-Admin-Password'] = managerAuth;
+    const headers = buildAdminHeaders(managerAuth, tfaToken);
     const res = await fetch('/api/manager/backups/trigger', {
         method: 'POST',
         headers,
@@ -662,9 +1207,8 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string, adminPassword?: string): Promise<HistoryFileItem[]> {
-    const headers: Record<string, string> = {};
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchNodeHistory(nodeId: string, adminPassword?: string, tfaToken?: string): Promise<HistoryFileItem[]> {
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -679,13 +1223,11 @@ export interface SnapshotItem {
     createdAt: string;
 }
 
-export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotItem[]> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) return [];
@@ -693,13 +1235,11 @@ export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string
     return data.snapshots || [];
 }
 
-export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string): Promise<SnapshotItem> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotItem> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/create');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -709,13 +1249,11 @@ export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string
     return data.snapshot;
 }
 
-export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/delete');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ name, password: adminPassword }),
     });
     if (!res.ok) {
@@ -723,18 +1261,81 @@ export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPas
     }
 }
 
+export interface SnapshotScheduleConfig {
+    enabled: boolean;
+    intervalHours: number;
+    keep: number;
+}
+
+export interface BackupVerificationResult {
+    success: boolean;
+    ok: boolean;
+    verifiedAt: string;
+    result?: unknown[];
+}
+
+export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        return { enabled: true, intervalHours: 24, keep: 7 };
+    }
+    const data = await res.json();
+    return data.config || { enabled: true, intervalHours: 24, keep: 7 };
+}
+
+export async function updateNodeSnapshotSchedule(
+    nodeUrl: string,
+    config: Partial<SnapshotScheduleConfig>,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<SnapshotScheduleConfig> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...config, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    return data.config;
+}
+
+export async function verifyNodeBackup(
+    nodeUrl: string,
+    snapshotName?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<BackupVerificationResult> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup/verify');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ name: snapshotName, password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function updateNodeReplicationCadence(
     nodeUrl: string,
     pullSeconds: number,
     reconcileMinutes: number,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/backup-config');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ pullSeconds, reconcileMinutes, password: adminPassword }),
     });
     if (!res.ok) {
@@ -742,13 +1343,11 @@ export async function updateNodeReplicationCadence(
     }
 }
 
-export async function forceNodeResync(nodeUrl: string, adminPassword?: string): Promise<void> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (adminPassword) headers['X-Admin-Password'] = adminPassword;
+export async function forceNodeResync(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<void> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-resync');
     const res = await fetch(endpoint, {
         method: 'POST',
-        headers,
+        headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ password: adminPassword }),
     });
     if (!res.ok) {
@@ -784,11 +1383,11 @@ export interface RegistrarPendingResponse {
 
 export async function getRegistrarPending(
     nodeUrl?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<RegistrarAllocation[]> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
     if (adminPassword) {
-        headers['X-Admin-Password'] = adminPassword;
         headers['x-admin-secret'] = adminPassword;
     }
     const endpoint = nodeUrl
@@ -810,7 +1409,8 @@ export const getRegistralPending = getRegistrarPending;
 export async function approveRegistrarClaim(
     nodeUrlOrName: string,
     nameOrPassword?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ status: string; name: string }> {
     let nodeUrl = nodeUrlOrName;
     let name = nameOrPassword;
@@ -822,9 +1422,8 @@ export async function approveRegistrarClaim(
         pwd = undefined;
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(pwd, tfaToken);
     if (pwd) {
-        headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
@@ -845,7 +1444,8 @@ export async function approveRegistrarClaim(
 export async function revokeRegistrarClaim(
     nodeUrlOrName: string,
     nameOrPassword?: string,
-    adminPassword?: string
+    adminPassword?: string,
+    tfaToken?: string
 ): Promise<{ status: string; name: string }> {
     let nodeUrl = nodeUrlOrName;
     let name = nameOrPassword;
@@ -857,9 +1457,8 @@ export async function revokeRegistrarClaim(
         pwd = undefined;
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers = buildAdminHeaders(pwd, tfaToken);
     if (pwd) {
-        headers['X-Admin-Password'] = pwd;
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
@@ -877,3 +1476,402 @@ export async function revokeRegistrarClaim(
     return res.json();
 }
 
+// ======================== REPLICATION TOKEN & ACCESS AUDIT ========================
+
+export interface ReplicationAccessEvent {
+    at: string;
+    ip: string;
+    auth: string;
+    reason?: string;
+}
+
+export interface ReplicationAccessData {
+    hasToken?: boolean;
+    tokenOnly?: boolean;
+    totalPulls?: number;
+    lastPullAt?: string | null;
+    lastPullIp?: string | null;
+    lastPullAuth?: string | null;
+    totalRejected?: number;
+    lastRejectedAt?: string | null;
+    lastRejectedIp?: string | null;
+    recent?: ReplicationAccessEvent[];
+    [key: string]: unknown;
+}
+
+export interface ReplicationTokenStatus {
+    hasToken: boolean;
+    tokenOnly: boolean;
+    createdAt?: string | null;
+}
+
+export async function getReplicationTokenStatus(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ReplicationTokenStatus> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/status');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function generateReplicationToken(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; token: string }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/generate');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function setReplicationTokenMode(
+    nodeUrl: string,
+    tokenOnly: boolean,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; tokenOnly: boolean }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/mode');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ tokenOnly, password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function clearReplicationToken(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-token/clear');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function getReplicationAccess(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ReplicationAccessData> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/replication-access');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+// ======================== ESCROW DISPUTES ========================
+
+export interface EscrowDisputeItem {
+    id: string;
+    postId: string;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    buyerName?: string;
+    sellerCallsign?: string;
+    sellerName?: string;
+    credits: number;
+    status: string;
+    createdAt: number;
+    daysStuck: number;
+    post: {
+        id: string;
+        title: string;
+        description: string;
+        authorPubkey: string;
+        authorName?: string;
+        authorCallsign?: string;
+        priceCredits: number;
+        unitPrice: number;
+        category: string;
+        imageUrl?: string;
+    } | null;
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey: string;
+        senderName?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
+    resolution?: 'release_to_seller' | 'refund_to_buyer' | 'split' | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+}
+
+export interface EscrowDisputesResponse {
+    disputes: EscrowDisputeItem[];
+    total: number;
+    minDays: number;
+}
+
+export async function fetchEscrowDisputes(
+    nodeUrl: string,
+    minDays = 7,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<EscrowDisputesResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', { minDays: String(minDays) });
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export interface ResolveEscrowDisputeResponse {
+    success: boolean;
+    transactionId: string;
+    resolution: 'release_to_seller' | 'refund_to_buyer' | 'split';
+    authSigner: string;
+    transaction: any;
+}
+
+export async function resolveEscrowDisputeApi(
+    nodeUrl: string,
+    disputeId: string,
+    action: 'release_to_seller' | 'refund_to_buyer' | 'split',
+    reason?: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<ResolveEscrowDisputeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/disputes/${encodeURIComponent(disputeId)}/resolve`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ action, reason }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+// ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
+
+export interface RekeyStatusResponse {
+    isInvalidated: boolean;
+    invalidatedInfo: {
+        public_key: string;
+        reason: string;
+        invalidated_at: string;
+        rekeyed_to: string | null;
+    } | null;
+    pendingRequest: {
+        id: number;
+        code: string;
+        old_pubkey: string;
+        new_pubkey: string | null;
+        operator_pubkey: string;
+        status: string;
+        created_at: string;
+        expires_at: string;
+    } | null;
+    history: Array<{
+        id: number;
+        old_pubkey: string;
+        new_pubkey: string;
+        reenrollment_code: string;
+        operator_pubkey: string;
+        performed_at: string;
+        completed_at: string | null;
+        details: string | null;
+    }>;
+}
+
+export interface IssueRekeyCodeResponse {
+    success: boolean;
+    code: string;
+    oldPubkey: string;
+    callsign: string;
+    expiresAt: string;
+    operator: string;
+}
+
+export interface CompleteRekeyResponse {
+    success: boolean;
+    oldPubkey: string;
+    newPubkey: string;
+    callsign: string;
+}
+
+export interface OffboardPreviewResponse {
+    member: {
+        publicKey: string;
+        callsign: string;
+        status: string;
+        joinedAt: string;
+    };
+    balance: number;
+    commonsBalance: number;
+    costToCommunity: number;
+    projectedCommonsBalance: number;
+    pendingEscrowsCount: number;
+    isSoleOwner: boolean;
+    activeMembers: Array<{
+        publicKey: string;
+        callsign: string;
+    }>;
+}
+
+export interface OffboardResponse {
+    success: boolean;
+    memberPubkey: string;
+    callsign: string;
+    resolution: string;
+    balanceSettled: number;
+}
+
+export async function fetchRekeyStatusApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<RekeyStatusResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/status`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function issueRekeyCodeApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<IssueRekeyCodeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function completeRekeyApi(
+    nodeUrl: string,
+    pubkey: string,
+    code: string,
+    newPubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<CompleteRekeyResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/complete`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code, newPubkey }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function fetchOffboardPreviewApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<OffboardPreviewResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard/preview`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, { headers });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+export async function executeOffboardApi(
+    nodeUrl: string,
+    pubkey: string,
+    payload: {
+        resolution: 'donate_to_commons' | 'gift_to_member' | 'write_off_commons' | 'prune_zero_balance';
+        giftRecipientPubkey?: string;
+    },
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<OffboardResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/offboard`);
+    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    if (adminPassword) {
+        headers['x-admin-secret'] = adminPassword;
+    }
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const err: any = new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+        err.code = body.code;
+        err.status = res.status;
+        throw err;
+    }
+    return res.json();
+}

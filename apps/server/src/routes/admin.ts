@@ -15,15 +15,17 @@ import {
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getAdminPubkey,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, type MemberNodeRole,
     canVouch,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
     createVotingRound, closeVotingRound, adminRejectProject,
+    adminHaltDecision, adminAccelerateDecision,
     getActiveRound, getGovernanceCredits,
     getVotingRounds, getCommonsBalance,
     runLedgerAudit,
+    getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -35,6 +37,32 @@ import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { issueCsrfToken, issueWsTicket } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
+import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
+import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
+import { resolveChannel } from '../engine/pulse-resolver.js';
+import { getPulseThumbnailService } from '../engine/pulse-thumbnail.js';
+import {
+    createAdminChallenge,
+    getAdminChallenge,
+    verifyAndSolveChallenge,
+    consumeHandshakeToken,
+    validateAdminSession,
+    revokeAllMemberSessions,
+    revokeAdminSession,
+    enrolAdminOwnerKey,
+    verifyEd25519Signature,
+} from '../admin-key-auth.js';
+import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import {
+    issueRekeyCode,
+    completeRekey,
+    getRekeyStatus,
+    getOffboardPreview,
+    executeOffboard,
+    type OffboardOptions,
+} from '../engine/member-wizards.js';
+import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
+import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -59,6 +87,368 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
     const token = issueCsrfToken();
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
+});
+
+// ===================== KEY-BASED ADMIN AUTH & BREAK-GLASS ENDPOINTS =====================
+// Implements docs/admin-surface.md §2 (all):
+// Signed challenge auth for phone & desktop QR flow, single-use 60s handshake tokens,
+// browser sessions (2h idle / 12h hard), instant revocation via session_epoch,
+// break-glass mode gating, and per-owner break-glass enrolment.
+
+/**
+ * POST /api/local/admin/auth/challenge
+ * Requests a fresh 60-second challenge for signed authentication (desktop QR or phone).
+ */
+router.post('/api/local/admin/auth/challenge', async (ctx) => {
+    const c = createAdminChallenge();
+    ctx.body = {
+        success: true,
+        challengeId: c.challengeId,
+        challenge: c.challenge,
+        expiresAt: c.expiresAt,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/verify-challenge
+ * Mobile app submits the signed challenge to mint a 60-second single-use handshake token.
+ */
+router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const { challengeId, memberPubkey, signature, totpCode } = body;
+    if (!challengeId || !memberPubkey || !signature) {
+        ctx.status = 400;
+        ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
+        return;
+    }
+
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode });
+    if (!res.ok) {
+        let status = 400;
+        if (res.totpRequired) {
+            status = 401;
+        } else if (res.error?.includes('Challenge not found')) {
+            status = 404;
+        } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
+            status = 403;
+        }
+        ctx.status = status;
+        ctx.body = { error: res.error, totpRequired: res.totpRequired };
+        return;
+    }
+
+    ctx.body = {
+        success: true,
+        handshakeToken: res.handshakeToken,
+        expiresAt: res.expiresAt,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/challenge/:challengeId
+ * Polled by desktop browser waiting for mobile app challenge signature.
+ */
+router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
+    const c = getAdminChallenge(ctx.params.challengeId);
+    if (!c || c.status === 'expired') {
+        ctx.status = 404;
+        ctx.body = { error: 'Challenge not found or expired', status: 'expired' };
+        return;
+    }
+    if (c.status === 'pending') {
+        ctx.body = { status: 'pending', expiresAt: c.expiresAt };
+        return;
+    }
+    ctx.body = {
+        status: 'resolved',
+        handshakeToken: c.handshakeToken,
+        memberPubkey: c.memberPubkey,
+        role: c.role,
+    };
+});
+
+/**
+ * POST /api/local/admin/auth/exchange
+ * Exchanges single-use 60s handshake token for a browser session (2h idle / 12h hard).
+ * Single-use: burned immediately, replays rejected.
+ */
+router.post('/api/local/admin/auth/exchange', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const token = body.token || (ctx.query?.token as string);
+    if (!token) {
+        ctx.status = 400;
+        ctx.body = { error: 'token is required' };
+        return;
+    }
+
+    const res = consumeHandshakeToken(token);
+    if (!res.ok) {
+        ctx.status = 401;
+        ctx.body = {
+            error: res.error,
+            replay: res.replay,
+            expired: res.expired,
+            revoked: res.revoked,
+        };
+        return;
+    }
+
+    ctx.cookies.set('admin_session', res.sessionId, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 12 * 3600 * 1000,
+        path: '/',
+    });
+    if (res.csrfToken) {
+        ctx.set('X-CSRF-Token', res.csrfToken);
+    }
+    ctx.body = {
+        success: true,
+        sessionId: res.sessionId,
+        csrfToken: res.csrfToken,
+        memberPubkey: res.memberPubkey,
+        role: res.role,
+        hardExpiresAt: res.hardExpiresAt,
+        idleExpiresAt: res.idleExpiresAt,
+    };
+});
+
+const seenRevocationNonces = new Map<string, number>();
+function consumeRevocationNonce(nonce: string, now: number): boolean {
+    if (seenRevocationNonces.size > 10_000) {
+        for (const [n, exp] of seenRevocationNonces) if (exp <= now) seenRevocationNonces.delete(n);
+    }
+    const exp = seenRevocationNonces.get(nonce);
+    if (exp !== undefined && exp > now) return false;
+    seenRevocationNonces.set(nonce, now + 60_000);
+    return true;
+}
+
+/**
+ * POST /api/local/admin/auth/revoke-all
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite.
+ * Gated by checkAdminAuth or signature header.
+ */
+router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let targetPubkey = body.memberPubkey || body.pubkey;
+
+    // Check if called with an active admin session or password auth
+    const isAuthed = await checkAdminAuth(ctx as any);
+    if (isAuthed) {
+        const callerPubkey = (ctx.state as any)?.actor;
+        const callerRole = (ctx.state as any)?.adminRole;
+        if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
+            ctx.status = 403;
+            ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
+    } else {
+        // Allow mobile app with signed headers (X-Public-Key, X-Signature)
+        const pubKeyHex = ctx.get('X-Public-Key');
+        const signatureBase64 = ctx.get('X-Signature');
+        if (pubKeyHex && signatureBase64 && isNodeAdmin(pubKeyHex)) {
+            const timestampHeader = ctx.get('X-Timestamp');
+            const nonce = ctx.get('X-Nonce');
+            const ts = Number(timestampHeader);
+            const now = Date.now();
+            if (!Number.isFinite(ts) || Math.abs(now - ts) > 60_000 || !nonce) {
+                ctx.status = 401;
+                ctx.body = { error: 'Missing or stale timestamp / nonce headers' };
+                return;
+            }
+            if (!consumeRevocationNonce(nonce, now)) {
+                ctx.status = 401;
+                ctx.body = { error: 'Replay detected: nonce already used' };
+                return;
+            }
+            const rawBody = (ctx as any).rawBody ?? '';
+            const msg = `${ctx.method}\n${ctx.path}\n${timestampHeader}\n${nonce}\n${rawBody}`;
+            if (verifyEd25519Signature(msg, signatureBase64, pubKeyHex)) {
+                targetPubkey = pubKeyHex;
+            } else {
+                ctx.status = 401;
+                ctx.body = { error: 'Invalid cryptographic signature' };
+                return;
+            }
+        } else {
+            ctx.status = 401;
+            ctx.body = { error: 'Unauthorized: valid admin session or signature required' };
+            return;
+        }
+    }
+
+    if (!targetPubkey || !isNodeAdmin(targetPubkey)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Unauthorized or target member is not an admin' };
+        return;
+    }
+
+    const newEpoch = revokeAllMemberSessions(targetPubkey);
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.status = 200;
+    ctx.body = {
+        success: true,
+        memberPubkey: targetPubkey,
+        sessionEpoch: newEpoch,
+    };
+});
+
+/**
+ * GET /api/local/admin/auth/session
+ * Returns authentication status and active member details.
+ */
+router.get('/api/local/admin/auth/session', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+
+    if (sessionToken) {
+        const res = validateAdminSession(sessionToken);
+        if (res.valid && res.session) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: true,
+                memberPubkey: res.session.memberPubkey,
+                role: res.session.role,
+                sessionEpoch: res.session.sessionEpoch,
+                hardExpiresAt: res.session.hardExpiresAt,
+                idleExpiresAt: res.session.idleExpiresAt,
+            };
+            return;
+        }
+    }
+
+    // Check if authenticated via password
+    const hasPasswordCreds =
+        (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+
+    if (hasPasswordCreds) {
+        const ok = await checkAdminAuth(ctx as any);
+        if (ok) {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: !!(ctx.state as any)?.isKeySession,
+                memberPubkey: (ctx.state as any)?.actor || null,
+                role: (ctx.state as any)?.adminRole || 'owner',
+            };
+            return;
+        }
+    }
+
+    ctx.status = 200;
+    ctx.body = { authenticated: false };
+});
+
+/**
+ * POST /api/local/admin/auth/logout
+ * Destroys current session and clears cookie.
+ */
+router.post('/api/local/admin/auth/logout', async (ctx) => {
+    const rawToken =
+        (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
+        ctx.request?.headers?.['x-admin-session'] ||
+        ctx.headers?.['x-admin-session'];
+    const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
+    if (sessionToken) {
+        revokeAdminSession(sessionToken);
+    }
+    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    ctx.body = { success: true };
+});
+
+/**
+ * POST /api/local/admin/auth/enrol
+ * POST /api/local/admin/auth/break-glass/enrol
+ * Enrols a member key and generates a unique per-owner break-glass code.
+ * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
+ */
+const handleEnrol = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
+    if (!targetPubkey) {
+        ctx.status = 400;
+        ctx.body = { error: 'memberPubkey is required' };
+        return;
+    }
+
+    const callerRole = (ctx.state as any)?.adminRole;
+    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
+    const requestedRole = body.role || 'owner';
+
+    if (requestedRole === 'owner' && !isBreakGlass && callerRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
+        return;
+    }
+
+    try {
+        const res = enrolAdminOwnerKey({
+            targetPubkey,
+            actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
+            isBreakGlass,
+            role: requestedRole,
+        });
+        ctx.body = {
+            success: true,
+            memberPubkey: res.memberPubkey,
+            role: res.role,
+            ...(res.breakGlassCode ? {
+                breakGlassCode: res.breakGlassCode,
+                message: 'Store this break-glass code securely. It will only be shown once.',
+            } : {}),
+            alertEmitted: res.alertEmitted,
+        };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to enrol admin key' };
+    }
+};
+
+router.post('/api/local/admin/auth/enrol', handleEnrol);
+router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
+
+/**
+ * POST /api/local/admin/auth/break-glass-mode
+ * Toggles break-glass mode on or off.
+ */
+router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if ((ctx.state as any)?.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only node owners can toggle break-glass mode' };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (typeof body.enabled !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: 'enabled (boolean) is required' };
+        return;
+    }
+    setBreakGlassMode(body.enabled);
+    ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
+});
+
+/**
+ * GET /api/local/admin/auth/break-glass-status
+ */
+router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
+});
+router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
+    ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================
@@ -148,6 +538,20 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
 
 // ===================== ADMIN ACTIONS (Requires Password) =====================
 
+/**
+ * Full community health, including `flags`.
+ *
+ * The public GET /api/community/health deliberately omits `flags` — it answers
+ * unauthenticated and the flags carry fraud analysis and member public keys. The node's
+ * own settings dashboard is an admin surface and still needs them, so it asks here.
+ * checkAdminAuth tarpits wrong passwords; the public route must never be given an
+ * auth check of its own, or it becomes an unthrottled password oracle.
+ */
+router.post('/api/local/admin/health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = getCommunityHealth();
+});
+
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     
@@ -157,6 +561,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         if (row.public_key && row.platform) {
             platformMap.set(row.public_key, row.platform.toLowerCase());
         }
+    }
+
+    const rolesList = listNodeRoles();
+    const rolesByPubkey = new Map<string, MemberNodeRole>();
+    for (const r of rolesList) {
+        rolesByPubkey.set(r.member_pubkey, r.role);
     }
 
     ctx.body = {
@@ -172,6 +582,7 @@ router.post('/api/local/admin/data', async (ctx) => {
                 tier,
                 standing: tier,
                 canVouch: isVoucher,
+                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
                 platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
             };
         }),
@@ -180,6 +591,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         health: getCommunityHealth(),
         reports: getReports().reports,
         reportCount: getReportCount(),
+        escrowDisputesCount: (db.prepare(`
+            SELECT COUNT(*)
+            FROM marketplace_transactions
+            WHERE status = 'pending'
+              AND (julianday('now') - julianday(created_at)) >= 7
+        `).pluck().get() as number) || 0,
         memberStats: getMemberStats(),
     };
 });
@@ -250,6 +667,19 @@ function getProcessCpuLoad(): number {
     return Math.min(100, Math.max(0, pct));
 }
 
+let cachedDiskHealth: DiskHealth | null = null;
+let lastDiskHealthCheck = 0;
+const DISK_HEALTH_CACHE_TTL_MS = 60_000;
+
+function getCachedDiskHealth(): DiskHealth {
+    const now = Date.now();
+    if (!cachedDiskHealth || now - lastDiskHealthCheck > DISK_HEALTH_CACHE_TTL_MS) {
+        cachedDiskHealth = getDiskHealth();
+        lastDiskHealthCheck = now;
+    }
+    return cachedDiskHealth;
+}
+
 const getDiagnosticsHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
 
@@ -304,6 +734,8 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
+            shutdownStatus: getShutdownStatus(),
+            diskHealth: getCachedDiskHealth(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -331,6 +763,51 @@ const getDiagnosticsHandler = async (ctx: any) => {
 
 router.get('/api/local/admin/diagnostics', getDiagnosticsHandler);
 router.post('/api/local/admin/diagnostics', getDiagnosticsHandler);
+
+// ===================== UNCLEAN SHUTDOWN DIAGNOSTICS =====================
+const getShutdownStatusHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, shutdownStatus: getShutdownStatus() };
+};
+
+const acknowledgeShutdownHandler = async (ctx: any) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const updated = acknowledgeShutdownRecovery();
+    ctx.body = { success: true, shutdownStatus: updated };
+};
+
+router.get('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status', getShutdownStatusHandler);
+router.post('/api/local/admin/shutdown-status/acknowledge', acknowledgeShutdownHandler);
+
+// ===================== STORAGE & DISK HEALTH =====================
+router.get('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.post('/api/local/admin/storage/disk-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, diskHealth: getDiskHealth() };
+});
+
+router.get('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean-preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { success: true, preview: getStorageCleanPreview() };
+});
+
+router.post('/api/local/admin/storage/clean', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const result = cleanStorageAndCompressLogs();
+    cachedDiskHealth = null;
+    ctx.body = result;
+});
+
 
 /**
  * Onboarding funnel: how many people tried to join, and where they stopped.
@@ -365,7 +842,12 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        adminDeletePost(ctx.params.id);
+        const ok = adminDeletePost(ctx.params.id);
+        if (!ok) {
+            ctx.status = 404;
+            ctx.body = { success: false, error: 'Post not found' };
+            return;
+        }
         ctx.body = { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
@@ -377,9 +859,12 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
 router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { status } = (ctx as any).requestBody || {};
-    if (status === 'active' || status === 'disabled') {
-        adminSetUserStatus(ctx.params.pubkey, status);
+    if (status !== 'active' && status !== 'disabled') {
+        ctx.status = 400;
+        ctx.body = { error: 'status must be "active" or "disabled"' };
+        return;
     }
+    adminSetUserStatus(ctx.params.pubkey, status);
     ctx.body = { success: true };
 });
 
@@ -457,14 +942,24 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
 
 router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    adminPruneUser(ctx.params.pubkey);
-    ctx.body = { success: true };
+    try {
+        adminPruneUser(ctx.params.pubkey);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to prune user' };
+    }
 });
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    adminPruneBranch(ctx.params.pubkey);
-    ctx.body = { success: true };
+    try {
+        adminPruneBranch(ctx.params.pubkey);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to prune branch' };
+    }
 });
 
 router.post('/api/local/admin/announcements', async (ctx) => {
@@ -528,12 +1023,20 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
 router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const { deletePost, suspendUser } = (ctx as any).requestBody || {};
-        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser);
+        const { deletePost, suspendUser, removePulseItem } = (ctx as any).requestBody || {};
+        const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem);
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Abuse report not found' };
             return;
+        }
+        const pulseItemId = removePulseItem
+            ? (db.prepare('SELECT target_pulse_item_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as any)?.target_pulse_item_id
+            : null;
+        if (pulseItemId) {
+            getPulseThumbnailService().delete(pulseItemId);
+            const by = ctx.state?.auth_signer ? String(ctx.state.auth_signer).substring(0, 12) : 'owner:password';
+            logger.info('ADMIN', `Removed Pulse item ${pulseItemId} (report ${ctx.params.id}) by ${by}${suspendUser ? ', owner suspended' : ''}`);
         }
         ctx.body = { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
@@ -551,13 +1054,17 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         return;
     }
     const deleted = adminBulkDeletePosts(postIds);
-    ctx.body = { success: true, deleted };
+    ctx.body = { success: true, deleted, deletedCount: deleted };
 });
 
 
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const adminPubkey = getAdminPubkey();
+    const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) {
+        ctx.body = { conversations: [], adminPubkey: '' };
+        return;
+    }
     const convs = getConversationsByMember(adminPubkey);
     // Also grab any legacy 'system' conversations.
     // Use a Set for O(N) dedup instead of an O(N^2) nested .find().
@@ -576,8 +1083,18 @@ router.post('/api/local/admin/inbox', async (ctx) => {
 router.post('/api/local/admin/inbox/send', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { targetPubkey, message } = (ctx as any).requestBody || {};
-    adminSendMessage(targetPubkey, message || '');
-    ctx.body = { success: true };
+    if (!targetPubkey || !message) {
+        ctx.status = 400;
+        ctx.body = { error: 'targetPubkey and message are required' };
+        return;
+    }
+    try {
+        adminSendMessage(targetPubkey, message);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to send admin message' };
+    }
 });
 
 router.post('/api/local/admin/commons/round', async (ctx) => {
@@ -589,13 +1106,26 @@ router.post('/api/local/admin/commons/round', async (ctx) => {
             ctx.body = { error: 'projectIds and closesAt required' };
             return;
         }
-        const round = createVotingRound(getAdminPubkey(), projectIds, closesAt);
+        const signedActor = (ctx.state as any)?.actor;
+        if (signedActor && !isAdminPubkey(signedActor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only an active node admin may create a voting round' };
+            return;
+        }
+        const creatorKey = signedActor || getFirstNodeAdminPubkey() || getAdminPubkey();
+        if (!creatorKey) {
+            ctx.status = 400;
+            ctx.body = { error: 'No genesis admin configured' };
+            return;
+        }
+        const round = createVotingRound(creatorKey, projectIds, closesAt);
         if (!round) {
             ctx.status = 400;
             ctx.body = { error: 'Failed — another round may be open, or not admin' };
             return;
         }
         ctx.body = { success: true, round };
+        return;
     } else if (action === 'close') {
         if (!roundId) {
             ctx.status = 400;
@@ -624,7 +1154,64 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
         ctx.body = { error: 'projectId required' };
         return;
     }
-    adminRejectProject(projectId);
+    try {
+        adminRejectProject(projectId);
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to reject project' };
+    }
+});
+
+// Admin: halt a community decision (§3.7)
+router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const signedActor = (ctx.state as any)?.actor as string | undefined;
+    if (!signedActor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    if (!isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    if (!reason) {
+        ctx.status = 400;
+        ctx.body = { error: 'reason (signed justification) required to halt decision' };
+        return;
+    }
+    const result = adminHaltDecision(ctx.params.id, signedActor, reason);
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { error: result.error || 'Failed to halt decision' };
+        return;
+    }
+    ctx.body = { success: true };
+});
+
+// Admin: accelerate a pending grace removal decision (§3.7)
+router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const signedActor = (ctx.state as any)?.actor as string | undefined;
+    if (!signedActor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    if (!isNodeAdmin(signedActor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Explicit authenticated node admin required' };
+        return;
+    }
+    const result = adminAccelerateDecision(ctx.params.id, signedActor);
+    if (!result.success) {
+        ctx.status = 400;
+        ctx.body = { error: result.error };
+        return;
+    }
     ctx.body = { success: true };
 });
 
@@ -632,9 +1219,11 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/commons/projects', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const crowdfundProjects = getCrowdfundProjects();
+    // ⚡ Bolt: Pre-fetch members Map for O(1) proposer lookup instead of N+1 getMember queries
+    const membersMap = new Map(getAllMembers().map(m => [m.publicKey, m]));
     // Map crowdfund schema to commons admin UI shape
     const projects = crowdfundProjects.map(p => {
-        const member = getMember(p.creator_pubkey);
+        const member = membersMap.get(p.creator_pubkey);
         return {
             id: p.id,
             title: p.title,
@@ -664,6 +1253,427 @@ router.post('/api/local/admin/gateway', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const updated = updateGatewayConfig(body);
     ctx.body = { success: true, gateway: updated };
+});
+
+
+function inferPulsePlatform(url: string): ChannelPlatform {
+    const raw = (url || '').toLowerCase();
+    if (raw.includes('youtube.com') || raw.includes('youtu.be')) return 'youtube';
+    if (raw.includes('soundcloud.com') || raw.includes('snd.sc')) return 'soundcloud';
+    if (raw.includes('instagram.com') || raw.includes('instagr.am')) return 'instagram';
+    if (raw.includes('tiktok.com')) return 'tiktok';
+    if (raw.includes('facebook.com') || raw.includes('fb.com') || raw.includes('fb.me')) return 'facebook';
+    if (/(\/feed\b|\/rss\b|\/atom\b|\.xml(\?|$)|\.rss(\?|$)|\/feeds?\/)/i.test(raw)) return 'rss';
+    return 'website';
+}
+
+// ===================== CURATED PULSE CHANNELS =====================
+// #pulse: Node operator curated channels for the Pulse feed.
+// Channels added here belong to the BeanPool system identity, not the admin's personal account.
+
+router.get('/api/local/admin/pulse/channels', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const owner = ensureBeanPoolIdentity();
+        const rows = db.prepare(
+            `SELECT c.id, c.owner_pubkey, c.platform, c.url, c.handle, c.category,
+                    c.supports_autolist, c.fail_count, c.last_error, c.is_stale,
+                    c.created_at, c.updated_at,
+                    (SELECT COUNT(*) FROM pulse_items p WHERE p.channel_id = c.id AND p.deleted_at IS NULL) as item_count
+               FROM creator_channels c
+              WHERE c.owner_pubkey = ? AND c.deleted_at IS NULL
+              ORDER BY c.created_at ASC`
+        ).all(owner) as any[];
+
+        const channels = rows.map(r => ({
+            id: r.id,
+            ownerPubkey: r.owner_pubkey,
+            platform: r.platform,
+            url: r.url,
+            handle: r.handle,
+            category: r.category,
+            supportsAutolist: r.supports_autolist === 1,
+            supports_autolist: r.supports_autolist,
+            failCount: r.fail_count || 0,
+            lastError: r.last_error || null,
+            isStale: r.is_stale === 1,
+            itemCount: r.item_count || 0,
+            item_count: r.item_count || 0,
+            isSeeded: r.id === BEANPOOL_LEARN_CHANNEL_ID,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+        }));
+
+        ctx.body = { success: true, channels };
+    } catch (e: any) {
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to list curated channels' };
+    }
+});
+
+router.post('/api/local/admin/pulse/channels', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { url, feedUrl, category, platform } = (ctx as any).requestBody || {};
+    const rawUrl = url || feedUrl;
+    if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'url is required' };
+        return;
+    }
+
+    const trimmedUrl = rawUrl.trim();
+    const cat = (category && typeof category === 'string' && category.trim()) ? category.trim() : 'learn';
+    const plat = (platform && typeof platform === 'string' && platform.trim())
+        ? platform.trim()
+        : inferPulsePlatform(trimmedUrl);
+
+    try {
+        const owner = ensureBeanPoolIdentity();
+        const channel = addChannel({
+            ownerPubkey: owner,
+            platform: plat,
+            raw: trimmedUrl,
+            category: cat,
+            syndicateToNode: true,
+        });
+
+        let resolve: { count: number; error?: string } | null = null;
+        if (channel.supportsAutolist) {
+            try {
+                resolve = await resolveChannel(channel.id);
+            } catch (err: any) {
+                resolve = { count: 0, error: err?.message || String(err) };
+            }
+        } else {
+            resolve = { count: 0, error: 'URL does not support automatic updates' };
+        }
+
+        const fresh = getChannel(channel.id) || channel;
+        const msg = fresh.supportsAutolist
+            ? (resolve && resolve.count > 0 ? `Channel added and imported ${resolve.count} items.` : 'Channel added (updates automatically).')
+            : 'Channel added, but this URL does not support automatic updates (not a channel/feed URL).';
+
+        ctx.body = {
+            success: true,
+            channel: fresh,
+            supportsAutolist: fresh.supportsAutolist,
+            supports_autolist: fresh.supportsAutolist ? 1 : 0,
+            resolve,
+            message: msg,
+        };
+    } catch (e: any) {
+        if (e instanceof ChannelError) {
+            ctx.status = 400;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        ctx.status = 500;
+        ctx.body = { error: e?.message || 'Failed to add curated channel' };
+    }
+});
+
+router.post('/api/local/admin/pulse/channels/remove', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id, channelId } = (ctx as any).requestBody || {};
+    const targetId = id || channelId;
+    if (!targetId || typeof targetId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'id is required' };
+        return;
+    }
+
+    if (targetId === BEANPOOL_LEARN_CHANNEL_ID) {
+        ctx.status = 400;
+        ctx.body = { error: 'The seeded BeanPool learn channel cannot be removed (it is recreated on boot).' };
+        return;
+    }
+
+    const owner = ensureBeanPoolIdentity();
+    try {
+        const deleted = deleteChannel(owner, targetId);
+        if (!deleted) {
+            ctx.status = 404;
+            ctx.body = { error: 'Channel not found or already removed' };
+            return;
+        }
+        ctx.body = { success: true, message: 'Channel removed' };
+    } catch (e: any) {
+        if (e instanceof ChannelError) {
+            ctx.status = 400;
+            ctx.body = { error: e.message };
+            return;
+        }
+        ctx.status = 500;
+        ctx.body = { error: e?.message || 'Failed to remove channel' };
+    }
+});
+
+// ===================== NODE ROLES MANAGEMENT =====================
+// docs/admin-surface.md §1, §5; docs/the-commons.md §9.2
+// Manage explicit node owner and admin role assignments.
+// Gated by checkAdminAuth.
+
+router.get('/api/local/admin/node-roles', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const roles = listNodeRoles();
+    ctx.body = { success: true, roles };
+});
+
+router.post('/api/local/admin/node-roles', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || {};
+    const targetPubkey = body.pubkey || body.publicKey || body.member_pubkey;
+    const role = body.role;
+
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    if (!targetPubkey || !role) {
+        ctx.status = 400;
+        ctx.body = { error: 'pubkey and role are required' };
+        return;
+    }
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
+        return;
+    }
+
+    try {
+        grantNodeRole(targetPubkey, role, effectiveActor);
+        ctx.body = { success: true, message: `Granted ${role} role to ${targetPubkey}` };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to grant node role';
+        ctx.status = msg.includes('Only an owner') ? 403 : (msg === 'Member not found' ? 404 : 400);
+        ctx.body = { error: msg };
+    }
+});
+
+router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey, role } = ctx.params;
+    const signedActor = (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
+        ctx.status = 400;
+        ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
+        return;
+    }
+
+    try {
+        const currentRole = nodeRoleOf(pubkey);
+        if (currentRole !== role) {
+            ctx.status = 404;
+            ctx.body = { error: `Member ${pubkey} does not hold role '${role}'` };
+            return;
+        }
+        revokeNodeRole(pubkey, role as MemberNodeRole, effectiveActor);
+        ctx.body = { success: true, message: `Revoked ${role} role from ${pubkey}` };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to revoke node role';
+        ctx.status = msg.includes('Only an owner') ? 403 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+// ===================== ESCROW DISPUTE RESOLUTION =====================
+// docs/settings-ia.md §5 item 2 & §6 correction 2
+
+router.get('/api/local/admin/disputes', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const minDays = !isNaN(Number(ctx.query.minDays)) ? Number(ctx.query.minDays) : 7;
+    const limit = !isNaN(Number(ctx.query.limit)) ? Math.max(1, Math.min(200, Number(ctx.query.limit))) : 50;
+    const offset = !isNaN(Number(ctx.query.offset)) ? Math.max(0, Number(ctx.query.offset)) : 0;
+    const status = (typeof ctx.query.status === 'string' && ['all', 'pending', 'resolved'].includes(ctx.query.status))
+        ? (ctx.query.status as 'all' | 'pending' | 'resolved')
+        : 'all';
+
+    const total = (db.prepare(`
+        SELECT COUNT(*) FROM marketplace_transactions mt
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+          AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).pluck().get(status, status, status, minDays, minDays) as number) || 0;
+
+    const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    ctx.body = {
+        disputes,
+        total,
+        count: disputes.length,
+        minDays,
+        limit,
+        offset
+    };
+});
+
+router.get('/api/local/admin/disputes/:id', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const dispute = getEscrowDispute(id);
+    if (!dispute) {
+        ctx.status = 404;
+        ctx.body = { error: 'Dispute not found' };
+        return;
+    }
+    ctx.body = { dispute };
+});
+
+router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { id } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const action = body.action as EscrowDisputeAction;
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : undefined;
+
+    if (!action || !['release_to_seller', 'refund_to_buyer', 'split'].includes(action)) {
+        ctx.status = 400;
+        ctx.body = { error: "action must be 'release_to_seller', 'refund_to_buyer', or 'split'" };
+        return;
+    }
+
+    // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
+    // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const tx = resolveEscrowDispute(id, action, effectiveActor, { reason });
+        ctx.body = {
+            success: true,
+            transactionId: id,
+            resolution: action,
+            authSigner: effectiveActor,
+            transaction: tx
+        };
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to resolve escrow dispute';
+        ctx.status = msg.includes('not found') ? 404 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+// ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
+
+router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const { pubkey } = ctx.params;
+        const status = getRekeyStatus(pubkey);
+        ctx.body = status;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to fetch re-key status' };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = issueRekeyCode(pubkey, effectiveActor);
+        ctx.body = {
+            success: true,
+            ...result,
+            operator: effectiveActor,
+        };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to issue re-enrolment code' };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { code, newPubkey } = body;
+
+    if (!code || typeof code !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Re-enrolment code is required' };
+        return;
+    }
+    if (!newPubkey || typeof newPubkey !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'New public key is required' };
+        return;
+    }
+
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to complete re-keying' };
+    }
+});
+
+router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    try {
+        const { pubkey } = ctx.params;
+        const preview = getOffboardPreview(pubkey);
+
+        // Security / Privacy: Only return active members roster to key-authenticated sessions.
+        // Password-only sessions cannot execute gift_to_member, so withholding the list
+        // prevents leaking the member roster.
+        const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+        if (!signedActor || signedActor === 'owner:password') {
+            preview.activeMembers = [];
+        }
+
+        ctx.body = preview;
+    } catch (e: any) {
+        const msg = e?.message || 'Failed to get offboard preview';
+        ctx.status = msg.includes('not found') ? 404 : 400;
+        ctx.body = { error: msg };
+    }
+});
+
+router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { resolution, giftRecipientPubkey } = body;
+
+    if (!resolution || !['donate_to_commons', 'gift_to_member', 'write_off_commons', 'prune_zero_balance'].includes(resolution)) {
+        ctx.status = 400;
+        ctx.body = { error: "resolution must be 'donate_to_commons', 'gift_to_member', 'write_off_commons', or 'prune_zero_balance'" };
+        return;
+    }
+
+    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
+    if (resolution === 'gift_to_member' && (!signedActor || signedActor === 'owner:password')) {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Two-person rule requires signed key-based admin authentication to gift offboarding funds to a member.',
+            code: 'KEY_AUTH_REQUIRED',
+        };
+        return;
+    }
+    const effectiveActor = signedActor || 'owner:password';
+
+    try {
+        const result = executeOffboard(
+            pubkey,
+            { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
+            effectiveActor
+        );
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = e?.statusCode || e?.status || 400;
+        ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };
+    }
 });
 
     return router;

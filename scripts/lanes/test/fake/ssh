@@ -1,0 +1,14 @@
+#!/bin/zsh
+# Fake ssh for selftest.sh — never connects anywhere. Answers the docker queries deploy_main makes.
+#   FAKE_SSH_REVISION   the image revision label the "running container" reports
+#   FAKE_SSH_SYMBOL=found   the symbol grep finds a hit
+S=${FAKE_STATE:?}
+cmd=${@[-1]}
+print -r -- "ssh $*" >> "$S/ssh.calls"
+case "$cmd" in
+  *"docker ps -q"*)  print cid123;;
+  *image.revision*)  print -r -- "$FAKE_SSH_REVISION";;
+  *RestartCount*)    print "restarts=0 status=running";;
+  *"grep -rlF"*)     [ "$FAKE_SSH_SYMBOL" = found ] && print /app/apps/server/dist/index.js;;
+esac
+exit 0

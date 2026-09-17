@@ -36,6 +36,12 @@ COPY . .
 #   5. Server (tsc → outputs to apps/server/dist/)
 RUN cd packages/beanpool-core && pnpm run build
 RUN cd packages/beanpool-engine && pnpm run build
+# Accept version from CI build args (from git tag) so the frontend build inherits it.
+# Declared HERE, not at the top of the stage: an ENV that changes on every release tag
+# invalidates every layer below it, so up there it would bust the `pnpm install` cache
+# on every single release build.
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
 # Force PWA rebuild 2026-07-28-v3 (responsive sidebar layout)
 RUN cd apps/pwa && pnpm run build
 # PWA build clears apps/server/public/ (emptyOutDir), so copy settings files from static/

@@ -166,6 +166,11 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM post_photos WHERE post_id=? AND order_num=?`).run(postId, Number(orderNum));
             return r.changes > 0;
         }
+        case 'members': {
+            const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
+            db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
+            return r.changes > 0;
+        }
         default:
             console.warn(`[Sync] Ignoring tombstone for unknown table: ${tableName}`);
             return false;
@@ -188,6 +193,10 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const [postId, orderNum] = rowKey.split('|');
             if (!postId || orderNum === undefined) return null;
             const r = db.prepare(`SELECT updated_at AS ts FROM post_photos WHERE post_id=? AND order_num=?`).get(postId, Number(orderNum)) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        case 'members': {
+            const r = db.prepare(`SELECT updated_at AS ts FROM members WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         default:
@@ -284,7 +293,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -360,10 +369,14 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
             }
 
             for (const rp of remote.posts ?? []) {
-                const existing = db.prepare("SELECT updated_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null } | undefined;
+                const existing = db.prepare("SELECT updated_at, poll_options, poll_closes_at FROM posts WHERE id=?").get(rp.id) as { updated_at: string | null; poll_options?: string | null; poll_closes_at?: string | null } | undefined;
+                const pollOptionsJson = rp.pollOptions != null
+                    ? (typeof rp.pollOptions === 'string' ? rp.pollOptions : JSON.stringify(rp.pollOptions))
+                    : null;
+                const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -383,7 +396,10 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.acceptedAt || null,
                         rp.pendingTransactionId || null,
                         rp.completedAt || null,
-                        rp.updatedAt || rp.createdAt
+                        rp.updatedAt || rp.createdAt,
+                        pollOptionsJson,
+                        pollClosesAtVal,
+                        rp.createdBy ?? null
                     );
                     newPosts++;
                 } else {
@@ -405,6 +421,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         completed_at = ?,
                         lat = ?,
                         lng = ?,
+                        poll_options = COALESCE(?, poll_options),
+                        poll_closes_at = COALESCE(?, poll_closes_at),
+                        created_by = COALESCE(?, created_by),
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -420,6 +439,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.completedAt || null,
                         rp.lat ?? null,
                         rp.lng ?? null,
+                        pollOptionsJson,
+                        pollClosesAtVal,
+                        rp.createdBy ?? null,
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -576,14 +598,11 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             if (remote.friends) {
                 for (const fr of remote.friends) {
-                    db.prepare(`INSERT INTO friends (owner_pubkey, friend_pubkey, added_at, is_guardian)
-                                VALUES (?, ?, ?, ?)
-                                ON CONFLICT(owner_pubkey, friend_pubkey) DO UPDATE SET
-                                    is_guardian = excluded.is_guardian`).run(
+                    db.prepare(`INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at)
+                                VALUES (?, ?, ?)`).run(
                         fr.ownerPubkey,
                         fr.friendPubkey,
-                        fr.addedAt,
-                        fr.isGuardian ? 1 : 0
+                        fr.addedAt
                     );
                 }
             }
@@ -651,8 +670,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             if (remote.abuseReports) {
                 for (const ar of remote.abuseReports) {
-                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at, status, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at, status, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     status = excluded.status,
                                     updated_at = excluded.updated_at
@@ -662,6 +681,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         ar.reporterPubkey,
                         ar.targetPubkey,
                         ar.targetPostId || null,
+                        ar.targetPulseItemId || null,
                         ar.reason,
                         ar.createdAt,
                         ar.status || 'pending',
@@ -736,8 +756,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 const importPulseItem = db.prepare(`INSERT INTO pulse_items
                                     (id, channel_id, owner_pubkey, platform, external_id,
                                      url, title, thumbnail_url, published_at, category,
-                                     source, muted, created_at, updated_at, deleted_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                     source, muted, curated, created_at, updated_at, deleted_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     channel_id    = excluded.channel_id,
                                     owner_pubkey  = excluded.owner_pubkey,
@@ -750,6 +770,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                                     category      = excluded.category,
                                     source        = excluded.source,
                                     muted         = excluded.muted,
+                                    curated       = excluded.curated,
                                     deleted_at    = excluded.deleted_at,
                                     updated_at    = excluded.updated_at
                                 WHERE excluded.updated_at > pulse_items.updated_at`);
@@ -767,43 +788,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         item.category,
                         item.source,
                         item.muted ? 1 : 0,
+                        // An older peer omits this; 0 is safe because every node re-seeds its
+                        // own curated content on boot.
+                        item.curated ? 1 : 0,
                         item.createdAt,
                         item.updatedAt,
                         item.deletedAt ?? null
-                    );
-                }
-            }
-
-            if (remote.recoveryRequests) {
-                for (const rr of remote.recoveryRequests) {
-                    db.prepare(`INSERT INTO recovery_requests (id, old_pubkey, new_pubkey, status, quorum_required, created_at, cooldown_until, executed_at, expires_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ON CONFLICT(id) DO UPDATE SET
-                                    status = excluded.status,
-                                    cooldown_until = excluded.cooldown_until,
-                                    executed_at = excluded.executed_at,
-                                    expires_at = excluded.expires_at`).run(
-                        rr.id,
-                        rr.oldPubkey,
-                        rr.newPubkey,
-                        rr.status,
-                        rr.quorumRequired,
-                        rr.createdAt,
-                        rr.cooldownUntil || null,
-                        rr.executedAt || null,
-                        rr.expiresAt || null
-                    );
-                }
-            }
-
-            if (remote.recoveryApprovals) {
-                for (const ra of remote.recoveryApprovals) {
-                    db.prepare(`INSERT OR IGNORE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at)
-                                VALUES (?, ?, ?, ?)`).run(
-                        ra.requestId,
-                        ra.guardianPubkey,
-                        ra.decision,
-                        ra.createdAt
                     );
                 }
             }
@@ -851,31 +841,24 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
-            // Recovery PINs — 6-digit PIN bcrypt hashes protecting friend lists.
-            // LWW on updated_at so newer PIN updates or attempts win on backup nodes.
-            if (remote.recoveryPins) {
-                try {
-                    const insertPin = db.prepare(`
-                        INSERT INTO recovery_pin
-                            (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(owner_pubkey) DO UPDATE SET
-                            pin_hash = excluded.pin_hash,
-                            pin_salt = excluded.pin_salt,
-                            attempts = excluded.attempts,
-                            last_attempt_at = excluded.last_attempt_at,
-                            updated_at = excluded.updated_at
-                        WHERE recovery_pin.updated_at IS NULL OR excluded.updated_at >= recovery_pin.updated_at
-                    `);
-                    for (const rp of remote.recoveryPins) {
-                        insertPin.run(
-                            rp.ownerPubkey, rp.pinHash, rp.pinSalt,
-                            rp.attempts ?? 0, rp.lastAttemptAt ?? null,
-                            rp.createdAt, rp.updatedAt || rp.createdAt,
-                        );
-                    }
-                } catch {
-                    // recovery_pin table may not exist on certain older migrations/mocks
+            if (remote.pollVotes) {
+                const importVote = db.prepare(`INSERT INTO poll_votes
+                    (post_id, voter_pubkey, option_id, signature, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
+                        option_id = excluded.option_id,
+                        signature = excluded.signature,
+                        created_at = excluded.created_at
+                    WHERE excluded.created_at IS NOT NULL
+                      AND (poll_votes.created_at IS NULL OR excluded.created_at >= poll_votes.created_at)`);
+                for (const pv of remote.pollVotes) {
+                    importVote.run(
+                        pv.postId,
+                        pv.voterPubkey,
+                        pv.optionId,
+                        pv.signature || '',
+                        pv.createdAt || new Date().toISOString()
+                    );
                 }
             }
 
@@ -897,8 +880,19 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
         currentImportOrigin = null;
     }
 
-    if (newMembers > 0 || newPosts > 0) {
-        cb.broadcast({ type: 'state_synced', newMembers, newPosts, from: remote.nodeId });
+    // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||
+    // newPosts > 0`, which was fine when the broadcast only woke up sockets — but it now also
+    // bumps the ETag version counters that let the list endpoints answer a conditional request
+    // without reading the database. An import that only MODIFIED listings, or only applied
+    // deletions, left both counters untouched, so every client on this node kept receiving 304
+    // indefinitely and a removed listing stayed visible forever. A 304 never reads the database,
+    // so nothing downstream would ever have noticed.
+    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0) {
+        cb.broadcast({
+            type: 'state_synced',
+            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied,
+            from: remote.nodeId,
+        });
     }
 
     // #134: Permanent audit trail — write one row per import with origin peer identity and change counts.

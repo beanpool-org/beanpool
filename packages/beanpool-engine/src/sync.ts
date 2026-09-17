@@ -81,6 +81,7 @@ export interface SyncAbuseReport {
     reporterPubkey: string;
     targetPubkey: string;
     targetPostId: string | null;
+    targetPulseItemId?: string | null;
     reason: string;
     createdAt: string;
     status?: string;
@@ -120,6 +121,9 @@ export interface SyncPulseItem {
     category: string;
     source: string;
     muted: boolean;
+    /** Curated system content. Must cross the wire: a replica that imports it as 0 would
+     *  expose it to per-channel retention and lose it on failover. */
+    curated: boolean;
     createdAt: string;
     updatedAt: string;
     deletedAt: string | null;
@@ -236,6 +240,14 @@ export interface SyncRecoveryPin {
     updatedAt: string;
 }
 
+export interface SyncPollVote {
+    postId: string;
+    voterPubkey: string;
+    optionId: string;
+    signature: string;
+    createdAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -260,6 +272,7 @@ export interface SyncPayload {
     recoveryShares?: SyncRecoveryShare[];
     recoveryPins?: SyncRecoveryPin[];
     settlements?: SyncSettlement[];
+    pollVotes?: SyncPollVote[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
     generatedAt?: string;
@@ -344,6 +357,11 @@ export function exportSyncState(
         lat: row.lat,
         lng: row.lng,
         originNode: row.origin_node,
+        createdBy: row.created_by ?? undefined,
+        pollOptions: row.poll_options
+            ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
+            : undefined,
+        pollClosesAt: row.poll_closes_at || undefined,
     }));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];
@@ -412,7 +430,11 @@ export function exportSyncState(
         ownerPubkey: row.owner_pubkey,
         friendPubkey: row.friend_pubkey,
         addedAt: row.added_at,
-        isGuardian: Boolean(row.is_guardian),
+        // Always false. `friends.is_guardian` is gone from schema.sql, so a fresh node reads
+        // `undefined` here while an existing node still holds legacy 1s — which would make two
+        // nodes with identical friendships export different payloads. Guardian recovery is
+        // deleted, so the honest value is the same everywhere: nobody is a guardian.
+        isGuardian: false,
         updatedAt: row.updated_at || row.added_at,
     }));
 
@@ -455,6 +477,7 @@ export function exportSyncState(
         reporterPubkey: row.reporter_pubkey,
         targetPubkey: row.target_pubkey,
         targetPostId: row.target_post_id,
+        targetPulseItemId: row.target_pulse_item_id ?? null,
         reason: row.reason,
         createdAt: row.created_at,
         status: row.status || 'pending',
@@ -499,6 +522,7 @@ export function exportSyncState(
             category: row.category,
             source: row.source,
             muted: row.muted === 1,
+            curated: row.curated === 1,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             deletedAt: row.deleted_at ?? null,
@@ -507,27 +531,15 @@ export function exportSyncState(
         // pulse_items table may not exist on older test fixtures
     }
 
-    const recoveryReqRows = sel('recovery_requests', 'updated_at');
-    const recoveryRequests: SyncRecoveryRequest[] = recoveryReqRows.map(row => ({
-        id: row.id,
-        oldPubkey: row.old_pubkey,
-        newPubkey: row.new_pubkey,
-        status: row.status,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until,
-        executedAt: row.executed_at,
-        expiresAt: row.expires_at,
-        updatedAt: row.updated_at || row.executed_at || row.cooldown_until || row.created_at,
-    }));
-
-    const recoveryAppRows = sel('recovery_approvals', 'created_at');
-    const recoveryApprovals: SyncRecoveryApproval[] = recoveryAppRows.map(row => ({
-        requestId: row.request_id,
-        guardianPubkey: row.guardian_pubkey,
-        decision: row.decision,
-        createdAt: row.created_at,
-    }));
+    // Guardian recovery is deleted. These three keys stay on the wire as empty arrays so an
+    // unpatched peer's `if (remote.recoveryRequests)` ingest still sees the shape it expects and
+    // iterates zero times. Querying the tables is pointless now and actively wrong on two counts:
+    // a fresh node has no such tables, so every sync cycle threw and swallowed an exception, and
+    // an existing node would have gone on replicating rows — PIN hashes included — for a feature
+    // that no longer has a single route.
+    const recoveryRequests: SyncRecoveryRequest[] = [];
+    const recoveryApprovals: SyncRecoveryApproval[] = [];
+    const recoveryPins: SyncRecoveryPin[] = [];
 
     const recoveryShareRows = sel('recovery_shares', 'updated_at');
     const recoveryShares: SyncRecoveryShare[] = recoveryShareRows.map((row: any) => ({
@@ -546,22 +558,6 @@ export function exportSyncState(
         createdAt: row.created_at,
         updatedAt: row.updated_at || row.created_at,
     }));
-
-    let recoveryPins: SyncRecoveryPin[] = [];
-    try {
-        const recoveryPinRows = sel('recovery_pin', 'updated_at');
-        recoveryPins = recoveryPinRows.map((row: any) => ({
-            ownerPubkey: row.owner_pubkey,
-            pinHash: row.pin_hash,
-            pinSalt: row.pin_salt,
-            attempts: row.attempts ?? 0,
-            lastAttemptAt: row.last_attempt_at ?? null,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at || row.created_at,
-        }));
-    } catch {
-        // recovery_pin table may not exist on older test fixtures
-    }
 
     // Settlements. Uses the same `sel` cursor helper as every other table, so delta sync picks up a row
     // whose state has moved without re-sending the whole outbox.
@@ -584,6 +580,20 @@ export function exportSyncState(
         createdAt: row.created_at,
         updatedAt: row.updated_at || row.created_at,
     }));
+
+    let pollVotes: SyncPollVote[] = [];
+    try {
+        const pollVoteRows = sel('poll_votes', 'created_at');
+        pollVotes = pollVoteRows.map((r: any) => ({
+            postId: r.post_id,
+            voterPubkey: r.voter_pubkey,
+            optionId: r.option_id,
+            signature: r.signature || '',
+            createdAt: r.created_at,
+        }));
+    } catch {
+        // Table absent on older schema/fixtures
+    }
 
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
@@ -618,6 +628,7 @@ export function exportSyncState(
         recoveryShares,
         recoveryPins,
         settlements,
+        pollVotes,
         tombstones,
     };
 }

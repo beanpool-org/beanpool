@@ -7,5 +7,11 @@ ios/
 dist/
 out/
 build/
+
+# Previous build outputs. 'build/' above matches the directory, not the
+# build-<timestamp>.apk / .aab files EAS writes into the project root, and
+# those get tarred into the archive a --local build unpacks.
+*.apk
+*.aab
 .turbo/
 

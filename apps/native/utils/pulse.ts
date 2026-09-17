@@ -4,7 +4,8 @@
  * Implements Contract B read/mute consumer for React Native:
  * 1. GET /api/pulse/feed (public read, cursor pagination, category filtering)
  * 2. POST /api/member/pulse/items/:id/mute (signed owner mutation)
- * 3. Local fixture fallback for development, testing, and offline preview.
+ * 3. POST /api/reports with targetPulseItemId (signed report of someone else's item)
+ * 4. Local fixture fallback for development, testing, and offline preview.
  */
 
 import { type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
@@ -24,6 +25,19 @@ export interface PulseFeedItem {
     publishedAt: string | null;
     source: string;
     isVerified: boolean;
+}
+
+/**
+ * Which lane of the feed an item belongs to.
+ *
+ * SKETCH ONLY. In production this must be a server-side flag on the channel
+ * (creator_channels.is_official, set when an admin creates the channel) and the
+ * lane should be a query parameter on GET /api/pulse/feed so pagination stays
+ * correct. Deriving it on the client the way this does is a prototype shortcut:
+ * it cannot see items that live on later pages.
+ */
+export function isOfficialSource(item: PulseFeedItem): boolean {
+    return item.source === 'official';
 }
 
 export interface PulseFeedResponse {
@@ -180,8 +194,28 @@ export function getFixturePulseFeed(options: FetchPulseFeedOptions = {}): PulseF
     return { items, nextCursor };
 }
 
+const EMPTY_FEED: PulseFeedResponse = { items: [], nextCursor: null };
+
 /**
- * Fetch pulse feed items from the node, falling back to fixture if node is offline or returns empty/error.
+ * What to show when the node cannot be reached on a first page.
+ *
+ * NEVER the fixture in a shipping build. PULSE_FIXTURE_ITEMS is fabricated content — it
+ * attributes invented posts to a named community business and one of them links to a
+ * Rickroll — and every one of the fallbacks below is reachable in production: no anchor
+ * node, a node without the pulse endpoint, a 5xx, malformed JSON, or simply being offline,
+ * which is the normal state for a lot of our users. Shipping invented posts into a social
+ * feed is also the kind of thing an app review rejects.
+ *
+ * The screen already has an honest empty state, so an empty feed is the right answer.
+ * Tests and local UI work opt in explicitly with `forceFixture`.
+ */
+function offlineFeed(options: FetchPulseFeedOptions): PulseFeedResponse {
+    return (typeof __DEV__ !== 'undefined' && __DEV__) ? getFixturePulseFeed(options) : EMPTY_FEED;
+}
+
+/**
+ * Fetch pulse feed items from the node. On a first page, an unreachable node yields an
+ * empty feed (see offlineFeed); during pagination it throws so the UI can say so.
  */
 export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promise<PulseFeedResponse> {
     if (options.forceFixture) {
@@ -191,7 +225,7 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
     try {
         const url = await anchorUrl();
         if (!url) {
-            return getFixturePulseFeed(options);
+            return offlineFeed(options);
         }
 
         const queryParams = new URLSearchParams();
@@ -212,7 +246,7 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
             if (options.cursor) {
                 throw new Error(`Failed to load feed page (${res.status})`);
             }
-            return getFixturePulseFeed(options);
+            return offlineFeed(options);
         }
 
         const data = await res.json().catch(() => null);
@@ -220,7 +254,7 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
             if (options.cursor) {
                 throw new Error('Invalid feed response from server');
             }
-            return getFixturePulseFeed(options);
+            return offlineFeed(options);
         }
 
         return {
@@ -232,7 +266,7 @@ export async function fetchPulseFeed(options: FetchPulseFeedOptions = {}): Promi
         if (options.cursor) {
             throw e;
         }
-        return getFixturePulseFeed(options);
+        return offlineFeed(options);
     }
 }
 
@@ -275,6 +309,51 @@ export async function mutePulseItem(
         success: Boolean(data.success),
         item: data.item,
     };
+}
+
+/** The same reasons the post-detail report form offers. */
+export const PULSE_REPORT_REASONS = ['Spam or scam', 'Offensive content', 'Misleading post', 'Other'] as const;
+
+/** A signed-in member can report an item that is not theirs. Fixture items are not on any node. */
+export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string | null): boolean {
+    return Boolean(currentPubkey && item.ownerPubkey && item.ownerPubkey !== currentPubkey && !item.id.startsWith('item_fix_'));
+}
+
+/**
+ * Report someone else's Pulse item to the node's operators.
+ *
+ * POST /api/reports with targetPulseItemId (signed). The node resolves the reported member from the
+ * item's owner, refuses your own item (400) and an item that is gone (404).
+ */
+export async function reportPulseItem(
+    item: PulseFeedItem,
+    reason: string,
+    identity?: BeanPoolIdentity | null,
+): Promise<{ success: boolean }> {
+    if (!identity) {
+        throw new Error('Identity required to report items.');
+    }
+    if (!item?.id || !reason?.trim()) {
+        throw new Error('An item and a reason are required.');
+    }
+
+    const url = await anchorUrl();
+    if (!url) {
+        throw new Error('Not connected to a node.');
+    }
+
+    const res = await signedPost(
+        url,
+        '/api/reports',
+        { reporterPubkey: identity.publicKey, targetPubkey: item.ownerPubkey, targetPulseItemId: item.id, reason: reason.trim() },
+        identity,
+    );
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data?.message || data?.error || `Failed to report item (${res.status})`);
+    }
+    return { success: Boolean(data.success) };
 }
 
 /**

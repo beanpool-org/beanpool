@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Rules — How BeanPool Works</title>
-    <meta name="description" content="The simple rules of BeanPool: how balances, credit, offers, fees, Keynesian federation, and the community pool work.">
+    <meta name="description" content="The simple rules of BeanPool: how balances, credit, offers, fees, Keynesian federation, community enterprises, and governance work.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -140,14 +140,13 @@
         <p>A trusted, community-appointed <strong style="color:var(--text-primary)">voucher</strong> can give a newcomer a <strong style="color:var(--text-primary)">starter floor of 25, 50, or 100 beans</strong> so they can begin using credit before they've earned it. These are typically awarded — entirely at the voucher's discretion — to people whose posts and contributions the voucher finds genuinely engaging and inspiring. It's optional either way: no one needs a vouch to take part, since you also open your credit line simply by trading (§3).</p>
 
         <h2><span class="num">10.</span>Federated Inter-Community Clearing</h2>
-        <p>Communities do not need to exist in isolation. Through <strong style="color:var(--text-primary)">Federated Trade Connectors</strong> (inspired by Keynesian multilateral clearing unions), independent community nodes can clear trades with neighbouring nodes peer-to-peer without converting into fiat currency or requiring external banking reserves. Cross-node transactions clear symmetrically, maintaining zero-sum balance and local sovereignty across all participating regions.</p>
+        <p>Communities do not need to exist in isolation. Through <strong style="color:var(--text-primary)">Federated Trade Connectors</strong> (inspired by Keynes’ clearing union), independent community nodes can clear trades with a neighbouring node peer-to-peer, without fiat currency or banking reserves. Beans never leave their home community — each pair of nodes keeps a bridge ledger of what they owe one another in work, and each side sets its own cap on how far that can run. Clearing is between pairs of communities, and each operator turns it on deliberately.</p>
 
         <h2><span class="num">11.</span>Cryptographic Identity &amp; Key Custody</h2>
         <p>Your account is protected by an Ed25519 cryptographic keypair generated on your device. BeanPool offers flexible custody to fit your needs:</p>
         <ul>
-            <li><strong style="color:var(--text-primary)">Full Self-Sovereignty:</strong> Private keys remain exclusively in your device's hardware SecureStore / passkeys with offline seed backup.</li>
-            <li><strong style="color:var(--text-primary)">Encrypted SSO Cloud Backup:</strong> 1-click seamless encrypted backup via Apple ID or Google OAuth so you can log in across devices without losing your keys.</li>
-            <li><strong style="color:var(--text-primary)">Social Guardian Recovery:</strong> Shamir secret-sharing with trusted community members (vouchers/guardians) allows decentralized recovery if you lose your phone.</li>
+            <li><strong style="color:var(--text-primary)">Full Self-Sovereignty:</strong> Private keys remain exclusively in your device's secure hardware (iOS Keychain / Android Keystore), with offline seed backup.</li>
+            <li><strong style="color:var(--text-primary)">Recovery:</strong> Your 12-word phrase restores your account on any device. On the phone app you can also link a sign-in account, which lets your community node help you back on. If you lose your device and recovery phrase, account restoration requires in-person, operator-assisted re-enrolment by your node administrator to bind your history to a new key — so write the words down.</li>
         </ul>
 
         <h2><span class="num">12.</span>Limits &amp; safety</h2>
@@ -156,6 +155,20 @@
             <li>Trust with any single partner is capped, so no one can inflate their standing by trading back and forth with one accomplice.</li>
             <li><strong style="color:var(--text-primary)">Holiday mode</strong> hides your offers and pauses incoming requests while you're away.</li>
             <li>Members can report and flag bad actors; community admins can remove them.</li>
+        </ul>
+
+        <h2><span class="num">13.</span>Community Enterprises &amp; Governance</h2>
+        <p>Community enterprises (such as a community tool library, an egg flock, or a firewood depot) and bounded projects are shared initiatives under collective stewardship. They operate under clear, code-enforced rules (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">the Commons governance model</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">One object, two lifecycles (§2.1):</strong> An ongoing enterprise persists and trades; a bounded enterprise (a project) has a goal and end date, winding up its account and returning surplus to the Commons when finished.</li>
+            <li><strong style="color:var(--text-primary)">Earned floors &amp; keeper pledges (Rules 1–3):</strong> An enterprise has no unearned overdraft. Its credit floor is backed by explicit pledges from its keepers' earned trade standing (straight sum, no synthetic multiplier). Pledging backing never touches or reduces a keeper's personal household credit floor.</li>
+            <li><strong style="color:var(--text-primary)">Limited liability (Rule 4):</strong> The enterprise fails, not the keeper's household. If an enterprise defaults, its spending freezes, but its keepers' personal floors are protected.</li>
+            <li><strong style="color:var(--text-primary)">Credit buys inputs, profit pays people (Rule 5):</strong> An enterprise may draw on credit down to its usable floor to buy supplies or services from outside neighbours. It may <em>never</em> draw on credit to pay its own keepers — keepers are paid only while <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Keeper pay capped by earned surplus (Rule 6):</strong> Payouts to keepers are strictly capped by genuine trading surplus (sales income minus keeper payments). Grants, pledges, and gifts can never be converted into keeper wages.</li>
+            <li><strong style="color:var(--text-primary)">Automatic working-capital sweeps (Rule 7):</strong> Enterprises declare a working capital ceiling. Earned surplus above this ceiling sweeps automatically back to the Community Commons pool to prevent hoarding. Grants and gifts are never swept.</li>
+            <li><strong style="color:var(--text-primary)">Two-person approval rule:</strong> Keepers cannot approve their own payments or personal bids on enterprise needs — another keeper must approve.</li>
+            <li><strong style="color:var(--text-primary)">Polls vs Decisions (§3):</strong> Informal questions are <em>Polls</em> in the market feed (1 member 1 vote, no bond, simple majority). Binding governance (pool grants, role changes, rule changes) runs via <em>Decisions</em> in the Commons tab with a 7-day voting window and self-executing resolution. Pool grants use quadratic voting on earned trade standing — liquid beans cannot buy votes.</li>
+            <li><strong style="color:var(--text-primary)">Settled vocabulary (§9):</strong> Four levels, four distinct words: node → <em>owner / admin</em> · enterprise → <em>lead keeper / keeper</em> · group → <em>convenor</em> · trust tier → <em>Steward</em>.</li>
         </ul>
         <div class="callout amber">In short: <strong>earn your credit line by trading, keep an offer or two live to use it, and let beans flow.</strong> Zero is the goal — give about as much as you take.</div>
     </section>

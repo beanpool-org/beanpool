@@ -54,8 +54,21 @@ import {
     type ChannelCategory,
     type ChannelPlatform,
     normaliseChannelInput,
+    SOUNDCLOUD_RESERVED_SEGMENTS,
 } from '../engine/creator-channels.js';
+import {
+    getPulseThumbnailService,
+    PulseThumbnailService,
+    extractInstagramEmbedUrl,
+    extractThumbnailFromEmbedHtml,
+} from '../engine/pulse-thumbnail.js';
+import { logger } from '../logger.js';
+import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
+
+export interface PulseSubmitRouteDeps extends RouteDeps {
+    thumbnailService?: PulseThumbnailService;
+}
 
 export interface ResolvedPulsePreview {
     channelId: string;
@@ -86,6 +99,23 @@ function pulseErrorStatus(code: string): number {
         default: return 400;
     }
 }
+
+/** Maximum items accepted in a single OAuth batch ingest request.
+ * TikTok Display API returns up to 20 videos per call; Instagram Graph API returns 25.
+ * 50 provides 2x headroom over actual client usage without permitting unbounded DoS batches. */
+export const MAX_OAUTH_INGEST_ITEMS = 50;
+
+/** Maximum total payload size for an OAuth batch ingest request body (512 KB). */
+export const MAX_OAUTH_INGEST_PAYLOAD_BYTES = 512 * 1024;
+
+/** Maximum character lengths per item field */
+export const MAX_ITEM_URL_LENGTH = 2048;
+export const MAX_ITEM_TITLE_LENGTH = 500;
+export const MAX_ITEM_THUMBNAIL_URL_LENGTH = 4096; // TikTok CDN signed URLs can reach ~3KB
+export const MAX_ITEM_EXTERNAL_ID_LENGTH = 512;
+export const MAX_ITEM_PUBLISHED_AT_LENGTH = 64;
+export const MAX_ITEM_CATEGORY_LENGTH = 50;
+
 
 function extractMetaProperty(html: string, prop: string): string | null {
     if (!html) return null;
@@ -187,6 +217,13 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
         if (fbMatch) {
             externalId = fbMatch[1];
         }
+    } else if (host === 'soundcloud.com' || host === 'snd.sc' || host === 'm.soundcloud.com') {
+        platform = 'soundcloud';
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        if (host !== 'snd.sc' && segments.length >= 1 && !SOUNDCLOUD_RESERVED_SEGMENTS.has(segments[0].toLowerCase())) {
+            accountHandle = `@${segments[0].toLowerCase()}`;
+        }
+        externalId = canonicalUrl;
     } else {
         platform = 'website';
         externalId = canonicalUrl;
@@ -247,10 +284,56 @@ export async function resolveMetadata(
         } catch (err: any) {
             if (err instanceof SsrfSecurityError) throw err;
         }
+    } else if (platform === 'soundcloud') {
+        title = 'SoundCloud Track';
+        try {
+            const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+            const res = await ssrfSafeFetch(oembedUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+            if (res.status === 200) {
+                const data = await res.json();
+                if (data.title) title = cleanXmlText(data.title);
+                if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+                if (data.author_url) {
+                    try {
+                        const parsedSlug = new URL(data.author_url).pathname.split('/').filter(Boolean)[0];
+                        if (parsedSlug && !SOUNDCLOUD_RESERVED_SEGMENTS.has(parsedSlug.toLowerCase())) {
+                            authorHandle = `@${parsedSlug.toLowerCase()}`;
+                        }
+                    } catch {}
+                }
+            }
+        } catch (err: any) {
+            if (err instanceof SsrfSecurityError) throw err;
+        }
+
+        if (!thumbnailUrl || title === 'SoundCloud Track') {
+            try {
+                const res = await ssrfSafeFetch(url, {
+                    timeoutMs: 5000,
+                    maxBytes: 1024 * 1024,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    },
+                });
+                if (res.status === 200) {
+                    const html = await res.text();
+                    const ogTitle = extractMetaProperty(html, 'og:title') || extractMetaProperty(html, 'twitter:title') || extractTagText(html, 'title');
+                    const ogImage = extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
+                    const ogPubDate = extractMetaProperty(html, 'article:published_time') || extractMetaProperty(html, 'og:article:published_time') || extractMetaProperty(html, 'date');
+                    if (ogTitle && title === 'SoundCloud Track') title = cleanXmlText(ogTitle);
+                    if (ogImage && !thumbnailUrl) thumbnailUrl = ogImage;
+                    if (ogPubDate) publishedAt = parseFeedDate(ogPubDate);
+                }
+            } catch (err: any) {
+                if (err instanceof SsrfSecurityError) throw err;
+            }
+        }
     } else if (platform === 'instagram') {
         title = 'Instagram Post';
         try {
-            const res = await ssrfSafeFetch(url, {
+            const embedUrl = extractInstagramEmbedUrl(url, externalId);
+            const targetUrl = embedUrl || url;
+            const res = await ssrfSafeFetch(targetUrl, {
                 timeoutMs: 5000,
                 maxBytes: 1024 * 1024,
                 headers: {
@@ -260,7 +343,7 @@ export async function resolveMetadata(
             if (res.status === 200) {
                 const html = await res.text();
                 const ogTitle = extractMetaProperty(html, 'og:title') || extractMetaProperty(html, 'twitter:title') || extractTagText(html, 'title');
-                const ogImage = extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
+                const ogImage = extractThumbnailFromEmbedHtml(html) || extractMetaProperty(html, 'og:image') || extractMetaProperty(html, 'twitter:image');
                 if (ogTitle) title = cleanXmlText(ogTitle);
                 if (ogImage) thumbnailUrl = ogImage;
             }
@@ -353,7 +436,7 @@ function matchOwnedChannel(
         }
 
         // If the URL has an explicit handle that conflicts with all member channels on that platform, reject it
-        if (platform === 'tiktok' || platform === 'instagram' || platform === 'youtube') {
+        if (platform === 'tiktok' || platform === 'instagram' || platform === 'youtube' || platform === 'soundcloud') {
             throw new PulseError('NOT_YOURS', `The account "${accountHandle}" in the URL does not match your owned channels.`);
         }
     }
@@ -383,7 +466,7 @@ function matchOwnedChannel(
     return primary || compatible[0];
 }
 
-function rowToPulseFeedCard(itemId: string): PulseFeedCard {
+export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     const r = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
@@ -402,7 +485,11 @@ function rowToPulseFeedCard(itemId: string): PulseFeedCard {
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: r.avatar_url || null,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.owner_pubkey}?size=thumb`)
+            : null,
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -414,8 +501,9 @@ function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     };
 }
 
-export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
+export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps): Router {
     const router = new Router();
+    const thumbnailService = (deps as PulseSubmitRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
 
     // Prepare statements outside request and transaction loops (Contract A Rule 4)
     const stmtFindActiveByExternalId = db.prepare(
@@ -470,6 +558,26 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
              source, muted, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 0, ?, ?)`
     );
+    const stmtRestoreOauthItem = db.prepare(
+        `UPDATE pulse_items
+            SET deleted_at = NULL,
+                url = ?,
+                title = ?,
+                thumbnail_url = ?,
+                published_at = COALESCE(?, published_at, ?),
+                category = ?,
+                source = 'oauth',
+                muted = 0,
+                updated_at = ?
+          WHERE id = ?`
+    );
+    const stmtInsertOauthItem = db.prepare(
+        `INSERT INTO pulse_items
+            (id, channel_id, owner_pubkey, platform, external_id,
+             url, title, thumbnail_url, published_at, category,
+             source, muted, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'oauth', 0, ?, ?)`
+    );
     const stmtUpdateChannelWatermark = db.prepare(
         `UPDATE creator_channels
             SET post_count_seen = ?, updated_at = ?
@@ -509,6 +617,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         if (!rawUrl) {
             ctx.status = 400;
             ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            return;
+        }
+
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
             return;
         }
 
@@ -573,18 +687,22 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         const body = (ctx as any).requestBody || {};
         const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
         const requestedChannelId = typeof body.channelId === 'string' ? body.channelId.trim() : undefined;
+        // The title the PWA sends back here is the one OUR OWN /preview resolved from the
+        // page's OpenGraph tags, and PulseIntakePage gives the user no field to edit it. A
+        // 400 on a long title would lock them out of posting a link they cannot shorten, so
+        // this is bounded by truncation, not rejection.
         const customTitle = typeof body.title === 'string' && body.title.trim()
-            ? cleanXmlText(body.title.trim()).slice(0, 500)
+            ? cleanXmlText(body.title.trim()).slice(0, MAX_ITEM_TITLE_LENGTH)
             : undefined;
 
         let customThumbnailUrl: string | undefined;
         if (typeof body.thumbnailUrl === 'string' && body.thumbnailUrl.trim()) {
             const trimmedThumb = body.thumbnailUrl.trim();
-            if (trimmedThumb.length <= 2048 && /^https?:\/\//i.test(trimmedThumb)) {
+            if (trimmedThumb.length <= MAX_ITEM_THUMBNAIL_URL_LENGTH && /^https?:\/\//i.test(trimmedThumb)) {
                 customThumbnailUrl = trimmedThumb;
             } else {
                 ctx.status = 400;
-                ctx.body = { error: 'invalid_thumbnail_url', message: 'Thumbnail URL must be a valid HTTP or HTTPS URL under 2048 characters.' };
+                ctx.body = { error: 'invalid_thumbnail_url', message: `Thumbnail URL must be a valid HTTP or HTTPS URL under ${MAX_ITEM_THUMBNAIL_URL_LENGTH} characters.` };
                 return;
             }
         }
@@ -594,6 +712,12 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         if (!rawUrl) {
             ctx.status = 400;
             ctx.body = { error: 'invalid_url', message: 'URL is required.' };
+            return;
+        }
+
+        if (rawUrl.length > MAX_ITEM_URL_LENGTH) {
+            ctx.status = 400;
+            ctx.body = { error: 'url_too_long', message: `URL exceeds maximum length of ${MAX_ITEM_URL_LENGTH} characters.` };
             return;
         }
 
@@ -615,7 +739,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
             const now = new Date().toISOString();
             const finalPublishedAt = meta.publishedAt || now;
 
-            let finalItemId: string;
+            let finalItemId = '';
             let isDeduplicated = false;
 
             db.transaction(() => {
@@ -670,6 +794,15 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
                     isDeduplicated = false;
                 }
             })();
+
+            // Ingest image bytes while the thumbnail URL is fresh
+            if (finalThumbnailUrl && /^https?:\/\//i.test(finalThumbnailUrl)) {
+                try {
+                    await thumbnailService.ingestThumbnail(finalItemId!, finalThumbnailUrl);
+                } catch (err: any) {
+                    logger.warn('SYS', `[PulseSubmit] Failed to ingest thumbnail for item ${finalItemId}: ${err?.message || err}`);
+                }
+            }
 
             const item = rowToPulseFeedCard(finalItemId!);
             ctx.body = { success: true, item, deduplicated: isDeduplicated };
@@ -772,6 +905,7 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
 
         const now = new Date().toISOString();
         scrubPulseItems({ id: itemId, ownerPubkey: actor }, now);
+        thumbnailService.delete(itemId);
 
         ctx.body = { success: true };
     });
@@ -836,6 +970,245 @@ export function createPulseSubmitRoutes(_deps: RouteDeps): Router {
         }
 
         ctx.body = { nudges };
+    });
+
+    /**
+     * 6. GET /api/pulse/oauth/config
+     * Public read. Returns platform OAuth availability and client identifiers.
+     */
+    router.get('/api/pulse/oauth/config', async (ctx) => {
+        ctx.body = getPulseOAuthConfig();
+    });
+
+    /**
+     * 7. POST /api/member/pulse/oauth-ingest
+     * Takes { channelId, items: Array<{ url, title, thumbnailUrl, publishedAt, externalId, category }> }.
+     * Verifies channel ownership (owner_pubkey = ctx.state.actor).
+     * Ingests items as OAuth-sourced, deduplicating against existing pulse_items rows.
+     */
+    router.post('/api/member/pulse/oauth-ingest', async (ctx) => {
+        const actor = ctx.state.actor;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Signed request required' };
+            return;
+        }
+
+        const body = (ctx as any).requestBody || {};
+
+        // 1. Total payload size check (protects against multi-megabyte payloads)
+        const payloadBytes = (ctx as any).rawBody
+            ? Buffer.byteLength((ctx as any).rawBody)
+            : Buffer.byteLength(JSON.stringify(body));
+        if (payloadBytes > MAX_OAUTH_INGEST_PAYLOAD_BYTES) {
+            ctx.status = 413;
+            ctx.body = {
+                error: 'payload_too_large',
+                message: `OAuth ingest payload exceeds maximum allowed size of ${MAX_OAUTH_INGEST_PAYLOAD_BYTES} bytes (received ${payloadBytes} bytes).`,
+            };
+            return;
+        }
+
+        const channelId = typeof body.channelId === 'string' ? body.channelId.trim() : '';
+        if (!channelId) {
+            ctx.status = 400;
+            ctx.body = { error: 'missing_field', message: 'channelId is required.' };
+            return;
+        }
+
+        const channel = stmtGetChannelById.get(channelId) as any;
+        if (!channel) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'Channel not found.' };
+            return;
+        }
+
+        if (channel.owner_pubkey !== actor) {
+            ctx.status = 403;
+            ctx.body = { error: 'not_yours', message: 'That is not your channel.' };
+            return;
+        }
+
+        // 2. Items array validation & batch size capping
+        if (!Array.isArray(body.items)) {
+            ctx.status = 400;
+            ctx.body = { error: 'invalid_items', message: 'items must be an array.' };
+            return;
+        }
+
+        const rawItems = body.items;
+        if (rawItems.length > MAX_OAUTH_INGEST_ITEMS) {
+            ctx.status = 400;
+            ctx.body = {
+                error: 'too_many_items',
+                message: `Batch item count exceeds maximum limit of ${MAX_OAUTH_INGEST_ITEMS} (received ${rawItems.length}).`,
+            };
+            return;
+        }
+
+        // 3. Per-item sanitising upfront, before the SQLite write lock is acquired.
+        //
+        // These items are NOT authored by the client — they are whatever TikTok's Display
+        // API or Instagram Graph handed the phone, verbatim. So a single oversized field is
+        // an upstream anomaly, not client misbehaviour, and must not cost the member the
+        // other 19 videos in the batch: TikTok captions run to 2,200 characters and
+        // apps/native/utils/pulse-oauth.ts falls back to v.video_description when v.title
+        // is empty, which is most videos. Worse, that client swallows a non-2xx and still
+        // reports "20 synced", so a 400 here would be a silent, permanent sync failure.
+        //
+        // The title is therefore truncated and the rest of the oversized fields drop their
+        // item, matching what the transaction loop already did for a bad URL. The bound is
+        // still enforced before the lock is taken, which is what the DoS fix is for; only
+        // the blast radius of one bad item changes.
+        const items: Record<string, any>[] = [];
+        let skippedCount = 0;
+        for (const rawItem of rawItems) {
+            if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) { skippedCount++; continue; }
+            if (typeof rawItem.url === 'string' && rawItem.url.length > MAX_ITEM_URL_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.length > MAX_ITEM_THUMBNAIL_URL_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.externalId === 'string' && rawItem.externalId.length > MAX_ITEM_EXTERNAL_ID_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.publishedAt === 'string' && rawItem.publishedAt.length > MAX_ITEM_PUBLISHED_AT_LENGTH) { skippedCount++; continue; }
+            if (typeof rawItem.category === 'string' && rawItem.category.length > MAX_ITEM_CATEGORY_LENGTH) { skippedCount++; continue; }
+
+            items.push(
+                typeof rawItem.title === 'string' && rawItem.title.length > MAX_ITEM_TITLE_LENGTH
+                    ? { ...rawItem, title: rawItem.title.slice(0, MAX_ITEM_TITLE_LENGTH) }
+                    : rawItem
+            );
+        }
+
+        const now = new Date().toISOString();
+        const results: PulseFeedCard[] = [];
+        const itemsToCache: Array<{ id: string; url: string }> = [];
+        let deduplicatedCount = 0;
+
+        try {
+            db.transaction(() => {
+                for (const rawItem of items) {
+                    const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
+                    if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
+
+                    let externalId: string | null = typeof rawItem.externalId === 'string' && rawItem.externalId.trim()
+                        ? rawItem.externalId.trim()
+                        : null;
+                    let canonicalUrl = itemUrl;
+
+                    try {
+                        const identified = identifyPlatformAndExternalId(itemUrl);
+                        if (!externalId) externalId = identified.externalId;
+                        canonicalUrl = identified.canonicalUrl;
+                    } catch {
+                        // Fall back to provided url
+                    }
+
+                    // Truncated again after cleanXmlText, which decodes entities and can
+                    // change the length either way; the pre-loop bounds the work, this
+                    // bounds what actually lands in the column.
+                    const title = typeof rawItem.title === 'string' && rawItem.title.trim()
+                        ? cleanXmlText(rawItem.title.trim()).slice(0, MAX_ITEM_TITLE_LENGTH)
+                        : (channel.platform === 'tiktok' ? 'TikTok Video' : 'Post');
+
+                    let thumbnailUrl: string | null = null;
+                    if (typeof rawItem.thumbnailUrl === 'string' && rawItem.thumbnailUrl.trim()) {
+                        const trimmedThumb = rawItem.thumbnailUrl.trim();
+                        // Length was already bounded by the pre-loop; this is the scheme check.
+                        if (/^https?:\/\//i.test(trimmedThumb)) {
+                            thumbnailUrl = trimmedThumb;
+                        } else {
+                            // Refuse the item outright if the thumbnail scheme is unsafe.
+                            continue;
+                        }
+                    }
+
+                    const itemCategory = typeof rawItem.category === 'string' && CHANNEL_CATEGORIES.includes(rawItem.category as ChannelCategory)
+                        ? (rawItem.category as ChannelCategory)
+                        : (channel.category || 'other');
+
+                    const publishedAt = typeof rawItem.publishedAt === 'string' && rawItem.publishedAt.trim()
+                        ? parseFeedDate(rawItem.publishedAt.trim()) || now
+                        : now;
+
+                    let finalItemId: string;
+
+                    const existing = (externalId
+                        ? stmtFindExistingByExternalId.get(channel.id, externalId)
+                        : stmtFindExistingByUrl.get(channel.id, canonicalUrl)) as any;
+
+                    if (existing) {
+                        finalItemId = existing.id;
+                        if (existing.deleted_at !== null) {
+                            // Restore tombstoned row
+                            stmtRestoreOauthItem.run(
+                                canonicalUrl,
+                                title,
+                                thumbnailUrl,
+                                publishedAt,
+                                now,
+                                itemCategory,
+                                now,
+                                existing.id
+                            );
+                        } else {
+                            // Update active item
+                            stmtUpdateActiveItem.run(
+                                title,
+                                thumbnailUrl,
+                                itemCategory,
+                                now,
+                                existing.id
+                            );
+                            deduplicatedCount++;
+                        }
+                    } else {
+                        finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
+                        stmtInsertOauthItem.run(
+                            finalItemId,
+                            channel.id,
+                            actor,
+                            channel.platform,
+                            externalId,
+                            canonicalUrl,
+                            title,
+                            thumbnailUrl,
+                            publishedAt,
+                            itemCategory,
+                            now,
+                            now
+                        );
+                    }
+
+                    try {
+                        results.push(rowToPulseFeedCard(finalItemId));
+                    } catch { }
+
+                    if (thumbnailUrl) {
+                        itemsToCache.push({ id: finalItemId, url: thumbnailUrl });
+                    }
+                }
+
+                // Advance watermark if channel has post_count_seen
+                if (channel.post_count_seen !== null && rawItems.length > channel.post_count_seen) {
+                    stmtUpdateChannelWatermark.run(rawItems.length, now, channel.id, actor);
+                }
+            })();
+
+            // Fill the thumbnail cache behind the response, three fetches at a time.
+            // Awaiting up to 50 downloads here put the member's sync behind a minute of
+            // upstream latency and every buffer on the heap at once; the signed URLs stay
+            // valid for days, so seconds later is just as fresh.
+            thumbnailService.queueIngest(itemsToCache);
+
+            ctx.body = {
+                success: true,
+                count: results.length,
+                skippedCount,
+                deduplicatedCount,
+                items: results,
+            };
+        } catch (err: any) {
+            ctx.status = 500;
+            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to ingest OAuth items.' };
+        }
     });
 
     return router;

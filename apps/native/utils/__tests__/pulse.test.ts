@@ -12,6 +12,8 @@ import {
     fetchPulseFeed,
     getFixturePulseFeed,
     mutePulseItem,
+    reportPulseItem,
+    canReportPulseItem,
     formatRelativeTime,
     PULSE_FIXTURE_ITEMS,
     type PulseFeedItem,
@@ -131,13 +133,19 @@ describe('pulse utility (native)', () => {
             );
         });
 
-        it('falls back to fixture when anchorUrl is null on initial fetch', async () => {
+        // These three used to assert the OPPOSITE — that an unreachable node yields the
+        // fixture. The fixture is fabricated content: it attributes invented posts to a
+        // named community business and one links to a Rickroll. Every path below is
+        // ordinary in production (no anchor node, a node without the endpoint, or simply
+        // being offline, which is normal for our users), so the old behaviour shipped
+        // invented posts into a real social feed. The screen has an honest empty state.
+        it('returns an empty feed, NOT the fixture, when anchorUrl is null', async () => {
             vi.mocked(anchorUrl).mockResolvedValueOnce(null);
             const res = await fetchPulseFeed();
-            expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
+            expect(res.items).toEqual([]);
         });
 
-        it('falls back to fixture when node returns 404/500 on initial fetch', async () => {
+        it('returns an empty feed, NOT the fixture, when the node returns 404/500', async () => {
             global.fetch = vi.fn().mockResolvedValueOnce({
                 ok: false,
                 status: 404,
@@ -145,12 +153,27 @@ describe('pulse utility (native)', () => {
             });
 
             const res = await fetchPulseFeed();
-            expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
+            expect(res.items).toEqual([]);
         });
 
-        it('falls back to fixture when network error throws on initial fetch', async () => {
+        it('returns an empty feed, NOT the fixture, when the network throws', async () => {
             global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
             const res = await fetchPulseFeed();
+            expect(res.items).toEqual([]);
+        });
+
+        it('no fabricated item can reach a shipping build through the offline path', async () => {
+            // The specific thing that must never appear in front of a user.
+            const fabricatedUrls = PULSE_FIXTURE_ITEMS.map(i => i.url).filter((u): u is string => !!u);
+            expect(fabricatedUrls.some(u => u.includes('dQw4w9WgXcQ'))).toBe(true); // it IS in the fixture
+            vi.mocked(anchorUrl).mockResolvedValueOnce(null);
+            const res = await fetchPulseFeed();
+            expect(res.items.map(i => i.url)).not.toEqual(expect.arrayContaining(fabricatedUrls));
+        });
+
+        it('still serves the fixture when a caller asks for it explicitly', async () => {
+            // Tests and local UI work opt in; nothing implicit does.
+            const res = await fetchPulseFeed({ forceFixture: true });
             expect(res.items.length).toBe(PULSE_FIXTURE_ITEMS.length);
         });
 
@@ -221,5 +244,50 @@ describe('pulse utility (native)', () => {
 
             await expect(mutePulseItem('item_1', true, mockIdentity)).rejects.toThrow('Not your item to mute');
         });
+    });
+});
+
+describe('reporting a Pulse item (native)', () => {
+    const identity = { publicKey: 'viewer-pub', privateKey: 'viewer-priv' } as any;
+    const item = {
+        id: 'item_abc', ownerPubkey: 'owner-pub', callsign: 'Kayla', avatarUrl: null, platform: 'youtube',
+        category: 'craft', url: 'https://youtube.com/watch?v=abc', title: 'Clip', thumbnailUrl: null,
+        publishedAt: null, source: 'manual', isVerified: false,
+    } as PulseFeedItem;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(anchorUrl).mockResolvedValue('https://test.beanpool.org');
+    });
+
+    it('offers Report only for a signed-in viewer on an item that is not theirs', () => {
+        expect(canReportPulseItem(item, 'viewer-pub')).toBe(true);
+        expect(canReportPulseItem(item, 'owner-pub')).toBe(false);
+        expect(canReportPulseItem(item, null)).toBe(false);
+        expect(canReportPulseItem({ ...item, id: 'item_fix_1' }, 'viewer-pub')).toBe(false);
+    });
+
+    it('sends a signed report naming the Pulse item and its owner', async () => {
+        vi.mocked(signedPost).mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) } as any);
+        const res = await reportPulseItem(item, 'Offensive content', identity);
+        expect(res.success).toBe(true);
+        expect(signedPost).toHaveBeenCalledWith(
+            'https://test.beanpool.org',
+            '/api/reports',
+            { reporterPubkey: 'viewer-pub', targetPubkey: 'owner-pub', targetPulseItemId: 'item_abc', reason: 'Offensive content' },
+            identity,
+        );
+    });
+
+    it("surfaces the node's refusal", async () => {
+        vi.mocked(signedPost).mockResolvedValueOnce({
+            ok: false, status: 404, json: async () => ({ error: 'not_found', message: 'That Pulse item no longer exists.' }),
+        } as any);
+        await expect(reportPulseItem(item, 'Spam or scam', identity)).rejects.toThrow('That Pulse item no longer exists.');
+    });
+
+    it('requires an identity', async () => {
+        await expect(reportPulseItem(item, 'Spam or scam', null)).rejects.toThrow(/Identity required/);
+        expect(signedPost).not.toHaveBeenCalled();
     });
 });

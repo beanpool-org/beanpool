@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, AppState, type AppStateStatus } from 'react-native';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { colors } from '../constants/colors';
+import { withJitter } from '../utils/jitter';
 
 function formatTimeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -17,15 +18,49 @@ export function SyncStatus() {
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
+        let interval: ReturnType<typeof setInterval> | null = null;
+        let cancelled = false;
+
         async function checkSync() {
             const time = await getLastSyncTime();
+            if (cancelled) return; // resolved after unmount
             setLastSync(time);
             setNow(Date.now()); // Force re-render even if time is identical
         }
-        
-        checkSync();
-        const interval = setInterval(checkSync, 10000);
-        return () => clearInterval(interval);
+
+        const startPolling = () => {
+            if (!interval) {
+                checkSync();
+                interval = setInterval(checkSync, withJitter(10000));
+            }
+        };
+
+        const stopPolling = () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = null;
+            }
+        };
+
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                startPolling();
+            } else {
+                stopPolling();
+            }
+        };
+
+        if (AppState.currentState === 'active') {
+            startPolling();
+        }
+
+        const sub = AppState.addEventListener('change', handleAppStateChange);
+
+        return () => {
+            cancelled = true;
+            stopPolling();
+            sub.remove();
+        };
     }, []);
 
     // For the native UI, if we synced within the last 5 minutes, we consider it 'Online / Synced'.

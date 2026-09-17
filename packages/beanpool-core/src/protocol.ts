@@ -37,6 +37,7 @@ export const PROTOCOL_CONSTANTS = {
     // saturating at the top (no single account runs away toward the cap).
     // Tuning: lower K = credit reached with less value (more generous); higher K = stricter.
     TRUST_CURVE_K: 5000,
+    PER_COUNTERPARTY_VOLUME_CAP: 500,  // Single source of truth: cap on volume to a single partner counting toward earned credit
 
     // Growth Weights — LEGACY (count-based; superseded by the value curve above in Trust Model v2).
     // Retained only for the deprecated calculateDynamicFloor() mirror; not used at runtime.
@@ -69,6 +70,12 @@ export const PROTOCOL_CONSTANTS = {
     // === Transaction Guardrails ===
     TRANSACTION_WARNING_THRESHOLD: 0.5, // Warn when using >50% of remaining credit
 } as const;
+
+/**
+ * Single source of truth for volume caps across all nodes and clients.
+ * Volume with any single counterparty that counts toward earned credit.
+ */
+export const PER_COUNTERPARTY_VOLUME_CAP = PROTOCOL_CONSTANTS.PER_COUNTERPARTY_VOLUME_CAP;
 
 // ===================== TYPES =====================
 
@@ -230,7 +237,7 @@ export function formatTimeEquivalent(beans: number): string {
 export const SYNTHETIC_ACCOUNT_PREFIXES = ['escrow_', 'project_', 'bridge_'] as const;
 
 /** Reserved exact account ids. */
-export const SYNTHETIC_ACCOUNT_IDS = ['COMMONS_POOL', 'SYSTEM', 'genesis'] as const;
+export const SYNTHETIC_ACCOUNT_IDS = ['COMMONS_POOL', 'SYSTEM', 'system', 'genesis'] as const;
 
 /**
  * Is this account id a synthetic (non-person) account?

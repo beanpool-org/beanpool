@@ -42,6 +42,13 @@ export class SsrfSecurityError extends Error {
     }
 }
 
+export class ProhibitedContentTypeError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ProhibitedContentTypeError';
+    }
+}
+
 export class PayloadTooLargeError extends Error {
     constructor(message: string) {
         super(message);
@@ -429,7 +436,8 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
         validateIpString(addr.address);
     }
 
-    const selected = addresses[0];
+    // Prefer IPv4 to avoid IPv6 routing issues in container networks
+    const selected = addresses.find((addr) => addr.family === 4) || addresses[0];
     return { pinnedIp: selected.address, family: selected.family };
 }
 
@@ -638,14 +646,19 @@ export async function ssrfSafeFetch(
         const rawContentType = response.headers['content-type'] || '';
         const mimeType = rawContentType.split(';')[0].trim().toLowerCase();
 
-        if (mimeType && allowedTypes.length > 0) {
-            const isAllowed = allowedTypes.some((allowed) =>
-                allowed === '*/*' || mimeType === allowed.toLowerCase()
-            );
-            if (!isAllowed) {
-                response.cleanup();
-                response.incoming.destroy();
-                throw new SsrfSecurityError(`Prohibited Content-Type: ${mimeType}`);
+        // Only enforce allowedContentTypes on successful 2xx responses.
+        // For non-2xx responses (e.g. 403, 404, 500), upstream CDNs/servers return error
+        // bodies (text/plain, text/html) that would otherwise mask the actual HTTP status.
+        if (status >= 200 && status < 300) {
+            if (mimeType && allowedTypes.length > 0) {
+                const isAllowed = allowedTypes.some((allowed) =>
+                    allowed === '*/*' || mimeType === allowed.toLowerCase()
+                );
+                if (!isAllowed) {
+                    response.cleanup();
+                    response.incoming.destroy();
+                    throw new ProhibitedContentTypeError(`Prohibited Content-Type: ${mimeType}`);
+                }
             }
         }
 
@@ -1529,6 +1542,80 @@ export async function buildYouTubeFeedUrl(urlOrHandle: string): Promise<string |
     return null;
 }
 
+/**
+ * Extract numeric SoundCloud user ID from profile HTML.
+ * Inspects iOS app meta tags, Google Play meta tags, api links, and schema metadata.
+ */
+export function extractSoundCloudUserIdFromHtml(html: string): string | null {
+    if (!html || typeof html !== 'string') return null;
+    const match = /soundcloud:\/\/(?:users|user):(\d+)/i.exec(html)
+        || /soundcloud:(?:users|user):(\d+)/i.exec(html)
+        || /["']soundcloud:(?:users|user):(\d+)["']/i.exec(html)
+        || /api\.soundcloud\.com\/users\/(\d+)/i.exec(html);
+    return match ? match[1] : null;
+}
+
+/**
+ * Build or resolve a SoundCloud creator's public RSS feed URL.
+ */
+export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<string | null> {
+    if (!urlOrHandle) return null;
+    const trimmed = urlOrHandle.trim();
+
+    // 1. Direct feeds.soundcloud.com URL
+    if (trimmed.includes('feeds.soundcloud.com/users/soundcloud:users:')) {
+        return trimmed;
+    }
+
+    // 2. Normalise to full soundcloud.com URL
+    let targetUrl: string;
+    if (/^https?:\/\//i.test(trimmed)) {
+        try {
+            const parsed = new URL(trimmed);
+            const host = parsed.hostname.toLowerCase();
+            if (host === 'soundcloud.com' || host.endsWith('.soundcloud.com') || host === 'snd.sc') {
+                targetUrl = trimmed;
+            } else {
+                return null;
+            }
+        } catch {
+            return null;
+        }
+    } else if (trimmed.startsWith('@')) {
+        targetUrl = `https://soundcloud.com/${trimmed.slice(1)}`;
+    } else {
+        targetUrl = `https://soundcloud.com/${trimmed}`;
+    }
+
+    try {
+        const response = await ssrfSafeFetch(targetUrl, {
+            timeoutMs: 8000,
+            maxBytes: 1024 * 1024,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+            },
+        });
+
+        if (response.status === 200) {
+            const html = await response.text();
+            const directFeed = discoverFeedUrlFromHtml(html, targetUrl);
+            if (directFeed && directFeed.includes('feeds.soundcloud.com')) {
+                return directFeed;
+            }
+            const userId = extractSoundCloudUserIdFromHtml(html);
+            if (userId) {
+                return `https://feeds.soundcloud.com/users/soundcloud:users:${userId}/sounds.rss`;
+            }
+            return directFeed || null;
+        }
+    } catch {
+        // Fetch failed or blocked by SSRF
+    }
+
+    return null;
+}
+
 export async function resolveChannel(channelId: string): Promise<{ count: number; error?: string }> {
     const channel = db.prepare(
         `SELECT id, owner_pubkey, platform, url, handle, category, supports_autolist,
@@ -1614,6 +1701,15 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 maxBytes: 256 * 1024,
             });
 
+            // A 502 from the site's CDN returns an HTML error page, which has no
+            // <link rel="alternate"> in it — so without this check a momentary outage was
+            // read as "this site has no feed" and set supports_autolist = 0 permanently.
+            // The default allowedContentTypes includes text/html, so this was never caught
+            // upstream either.
+            if (initialResp.status < 200 || initialResp.status >= 300) {
+                throw new Error(`Upstream site returned HTTP ${initialResp.status}`);
+            }
+
             const initialText = await initialResp.text();
             const trimmedLower = initialText.slice(0, 2000).trimStart().toLowerCase();
             const isHtml = trimmedLower.startsWith('<!doctype html') || trimmedLower.startsWith('<html') || /<html[\s>]/i.test(trimmedLower);
@@ -1641,6 +1737,29 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                     return { count: 0, error: noFeedMsg };
                 }
             }
+        } else if (channel.platform === 'soundcloud') {
+            const initialUrl = channel.url;
+            if (!initialUrl) {
+                return { count: 0, error: 'No URL available' };
+            }
+            feedUrl = await buildSoundCloudFeedUrl(initialUrl);
+            if (feedUrl) {
+                if (feedUrl !== initialUrl && feedUrl.includes('feeds.soundcloud.com')) {
+                    db.prepare(
+                        `UPDATE creator_channels SET url = ?, updated_at = ? WHERE id = ?`
+                    ).run(feedUrl, now, channel.id);
+                }
+            } else {
+                const nextFails = (channel.fail_count || 0) + 1;
+                const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
+                const errMsg = "SoundCloud profile has no public RSS feed — share tracks manually";
+                db.prepare(
+                    `UPDATE creator_channels
+                        SET fail_count = ?, last_error = ?, is_stale = ?, updated_at = ?
+                      WHERE id = ?`
+                ).run(nextFails, errMsg, isStale, now, channel.id);
+                return { count: 0, error: errMsg };
+            }
         } else {
             feedUrl = channel.url;
         }
@@ -1655,11 +1774,32 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 timeoutMs: 8000,
                 maxBytes: 2 * 1024 * 1024,
             });
+            // Same trap, worse ending: an HTTP 500 error page parsed as feed XML yields
+            // zero items, and the success path below then wrote supports_autolist = 1,
+            // fail_count = 0, last_error = NULL — reporting a dead feed as a healthy poll
+            // with no new posts, and wiping the failure counter that would have surfaced it.
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(`Upstream feed returned HTTP ${response.status}`);
+            }
             xml = await response.text();
         }
 
         const parsed = parseFeedXml(xml, feedUrl);
-        const thirtyDaysAgoMs = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        // Ingest all parsed items without an intake age filter. A 30-day intake window
+        // silently dropped every item from any channel whose latest post was over a month old,
+        // which is most channels — see docs/pulse-learn-lane.md section 0.2.
+        // Cap intake at the retention budget. Without this the dedupe index — which is
+        // PARTIAL (`WHERE external_id IS NOT NULL AND deleted_at IS NULL`) — lets a
+        // tombstoned row fall out of the index, so the next resolve does not conflict with
+        // it and inserts a brand new duplicate. A 50-item blog feed would then loop every
+        // five minutes: resolve inserts 50, prune tombstones 30, resolve re-inserts those
+        // 30 as new rows, forever. Taking only the newest N means prune never has anything
+        // of this channel's to tombstone, so the cycle cannot start. It also bounds the
+        // blast radius of an RSS feed that serves hundreds of items in one document.
+        const intake = [...parsed.items]
+            .sort((a, b) => (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0))
+            .slice(0, PULSE_KEEP_PER_CHANNEL);
+
         let insertedOrUpdated = 0;
 
         const insertItem = db.prepare(
@@ -1677,11 +1817,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         );
 
         db.transaction(() => {
-            for (const item of parsed.items) {
-                const pubMs = Date.parse(item.publishedAt);
-                if (!isNaN(pubMs) && pubMs < thirtyDaysAgoMs) {
-                    continue;
-                }
+            for (const item of intake) {
 
                 const itemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                 insertItem.run(
@@ -1760,19 +1896,29 @@ export function scrubPulseItems(
     return info.changes;
 }
 
+export const PULSE_KEEP_PER_CHANNEL = 20;
+
 /**
- * Prunes pulse items older than 30 days by tombstoning them.
+ * Retention: keep the latest N items per channel, replacing the time pruner.
+ * Tombstones every non-curated item that is not among the newest keepPerChannel
+ * for its channel, ordered by published_at DESC, id DESC. Curated items (curated = 1)
+ * are never pruned, and are excluded from the keep-set too — otherwise they would eat
+ * into a channel's budget and silently retain fewer of the member's own posts.
  */
-export function prunePulseItems(maxAgeDays = 30): number {
+export function prunePulseItems(keepPerChannel = PULSE_KEEP_PER_CHANNEL): number {
     const now = new Date().toISOString();
-    const cutoffMs = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
-    const cutoff = new Date(cutoffMs).toISOString();
 
     const info = db.prepare(
         `UPDATE pulse_items
             SET deleted_at = ?, url = NULL, title = NULL, thumbnail_url = NULL, updated_at = ?
-          WHERE deleted_at IS NULL AND published_at < ?`
-    ).run(now, now, cutoff);
+          WHERE deleted_at IS NULL AND curated = 0 AND id NOT IN (
+              SELECT id FROM pulse_items p2
+               WHERE p2.channel_id = pulse_items.channel_id AND p2.deleted_at IS NULL
+                 AND p2.curated = 0
+               ORDER BY p2.published_at DESC, p2.id DESC
+               LIMIT ?
+          )`
+    ).run(now, now, keepPerChannel);
 
     return info.changes;
 }
@@ -1789,7 +1935,7 @@ export async function runPulseSchedulerTick(): Promise<void> {
     isSchedulerRunning = true;
 
     try {
-        prunePulseItems(30);
+        prunePulseItems(PULSE_KEEP_PER_CHANNEL);
 
         const channels = db.prepare(
             `SELECT id FROM creator_channels
@@ -1912,7 +2058,11 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: r.avatar_url || null,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.owner_pubkey}?size=thumb`)
+            : null,
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -1960,7 +2110,11 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
             id: row.id,
             ownerPubkey: row.owner_pubkey,
             callsign: row.callsign || 'Neighbour',
-            avatarUrl: row.avatar_url || null,
+            avatarUrl: row.avatar_url
+                ? (row.avatar_url.startsWith('bundled://')
+                    ? row.avatar_url
+                    : `/api/avatar/${row.owner_pubkey}?size=thumb`)
+                : null,
             platform: row.platform,
             category: row.category,
             url: row.url || null,

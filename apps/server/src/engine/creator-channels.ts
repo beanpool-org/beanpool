@@ -26,17 +26,17 @@ import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
 
-export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'website' | 'rss';
-export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'other';
+export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
+export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
 
 export const CHANNEL_PLATFORMS: readonly ChannelPlatform[] =
-    ['youtube', 'tiktok', 'instagram', 'facebook', 'website', 'rss'] as const;
+    ['youtube', 'tiktok', 'instagram', 'facebook', 'soundcloud', 'website', 'rss'] as const;
 // A channel is CONTENT, not produce. These started as the marketplace taxonomy — what a member
 // sells — which left a community org, a project account or a news feed with nowhere to go but
 // 'other'. `community` is additive: every other id keeps its meaning and its stored rows, only the
 // labels the client renders were rewritten.
 export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
-    ['community', 'food', 'craft', 'business', 'repair', 'art', 'other'] as const;
+    ['community', 'food', 'craft', 'business', 'repair', 'art', 'learn', 'other'] as const;
 
 /**
  * Platforms whose items the node can list unaided.
@@ -47,7 +47,7 @@ export const CHANNEL_CATEGORIES: readonly ChannelCategory[] =
  * or a phone. Those arrive one item at a time until a member connects OAuth, which flips
  * `supports_autolist` on the row rather than changing this map.
  */
-const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'rss', 'website']);
+const AUTOLIST_PLATFORMS: ReadonlySet<ChannelPlatform> = new Set<ChannelPlatform>(['youtube', 'soundcloud', 'rss', 'website']);
 
 /**
  * Whether this specific URL can be listed, not just its platform.
@@ -61,6 +61,10 @@ function canAutolist(platform: ChannelPlatform, url: string): boolean {
     if (platform === 'youtube') {
         // Only the channel-shaped forms have an RSS feed behind them.
         return /\/(channel|c|user)\/|\/@|\/feeds\/videos\.xml/.test(url);
+    }
+    if (platform === 'soundcloud') {
+        // SoundCloud profiles attempt feed discovery against feeds.soundcloud.com.
+        return true;
     }
     if (platform === 'website') {
         // Websites start autolist-enabled so the resolver can perform initial feed discovery.
@@ -166,6 +170,7 @@ const PLATFORM_HOSTS: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
     tiktok: ['tiktok.com', 'vm.tiktok.com'],
     instagram: ['instagram.com', 'instagr.am'],
     facebook: ['facebook.com', 'fb.com', 'fb.me', 'm.facebook.com'],
+    soundcloud: ['soundcloud.com', 'snd.sc', 'm.soundcloud.com'],
 };
 
 /**
@@ -180,6 +185,7 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
     tiktok: 'www.tiktok.com',
     instagram: 'www.instagram.com',
     facebook: 'www.facebook.com',
+    soundcloud: 'soundcloud.com',
 };
 
 /**
@@ -189,7 +195,7 @@ const CANONICAL_HOST: Record<Exclude<ChannelPlatform, 'website' | 'rss'>, string
  * on the short domain — rewriting `youtu.be/abc` to `www.youtube.com/abc` produces a 404, and the
  * member has no way to tell why the link they pasted stopped working.
  */
-const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me']);
+const SHORT_LINK_HOSTS: ReadonlySet<string> = new Set(['youtu.be', 'vm.tiktok.com', 'fb.me', 'snd.sc']);
 
 /** Tracking parameters that differ per share and would defeat de-duplication. */
 // Deliberately excludes `si`: it is a YouTube share parameter, and platform query strings are
@@ -259,10 +265,10 @@ const FB_PREFIX_DEPTH: ReadonlyMap<string, number> = new Map([
  */
 const PLATFORM_DISPLAY: Record<ChannelPlatform, string> = {
     youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram',
-    facebook: 'Facebook', website: 'website', rss: 'feed',
+    facebook: 'Facebook', soundcloud: 'SoundCloud', website: 'website', rss: 'feed',
 };
 const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
-    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', website: 'a', rss: 'a',
+    youtube: 'a', tiktok: 'a', instagram: 'an', facebook: 'a', soundcloud: 'a', website: 'a', rss: 'a',
 };
 
 /**
@@ -275,18 +281,24 @@ const PLATFORM_ARTICLE: Record<ChannelPlatform, string> = {
 const IG_RESERVED_SEGMENTS: ReadonlySet<string> =
     new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct']);
 
+/** SoundCloud site furniture paths that are not user channels. */
+export const SOUNDCLOUD_RESERVED_SEGMENTS: ReadonlySet<string> =
+    new Set(['discover', 'stream', 'upload', 'search', 'you', 'charts', 'messages', 'settings', 'stations', 'popular', 'tags', 'imprint', 'terms-of-use', 'pages', 'jobs', 'press', 'feed']);
+
 /**
  * Reject a bare handle that names a reserved path rather than an account.
  *
- * Only Instagram and Facebook can collide: TikTok and YouTube handles are stored under `/@...`, a
+ * Only Instagram, SoundCloud, and Facebook can collide: TikTok and YouTube handles are stored under `/@...`, a
  * namespace of their own that no reserved segment reaches.
  */
 function assertHandleNotReserved(platform: ChannelPlatform, handle: string): void {
     const reserved = platform === 'instagram'
         ? IG_RESERVED_SEGMENTS.has(handle)
-        : platform === 'facebook'
-            ? (FB_PREFIX_DEPTH.has(handle) || handle === 'profile.php')
-            : false;
+        : platform === 'soundcloud'
+            ? SOUNDCLOUD_RESERVED_SEGMENTS.has(handle)
+            : platform === 'facebook'
+                ? (FB_PREFIX_DEPTH.has(handle) || handle === 'profile.php')
+                : false;
     if (reserved) {
         throw new ChannelError('NO_HANDLE',
             `"${handle}" is a reserved ${PLATFORM_DISPLAY[platform]} address, not an account name.`);
@@ -347,6 +359,7 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
                 case 'instagram': return { url: `https://www.instagram.com/${h}/`, handle: `@${h}` };
                 case 'tiktok': return { url: `https://www.tiktok.com/@${h}`, handle: `@${h}` };
                 case 'youtube': return { url: `https://www.youtube.com/@${h}`, handle: `@${h}` };
+                case 'soundcloud': return { url: `https://soundcloud.com/${h}`, handle: `@${h}` };
                 case 'facebook': return { url: `https://www.facebook.com/${h}`, handle: h };
             }
         })();
@@ -415,6 +428,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     const fbProfileId = (platform === 'facebook' && /^\/profile\.php\/?$/i.test(parsed.pathname))
         ? parsed.searchParams.get('id')
         : null;
+    const ytVideoId = (platform === 'youtube' && /^\/watch\/?$/i.test(parsed.pathname))
+        ? parsed.searchParams.get('v')
+        : null;
     if (platform === 'website' || platform === 'rss') {
         // A feed URL's identity often lives in the query string —
         // `youtube.com/feeds/videos.xml?channel_id=UC…` is the autolist path itself, and
@@ -425,8 +441,12 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
             if (TRACKING_PARAMS.some(re => re.test(key))) parsed.searchParams.delete(key);
         }
         parsed.searchParams.sort();   // stable ordering, so one feed is one string
+    } else if (fbProfileId) {
+        parsed.search = `?id=${encodeURIComponent(fbProfileId)}`;
+    } else if (ytVideoId) {
+        parsed.search = `?v=${encodeURIComponent(ytVideoId)}`;
     } else {
-        parsed.search = fbProfileId ? `?id=${encodeURIComponent(fbProfileId)}` : '';
+        parsed.search = '';
     }
     parsed.hash = '';
     // The four platforms are https-only, so normalising their scheme is safe and helps
@@ -454,6 +474,9 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
     } else if (platform === 'tiktok' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
+    } else if (platform === 'youtube' && seg0 === 'watch' && ytVideoId) {
+        handle = null;
+        parsed.pathname = '/watch';
     } else if (platform === 'youtube' && segments[0]?.startsWith('@')) {
         handle = segments[0].toLowerCase();
         parsed.pathname = `/${handle}`;
@@ -476,6 +499,10 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
         // this member's chip.
         handle = ident;
         parsed.pathname = `/${seg0}/${ident}`;
+    } else if (platform === 'soundcloud' && segments.length >= 1 && !SOUNDCLOUD_RESERVED_SEGMENTS.has(seg0)) {
+        const h = segments[0].toLowerCase();
+        handle = `@${h}`;
+        parsed.pathname = `/${h}`;
     } else if (platform === 'facebook' && fbProfileId) {
         handle = `profile.php?id=${fbProfileId}`;
         parsed.pathname = '/profile.php';
@@ -519,7 +546,8 @@ export function normaliseChannelInput(platform: ChannelPlatform, raw: string): {
 
     // `instagram.com` on its own parses, passes the host check, and yields no handle — a valid URL
     // that points at no account. Storing it would put an empty chip on the member's profile.
-    if (!handle && !isShortLink && platform !== 'website' && platform !== 'rss') {
+    const isBareVideo = platform === 'youtube' && seg0 === 'watch' && !!ytVideoId;
+    if (!handle && !isShortLink && !isBareVideo && platform !== 'website' && platform !== 'rss') {
         throw new ChannelError('NO_HANDLE', 'That link does not point to an account. Try your handle.');
     }
 
@@ -869,3 +897,94 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
 
     return changed > 0;
 }
+
+/**
+ * Attach OAuth verification to a channel (The Pulse, Phase 5).
+ *
+ * Setting `oauth_verified_at` is a claim of cryptographic/platform proof that the authenticated
+ * member actually owns the connected platform account.
+ *
+ * Rules:
+ * 1. Takes owner from `ctx.state.actor` (ownerPubkey). Never trusts a body claim.
+ * 2. Confirms the channel belongs to this owner and is not deleted.
+ * 3. Confirms the connected platform matches the channel platform.
+ * 4. Confirms the platform username matches the channel's handle or URL (prevent attaching own OAuth to someone else's channel).
+ * 5. Sets `oauth_verified_at = now`, `supports_autolist = 1`, and updates `updated_at = now`.
+ */
+export function verifyChannelOauth(
+    ownerPubkey: string,
+    id: string,
+    proof: { platform: string; platformUsername: string }
+): CreatorChannel {
+    const row = db.prepare(
+        `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
+    ).get(id) as any;
+    if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+
+    if (row.platform !== proof.platform) {
+        throw new ChannelError('BAD_PLATFORM', `Channel platform is ${row.platform}, but verification is for ${proof.platform}.`);
+    }
+
+    const cleanUsername = (proof.platformUsername || '').replace(/^@/, '').toLowerCase().trim();
+    if (!cleanUsername) {
+        throw new ChannelError('EMPTY', 'Platform account username is required.');
+    }
+
+    const cleanHandle = (row.handle || '').replace(/^@/, '').toLowerCase().trim();
+    // normaliseChannelInput already clears .hash and strips tracking params on the way in, so this is defence for URLs that predate normalisation or arrive by another path
+    const urlWithoutQueryOrHash = (row.url || '').split(/[?#]/)[0];
+    const cleanUrl = urlWithoutQueryOrHash.toLowerCase();
+
+    // Check handle match or URL match
+    const matchesHandle = cleanHandle === cleanUsername;
+    const matchesUrl = cleanUrl.includes(`/@${cleanUsername}`) ||
+        cleanUrl.includes(`/${cleanUsername}/`) ||
+        cleanUrl.endsWith(`/${cleanUsername}`);
+
+    if (!matchesHandle && !matchesUrl) {
+        throw new ChannelError(
+            'ACCOUNT_MISMATCH',
+            `The connected ${PLATFORM_DISPLAY[row.platform as ChannelPlatform] || proof.platform} account (@${cleanUsername}) does not match this channel.`
+        );
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = ?,
+                supports_autolist = 1,
+                updated_at = ?
+          WHERE id = ? AND owner_pubkey = ?`
+    ).run(now, now, id, ownerPubkey);
+
+    return getChannel(id)!;
+}
+
+/**
+ * Disconnect OAuth verification from a channel (The Pulse, Phase 5).
+ *
+ * Drops `oauth_verified_at`, resets `supports_autolist` back to the platform's native capability,
+ * and leaves already ingested feed items intact.
+ */
+export function disconnectChannelOauth(ownerPubkey: string, id: string): CreatorChannel {
+    const row = db.prepare(
+        `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
+    ).get(id) as any;
+    if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
+    if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
+
+    const now = new Date().toISOString();
+    const nativeAutolist = canAutolist(row.platform as ChannelPlatform, row.url || '') ? 1 : 0;
+
+    db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = NULL,
+                supports_autolist = ?,
+                updated_at = ?
+          WHERE id = ? AND owner_pubkey = ?`
+    ).run(nativeAutolist, now, id, ownerPubkey);
+
+    return getChannel(id)!;
+}
+

@@ -25,13 +25,13 @@
     </nav>
     <section class="legal-content glass-panel">
         <h1>Privacy Policy</h1>
-        <p><strong style="color: #94a3b8;">Last Updated: April 1, 2026</strong></p>
+        <p><strong style="color: #94a3b8;">Last Updated: September 17, 2026</strong></p>
         
         <h2>1. Zero Knowledge & Decentralization</h2>
         <p>BeanPool is a peer-to-peer (P2P) localized protocol natively bypassing centralized tracking silos. Our systems are mathematically verifiable, functioning without a central corporate authority tracking your personal data. All cryptographic keypairs (your Ed25519 identity) are generated and stored securely within your device's hardware SecureStore / Secure Enclave. If you choose our encrypted SSO cloud backup, your private key shard is encrypted client-side before upload, ensuring no central operator can access your identity or funds.</p>
         
         <h2>2. 4-Tier Location Privacy</h2>
-        <p>Your physical home address is never broadcast in plain text. BeanPool provides 4-tier fuzzy location obfuscation (Regional, Postal Code, Neighborhood, Exact). You can participate in marketplace discovery and trade coordination without exposing your exact residence.</p>
+        <p>Your physical home address is never broadcast in plain text. BeanPool provides four location privacy tiers: Ghost (no GPS at all — you drop a pin by hand), Post-Only (a coordinate saved once, when you post), Zone (your position offset by up to ~2km), and Live (real-time, foreground only). You can participate in marketplace discovery and trade coordination without exposing your exact residence.</p>
 
         <h2>3. Data Collection Restrictions</h2>
         <p>We do not capture analytical telemetry, behavior-tracking metrics, or third-party marketing metadata. Your application communicates directly with the community nodes that you explicitly join and trust. Any marketplace Needs or Offers you create are broadcast strictly to the specific community ledger tied to your cryptographic callsign.</p>
@@ -39,8 +39,20 @@
         <h2>4. Account Eradication & Data Portability</h2>
         <p>You retain complete control to erase your identity at any point via the <strong>Settings -> Reset / Wipe Identity</strong> option. Deleting your local keys renders all your historical transactions cryptographically untamperable and your local identity permanently closed.</p>
         
-        <h2>5. Moderation & Safety Compliance</h2>
+        <h2>5. Moderation &amp; Safety Compliance</h2>
         <p>Because the platform enables users to broadcast public Needs and Offers within neighborhood networks, we enforce strict client-side blocking and reporting tools. Verified participants can sever, block, and report inappropriate content, which transmits signed cryptographic flags directly to community moderators to maintain safe, healthy local exchanges.</p>
+
+        <h2>6. Member-Connected Channels &amp; Platform Data (TikTok, Instagram &amp; Video Feeds)</h2>
+        <p>Members may optionally connect their external publishing accounts (such as TikTok, Instagram, YouTube, SoundCloud, or RSS feeds) to syndicate their public posts into the community Pulse feed. Connecting a platform is entirely voluntary and member-initiated.</p>
+        <p>When connecting an account via OAuth (TikTok or Instagram):</p>
+        <ul>
+            <li><strong>Device-Side Token Storage:</strong> You authorize your account directly with the platform provider. Platform OAuth access and refresh tokens are stored exclusively on your own device in secure hardware storage. Access tokens are never stored on or held by the community node database.</li>
+            <li><strong>Limited Scope &amp; No Private Data Access:</strong> BeanPool requests only the basic public profile permissions needed to verify channel ownership (such as username and public identifier) and list public videos or posts. The system does not access, read, or store your private messages, direct messages (DMs), follower or following lists, or private/unlisted content.</li>
+            <li><strong>What the Node Stores:</strong> When public posts are syndicated to the feed, the community node stores only public post metadata: the platform name, your channel identifier and member public key, the platform post identifier, the canonical post URL, the public post title or caption snippet, the preview thumbnail image URL, the publication timestamp, and your selected category. The node also keeps a cached copy of each post's preview image, described below.</li>
+            <li><strong>Preview Images Only &mdash; No Video or Audio Hosting:</strong> So that the feed loads on slow connections, and keeps working after a platform's image link expires, the community node fetches each post's preview thumbnail image and keeps a cached copy, which it can serve to the feed itself. Only still images are cached (JPEG, PNG, WebP, GIF or AVIF, at most 2&nbsp;MB each), in memory (up to 20&nbsp;MB, cleared when the node restarts) and on the node's disk (up to 100&nbsp;MB in total, with the least recently viewed images removed first when that limit is reached). Cached images are not copied to other nodes. The web app loads preview images through the node; the phone app loads them directly from the platform, so your phone contacts the platform's image servers when it shows a preview. Video and audio are never downloaded, copied, or re-hosted on the community node: content is played through each platform's official player or opened via an external link.</li>
+            <li><strong>Retention &amp; Scrubbing:</strong> The node keeps the 20 most recently published items from each connected channel. Items beyond those 20 are automatically pruned, typically within minutes of newer posts arriving; items are not removed on age alone. Curated learning content that BeanPool supplies to every node is exempt from this limit and contains no member data. When an item is pruned or deleted, the node records a tombstone deletion timestamp and immediately scrubs the post URL, title, and thumbnail URL to <code>NULL</code>, permanently erasing that data from the database. From that moment the node stops serving the item's cached preview image. If you delete a single post from the feed, its cached image is removed at the same time; when items are removed by pruning, by deleting a channel, or by deleting your account, the cached image file is removed from the node's disk the next time it is requested, or when it is displaced from the size-limited cache.</li>
+            <li><strong>Disconnecting &amp; Deleting Channels:</strong> You can disconnect an OAuth account at any time in the app, which immediately deletes the stored access token from your device and clears verification on the node (existing imported items remain until you delete them or the channel, or until newer posts from the same channel push them out of the 20 kept). If you delete a channel entirely, the channel link and handle are immediately scrubbed to <code>NULL</code> and all associated imported feed items are scrubbed from the node.</li>
+        </ul>
 
         <h2>Contact Administrator</h2>
         <p>For protocol inquiries or privacy concerns regarding your specific local community node, please contact your local node operator or email <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>.</p>

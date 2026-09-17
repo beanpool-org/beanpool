@@ -10,7 +10,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createIdentity, createIdentityFromMnemonic, importIdentity, updateCallsign, getMnemonic, hasMnemonic, seedViewedKey, type BeanPoolIdentity } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
-import { redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership, recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl } from '../lib/api';
+import {
+    redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
+    recordOnboardingEvent, initPairingApi, pollPairingApi, cancelPairingApi, getNodeApiUrl,
+} from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, decryptPairingPayload } from '@beanpool/core';
@@ -120,13 +123,18 @@ const BUNDLED_AVATARS = [
     { id: 'crystal',      label: 'Crystal' },
 ];
 
-function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
+/**
+ * Four equal columns that may shrink, with labels that wrap. The old row gave each step a fixed
+ * 4.5rem with unwrappable labels — 18rem plus connectors, which at 1.3x text pushed the first
+ * screen a new member sees out to 376px on a 320px phone.
+ */
+export function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
     const steps = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
     return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+        <div data-testid="onboarding-stepper" style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+            columnGap: '2px',
             marginBottom: '1.5rem',
             width: '100%',
         }}>
@@ -135,51 +143,53 @@ function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
                 const isActive = stepNum === step;
                 const isCompleted = stepNum < step;
                 return (
-                    <React.Fragment key={i}>
+                    <div key={i} style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        position: 'relative',
+                        minWidth: 0,
+                    }}>
                         {i > 0 && (
-                            <div style={{
-                                flex: 1,
+                            // Connector from the previous step's dot to this one's, 4px clear of each.
+                            <div aria-hidden="true" style={{
+                                position: 'absolute',
+                                top: '5px',
+                                right: 'calc(50% + 10px)',
+                                width: 'calc(100% - 18px)',
                                 height: '2px',
                                 backgroundColor: isCompleted || isActive ? '#22c55e' : '#e5e7eb',
-                                marginLeft: '4px',
-                                marginRight: '4px',
-                                marginTop: '-14px',
                             }} />
                         )}
                         <div style={{
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '6px',
+                            backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
+                            marginBottom: '6px',
                             display: 'flex',
-                            flexDirection: 'column',
                             alignItems: 'center',
-                            position: 'relative',
-                            width: '4.5rem',
+                            justifyContent: 'center',
+                            transition: 'all 0.3s',
                         }}>
-                            <div style={{
-                                width: '12px',
-                                height: '12px',
-                                borderRadius: '6px',
-                                backgroundColor: isCompleted ? '#22c55e' : isActive ? '#2563eb' : '#d1d5db',
-                                marginBottom: '6px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.3s',
-                            }}>
-                                {isCompleted && (
-                                    <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
-                                )}
-                            </div>
-                            <span style={{
-                                fontSize: '10px',
-                                color: isActive ? 'var(--text-primary)' : '#6b7280',
-                                fontWeight: isActive ? '700' : '500',
-                                transition: 'color 0.3s',
-                                whiteSpace: 'nowrap',
-                                textAlign: 'center',
-                            }}>
-                                {label}
-                            </span>
+                            {isCompleted && (
+                                <span style={{ color: '#fff', fontSize: '8px', fontWeight: '800' }}>✓</span>
+                            )}
                         </div>
-                    </React.Fragment>
+                        <span style={{
+                            fontSize: '10px',
+                            lineHeight: 1.2,
+                            color: isActive ? 'var(--text-primary)' : '#6b7280',
+                            fontWeight: isActive ? '700' : '500',
+                            transition: 'color 0.3s',
+                            whiteSpace: 'normal',
+                            overflowWrap: 'anywhere',
+                            textAlign: 'center',
+                            maxWidth: '100%',
+                        }}>
+                            {label}
+                        </span>
+                    </div>
                 );
             })}
         </div>
@@ -197,17 +207,7 @@ export function WelcomePage({ onComplete }: Props) {
     const [error, setError] = useState<string | null>(null);
 
     const [showRecovery, setShowRecovery] = useState(false);
-    const [recoveryMode, setRecoveryMode] = useState<'words' | 'social'>('words');
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
-
-    // Social Recovery state
-    const [socialStep, setSocialStep] = useState<'lookup' | 'select' | 'guess' | 'waiting'>('lookup');
-    const [socialCallsign, setSocialCallsign] = useState('');
-    const [socialLookupResults, setSocialLookupResults] = useState<any[]>([]);
-    const [socialSelectedProfile, setSocialSelectedProfile] = useState<any>(null);
-    const [socialGuardianGuess, setSocialGuardianGuess] = useState('');
-    const [socialStatusData, setSocialStatusData] = useState<any>(null);
-    const [tempSocialIdentity, setTempSocialIdentity] = useState<BeanPoolIdentity | null>(null);
 
     const [pendingIdentity, setPendingIdentity] = useState<BeanPoolIdentity | null>(null);
 
@@ -344,82 +344,6 @@ export function WelcomePage({ onComplete }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
 
-    // Social recovery status poller
-    React.useEffect(() => {
-        let interval: any;
-        if (socialStep === 'waiting' && (tempSocialIdentity?.publicKey || socialStatusData?.newPubkey)) {
-            const pubkey = tempSocialIdentity?.publicKey || socialStatusData?.newPubkey;
-            interval = setInterval(async () => {
-                try {
-                    const { getRecoveryStatus } = await import('../lib/api');
-                    const st = await getRecoveryStatus(pubkey);
-                    if (st && st.status !== 'none') {
-                        setSocialStatusData((prev: any) => ({ ...st, newPubkey: pubkey }));
-                        if (st.status === 'executed' && tempSocialIdentity) {
-                            clearInterval(interval);
-                            onComplete(tempSocialIdentity);
-                        }
-                    }
-                } catch (e) {}
-            }, 5000);
-        }
-        return () => clearInterval(interval);
-    }, [socialStep, tempSocialIdentity, socialStatusData, onComplete]);
-
-    async function handleSocialLookup() {
-        if (!socialCallsign.trim()) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const { lookupRecoveryCallsign } = await import('../lib/api');
-            const results = await lookupRecoveryCallsign(socialCallsign.trim());
-            if (!results || results.length === 0) {
-                setError('No recovery-eligible accounts found with that callsign.');
-            } else {
-                setSocialLookupResults(results);
-                setSocialStep('select');
-            }
-        } catch (e: any) {
-            setError(e.message || 'Lookup failed. Check connection.');
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function handleSocialSubmit() {
-        if (!socialGuardianGuess.trim() || !socialSelectedProfile) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const newId = await createIdentity(socialSelectedProfile.callsign);
-            const { createRecoveryRequest } = await import('../lib/api');
-            const req = await createRecoveryRequest(socialSelectedProfile.publicKey, socialGuardianGuess.trim(), newId);
-            setTempSocialIdentity(newId);
-            setSocialStatusData(req);
-            setSocialStep('waiting');
-        } catch (e: any) {
-            setError(e.message || 'Failed to submit recovery request.');
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function handleSocialCancel() {
-        if (window.confirm('Cancel Social Recovery? This will wipe the pending request from this device.')) {
-            try {
-                if (socialStatusData?.requestId) {
-                    const { cancelRecoveryRequest } = await import('../lib/api');
-                    await cancelRecoveryRequest(socialStatusData.requestId).catch(() => {});
-                }
-                setTempSocialIdentity(null);
-                setSocialStatusData(null);
-                setSocialStep('lookup');
-                setShowRecovery(false);
-            } catch (e: any) {
-                alert(e.message || 'Failed to cancel');
-            }
-        }
-    }
 
     // Cut the PWA out of the invite flow: an invite link only reaches the web
     // PWA via the trampoline's explicit "continue in browser" escape hatch,
@@ -980,7 +904,7 @@ export function WelcomePage({ onComplete }: Props) {
                                         <div>
                                             <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
-                                                Positive balances above 200 Beans decay by 1.5% monthly (progressive circulation). This prevents hoarding and funds local community projects.
+                                                Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                             </p>
                                         </div>
                                     </div>
@@ -1018,12 +942,11 @@ export function WelcomePage({ onComplete }: Props) {
                                 <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🔑 Your 12 Words Are Everything</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        Right now your 12 words are the <strong>only</strong> way back into your account. No email,
-                                        no password reset — nobody, including your hub, can restore it for you.
+                                        Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         ⚠️ <strong>Browser storage can be wiped without warning.</strong> Safari clears site data after
-                                        7 days of inactivity, and clearing browsing data erases your identity permanently.
+                                        7 days of inactivity, so keeping your 12 words safe ensures seamless access.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         📝 Find them any time under <strong>Settings → Recovery Phrase</strong>.
@@ -1101,8 +1024,8 @@ export function WelcomePage({ onComplete }: Props) {
                                 </p>
                                 <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
                                     Safari can clear site data after <strong>7 days of inactivity</strong>, and
-                                    clearing your browsing data erases your identity permanently.
-                                    Your 12 words on paper are the only backup that can't be wiped.
+                                    clearing your browsing data wipes your local session.
+                                    Your 12 words on paper are the only offline backup that can't be wiped.
                                 </p>
                             </div>
 
@@ -1208,161 +1131,8 @@ export function WelcomePage({ onComplete }: Props) {
                             </button>
                         </>
                     ) : showRecovery ? (
-                        recoveryMode === 'social' ? (
-                            /* ===== SOCIAL RECOVERY FLOW ===== */
-                            <>
-                                {socialStep === 'lookup' && (
-                                    <>
-                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'left' }}>
-                                            🛡️ Social Recovery
-                                        </h3>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5, textAlign: 'left' }}>
-                                            Enter your old callsign to look up your account on the community node.
-                                        </p>
-                                        <label htmlFor="socialCallsignInput" style={{ display: 'block', textAlign: 'left', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                            Your Old Callsign
-                                        </label>
-                                        <input
-                                            id="socialCallsignInput"
-                                            type="text"
-                                            value={socialCallsign}
-                                            onChange={(e) => setSocialCallsign(e.target.value)}
-                                            placeholder="e.g. Marty"
-                                            style={inputStyle}
-                                            autoCapitalize="none"
-                                        />
-                                        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>{error}</p>}
-                                        <button
-                                            onClick={handleSocialLookup}
-                                            disabled={loading || !socialCallsign.trim()}
-                                            style={{
-                                                width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none',
-                                                background: loading || !socialCallsign.trim() ? '#555' : '#2563eb',
-                                                color: '#fff', fontSize: '1rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                                            }}
-                                        >
-                                            {loading ? 'Finding Account...' : 'Find Account'}
-                                        </button>
-                                        <button
-                                            onClick={() => { setShowRecovery(false); setError(null); }}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem' }}
-                                        >
-                                            ← Back
-                                        </button>
-                                    </>
-                                )}
-
-                                {socialStep === 'select' && (
-                                    <>
-                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'left' }}>
-                                            Who are you?
-                                        </h3>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', textAlign: 'left' }}>
-                                            Select your profile from the results below:
-                                        </p>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                                            {socialLookupResults.map(p => (
-                                                <button
-                                                    key={p.publicKey}
-                                                    onClick={() => { setSocialSelectedProfile(p); setSocialStep('guess'); }}
-                                                    style={{
-                                                        display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem',
-                                                        borderRadius: '12px', border: '1px solid var(--border-primary, #333)',
-                                                        background: 'var(--bg-secondary, #1e293b)', color: 'var(--text-primary)',
-                                                        cursor: 'pointer', textAlign: 'left', width: '100%',
-                                                    }}
-                                                >
-                                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#3b82f622', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                                                        {p.callsign?.charAt(0).toUpperCase() || '?'}
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{p.callsign}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Joined {new Date(p.joinedAt).toLocaleDateString()}</div>
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <button
-                                            onClick={() => setSocialStep('lookup')}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer' }}
-                                        >
-                                            ← Back
-                                        </button>
-                                    </>
-                                )}
-
-                                {socialStep === 'guess' && (
-                                    <>
-                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'left' }}>
-                                            Guardian Knowledge Check
-                                        </h3>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5, textAlign: 'left' }}>
-                                            To prevent spam, enter the exact callsign of at least ONE of your Guardians.
-                                        </p>
-                                        <label htmlFor="guardianGuessInput" style={{ display: 'block', textAlign: 'left', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                            Guardian's Callsign
-                                        </label>
-                                        <input
-                                            id="guardianGuessInput"
-                                            type="text"
-                                            value={socialGuardianGuess}
-                                            onChange={(e) => setSocialGuardianGuess(e.target.value)}
-                                            placeholder="A guardian's callsign"
-                                            style={inputStyle}
-                                            autoCapitalize="none"
-                                        />
-                                        {error && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'left' }}>{error}</p>}
-                                        <button
-                                            onClick={handleSocialSubmit}
-                                            disabled={loading || !socialGuardianGuess.trim()}
-                                            style={{
-                                                width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none',
-                                                background: loading || !socialGuardianGuess.trim() ? '#555' : '#2563eb',
-                                                color: '#fff', fontSize: '1rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-                                            }}
-                                        >
-                                            {loading ? 'Submitting Request...' : 'Submit Request'}
-                                        </button>
-                                        <button
-                                            onClick={() => setSocialStep('select')}
-                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem' }}
-                                        >
-                                            ← Back
-                                        </button>
-                                    </>
-                                )}
-
-                                {socialStep === 'waiting' && socialStatusData && (
-                                    <>
-                                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem', textAlign: 'center' }}>
-                                            ⏳ Waiting for Guardians
-                                        </h3>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', lineHeight: 1.5, textAlign: 'center' }}>
-                                            Your request has been submitted! Ask your guardians to approve it under <strong>Settings → Recovery Requests</strong>.
-                                        </p>
-                                        <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '1rem', borderRadius: '12px', textAlign: 'center', marginBottom: '1rem' }}>
-                                            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Approvals</div>
-                                            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#3b82f6' }}>{socialStatusData.approvals || 0} / {socialStatusData.quorumRequired || 3}</div>
-                                        </div>
-
-                                        {socialStatusData.status === 'approved' && (
-                                            <div style={{ background: '#10b98122', border: '1px solid #10b981', padding: '0.75rem', borderRadius: '10px', marginBottom: '1rem', color: '#10b981', fontSize: '0.85rem' }}>
-                                                ✅ Quorum reached! Your identity will automatically migrate after the 24-hour security cooldown.
-                                            </div>
-                                        )}
-
-                                        <button
-                                            onClick={handleSocialCancel}
-                                            style={{ background: 'none', border: '1px solid #ef444466', color: '#ef4444', padding: '0.6rem 1rem', borderRadius: '8px', cursor: 'pointer', width: '100%', fontSize: '0.85rem', fontWeight: 600 }}
-                                        >
-                                            Cancel Recovery & Start Fresh
-                                        </button>
-                                    </>
-                                )}
-                            </>
-                        ) : (
-                            /* ===== RECOVERY FROM 12 WORDS ===== */
-                            <>
+                        /* ===== RECOVERY FROM 12 WORDS ===== */
+                        <>
                                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'left' }}>
                                     🔑 Recover with 12 Words
                                 </h3>
@@ -1489,7 +1259,6 @@ export function WelcomePage({ onComplete }: Props) {
                                     ← Back
                                 </button>
                             </>
-                        )
                     ) : showQrPairing ? (
                         /* ===== QR DEVICE PAIRING (#89) ===== */
                         <>
@@ -1879,19 +1648,11 @@ export function WelcomePage({ onComplete }: Props) {
                                     </button>
 
                                     <button
-                                        onClick={() => { setShowRecovery(true); setRecoveryMode('words'); setError(null); }}
+                                        onClick={() => { setShowRecovery(true); setError(null); }}
                                         disabled={loading}
                                         className="w-full rounded-2xl border border-amber-500/40 bg-amber-50/90 hover:bg-amber-100/90 active:scale-[0.98] dark:bg-amber-950/40 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">🔑</span> Recover with 12 Words
-                                    </button>
-
-                                    <button
-                                        onClick={() => { setShowRecovery(true); setRecoveryMode('social'); setError(null); }}
-                                        disabled={loading}
-                                        className="w-full rounded-2xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100/90 active:scale-[0.98] dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-900 dark:text-blue-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                                    >
-                                        <span aria-hidden="true">🛡️</span> Social Recovery (Guardians)
                                     </button>
 
                                     <button

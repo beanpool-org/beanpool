@@ -18,9 +18,9 @@ const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
 
 export default function TreasuryPostScreen() {
-    const params = useLocalSearchParams<{ treasury: string; mode?: string; name?: string }>();
+    const params = useLocalSearchParams<{ treasury?: string; mode?: string; name?: string }>();
     const isNeed = params.mode === 'need';
-    const treasuryName = params.name || 'this treasury';
+    const treasuryName = params.name || 'this enterprise';
     const { theme, colors } = useTheme();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -138,14 +138,16 @@ export default function TreasuryPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={64} style={{ flex: 1 }}>
+            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
+                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
+            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name={isNeed ? 'hand-extended' : 'tag'} size={20} color={colors.brand.primary} style={{ marginRight: 10 }} />
                         <Text style={styles.infoText}>
                             {isNeed
-                                ? `Posting on behalf of ${treasuryName}. Members can bid to fulfil this tender; you approve a bid and release payment when it's done — funded by the treasury's credit line.`
-                                : `Posting on behalf of ${treasuryName}. This lists in the Market like any offer; income from sales lands in the treasury's balance.`}
+                                ? `Posting on behalf of ${treasuryName}. Members can bid to fulfil this tender; you approve a bid and release payment when it's done — funded by the enterprise's credit line.`
+                                : `Posting on behalf of ${treasuryName}. This lists in the Market like any offer; income from sales lands in the enterprise's balance.`}
                         </Text>
                     </View>
 

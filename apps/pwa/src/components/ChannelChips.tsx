@@ -41,7 +41,7 @@ export function ChannelChips({ channels }: Props) {
                 const href = channel.url?.trim();
                 const isLink = isWebUrl(href);
 
-                const className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all no-underline ${
+                const className = `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:focus-visible:ring-emerald-400 focus-visible:ring-offset-1 ${
                     channel.isVerified
                         ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 shadow-sm'
                         : 'border-nature-200 dark:border-nature-800 bg-white/80 dark:bg-nature-900/80 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800 shadow-sm'

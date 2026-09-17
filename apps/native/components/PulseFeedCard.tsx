@@ -7,6 +7,8 @@
  *   strictly validated via `isWebUrl` before invocation.
  * - Emphasizes community: "my neighbour made this" — shows author avatar, callsign, and verified status.
  * - Owner Mute: When the item is owned by the current viewer, provides a mute action with confirmation.
+ * - Report: a signed-in viewer can flag someone else's item for the node's operators. The flag opens
+ *   an inline reason picker (the post-detail report reasons) — no text input, so no keyboard handling.
  * - Responsive at 320dp and 1.3x font scale: cards reflow and titles wrap cleanly with no horizontal overflow.
  */
 
@@ -28,7 +30,7 @@ import {
     categoryMeta,
     VIDEO_PLATFORMS,
 } from '@beanpool/core';
-import { type PulseFeedItem, formatRelativeTime } from '../utils/pulse';
+import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, PULSE_REPORT_REASONS } from '../utils/pulse';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
@@ -36,14 +38,20 @@ interface PulseFeedCardProps {
     item: PulseFeedItem;
     currentPubkey?: string | null;
     onMute?: (itemId: string) => void | Promise<void>;
+    /** Sends the report; the card shows the flag only when this is provided. */
+    onReport?: (item: PulseFeedItem, reason: string) => Promise<void>;
 }
 
-export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProps) {
+export function PulseFeedCard({ item, currentPubkey, onMute, onReport }: PulseFeedCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const [imageFailed, setImageFailed] = useState(false);
+    const [showReport, setShowReport] = useState(false);
+    const [reportReason, setReportReason] = useState<string | null>(null);
+    const [submittingReport, setSubmittingReport] = useState(false);
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
+    const canReport = Boolean(onReport) && canReportPulseItem(item, currentPubkey);
     const platMeta = platformMeta(item.platform);
     const catMeta = categoryMeta(item.category);
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
@@ -90,6 +98,25 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
         );
     };
 
+    const closeReport = () => {
+        setShowReport(false);
+        setReportReason(null);
+    };
+
+    const submitReport = async () => {
+        if (!onReport || !reportReason || submittingReport) return;
+        setSubmittingReport(true);
+        try {
+            await onReport(item, reportReason);
+            closeReport();
+            Alert.alert('Reported', "Thanks. This community's operators will review it.");
+        } catch (e: any) {
+            Alert.alert('Could not report', e?.message || 'Please try again.');
+        } finally {
+            setSubmittingReport(false);
+        }
+    };
+
     const cardAccessibilityLabel = `${item.title || 'Community post'} by ${authorName} on ${platMeta.label}${item.isVerified ? ', verified creator' : ''}`;
 
     return (
@@ -121,8 +148,12 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                             ) : null}
                         </View>
                         <View style={styles.metaRow}>
-                            <Text style={styles.platformBadge}>
-                                {platMeta.icon} {platMeta.label}
+                            {/* An official source rendered identically to a neighbour's post
+                                reads as the community endorsing it, so it is labelled as a
+                                source rather than by the platform that carried it. "Blog /
+                                RSS" also means nothing to someone reading the local paper. */}
+                            <Text style={isOfficialSource(item) ? styles.sourceBadge : styles.platformBadge}>
+                                {isOfficialSource(item) ? '\u{1F4F0} Local source' : `${platMeta.icon} ${platMeta.label}`}
                             </Text>
                             {timeAgo ? (
                                 <Text style={styles.timeText}> · {timeAgo}</Text>
@@ -138,6 +169,18 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                         </Text>
                     </View>
 
+                    {canReport && (
+                        <Pressable
+                            onPress={() => (showReport ? closeReport() : setShowReport(true))}
+                            style={styles.reportFlagBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Report this post"
+                            accessibilityState={{ expanded: showReport }}
+                        >
+                            <Text style={styles.reportFlagText} aria-hidden={true}>⚑</Text>
+                        </Pressable>
+                    )}
+
                     {isOwner && onMute && (
                         <Pressable
                             onPress={handleMutePress}
@@ -152,16 +195,60 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                 </View>
             </View>
 
+            {showReport && canReport && (
+                <View style={styles.reportBox}>
+                    <Text style={styles.reportBoxLabel}>Report this post — why?</Text>
+                    <View style={styles.reportReasons}>
+                        {PULSE_REPORT_REASONS.map((r) => {
+                            const isSelected = reportReason === r;
+                            return (
+                                <Pressable
+                                    key={r}
+                                    onPress={() => setReportReason(r)}
+                                    style={[styles.reportReasonChip, isSelected && styles.reportReasonChipSelected]}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: isSelected }}
+                                >
+                                    <Text style={[styles.reportReasonText, isSelected && styles.reportReasonTextSelected]}>
+                                        {isSelected ? '✓ ' : ''}{r}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+                    <View style={styles.reportActions}>
+                        <Pressable
+                            onPress={closeReport}
+                            disabled={submittingReport}
+                            style={styles.reportCancelBtn}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.reportCancelText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={submitReport}
+                            disabled={!reportReason || submittingReport}
+                            style={[styles.reportSubmitBtn, (!reportReason || submittingReport) && styles.reportSubmitDisabled]}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: !reportReason || submittingReport }}
+                        >
+                            <Text style={styles.reportSubmitText}>{submittingReport ? 'Sending…' : 'Submit report'}</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            )}
+
             {/* Facade Poster / Thumbnail with Open Link Handler */}
             <Pressable
-                onPress={handleOpenPost}
+                disabled={!item.url}
+                onPress={item.url ? handleOpenPost : undefined}
                 style={({ pressed }) => [
                     styles.contentPressable,
-                    pressed && styles.contentPressed,
+                    item.url && pressed && styles.contentPressed,
                 ]}
-                accessibilityRole="link"
+                accessibilityRole={item.url ? "link" : undefined}
                 accessibilityLabel={cardAccessibilityLabel}
-                accessibilityHint="Opens external post in browser or app"
+                accessibilityHint={item.url ? "Opens external post in browser or app" : undefined}
             >
                 {item.thumbnailUrl && !imageFailed ? (
                     <View style={styles.thumbnailWrap}>
@@ -180,16 +267,20 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                                 </View>
                             </View>
                         )}
-                        <View style={styles.externalBadge}>
-                            <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                        </View>
+                        {item.url ? (
+                            <View style={styles.externalBadge}>
+                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                            </View>
+                        ) : null}
                     </View>
                 ) : (
                     <View style={[styles.thumbnailWrap, styles.placeholderThumbnail]}>
-                        <Text style={styles.placeholderIcon}>{platMeta.icon}</Text>
-                        <View style={styles.externalBadge}>
-                            <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
-                        </View>
+                        <Text style={styles.placeholderIcon}>{item.callsign === 'Daily Pulse' ? '🌱' : platMeta.icon}</Text>
+                        {item.url ? (
+                            <View style={styles.externalBadge}>
+                                <Text style={styles.externalBadgeText}>{platMeta.label} ↗</Text>
+                            </View>
+                        ) : null}
                     </View>
                 )}
 
@@ -198,11 +289,19 @@ export function PulseFeedCard({ item, currentPubkey, onMute }: PulseFeedCardProp
                     <Text style={styles.title} numberOfLines={3}>
                         {item.title || 'View post on ' + platMeta.label}
                     </Text>
-                    <View style={styles.footerLinkRow}>
-                        <Text style={styles.footerLinkText}>
-                            Open on {platMeta.label} <Text style={styles.arrowIcon}>↗</Text>
-                        </Text>
-                    </View>
+                    {item.url ? (
+                        <View style={styles.footerLinkRow}>
+                            <Text style={styles.footerLinkText}>
+                                Open on {platMeta.label} <Text style={styles.arrowIcon}>↗</Text>
+                            </Text>
+                        </View>
+                    ) : (
+                        <View style={styles.footerLinkRow}>
+                            <Text style={styles.footerLinkText}>
+                                🌱 Daily Reflection
+                            </Text>
+                        </View>
+                    )}
                 </View>
             </Pressable>
         </View>
@@ -279,6 +378,11 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontWeight: '600',
             color: colors.text.secondary,
         },
+        sourceBadge: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.accent.primary,
+        },
         timeText: {
             fontSize: 12,
             color: colors.text.muted,
@@ -311,6 +415,100 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             fontSize: 12,
             fontWeight: '600',
             color: colors.market.need.fg,
+        },
+        reportFlagBtn: {
+            minWidth: 48,
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+            marginVertical: -8,
+        },
+        reportFlagText: {
+            fontSize: 18,
+            color: colors.text.muted,
+        },
+        reportBox: {
+            marginHorizontal: 14,
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 10,
+            borderWidth: 1,
+            backgroundColor: colors.feedback.danger.bg,
+            borderColor: colors.feedback.danger.border,
+        },
+        reportBoxLabel: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text.heading,
+            marginBottom: 8,
+        },
+        reportReasons: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 12,
+        },
+        reportReasonChip: {
+            minHeight: 48,
+            justifyContent: 'center',
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 24,
+            borderWidth: 1,
+            backgroundColor: colors.surface.card,
+            borderColor: colors.border.default,
+            maxWidth: '100%',
+        },
+        reportReasonChipSelected: {
+            backgroundColor: colors.feedback.danger.solid,
+            borderColor: colors.feedback.danger.solid,
+        },
+        reportReasonText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
+        reportReasonTextSelected: {
+            color: colors.text.inverse,
+        },
+        reportActions: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        reportCancelBtn: {
+            flexGrow: 1,
+            minHeight: 48,
+            paddingHorizontal: 14,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+        },
+        reportCancelText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.text.body,
+        },
+        reportSubmitBtn: {
+            flexGrow: 1,
+            minHeight: 48,
+            paddingHorizontal: 14,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 10,
+            backgroundColor: colors.feedback.danger.solid,
+        },
+        reportSubmitDisabled: {
+            opacity: 0.5,
+        },
+        reportSubmitText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text.inverse,
         },
         contentPressable: {
             width: '100%',

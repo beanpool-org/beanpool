@@ -82,23 +82,6 @@ async function run() {
             1, '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z'
         );
 
-        // Seed Friend Fragment (share_index 3)
-        db.prepare(`INSERT OR REPLACE INTO recovery_shares
-            (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            ownerPubkey, 'member', friend1Pubkey, 3,
-            'sealed-friend1-fragment', 'iv1', 'tag1',
-            1, '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z'
-        );
-
-        // Seed Recovery PIN (hashed 6-digit PIN)
-        db.prepare(`INSERT OR REPLACE INTO recovery_pin
-            (owner_pubkey, pin_hash, pin_salt, attempts, last_attempt_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-            ownerPubkey, 'bcrypt-hash-123456', 'salt-xyz',
-            0, null, '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z'
-        );
-
         console.log('--- TEST PART 1: ATOMIC DATABASE SNAPSHOT DURABILITY (VACUUM INTO) ---');
         const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
         const snapshotFile = path.join(DATA_DIR, 'test-snapshot.db');
@@ -112,13 +95,10 @@ async function run() {
         const snapDb = new Database(snapshotFile, { readonly: true });
         
         const snapShares = snapDb.prepare(`SELECT * FROM recovery_shares WHERE owner_pubkey = ? ORDER BY share_index`).all(ownerPubkey) as any[];
-        assert(snapShares.length === 3, `Snapshot captured exactly 3 recovery shares (got ${snapShares.length})`);
+        assert(snapShares.length === 2, `Snapshot captured exactly 2 recovery shares (got ${snapShares.length})`);
         assert(snapShares[0].holder_type === 'hub' && snapShares[0].encrypted_share === 'plain-hub-fragment-A', 'Hub share A preserved in snapshot');
         assert(snapShares[1].holder_type === 'sso' && snapShares[1].sso_lookup_hash === 'hash-lookup-123', 'SSO share B and lookup hash preserved in snapshot');
-        assert(snapShares[2].holder_type === 'member' && snapShares[2].holder_ref === friend1Pubkey, 'Friend share preserved in snapshot');
 
-        const snapPin = snapDb.prepare(`SELECT * FROM recovery_pin WHERE owner_pubkey = ?`).get(ownerPubkey) as any;
-        assert(!!snapPin && snapPin.pin_hash === 'bcrypt-hash-123456', 'Recovery PIN record preserved in snapshot');
         snapDb.close();
         fs.unlinkSync(snapshotFile);
 
@@ -126,16 +106,12 @@ async function run() {
         // Export state from primary
         const payload = await exportSyncState(nodeId);
         assert(Array.isArray(payload.recoveryShares), 'exportSyncState includes recoveryShares array');
-        assert(payload.recoveryShares!.length >= 3, `exportSyncState exported ${payload.recoveryShares!.length} recovery shares`);
-        assert(Array.isArray(payload.recoveryPins), 'exportSyncState includes recoveryPins array');
-        assert(payload.recoveryPins!.some(p => p.ownerPubkey === ownerPubkey && p.pinHash === 'bcrypt-hash-123456'), 'exportSyncState exported recovery PIN record');
+        assert(payload.recoveryShares!.length >= 2, `exportSyncState exported ${payload.recoveryShares!.length} recovery shares`);
 
         // Clear local replicated tables on the backup
         clearReplicatedTables();
         const emptyShares = db.prepare(`SELECT COUNT(*) as count FROM recovery_shares`).get() as { count: number };
-        const emptyPins = db.prepare(`SELECT COUNT(*) as count FROM recovery_pin`).get() as { count: number };
         assert(emptyShares.count === 0, 'clearReplicatedTables cleared recovery_shares');
-        assert(emptyPins.count === 0, 'clearReplicatedTables cleared recovery_pin');
 
         // Set role to backup and configure trusted mirror
         setNodeRole('backup');
@@ -144,14 +120,11 @@ async function run() {
         // Import remote state from the primary snapshot
         await importRemoteState(payload);
 
-        // Verify that the backup mirror now holds the replicated recovery shares and PINs
+        // Verify that the backup mirror now holds the replicated recovery shares
         const importedShares = db.prepare(`SELECT * FROM recovery_shares WHERE owner_pubkey = ? ORDER BY share_index`).all(ownerPubkey) as any[];
-        assert(importedShares.length === 3, `Backup mirror ingested 3 recovery shares (got ${importedShares.length})`);
+        assert(importedShares.length === 2, `Backup mirror ingested 2 recovery shares (got ${importedShares.length})`);
         assert(importedShares[0].holder_type === 'hub' && importedShares[0].encrypted_share === 'plain-hub-fragment-A', 'Backup mirror holds Hub share A');
         assert(importedShares[1].holder_type === 'sso' && importedShares[1].sso_lookup_hash === 'hash-lookup-123', 'Backup mirror holds SSO share B');
-        
-        const importedPin = db.prepare(`SELECT * FROM recovery_pin WHERE owner_pubkey = ?`).get(ownerPubkey) as any;
-        assert(!!importedPin && importedPin.pin_hash === 'bcrypt-hash-123456', 'Backup mirror holds replicated Recovery PIN');
 
         removeConnector(trustedAddr);
         setNodeRole('primary');

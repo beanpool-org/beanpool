@@ -46,7 +46,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            # Only a release claims :latest. A push to main builds amd64 only, so letting
+            # it move :latest left arm64 nodes (Raspberry Pi) unable to pull it at all —
+            # "no matching manifest for linux/arm64". :latest now always points at a
+            # multi-arch release image. Main builds are still addressable by their sha tag.
+            type=raw,value=latest,enable=${{ steps.version.outputs.is_release }}
             type=sha,prefix=
             type=semver,pattern={{version}},enable=${{ steps.version.outputs.is_release }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ steps.version.outputs.is_release }}

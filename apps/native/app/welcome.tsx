@@ -20,7 +20,6 @@ import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/b
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
-import { FriendPickerSheet } from '../components/FriendPickerSheet';
 import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
@@ -74,7 +73,21 @@ export default function WelcomeScreen() {
     const incomingUrl = Linking.useURL();
     const { setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
-    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>('home');
+    const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
+        ? (params.mode as any)
+        : 'home';
+    const [mode, setMode] = useState<'home' | 'member' | 'create' | 'recover' | 'ssoRecover' | 'profileSetup' | 'seedBackup' | 'onboardingGuide' | 'confirmReplace'>(initialMode);
+    useEffect(() => {
+        if (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string)) {
+            setMode(params.mode as any);
+            // Consume the param. Leaving it set meant any later re-render re-applied it,
+            // so "← Back to Restore Options" out of SSO recovery snapped straight back
+            // into SSO recovery. Cleared with '' rather than undefined, matching how the
+            // rest of the app retires a consumed param (index.tsx, map.tsx) — '' is
+            // falsy, so the guard above still short-circuits.
+            router.setParams({ mode: '' });
+        }
+    }, [params?.mode]);
     const [callsign, setCallsign] = useState('');
     // Fun-name suggestions shown when the chosen first-join name is taken on the node.
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
@@ -143,7 +156,6 @@ export default function WelcomeScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
-    const [showFriendSheet, setShowFriendSheet] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
@@ -1051,7 +1063,6 @@ export default function WelcomeScreen() {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
                             } : undefined}
-                            onProtectFriends={Platform.OS !== 'web' ? () => setShowFriendSheet(true) : undefined}
                         />
 
                         {Platform.OS === 'web' && (
@@ -1060,7 +1071,7 @@ export default function WelcomeScreen() {
                                     The web version of BeanPool runs inside your hub's server, which means it can't safely manage recovery keys. Your 12 words are the only way back on the web.
                                 </Text>
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 8 }}>
-                                    For Apple sign-in or friend-based recovery, use the BeanPool app on your phone.
+                                    For sign-in account recovery (Apple, Google), use the BeanPool app on your phone.
                                 </Text>
                             </View>
                         )}
@@ -1073,14 +1084,6 @@ export default function WelcomeScreen() {
                             onEnrolled={(result) => {
                                 setEnrolment(result);
                                 setShowSsoSheet(false);
-                            }}
-                        />
-                        <FriendPickerSheet
-                            visible={showFriendSheet}
-                            onClose={() => setShowFriendSheet(false)}
-                            onEnrolled={(result) => {
-                                setEnrolment(result);
-                                setShowFriendSheet(false);
                             }}
                         />
 
@@ -1265,7 +1268,7 @@ export default function WelcomeScreen() {
                                 <View style={guideStyles.bulletContent}>
                                     <Text style={guideStyles.bulletTitle}>Community Commons Pool</Text>
                                     <Text style={guideStyles.bulletText}>
-                                        Positive balances above 200 Beans decay by 1.5% monthly (progressive circulation). This prevents hoarding and funds local community projects.
+                                        Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                     </Text>
                                 </View>
                             </View>
@@ -1307,16 +1310,13 @@ export default function WelcomeScreen() {
                                 which has no marginBottom because the other three cards end on
                                 it. This is the only card where it is followed by bullets. */}
                             <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>
-                                Right now your 12 words are the only way back into your account. No
-                                email, no password reset — nobody, including your hub, can restore it
-                                for you.
+                                Your 12 words are your primary key to your account across devices. Without them, account recovery requires operator-assisted re-enrolment by your node administrator.
                             </Text>
                             <Text style={guideStyles.bulletItem}>
                                 📝 Find them any time under <Text style={{ fontWeight: 'bold' }}>Settings → Recovery Phrase</Text>.
                             </Text>
                             <Text style={guideStyles.bulletItem}>
-                                🤝 Soon you'll be able to share the job with your hub and the person who
-                                invited you, so losing your phone stops being a problem you carry alone.
+                                🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.
                             </Text>
                         </View>
 
@@ -1526,7 +1526,7 @@ export default function WelcomeScreen() {
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
                         <Text style={styles.subtitle}>
-                            Your account isn't lost — bring it to this device with your social sign-in, 12 recovery words, or Guardians.
+                            Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.
                         </Text>
 
                         <Pressable
@@ -1551,10 +1551,6 @@ export default function WelcomeScreen() {
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
-                        </Pressable>
-
-                        <Pressable style={styles.socialRecoverBtn} onPress={() => { router.push('/recover-identity'); }} accessibilityRole="button">
-                            <Text style={styles.socialRecoverBtnText}>🛡️ Recover via Guardians</Text>
                         </Pressable>
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
@@ -1631,7 +1627,7 @@ export default function WelcomeScreen() {
                             ) : (
                                 <View style={styles.noSeedWarnBox}>
                                     <Text style={styles.noSeedWarnText}>
-                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing may permanently lose access to {outCallsign}.
+                                        ⚠️ {outCallsign}'s recovery words aren't stored on this phone, so we can't show them here. If you don't already have them written down somewhere, continuing without them will require operator-assisted recovery to regain access to {outCallsign}.
                                     </Text>
                                 </View>
                             )}

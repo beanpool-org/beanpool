@@ -34,6 +34,10 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — Navigation param typing and Talk tab view state sync LANDED in #679.
+Typed optional `view?: string` in `apps/native/app/(tabs)/people.tsx` and added `useEffect` in `apps/native/app/(tabs)/chats.tsx` to keep `talkView` synchronized with navigation param updates. Do not re-file.
+Before filing navigation or screen parameter PRs, always type `useLocalSearchParams` query parameters as optional (`param?: string`) unless strictly enforced by static routing, and use a synchronization `useEffect` if sub-view state can change after the screen is already mounted.
+
 ### 2026-08-25 — `useLocalSearchParams` typing LANDED in #397 (chat + post) and #383 (invite).
 #376 closed as subsumed by #397. Do not re-file.
 
@@ -52,3 +56,28 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `Notifications.addNotificationResponseReceivedListener` used an `any` type for the response parameter.
 **Learning:** Replaced `any` with `import("expo-notifications").NotificationResponse` to provide proper typing for notification interactions.
 **Pattern:** Search for `any` types in Expo SDK callback definitions and replace them with the corresponding explicit type from the library.
+
+## 2026-09-02 - [Replace deprecated ImagePicker.MediaTypeOptions]
+**Issue:** `propose-project.tsx` used `ImagePicker.MediaTypeOptions.Images` which is deprecated in modern Expo SDKs (`expo-image-picker`).
+**Learning:** Replaced `ImagePicker.MediaTypeOptions.Images` with `['images']`.
+**Pattern:** Search for `MediaTypeOptions` usages in Expo apps and replace with string array equivalents like `['images']`.
+
+## 2026-09-07 - [Strongly type Notifications module instance]
+**Issue:** `push-notifications.ts` used `let Notifications: any = null;` for dynamic loading of expo-notifications.
+**Learning:** Replaced `any` with `typeof import('expo-notifications') | null` to ensure type safety on dynamic module methods.
+**Pattern:** Use `typeof import('module-name') | null` for dynamically required modules in Expo services.
+
+## 2026-09-12 - [Fix route parameter type in people.tsx]
+**Issue:** `people.tsx` typed `useLocalSearchParams<{ view: string }>()` as a non-optional string parameter.
+**Learning:** When entering the People screen without route params, `view` is `undefined` at runtime. Updating to `{ view?: string }` ensures accurate parameter typing.
+**Pattern:** Always type search parameters as optional (`param?: string`) unless guaranteed by route definition.
+
+## 2026-09-12 - [Fix DateTimePicker event type in edit-project]
+**Issue:** `edit-project.tsx` used `any` for DateTimePicker `onChange` event callback parameters.
+**Learning:** Replaced `any` with `DateTimePickerEvent` from `@react-native-community/datetimepicker`.
+**Pattern:** Search for `DateTimePicker` event handlers using `any` and replace with `DateTimePickerEvent`.
+
+## 2026-09-15 - [Export ErrorBoundary and handle string array params in treasury-detail]
+**Issue:** `treasury-detail.tsx` was missing an exported `ErrorBoundary` component for Expo Router error handling, and parameter typing did not account for potential array query parameter values.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` and safely extracted scalar string values for search parameters.
+**Pattern:** Ensure Expo Router screen components export `ErrorBoundary` and handle both string and string[] parameter types gracefully.

@@ -1,4 +1,4 @@
-// Stateful mutations for ratings, reviews, and friend/guardian relationships.
+// Stateful mutations for ratings, reviews, and friend relationships.
 //
 // Bridges the database storage layer with server singletons and tombstone logs.
 
@@ -80,20 +80,5 @@ export function removeFriend(ownerPubkey: string, friendPubkey: string): boolean
     if (res.changes > 0) {
         writeTombstone('friends', `${ownerPubkey}|${friendPubkey}`);
     }
-    return res.changes > 0;
-}
-
-/**
- * Promotes a connection to guardian role.
- */
-export function setGuardian(ownerPubkey: string, friendPubkey: string, isGuardian: boolean): boolean {
-    if (!getMember(db, ownerPubkey) || !getMember(db, friendPubkey) || ownerPubkey === friendPubkey) return false;
-    
-    const exists = db.prepare("SELECT * FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(ownerPubkey, friendPubkey);
-    if (!exists) {
-        db.prepare("INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)").run(ownerPubkey, friendPubkey, new Date().toISOString());
-    }
-
-    const res = db.prepare("UPDATE friends SET is_guardian=? WHERE owner_pubkey=? AND friend_pubkey=?").run(isGuardian ? 1 : 0, ownerPubkey, friendPubkey);
     return res.changes > 0;
 }

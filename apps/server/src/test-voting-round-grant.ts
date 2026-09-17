@@ -8,7 +8,7 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-voting-round-grant.ts
  */
 import {
-    initStateEngine, createProject, createVotingRound, closeVotingRound, getBalance,
+    initStateEngine, createProject, createVotingRound, closeVotingRound, getBalance, grantNodeRole,
 } from './state-engine.js';
 import { setCommonsBalance } from '@beanpool/core';
 import { db } from './db/db.js';
@@ -29,10 +29,11 @@ async function main() {
     initStateEngine();
     setCommonsBalance(1000);
 
-    const admin = 'admin-' + Date.now();      // invited_by NULL → eligible round creator
+    const admin = 'admin-' + Date.now();
     const prop1 = 'p1-' + Date.now();
     const prop2 = 'p2-' + Date.now();
     [admin, prop1, prop2].forEach(seedMember);
+    grantNodeRole(admin, 'owner');
 
     const winnerProj = createProject(prop1, 'High-weight project', 'desc', 100);
     const loserProj = createProject(prop2, 'Many-cheap-votes project', 'desc', 100);
@@ -55,11 +56,11 @@ async function main() {
     const res = closeVotingRound(round.id);
 
     assert(res.success && res.winner?.id === winnerProj.id, 'A2-5: winner chosen by vote WEIGHT (5), not voter count (loser had 2 voters)');
-    assert(dbBalance(prop1) === 100, 'A2-5: proposer credited in the DB (durable), not just in memory');
-    assert(getBalance(prop1).balance === dbBalance(prop1), 'A2-5: in-memory ledger == DB for the proposer (no desync)');
+    assert(dbBalance(winnerProj.id) === 100, 'A2-5: enterprise credited in the DB (durable), not just in memory');
+    assert(getBalance(winnerProj.id).balance === dbBalance(winnerProj.id), 'A2-5: in-memory ledger == DB for the enterprise (no desync)');
 
-    const tx = db.prepare(`SELECT * FROM transactions WHERE from_pubkey='COMMONS_POOL' AND to_pubkey=? AND amount=100`).get(prop1) as any;
-    assert(!!tx, 'A2-5: a COMMONS_POOL→proposer transaction row was recorded (auditable)');
+    const tx = db.prepare(`SELECT * FROM transactions WHERE from_pubkey='COMMONS_POOL' AND to_pubkey=? AND amount=100`).get(winnerProj.id) as any;
+    assert(!!tx, 'A2-5: a COMMONS_POOL→enterprise transaction row was recorded (auditable)');
 
     assert(Math.abs(getBalance('COMMONS_POOL').commonsBalance - (commonsBefore - 100)) < 1e-9, 'A2-5: commons balance debited by the grant (conservation)');
     assert(dbBalance(loserProj.id) === 0 && dbBalance(prop2) === 0, 'A2-5: the losing project / proposer received nothing');

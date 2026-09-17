@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, SYNONYM_MAP } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook } from './db/db.js';
+import { getVersion } from './version.js';
+import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
+import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, raiseCreatorOperatorSwitch } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -17,6 +19,89 @@ import { pruneFunnel } from './engine/funnel.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
+import { seedPulseCurated } from './engine/pulse-seed.js';
+import {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    getNodeRoleSessionEpoch,
+    bumpNodeRoleSessionEpoch,
+    setNodeRoleBreakGlassHash,
+    getNodeRoleBreakGlassHash,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+} from './engine/node-roles.js';
+export {
+    nodeRoleOf,
+    isNodeOwner,
+    isNodeAdmin,
+    getFirstNodeAdminPubkey,
+    listNodeRoles,
+    grantNodeRole,
+    revokeNodeRole,
+    getNodeRoleSessionEpoch,
+    bumpNodeRoleSessionEpoch,
+    setNodeRoleBreakGlassHash,
+    getNodeRoleBreakGlassHash,
+    type MemberNodeRole,
+    type NodeRoleRecord,
+};
+import {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+} from './decisions-engine.js';
+export {
+    createDecision,
+    getDecision,
+    getAllDecisions,
+    getOpenDecisions,
+    castDecisionVote,
+    getDecisionVotes,
+    tallyDecision,
+    executeDecision,
+    tickDecisions,
+    adminHaltDecision,
+    adminAccelerateDecision,
+    getActiveMembersCount30d,
+    getQuorumRequired,
+    checkCanProposeDecision,
+    checkVoterEligibility,
+    getDecisionVoiceCredits,
+    type Decision,
+    type DecisionVote,
+    type DecisionTally,
+    type DecisionTouch,
+    type DecisionEffect,
+    type DecisionFranchise,
+    type DecisionStatus,
+    type CreateDecisionOptions,
+};
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
@@ -101,13 +186,38 @@ import {
     type SyncRecoveryRequest,
     type SyncRecoveryApproval,
     type SyncMarketplaceTransaction,
-    type SyncPayload
+    type SyncPollVote,
+    type SyncPayload,
+    createGroup as createGroupEngine,
+    getGroup as getGroupEngine,
+    listGroups as listGroupsEngine,
+    getGroupMembers as getGroupMembersEngine,
+    getGroupMember as getGroupMemberEngine,
+    isGroupConvenor as isGroupConvenorEngine,
+    isGroupMember as isGroupMemberEngine,
+    getMemberGroupIds as getMemberGroupIdsEngine,
+    joinGroup as joinGroupEngine,
+    setMemberRole as setMemberRoleEngine,
+    removeGroupMember as removeGroupMemberEngine,
+    updateGroupPolicy as updateGroupPolicyEngine,
+    updateGroup as updateGroupEngine,
+    approveGroupMember as approveGroupMemberEngine,
+    inviteGroupMember as inviteGroupMemberEngine,
+    deleteGroupPost as deleteGroupPostEngine,
+    type Group,
+    type GroupMember,
+    type GroupRole,
+    type JoinPolicy,
+    type GroupCategory,
+    type GroupMemberStatus,
+    type CreateGroupParams,
+    type UpdateGroupParams,
+    type ListGroupsFilter
 } from '@beanpool/engine';
 import {
     addRating,
     addFriend,
-    removeFriend,
-    setGuardian
+    removeFriend
 } from './engine/social.js';
 import {
     createPost as createPostEngine,
@@ -115,6 +225,8 @@ import {
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
+    closePoll as closePollEngine,
+    votePoll as votePollEngine,
     adminDeletePost as adminDeletePostEngine,
     adminBulkDeletePosts as adminBulkDeletePostsEngine
 } from './engine/posts.js';
@@ -125,7 +237,9 @@ import {
     cancelPostRequest as cancelPostRequestEngine,
     acceptPost as acceptPostEngine,
     completePostTransaction as completePostTransactionEngine,
-    cancelPostTransaction as cancelPostTransactionEngine
+    cancelPostTransaction as cancelPostTransactionEngine,
+    resolveEscrowDispute as resolveEscrowDisputeEngine,
+    type EscrowDisputeAction
 } from './engine/escrow.js';
 import {
     createConversation as createConversationEngine,
@@ -139,6 +253,14 @@ import {
     migrateConsolidateConversations as migrateConsolidateConversationsEngine,
     repairConsolidatedMessagesMetadata as repairConsolidatedMessagesMetadataEngine
 } from './engine/messaging.js';
+import {
+    ensureEnterpriseThread as ensureEnterpriseThreadEngine,
+    getEnterpriseThreadMessages as getEnterpriseThreadMessagesEngine,
+    postEnterpriseThreadMessage as postEnterpriseThreadMessageEngine,
+    removeEnterpriseThreadMessage as removeEnterpriseThreadMessageEngine,
+    isKeeperOfEnterprise as isKeeperOfEnterpriseEngine,
+    type EnterpriseThreadMessage
+} from './engine/enterprise-thread.js';
 import {
     getNodeRole,
     setNodeRole,
@@ -227,12 +349,15 @@ export interface AbuseReport {
     reporterPubkey: string;
     targetPubkey: string;
     targetPostId?: string;
+    targetPulseItemId?: string;
     reason: string;
     createdAt: string;
     status?: string;
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
+    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -300,8 +425,12 @@ const wsClients: Set<any> = new Set();
 // ===================== INIT =====================
 
 export function initStateEngine(): void {
+    bumpPostsVersion();
+    bumpMembersVersion();
     initSchema();
+    clearEnterpriseFloorCache();
     migrateLegacyState();
+    seedPulseCurated();
     
     // Seed SYSTEM user securely
     db.pragma('foreign_keys = OFF');
@@ -444,6 +573,15 @@ export function initStateEngine(): void {
         setInterval(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
         }, 60 * 60 * 1000);
+
+        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+        // evaluate passed grants queue, and fire expired grace-period prunes.
+        setTimeout(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 30 * 1000);
+        setInterval(() => {
+            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        }, 60 * 1000);
     }
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
@@ -597,7 +735,7 @@ export function runMarketplaceHygiene(): void {
     for (const row of stale) {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
-        const requesterPubkey = post && post.type !== 'offer' ? row.seller_pubkey : row.buyer_pubkey;
+        const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
         dispatchPushNotification(
             [requesterPubkey, post?.author_pubkey].filter(Boolean),
             'SYSTEM',
@@ -715,6 +853,12 @@ export function removeWsClient(ws: any): void {
     wsClients.delete(ws);
 }
 
+// The ETag version counters now live in engine/versions.ts — a dependency-free module, so that
+// low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
+// importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
+import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
+export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
+
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),
 // pass `recipients` so the event is delivered ONLY to sockets whose authenticated
@@ -724,9 +868,49 @@ export function removeWsClient(ws: any): void {
 // community events (new_post, member_joined, profile_updated) pass no recipients and
 // stay global, as intended.
 export function broadcast(event: any, recipients?: string[]): void {
+    if (event && typeof event.type === 'string') {
+        switch (event.type) {
+            case 'new_post':
+                bumpPostsVersion();
+                if (!recipients) {
+                    bumpActivityVersion();
+                }
+                break;
+            case 'post_updated':
+            case 'post_removed':
+            case 'post_accepted':
+            case 'transaction_requested':
+            case 'transaction_rejected':
+            case 'transaction_cancelled':
+                bumpPostsVersion();
+                break;
+            case 'transaction_completed':
+                bumpPostsVersion();
+                bumpActivityVersion();
+                break;
+            case 'member_joined':
+                bumpMembersVersion();
+                bumpActivityVersion();
+                break;
+            case 'treasury_created':
+                bumpMembersVersion();
+                break;
+            case 'profile_updated':
+                bumpMembersVersion();
+                bumpPostsVersion(); // Profiles affect marketplace listings (e.g., holiday mode, callsigns)
+                bumpActivityVersion(); // Profile updates change member callsigns joined in activity feed
+                break;
+            case 'state_synced':
+            case 'user_pruned':
+                bumpPostsVersion();
+                bumpMembersVersion();
+                bumpActivityVersion();
+                break;
+        }
+    }
     const msg = JSON.stringify(event);
     for (const ws of wsClients) {
-        if (recipients && ws._memberPubkey && !recipients.includes(ws._memberPubkey)) continue;
+        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) continue;
         try { ws.send(msg); } catch { wsClients.delete(ws); }
     }
 }
@@ -735,10 +919,22 @@ export function broadcast(event: any, recipients?: string[]): void {
 
 export function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
-    const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
+    const cleanKey = typeof publicKey === 'string' ? publicKey.trim().toLowerCase() : '';
+    try {
+        const invalidated = db.prepare("SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
+        if (invalidated) {
+            const rekeyDetail = invalidated.rekeyed_to ? ` and re-keyed to ${invalidated.rekeyed_to}` : '';
+            throw new Error(`Device key has been invalidated (${invalidated.reason}${rekeyDetail}). Please re-enrol using your replacement device.`);
+        }
+    } catch (e: any) {
+        if (e?.message?.includes('Device key has been invalidated')) throw e;
+        // If table does not exist during early boot or mock, ignore
+    }
+    const member = db.prepare("SELECT status FROM members WHERE public_key = ? COLLATE NOCASE").get(cleanKey) as any;
     if (!member) throw new Error('Member not found');
     if (member.status === 'disabled' || member.status === 'suspended') throw new Error('Account is suspended or disabled');
     if (member.status === 'pruned') throw new Error('Account has been pruned');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
 export function assertProfileComplete(publicKey: string): void {
@@ -919,7 +1115,6 @@ export function assessTradeRisk(s: {
         && (s.completionRate === null || s.completionRate >= 0.8);
     if (established && !poorCompletion) {
         reasons.push(`Established member — ${s.tradeCount} completed trades.`);
-        if (s.wardsCount > 0) reasons.push(`${s.wardsCount} ${s.wardsCount === 1 ? 'person trusts' : 'people trust'} them as a recovery guardian.`);
         reasons.push('No connections in common with you yet.');
         return { band: 'green', headline: 'Established member', reasons, tips: [] };
     }
@@ -999,11 +1194,10 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     const inviterKey = member?.invitedBy;
     if (!inviterKey || inviterKey === targetPubkey) return null;
 
-    const adminKey = getAdminPubkey();
     if (inviterKey === 'genesis') {
         return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
-    if (inviterKey === 'SYSTEM' || inviterKey === adminKey) {
+    if (inviterKey === 'SYSTEM' || isAdminPubkey(inviterKey)) {
         return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
     }
     const inviter = getMember(inviterKey);
@@ -1012,7 +1206,11 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: inviter.avatarUrl || null,
+        avatarUrl: inviter.avatarUrl
+            ? (inviter.avatarUrl.startsWith('bundled://')
+                ? inviter.avatarUrl
+                : `/api/avatar/${inviter.publicKey}?size=thumb`)
+            : null,
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
@@ -1036,8 +1234,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     const totalResolved = completedTrades + cancelledTrades;
     const completionRate = totalResolved > 0 ? completedTrades / totalResolved : null;
 
-    // Deep-trust signal: how many people made the target their recovery guardian.
-    const wardsCount = getMyWards(targetPubkey).length;
+    const wardsCount = 0;
 
     // Mutual connections: viewer's friends ∩ target's friends. Only ever
     // surfaces people the viewer already knows — never the target's wider graph.
@@ -1051,8 +1248,15 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
               AND fv.friend_pubkey != ? AND fv.friend_pubkey != ?
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[])
-            .map(r => ({ publicKey: r.publicKey, callsign: r.callsign, avatarUrl: r.avatarUrl || null }))
+        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+            publicKey: r.publicKey,
+            callsign: r.callsign,
+            avatarUrl: r.avatarUrl
+                ? (r.avatarUrl.startsWith('bundled://')
+                    ? r.avatarUrl
+                    : `/api/avatar/${r.publicKey}?size=thumb`)
+                : null
+        }))
         : [];
     const mutualCount = mutualConnections.length;
 
@@ -1101,7 +1305,11 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: voucher.avatarUrl || null,
+                avatarUrl: voucher.avatarUrl
+                    ? (voucher.avatarUrl.startsWith('bundled://')
+                        ? voucher.avatarUrl
+                        : `/api/avatar/${voucher.publicKey}?size=thumb`)
+                    : null,
             };
         }
     }
@@ -1129,17 +1337,17 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
     const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
     const liveOffers = liveOfferCount(publicKey);
-    // usableFloor: the deepest you may actually spend right now (Trust Model v3) — the shallower of
-    // your earned limit and what your live Offers unlock. frozen: your debt sits below that line.
-    const uFloor = Math.max(floor, -offerCapForCount(liveOffers));
+    const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
+    const effectiveFloor = isTreasury ? getEnterpriseUnderlyingFloor(publicKey).floor : floor;
+    const uFloor = usableFloor(publicKey);
     return {
         balance,
-        floor,
+        floor: effectiveFloor,
         usableFloor: uFloor,
         liveOffers,
         frozen: balance < uFloor,
@@ -1157,7 +1365,9 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         // controls only on these cards — a control you can't use shouldn't be drawn.
         keeperOf: keeperOf(publicKey),
         // isTreasury: this account IS a community treasury (the Commons' trading face), not a person.
-        isTreasury: !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury,
+        isTreasury,
+        // nodeRole: explicit owner/admin role (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2).
+        nodeRole: nodeRoleOf(publicKey),
     };
 }
 
@@ -1184,8 +1394,12 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature: string; payload: string }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
     if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
+    if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
+        const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
+        if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    }
     if (amount < 0) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
@@ -1206,7 +1420,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     const isEscrow = method === 'escrow' || from.startsWith('escrow_') || to.startsWith('escrow_');
     // #104: a bridge_<peer> account is the local payer when settling a visitor's purchase. It has no
     // trust profile, so the completed-trade gate would block every cross-node settlement.
-    if (!isEscrow && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
+    const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
+    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -1286,6 +1502,13 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
     persistDecayEvents();
     persistCommonsBalance();
+
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
@@ -1400,7 +1623,9 @@ export function settleDemurrage(publicKeys: string[]): void {
  */
 export function conservingTransaction<T>(fn: () => T): T {
     // Make the rows agree with memory BEFORE snapshotting, so the snapshot is a consistent pair.
-    persistDecayEvents();
+    if (!(db as any).inTransaction) {
+        persistDecayEvents();
+    }
     const commonsBefore = getCommonsBalanceExact();
     try {
         return db.transaction(fn)();
@@ -1464,7 +1689,7 @@ export function moveToCommons(
     // becoming a back door around `transfer()`'s send gate and floor policy. A prune is different in kind —
     // an admin action on a member being removed, taking a positive balance to exactly zero — so the gate is
     // moot rather than bypassed. Anything else moving a member's value belongs in `transfer()`.
-    opts?: { allowMemberDebit?: boolean },
+    opts?: { allowMemberDebit?: boolean; authSigner?: string },
 ): Transaction | null {
     const synthetic = isSyntheticAccount(from);
     const treasury = !synthetic
@@ -1473,31 +1698,36 @@ export function moveToCommons(
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
     if (amount <= 0) return null;
-    // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
-    // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
-    if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from, to: 'COMMONS_POOL', amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp);
+    return conservingTransaction(() => {
+        // Synthetic senders are unbounded (escrow drains to zero by design; a bridge must be able to go
+        // negative). A treasury or a member is floored at 0 — neither may be driven into debt by this path.
+        if (!ledger.moveToCommons(from, amount, synthetic ? -Infinity : 0)) return null;
 
-    const fromAcc = ledger.getAccount(from);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+        const txn: Transaction = {
+            id: crypto.randomUUID(),
+            from, to: 'COMMONS_POOL', amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
+        );
 
-    persistDecayEvents();
-    persistCommonsBalance();   // must come last — it is what makes the credit durable
-    return txn;
+        const fromAcc = ledger.getAccount(from);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the credit durable
+        return txn;
+    });
 }
 
 /**
@@ -1549,6 +1779,14 @@ export function payFromCommons(
     // them and this must too (review finding).
     persistDecayEvents();
     persistCommonsBalance();
+
+    afterTransactionCommit(() => {
+        const toMember = getMember(to);
+        if (toMember?.isTreasury) {
+            sweepEnterpriseCeiling(to);
+        }
+    });
+
     return txn;
 }
 
@@ -1621,23 +1859,102 @@ function floorLockedError(publicKey: string, postBalance: number): Error {
  * The system admin is exempt — it acts at the system level, not as a participant.
  */
 export function hasListedOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     return hasListedOfferEngine(db, publicKey);
 }
 
 export function hasLiveOffer(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     return hasLiveOfferEngine(db, publicKey);
 }
 
 export function liveOfferCount(publicKey: string): number {
-    if (publicKey === getAdminPubkey()) return OFFER_BANDS.length - 1;
+    if (isAdminPubkey(publicKey)) return OFFER_BANDS.length - 1;
     return liveOfferCountEngine(db, publicKey);
 }
 
+/**
+ * Computes an enterprise's underlying credit floor based on keeper backing pledges
+ * (docs/the-commons.md §2.6) and its own trust profile (earned/granted credit).
+ */
+export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor: number; totalBacking: number; hasBacking: boolean } {
+    const backingRow = db.prepare(`
+        SELECT COALESCE(SUM(o.backing), 0) as totalBacking,
+               COUNT(CASE WHEN o.backing > 0 THEN 1 END) as hasBacking,
+               COUNT(*) as totalKeepers
+        FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ?
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
+    const pledgeRow = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) as total
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(enterprisePubkey) as any;
+    const pledgeBacking = Number(pledgeRow?.total || 0);
+    const operatorBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
+    const totalBacking = Math.max(operatorBacking, pledgeBacking);
+    const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0 || pledgeBacking > 0;
+
+    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (memberRow?.status === 'completed' || memberRow?.credit_frozen === 1) {
+        return { floor: 0, totalBacking: 0, hasBacking: false };
+    }
+
+    const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
+    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+    if (legacyFloor > 0 && totalBacking >= legacyFloor) {
+        legacyFloor = 0;
+    }
+
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
+        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
+    }
+
+    return { floor: 0, totalBacking: 0, hasBacking: false };
+}
+
 export function usableFloor(publicKey: string): number {
-    const { floor } = getMemberTrustProfile(publicKey);
-    return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+    const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
+    if (!m?.is_treasury) {
+        const { floor } = getMemberTrustProfile(publicKey);
+        return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+    }
+
+    if (m.status === 'completed') return 0;
+
+    const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(publicKey);
+    const underlyingAllowance = Math.abs(underlyingFloor);
+    const liveOffers = liveOfferCount(publicKey);
+    const covenantAllowance = offerCapForCount(liveOffers);
+    const normalDerivedAllowance = Math.min(underlyingAllowance, covenantAllowance);
+
+    // If enterprise is paused (docs/the-commons.md §2.2):
+    if (m.paused === 1 && m.paused_floor_snapshot != null) {
+        const pausedAt = m.paused_at ? new Date(m.paused_at).getTime() : Date.now();
+        const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+        const isExpired = (Date.now() - pausedAt) > ninetyDaysMs;
+
+        if (!isExpired) {
+            const snapshotAllowance = Math.abs(Number(m.paused_floor_snapshot));
+            // While paused (up to 90 days):
+            // - Covenant floor can never pull it below snapshot (even with 0 offers).
+            // - Earned growth still counts (if earned credit raises the floor, use the higher value).
+            // - Keeper exits still release backing (if backing is removed, floor drops accordingly).
+            // Formula: max(snapshot, derived) where snapshot expires at 90 days. Keeper backing release overrides snapshot floor.
+            const effectiveAllowance = underlyingAllowance < snapshotAllowance
+                ? underlyingAllowance  // backing withdrawn — override snapshot
+                : Math.max(snapshotAllowance, underlyingAllowance);  // earned growth raises it
+            return -Math.max(effectiveAllowance, normalDerivedAllowance);
+        }
+    }
+
+    return -normalDerivedAllowance;
 }
 
 /**
@@ -1648,7 +1965,7 @@ export function usableFloor(publicKey: string): number {
  * set via adminSetVoucher), plus the system admin who always holds it.
  */
 export function canVouch(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_vouch;
 }
@@ -1666,7 +1983,7 @@ export function canVouch(publicKey: string): boolean {
  * Distinct from the 'Steward' tier (a cosmetic badge) and from node role (replication topology).
  */
 export function canOperate(publicKey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
+    if (isAdminPubkey(publicKey)) return true;
     const row = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(publicKey) as any;
     return !!row?.can_operate;
 }
@@ -1679,28 +1996,72 @@ export function canOperate(publicKey: string): boolean {
  * per-enterprise assignments. adminAssignTreasuryOperator sets the flag automatically, so a row can
  * never be silently inert.
  *
- * The system admin retains a node-wide override — they create the enterprises in the first place.
+ * Gated for SPENDING operations: post offer, post need, approve a bid, complete and pay, sweep the balance,
+ * and fund a federation commission.
+ * NO admin bypass: requires a real treasury_operators row, exactly as for anyone else.
+ *
+ * An admin can rescue an abandoned enterprise by explicitly appointing themselves via
+ * adminAssignTreasuryOperator, which creates a public, recorded, revocable binding.
+ *
+ * The actor's account must also be 'active'. A suspend_member Decision sets status = 'disabled' and
+ * leaves can_operate and the binding alone, so without this a keeper the community suspended could
+ * still list, edit and pay out as the enterprise. Checked here rather than in canOperate(), whose other
+ * callers (getBalance, keeperOf) only drive what the client shows; admin moderation goes through
+ * canAdministerTreasury, which returns before reaching this.
  */
 export function canOperateTreasury(publicKey: string, treasuryPubkey: string): boolean {
-    if (publicKey === getAdminPubkey()) return true;
     if (!canOperate(publicKey)) return false;
-    const row = db.prepare(
-        "SELECT 1 FROM treasury_operators WHERE member_pubkey = ? AND treasury_pubkey = ?"
-    ).get(publicKey, treasuryPubkey);
+    const row = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active'
+    `).get(publicKey, treasuryPubkey);
     return !!row;
+}
+
+/**
+ * May this actor perform REPAIR AND MODERATION actions on this enterprise?
+ * Covers non-spending administrative actions: pausing an enterprise, unbinding a keeper,
+ * archiving an abandoned enterprise, taking down a listing.
+ *
+ * The node admin IS allowed here (break-glass repair / moderation authority), as is any
+ * legitimate keeper of the enterprise.
+ */
+export function canAdministerTreasury(publicKey: string, treasuryPubkey: string): boolean {
+    if (publicKey === 'admin' || publicKey === 'owner:password' || isAdminPubkey(publicKey)) return true;
+    return canOperateTreasury(publicKey, treasuryPubkey);
+}
+
+/**
+ * Authority predicate for enterprise lead-level governance (docs/the-commons.md §2.2, §2.3).
+ * Matches the authority predicate initiateWindUp and finaliseWindUp use:
+ * the lead keeper, the sole keeper, or a node admin.
+ *
+ * The ACTOR must be active with the operator switch on. The sole-keeper COUNT is every binding, suspended
+ * keepers included: a suspended keeper keeps their row (adminSetOperator, the suspend_member Decision), a
+ * removed one does not. Counting only active keepers would let a community's suspension of the lead turn
+ * the remaining keeper into a "sole keeper" who could approve keepers and wind the enterprise up alone
+ * (PR #838 B1).
+ */
+export function isLeadOrSoleKeeperOrAdmin(enterprisePubkey: string, actorPubkey: string): boolean {
+    if (isAdminPubkey(actorPubkey)) return true;
+    const mem = db.prepare("SELECT status, can_operate FROM members WHERE public_key = ?").get(actorPubkey) as any;
+    if (!mem || mem.status !== 'active' || mem.can_operate !== 1) return false;
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, actorPubkey) as any;
+    if (!op) return false;
+    const opCount = (db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0;
+    const isSoleKeeper = opCount === 1;
+    const isLead = op.role === 'lead';
+    return isLead || isSoleKeeper;
 }
 
 /**
  * Which enterprises does this member keep? Drives the Commons tab's per-enterprise controls —
  * the client needs the list, not a boolean, to know which cards get an operate panel.
  *
- * The admin holds a node-wide override, so they get every treasury.
+ * No admin bypass: an admin sees only the enterprises they have explicitly been appointed to keep.
  */
 export function keeperOf(publicKey: string): string[] {
-    if (publicKey === getAdminPubkey()) {
-        return (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as any[])
-            .map(r => r.public_key);
-    }
     if (!canOperate(publicKey)) return [];
     return (db.prepare(
         "SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ?"
@@ -1710,20 +2071,40 @@ export function keeperOf(publicKey: string): string[] {
 /**
  * Who keeps this enterprise? Public — stewardship is transparent to members by design
  * (docs/community-governance.md), so a community can see who is accountable for what.
- * Suspended keepers (can_operate=0) are excluded: they cannot act, so listing them would misinform.
+ * Suspended keepers (operator switch off, or account not active) are listed with `suspended: true` rather
+ * than hidden: they still count toward "sole keeper" (isLeadOrSoleKeeperOrAdmin), so hiding them would
+ * show one keeper while the server says there are two. They cannot act.
  */
-export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: string; callsign: string; avatarUrl: string | null; grantedAt: string | null }> {
+export function treasuryKeepers(treasuryPubkey: string): Array<{
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    grantedAt: string | null;
+    role: string;
+    backing: number;
+    lastActiveAt: string | null;
+    suspended: boolean;
+}> {
     return (db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at
+        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+               m.can_operate, m.status
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND COALESCE(m.can_operate, 0) = 1
+        WHERE o.treasury_pubkey = ?
         ORDER BY o.granted_at
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: r.avatar_url ?? null,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://')
+                ? r.avatar_url
+                : `/api/avatar/${r.public_key}?size=thumb`)
+            : null,
         grantedAt: r.granted_at ?? null,
+        role: r.role || 'keeper',
+        backing: Number(r.backing || 0),
+        lastActiveAt: r.last_active_at || r.joined_at || null,
+        suspended: r.can_operate !== 1 || r.status !== 'active',
     }));
 }
 
@@ -1732,7 +2113,15 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{ publicKey: stri
  * never silently inert. `grantedBy` records the granting admin's pubkey today, and is deliberately
  * untyped so an `appoint` Decision id can be recorded here later without a migration.
  */
-export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
+export function clearEnterpriseFloorCache(enterprisePubkey?: string): void {
+    engine.clearEnterpriseFloorCache(db, enterprisePubkey);
+}
+
+export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseFloorInfo {
+    return engine.getEnterpriseFloor(db, enterprisePubkey);
+}
+
+export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin', backing = 0): { ok: true } {
     const member = getMember(memberPubkey);
     if (!member) throw new Error('Member not found');
     if (member.isTreasury) throw new Error('A treasury cannot keep another treasury');
@@ -1740,10 +2129,12 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
-        db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-                    VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
+        db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+                    VALUES (?, ?, 'keeper', ?, ?)
+                    ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing`).run(treasuryPubkey, memberPubkey, grantedBy, backing);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
@@ -1754,6 +2145,8 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
  *
  * Clears can_operate once a member keeps nothing, so `canOperate()` keeps meaning "is a keeper"
  * and the fleet manager's display stays truthful.
+ *
+ * Handles keeper exit backing release/covenant lock (docs/the-commons.md §2.6).
  */
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
     db.transaction(() => {
@@ -1762,10 +2155,1036 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
         const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
             .get(memberPubkey) as any;
         if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
+
+        // Keeper exit (docs/the-commons.md §2.6):
+        // Solvent: leave immediately, backing released, floor recalculates.
+        // In deficit: backing is locked to the extent the deficit needs it (Rule 3).
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(memberPubkey, treasuryPubkey) as any;
+        const keeperPledge = Number(activeRow?.total || 0);
+
+        if (keeperPledge > 0) {
+            const balance = getBalance(treasuryPubkey).balance;
+            const deficit = Math.max(0, -balance);
+            const totalRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.keeper != ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(treasuryPubkey, memberPubkey) as any;
+            const otherPledges = Number(totalRow?.total || 0);
+            const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
+            const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+            const otherAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+
+            if (otherAllowance >= deficit) {
+                // Solvent or remaining keepers cover deficit: full release
+                db.prepare(
+                    "UPDATE enterprise_pledges SET released_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                ).run(memberPubkey, treasuryPubkey);
+            } else {
+                // In deficit: lock what deficit needs (deficit - otherAllowance), release excess
+                const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
+                const toRelease = keeperPledge - lockedNeeded;
+                if (toRelease > 0) {
+                    const nowIso = new Date().toISOString();
+                    db.prepare(
+                        "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                    ).run(nowIso, memberPubkey, treasuryPubkey);
+                    db.prepare(`
+                        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                        VALUES (?, ?, ?, ?, ?, NULL)
+                    `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                }
+            }
+        }
     })();
+    clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     return { ok: true };
 }
+
+/**
+ * Available earned credit that a keeper can pledge to back enterprises (docs/the-commons.md §2.4 Rule 3).
+ * A keeper's earned credit is never deducted from their personal floor, but is counted once across all
+ * enterprises they keep.
+ * Pledges are incremental: headroom is earned credit minus ALL active pledges across all enterprises.
+ * Returns 0 if account is inactive (disabled/pruned) or credit-frozen.
+ */
+export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: string): number {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+    if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
+        return 0;
+    }
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+    ).get(keeperPubkey) as any;
+    const totalPledged = Number(row?.total || 0);
+    return Math.max(0, earnedCredit - totalPledged);
+}
+
+/**
+ * List active pledges backing an enterprise.
+ */
+export function getEnterprisePledges(enterprisePubkey: string): Array<{
+    id: string;
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(enterprisePubkey) as any[]).map(r => ({
+        id: r.id,
+        keeper: r.keeper,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.keeper}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * List active pledges made by a keeper.
+ */
+export function getKeeperPledges(keeperPubkey: string): Array<{
+    id: string;
+    enterprise: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string;
+}> {
+    return (db.prepare(`
+        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.enterprise
+        WHERE p.keeper = ? AND p.released_at IS NULL
+        ORDER BY p.pledged_at ASC
+    `).all(keeperPubkey) as any[]).map(r => ({
+        id: r.id,
+        enterprise: r.enterprise,
+        callsign: r.callsign,
+        avatarUrl: r.avatar_url
+            ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.enterprise}?size=thumb`)
+            : null,
+        amount: Number(r.amount),
+        pledgedAt: r.pledged_at,
+    }));
+}
+
+/**
+ * Explicit, once-only backing pledge of a keeper's earned credit to back an enterprise (docs/the-commons.md §2.4 Rules 1-4).
+ * Gated by keepership (must have a treasury_operators row and can_operate = 1).
+ */
+export function pledgeEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amount: number
+): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+        if (t.status === 'disabled' || t.status === 'pruned') {
+            throw new Error('This enterprise has been closed, so no backing can be pledged to it.');
+        }
+
+        const km = db.prepare("SELECT status, can_operate, credit_frozen FROM members WHERE public_key = ?").get(keeperPubkey) as any;
+        if (!km || km.status === 'disabled' || km.status === 'pruned') {
+            throw new Error('Your account is not active, so you cannot back this enterprise.');
+        }
+        if (km.credit_frozen === 1) {
+            throw new Error('Your credit is frozen, so you cannot back this enterprise.');
+        }
+
+        if (!canOperateTreasury(keeperPubkey, enterprisePubkey)) {
+            throw new Error('You are not an authorized keeper of this enterprise');
+        }
+
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            throw new Error('Pledge amount must be a positive number');
+        }
+
+        const totalPledgedRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
+        ).get(keeperPubkey) as any;
+        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
+        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
+
+        if (parsedAmount > availableToAdd) {
+            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
+        }
+
+        const pledgeToAdd = parsedAmount;
+        const pledgeId = crypto.randomUUID();
+        const pledgedAt = new Date().toISOString();
+
+        db.prepare(`
+            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+
+        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+        if (legacyFloor > 0) {
+            const pledgeSumRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(enterprisePubkey) as any;
+            const totalActiveDerived = Number(pledgeSumRow?.total || 0);
+            if (totalActiveDerived >= legacyFloor) {
+                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
+                broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+            }
+        }
+
+        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
+/**
+ * Release backing pledge from an enterprise (docs/the-commons.md §2.4 Rule 3).
+ * Covenant: a keeper can release only what leaves the enterprise above its current deficit.
+ */
+export function releaseEnterpriseBacking(
+    enterprisePubkey: string,
+    keeperPubkey: string,
+    amountToRelease?: number
+): { releasedAmount: number; remainingPledge: number } {
+    const res = db.transaction(() => {
+        const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        if (!t?.is_treasury) throw new Error('Not an enterprise');
+
+        const activeRow = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).get(keeperPubkey, enterprisePubkey) as any;
+        const currentKeeperPledge = Number(activeRow?.total || 0);
+
+        const bound = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, keeperPubkey);
+        const hasActivePledge = currentKeeperPledge > 0;
+        if (!bound && !hasActivePledge && !isAdminPubkey(keeperPubkey)) {
+            throw new Error('You are not an authorized keeper or pledge holder of this enterprise');
+        }
+
+        if (currentKeeperPledge <= 0) {
+            throw new Error('No active backing pledge found for this enterprise');
+        }
+
+        let toRelease = (amountToRelease !== undefined && amountToRelease !== null) ? Number(amountToRelease) : currentKeeperPledge;
+        if (!Number.isFinite(toRelease) || toRelease <= 0) {
+            throw new Error('Release amount must be a positive number');
+        }
+        toRelease = Math.min(toRelease, currentKeeperPledge);
+
+        // Covenant check: enterprise balance deficit
+        const balance = getBalance(enterprisePubkey).balance;
+        const deficit = Math.max(0, -balance);
+
+        const totalPledgesRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
+        const newTotalPledges = currentTotalPledges - toRelease;
+        const legacyFloor = Number(t.legacy_credit_floor || 0);
+
+        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
+        }
+
+        const remainingPledge = currentKeeperPledge - toRelease;
+        const nowIso = new Date().toISOString();
+
+        db.prepare(
+            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        ).run(nowIso, keeperPubkey, enterprisePubkey);
+
+        if (remainingPledge > 0) {
+            const newPledgeId = crypto.randomUUID();
+            db.prepare(`
+                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                VALUES (?, ?, ?, ?, ?, NULL)
+            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        }
+
+        return { releasedAmount: toRelease, remainingPledge };
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    return res;
+}
+
+// -------------------------------------------------------------------------------------
+// Enterprise Keepers: Join Requests & Lead Succession (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+// -------------------------------------------------------------------------------------
+
+export interface KeeperJoinRequest {
+    id: string;
+    enterprisePubkey: string;
+    memberPubkey: string;
+    callsign?: string;
+    avatarUrl?: string | null;
+    pledgedBacking: number;
+    status: 'pending' | 'approved' | 'declined' | 'cancelled';
+    createdAt: string;
+    decidedAt?: string | null;
+    decidedBy?: string | null;
+    availableToBack?: number;
+    earnedCredit?: number;
+}
+
+/**
+ * A member asks to join an enterprise as a keeper, with an explicit backing pledge (0 .. available).
+ * (docs/the-commons.md §2.3, §2.4 Rule 3).
+ * A pledge of 0 is valid. Re-validated at request time AND at approval time.
+ */
+export function requestToJoinEnterprise(
+    enterprisePubkey: string,
+    memberPubkey: string,
+    pledgedBacking: number
+): KeeperJoinRequest {
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!ent || !ent.is_treasury) {
+        throw new Error('Not an enterprise');
+    }
+    if (ent.status === 'completed') {
+        throw new Error('Completed enterprise accepts no requests');
+    }
+    if (ent.status === 'disabled' || ent.status === 'pruned') {
+        throw new Error('This enterprise has been closed');
+    }
+
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km || km.status !== 'active') {
+        throw new Error('Your account is not active, so you cannot join as a keeper');
+    }
+    if (km.credit_frozen === 1) {
+        throw new Error('Your credit is frozen, so you cannot join as a keeper');
+    }
+    if (isOperatorSwitchedOff(memberPubkey)) {
+        throw new Error('Your operator access is switched off by a node admin, so you cannot join as a keeper');
+    }
+
+    const existingOp = db.prepare(
+        "SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?"
+    ).get(enterprisePubkey, memberPubkey);
+    if (existingOp) {
+        throw new Error('Already a keeper of this enterprise');
+    }
+
+    const pending = db.prepare(
+        "SELECT 1 FROM enterprise_keeper_requests WHERE enterprise_pubkey = ? AND member_pubkey = ? AND status = 'pending'"
+    ).get(enterprisePubkey, memberPubkey);
+    if (pending) {
+        throw new Error('A pending request already exists for this enterprise');
+    }
+
+    const parsedAmount = Number(pledgedBacking);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+        throw new Error('Pledge amount must be non-negative');
+    }
+
+    const available = getAvailableBacking(memberPubkey);
+    if (parsedAmount > available) {
+        throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${available} available to back across all enterprises)`);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+        INSERT INTO enterprise_keeper_requests (id, enterprise_pubkey, member_pubkey, pledged_backing, status, created_at)
+        VALUES (?, ?, ?, ?, 'pending', ?)
+    `).run(id, enterprisePubkey, memberPubkey, parsedAmount, now);
+
+    broadcast({ type: 'enterprise_keeper_request_created', enterprisePubkey, memberPubkey, requestId: id, pledgedBacking: parsedAmount });
+
+    return {
+        id,
+        enterprisePubkey,
+        memberPubkey,
+        pledgedBacking: parsedAmount,
+        status: 'pending',
+        createdAt: now,
+    };
+}
+
+/**
+ * List keeper requests for an enterprise, visible to keepers / applicants.
+ */
+export function getKeeperRequests(enterprisePubkey: string, filterStatus?: string): KeeperJoinRequest[] {
+    let sql = `
+        SELECT r.id, r.enterprise_pubkey, r.member_pubkey, r.pledged_backing, r.status,
+               r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_url
+        FROM enterprise_keeper_requests r
+        JOIN members m ON m.public_key = r.member_pubkey
+        WHERE r.enterprise_pubkey = ?
+    `;
+    const params: any[] = [enterprisePubkey];
+    if (filterStatus) {
+        sql += ` AND r.status = ?`;
+        params.push(filterStatus);
+    }
+    sql += ` ORDER BY r.created_at DESC`;
+
+    return (db.prepare(sql).all(...params) as any[]).map(r => {
+        const trust = getMemberTrustProfile(r.member_pubkey);
+        const available = getAvailableBacking(r.member_pubkey);
+        return {
+            id: r.id,
+            enterprisePubkey: r.enterprise_pubkey,
+            memberPubkey: r.member_pubkey,
+            callsign: r.callsign,
+            avatarUrl: r.avatar_url
+                ? (r.avatar_url.startsWith('bundled://') ? r.avatar_url : `/api/avatar/${r.member_pubkey}?size=thumb`)
+                : null,
+            pledgedBacking: Number(r.pledged_backing),
+            status: r.status,
+            createdAt: r.created_at,
+            decidedAt: r.decided_at,
+            decidedBy: r.decided_by,
+            availableToBack: available,
+            earnedCredit: trust.earnedCredit,
+        };
+    });
+}
+
+/**
+ * Approve a keeper join request.
+ * Gated by lead keeper, sole keeper, or node admin (isLeadOrSoleKeeperOrAdmin).
+ * Re-validates available_to_back SERVER-SIDE AT APPROVAL.
+ * On approval the member becomes a keeper with the pledged backing through existing keeper/backing machinery.
+ */
+export function approveKeeperRequest(requestId: string, actorPubkey: string): { ok: true; keeper: string; backing: number } {
+    const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
+    if (!req) throw new Error('Keeper request not found');
+    if (req.status !== 'pending') throw new Error('Request is no longer pending');
+
+    if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper, sole keeper, or admin may approve keeper requests');
+    }
+
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(req.enterprise_pubkey) as any;
+    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
+    if (ent.status === 'completed') throw new Error('Completed enterprise accepts no requests');
+
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(req.member_pubkey) as any;
+    if (!km || km.status !== 'active') {
+        throw new Error('Applicant account is not active, so they cannot be approved as a keeper');
+    }
+    if (km.credit_frozen === 1) {
+        throw new Error('Applicant credit is frozen, so they cannot be approved as a keeper');
+    }
+    // A lead's approval must never reverse an admin suspension (PR #838 B3).
+    if (isOperatorSwitchedOff(req.member_pubkey)) {
+        throw new Error("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
+    }
+
+    // Re-validate available_to_back SERVER-SIDE AT APPROVAL
+    const pledged = Number(req.pledged_backing || 0);
+    const available = getAvailableBacking(req.member_pubkey);
+    if (pledged > available) {
+        throw new Error(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
+    }
+
+    db.transaction(() => {
+        const now = new Date().toISOString();
+        const updateRes = db.prepare(`
+            UPDATE enterprise_keeper_requests
+            SET status = 'approved', decided_at = ?, decided_by = ?
+            WHERE id = ? AND status = 'pending'
+        `).run(now, actorPubkey, requestId);
+        if (updateRes.changes === 0) {
+            throw new Error('Request is no longer pending');
+        }
+
+        // The operator switch is raised only for a first binding. For anyone who already keeps an
+        // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
+        const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(req.member_pubkey);
+        db.prepare(`
+            INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+            VALUES (?, ?, 'keeper', ?, ?)
+            ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing
+        `).run(req.enterprise_pubkey, req.member_pubkey, actorPubkey, pledged);
+        if (!hadBinding) {
+            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(req.member_pubkey);
+        }
+
+        if (pledged > 0) {
+            const pledgeId = crypto.randomUUID();
+            const nowIso = new Date().toISOString();
+            db.prepare(`
+                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                VALUES (?, ?, ?, ?, ?, NULL)
+            `).run(pledgeId, req.member_pubkey, req.enterprise_pubkey, pledged, nowIso);
+
+            // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+            const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(req.enterprise_pubkey) as any;
+            const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+            if (legacyFloor > 0) {
+                const pledgeSumRow = db.prepare(`
+                    SELECT COALESCE(SUM(p.amount), 0) as total
+                    FROM enterprise_pledges p
+                    JOIN members m ON m.public_key = p.keeper
+                    WHERE p.enterprise = ?
+                      AND p.released_at IS NULL
+                      AND m.status = 'active'
+                      AND COALESCE(m.credit_frozen, 0) = 0
+                `).get(req.enterprise_pubkey) as any;
+                if (Number(pledgeSumRow?.total || 0) >= legacyFloor) {
+                    db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(req.enterprise_pubkey);
+                    broadcast({ type: 'profile_updated', publicKey: req.enterprise_pubkey });
+                }
+            }
+        }
+    })();
+
+    clearEnterpriseFloorCache(req.enterprise_pubkey);
+    broadcast({ type: 'profile_updated', publicKey: req.member_pubkey });
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: req.enterprise_pubkey, keeper: req.member_pubkey });
+    broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey });
+
+    return { ok: true, keeper: req.member_pubkey, backing: pledged };
+}
+
+/**
+ * Decline a keeper join request.
+ * Gated by lead keeper, sole keeper, or node admin (isLeadOrSoleKeeperOrAdmin).
+ * Leaves no keeper row and no backing.
+ */
+export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
+    const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
+    if (!req) throw new Error('Keeper request not found');
+    if (req.status !== 'pending') throw new Error('Request is no longer pending');
+
+    if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper, sole keeper, or admin may decline keeper requests');
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(`
+        UPDATE enterprise_keeper_requests
+        SET status = 'declined', decided_at = ?, decided_by = ?
+        WHERE id = ?
+    `).run(now, actorPubkey, requestId);
+
+    broadcast({ type: 'enterprise_keeper_declined', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey });
+    return { ok: true };
+}
+
+// -------------------------------------------------------------------------------------
+// Lead Succession Without an Admin (docs/the-commons.md §2.3)
+// -------------------------------------------------------------------------------------
+
+export interface SuccessionVoteInfo {
+    voterPubkey: string;
+    callsign: string;
+    votedAt: string;
+}
+
+export interface SuccessionProposalInfo {
+    id: string;
+    enterprisePubkey: string;
+    leadPubkey: string;
+    leadCallsign: string;
+    candidatePubkey: string;
+    candidateCallsign: string;
+    proposerPubkey: string;
+    proposerCallsign: string;
+    status: 'active' | 'passed' | 'cancelled';
+    createdAt: string;
+    executedAt: string | null;
+    votes: SuccessionVoteInfo[];
+    totalEligible: number;
+    requiredVotes: number;
+    votesCount: number;
+}
+
+/**
+ * Check lead inactivity for an enterprise.
+ * Activity signal: members.last_active_at (falling back to joined_at), which is automatically
+ * updated whenever the lead performs authenticated node actions via recordActivity.
+ */
+export function getLeadInactivity(enterprisePubkey: string): {
+    leadPubkey: string | null;
+    leadCallsign: string | null;
+    lastActiveAt: string | null;
+    daysInactive: number;
+    isEligible: boolean;
+} {
+    const leadRow = db.prepare(`
+        SELECT o.member_pubkey, m.callsign, m.last_active_at, m.joined_at
+        FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.role = 'lead'
+    `).get(enterprisePubkey) as any;
+
+    if (!leadRow) {
+        return {
+            leadPubkey: null,
+            leadCallsign: null,
+            lastActiveAt: null,
+            daysInactive: 0,
+            isEligible: false,
+        };
+    }
+
+    const lastActiveStr = leadRow.last_active_at || leadRow.joined_at;
+    const lastActiveTime = lastActiveStr ? new Date(lastActiveStr).getTime() : 0;
+    const msInactive = Math.max(0, Date.now() - lastActiveTime);
+    const daysInactive = msInactive / (24 * 60 * 60 * 1000);
+    const isEligible = daysInactive >= 30;
+
+    return {
+        leadPubkey: leadRow.member_pubkey,
+        leadCallsign: leadRow.callsign,
+        lastActiveAt: lastActiveStr || null,
+        daysInactive,
+        isEligible,
+    };
+}
+
+/**
+ * Automatically cancel any active succession proposals if the lead keeper records node activity.
+ */
+export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
+    const activeProps = db.prepare(
+        "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
+    ).all(leadPubkey) as any[];
+
+    if (activeProps.length > 0) {
+        db.prepare(
+            "UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'"
+        ).run(leadPubkey);
+
+        for (const p of activeProps) {
+            broadcast({ type: 'enterprise_succession_cancelled', proposalId: p.id, enterprisePubkey: p.enterprise_pubkey, leadPubkey });
+        }
+    }
+}
+
+/**
+ * Propose moving the lead role to an active keeper when the current lead has been inactive for 30 days.
+ * Gated by: proposer is an active keeper (other than the lead), lead has no activity for 30 days.
+ * Succeeds on a strict majority of keepers excluding the inactive lead.
+ */
+export function proposeLeadSuccession(
+    enterprisePubkey: string,
+    proposerPubkey: string,
+    candidatePubkey: string
+): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
+    if (ent.status === 'completed') throw new Error('Completed enterprise cannot have succession');
+
+    const inactivity = getLeadInactivity(enterprisePubkey);
+    if (!inactivity.leadPubkey) {
+        throw new Error('No lead keeper found for this enterprise');
+    }
+    const leadPubkey = inactivity.leadPubkey;
+
+    if (!inactivity.isEligible) {
+        throw new Error('Lead keeper has recorded node activity within the last 30 days');
+    }
+
+    if (proposerPubkey === leadPubkey) {
+        throw new Error('Lead keeper cannot propose succession against themselves');
+    }
+    if (candidatePubkey === leadPubkey) {
+        throw new Error('Candidate cannot be the current lead keeper');
+    }
+
+    // Proposer must be an active keeper of this enterprise
+    const proposerOp = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).get(enterprisePubkey, proposerPubkey);
+    if (!proposerOp) {
+        throw new Error('Only an active keeper of this enterprise may propose succession');
+    }
+
+    // Candidate must be an active keeper of this enterprise
+    const candidateOp = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).get(enterprisePubkey, candidatePubkey);
+    if (!candidateOp) {
+        throw new Error('Candidate must be an active keeper of this enterprise');
+    }
+
+    // Other keepers excluding lead
+    const otherKeepers = db.prepare(`
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).all(enterprisePubkey, leadPubkey) as any[];
+
+    if (otherKeepers.length === 0) {
+        throw new Error('No other keepers available for succession');
+    }
+
+    // Check for existing active proposal
+    const existingActive = db.prepare(
+        "SELECT * FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
+    ).get(enterprisePubkey) as any;
+    if (existingActive) {
+        const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(leadPubkey) as any;
+        if (leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(existingActive.created_at).getTime()) {
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(existingActive.id);
+            throw new Error('Lead keeper has returned to activity; active proposal cancelled');
+        }
+        throw new Error('An active succession proposal already exists for this enterprise');
+    }
+
+    const proposalId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const totalEligible = otherKeepers.length;
+    const requiredVotes = Math.floor(totalEligible / 2) + 1; // Strict majority: > totalEligible / 2
+
+    let executed = false;
+    let finalStatus: 'active' | 'passed' = 'active';
+    let executedAt: string | null = null;
+
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO enterprise_succession_proposals (id, enterprise_pubkey, lead_pubkey, candidate_pubkey, proposer_pubkey, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'active', ?)
+        `).run(proposalId, enterprisePubkey, leadPubkey, candidatePubkey, proposerPubkey, now);
+
+        db.prepare(`
+            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at)
+            VALUES (?, ?, ?)
+        `).run(proposalId, proposerPubkey, now);
+
+        if (1 >= requiredVotes) {
+            // Proposer alone reaches strict majority (e.g. N = 1 other keeper)
+            executed = true;
+            finalStatus = 'passed';
+            executedAt = now;
+
+            // Old lead becomes ordinary keeper and keeps their backing
+            db.prepare("UPDATE treasury_operators SET role = 'keeper' WHERE treasury_pubkey = ? AND member_pubkey = ?")
+                .run(enterprisePubkey, leadPubkey);
+            // Candidate becomes lead
+            db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?")
+                .run(enterprisePubkey, candidatePubkey);
+            // Mark proposal passed
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'passed', executed_at = ? WHERE id = ?")
+                .run(now, proposalId);
+        }
+    })();
+
+    broadcast({
+        type: executed ? 'enterprise_succession_passed' : 'enterprise_succession_proposed',
+        proposalId,
+        enterprisePubkey,
+        leadPubkey,
+        candidatePubkey,
+        proposerPubkey,
+        executed,
+    });
+    if (executed) {
+        broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    }
+
+    const leadMem = getMember(leadPubkey);
+    const candMem = getMember(candidatePubkey);
+    const propMem = getMember(proposerPubkey);
+
+    return {
+        ok: true,
+        executed,
+        proposal: {
+            id: proposalId,
+            enterprisePubkey,
+            leadPubkey,
+            leadCallsign: leadMem?.callsign || leadPubkey.slice(0, 8),
+            candidatePubkey,
+            candidateCallsign: candMem?.callsign || candidatePubkey.slice(0, 8),
+            proposerPubkey,
+            proposerCallsign: propMem?.callsign || proposerPubkey.slice(0, 8),
+            status: finalStatus,
+            createdAt: now,
+            executedAt,
+            votes: [{
+                voterPubkey: proposerPubkey,
+                callsign: propMem?.callsign || proposerPubkey.slice(0, 8),
+                votedAt: now,
+            }],
+            totalEligible,
+            requiredVotes,
+            votesCount: 1,
+        },
+    };
+}
+
+/**
+ * Vote on an active succession proposal.
+ * Sits behind: voter is an active keeper excluding the lead, lead has not returned.
+ * Strict majority (> totalEligible / 2) moves the role; a tie does not.
+ */
+export function voteLeadSuccession(
+    proposalId: string,
+    voterPubkey: string
+): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
+    if (!prop) throw new Error('Succession proposal not found');
+    if (prop.status !== 'active') throw new Error(`Proposal is no longer active (${prop.status})`);
+
+    // Check if lead returned to activity
+    const leadMem = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(prop.lead_pubkey) as any;
+    if (leadMem?.last_active_at && new Date(leadMem.last_active_at).getTime() > new Date(prop.created_at).getTime()) {
+        db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(proposalId);
+        broadcast({ type: 'enterprise_succession_cancelled', proposalId, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey });
+        throw new Error('Lead keeper has returned to activity; succession proposal was cancelled');
+    }
+
+    if (voterPubkey === prop.lead_pubkey) {
+        throw new Error('Lead keeper cannot vote on succession');
+    }
+
+    const voterOp = db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).get(prop.enterprise_pubkey, voterPubkey);
+    if (!voterOp) {
+        throw new Error('Only active keepers of this enterprise may vote on succession');
+    }
+
+    const alreadyVoted = db.prepare(
+        "SELECT 1 FROM enterprise_succession_votes WHERE proposal_id = ? AND voter_pubkey = ?"
+    ).get(proposalId, voterPubkey);
+    if (alreadyVoted) {
+        throw new Error('You have already voted on this proposal');
+    }
+
+    const otherKeepers = db.prepare(`
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).all(prop.enterprise_pubkey, prop.lead_pubkey) as any[];
+    const totalEligible = otherKeepers.length;
+    const requiredVotes = Math.floor(totalEligible / 2) + 1; // Strict majority: > totalEligible / 2
+
+    const now = new Date().toISOString();
+    let executed = false;
+    let finalStatus: 'active' | 'passed' = 'active';
+    let executedAt: string | null = null;
+    let newVoteCount = 0;
+
+    let candidateInvalidated = false;
+
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at)
+            VALUES (?, ?, ?)
+        `).run(proposalId, voterPubkey, now);
+
+        const votes = (db.prepare(
+            "SELECT COUNT(*) as c FROM enterprise_succession_votes WHERE proposal_id = ?"
+        ).get(proposalId) as any)?.c ?? 0;
+        newVoteCount = Number(votes);
+
+        if (newVoteCount >= requiredVotes) {
+            const candidateOp = db.prepare(`
+                SELECT 1 FROM treasury_operators o
+                JOIN members m ON m.public_key = o.member_pubkey
+                WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+            `).get(prop.enterprise_pubkey, prop.candidate_pubkey);
+            if (!candidateOp) {
+                db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(proposalId);
+                candidateInvalidated = true;
+                return;
+            }
+
+            executed = true;
+            finalStatus = 'passed';
+            executedAt = now;
+
+            // Old lead becomes ordinary keeper and keeps their backing
+            db.prepare("UPDATE treasury_operators SET role = 'keeper' WHERE treasury_pubkey = ? AND member_pubkey = ?")
+                .run(prop.enterprise_pubkey, prop.lead_pubkey);
+            // Candidate becomes lead
+            db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?")
+                .run(prop.enterprise_pubkey, prop.candidate_pubkey);
+            // Mark proposal passed
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'passed', executed_at = ? WHERE id = ?")
+                .run(now, proposalId);
+        }
+    })();
+
+    if (candidateInvalidated) {
+        broadcast({ type: 'enterprise_succession_cancelled', proposalId, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey });
+        throw new Error('Succession candidate is no longer an active keeper of this enterprise; proposal cancelled');
+    }
+
+    broadcast({
+        type: executed ? 'enterprise_succession_passed' : 'enterprise_succession_voted',
+        proposalId,
+        enterprisePubkey: prop.enterprise_pubkey,
+        voterPubkey,
+        executed,
+        votesCount: newVoteCount,
+        requiredVotes,
+    });
+    if (executed) {
+        broadcast({ type: 'profile_updated', publicKey: prop.enterprise_pubkey });
+    }
+
+    const allVotes = (db.prepare(`
+        SELECT v.voter_pubkey, v.voted_at, m.callsign
+        FROM enterprise_succession_votes v
+        JOIN members m ON m.public_key = v.voter_pubkey
+        WHERE v.proposal_id = ?
+        ORDER BY v.voted_at ASC
+    `).all(proposalId) as any[]).map(r => ({
+        voterPubkey: r.voter_pubkey,
+        callsign: r.callsign,
+        votedAt: r.voted_at,
+    }));
+
+    const leadM = getMember(prop.lead_pubkey);
+    const candM = getMember(prop.candidate_pubkey);
+    const propM = getMember(prop.proposer_pubkey);
+
+    return {
+        ok: true,
+        executed,
+        proposal: {
+            id: proposalId,
+            enterprisePubkey: prop.enterprise_pubkey,
+            leadPubkey: prop.lead_pubkey,
+            leadCallsign: leadM?.callsign || prop.lead_pubkey.slice(0, 8),
+            candidatePubkey: prop.candidate_pubkey,
+            candidateCallsign: candM?.callsign || prop.candidate_pubkey.slice(0, 8),
+            proposerPubkey: prop.proposer_pubkey,
+            proposerCallsign: propM?.callsign || prop.proposer_pubkey.slice(0, 8),
+            status: finalStatus,
+            createdAt: prop.created_at,
+            executedAt,
+            votes: allVotes,
+            totalEligible,
+            requiredVotes,
+            votesCount: newVoteCount,
+        },
+    };
+}
+
+/**
+ * Get lead succession proposals and eligibility for an enterprise.
+ */
+export function getSuccessionProposals(enterprisePubkey: string): {
+    inactivity: ReturnType<typeof getLeadInactivity>;
+    proposals: SuccessionProposalInfo[];
+} {
+    const inactivity = getLeadInactivity(enterprisePubkey);
+
+    // Cancel active proposal if lead returned
+    const active = db.prepare(
+        "SELECT id, created_at FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
+    ).get(enterprisePubkey) as any;
+    if (active && inactivity.leadPubkey) {
+        const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(inactivity.leadPubkey) as any;
+        if (leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(active.created_at).getTime()) {
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(active.id);
+            broadcast({ type: 'enterprise_succession_cancelled', proposalId: active.id, enterprisePubkey, leadPubkey: inactivity.leadPubkey });
+        }
+    }
+
+    const rows = db.prepare(`
+        SELECT p.id, p.enterprise_pubkey, p.lead_pubkey, p.candidate_pubkey, p.proposer_pubkey,
+               p.status, p.created_at, p.executed_at,
+               lm.callsign as lead_callsign,
+               cm.callsign as candidate_callsign,
+               pm.callsign as proposer_callsign
+        FROM enterprise_succession_proposals p
+        JOIN members lm ON lm.public_key = p.lead_pubkey
+        JOIN members cm ON cm.public_key = p.candidate_pubkey
+        JOIN members pm ON pm.public_key = p.proposer_pubkey
+        WHERE p.enterprise_pubkey = ?
+        ORDER BY p.created_at DESC
+    `).all(enterprisePubkey) as any[];
+
+    const otherKeepers = inactivity.leadPubkey ? db.prepare(`
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).all(enterprisePubkey, inactivity.leadPubkey) as any[] : [];
+    const totalEligible = otherKeepers.length;
+    const requiredVotes = Math.floor(totalEligible / 2) + 1;
+
+    const proposals: SuccessionProposalInfo[] = rows.map(r => {
+        const votes = (db.prepare(`
+            SELECT v.voter_pubkey, v.voted_at, m.callsign
+            FROM enterprise_succession_votes v
+            JOIN members m ON m.public_key = v.voter_pubkey
+            WHERE v.proposal_id = ?
+            ORDER BY v.voted_at ASC
+        `).all(r.id) as any[]).map(v => ({
+            voterPubkey: v.voter_pubkey,
+            callsign: v.callsign,
+            votedAt: v.voted_at,
+        }));
+
+        return {
+            id: r.id,
+            enterprisePubkey: r.enterprise_pubkey,
+            leadPubkey: r.lead_pubkey,
+            leadCallsign: r.lead_callsign,
+            candidatePubkey: r.candidate_pubkey,
+            candidateCallsign: r.candidate_callsign,
+            proposerPubkey: r.proposer_pubkey,
+            proposerCallsign: r.proposer_callsign,
+            status: r.status,
+            createdAt: r.created_at,
+            executedAt: r.executed_at,
+            votes,
+            totalEligible,
+            requiredVotes,
+            votesCount: votes.length,
+        };
+    });
+
+    return { inactivity, proposals };
+}
+
+
 
 /**
  * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
@@ -1798,7 +3217,7 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
-    const isAdmin = actorPubkey === getAdminPubkey();
+    const isAdmin = isAdminPubkey(actorPubkey);
     if (!isAdmin && actorPubkey !== vouchedBy) throw new Error('Only the voucher who vouched, or an admin, can withdraw a vouch');
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
@@ -1809,9 +3228,20 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
 }
 
 export function createPost(
-    type: 'offer' | 'need', category: string, title: string, description: string, credits: number,
+    type: 'offer' | 'need' | 'poll', category: string, title: string, description: string, credits: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string, authorPublicKey: string, lat?: number, lng?: number, photos?: string[], repeatable?: boolean, id?: string, cashAlsoNeeded?: boolean,
-    options?: { reach?: unknown; reachPeers?: unknown }
+    options?: {
+        reach?: unknown;
+        reachPeers?: unknown;
+        createdBy?: string;
+        pollOptions?: Array<{ id: string; text: string }>;
+        durationDays?: number;
+        audienceScope?: AudienceScope;
+        targetGroupId?: string;
+        targetPubkey?: string;
+        assignedTo?: string;
+        targetArchetypes?: string;
+    }
 ): MarketplacePost | null {
     return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
 }
@@ -1824,10 +3254,723 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost>): MarketplacePost | null {
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
     return updatePostEngine(broadcast, id, authorPublicKey, updates);
 }
 
+/**
+ * Process pending deferred wage claims for an enterprise (docs/the-commons.md §2.4 Rule 6).
+ * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
+ */
+export function processDeferredWageClaims(enterprisePubkey: string): number {
+    const ent = db.prepare('SELECT paused, status FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (ent?.paused === 1 || ent?.status === 'completed') {
+        return 0; // While paused: no wage payments out
+    }
+    let paidCount = 0;
+    const claims = db.prepare(`
+        SELECT * FROM deferred_wage_claims
+        WHERE enterprise_pubkey = ? AND status = 'pending'
+        ORDER BY created_at ASC
+    `).all(enterprisePubkey) as any[];
+
+    for (const claim of claims) {
+        if (claim.transaction_id) {
+            const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+            if (!tx || tx.status === 'cancelled' || tx.status === 'rejected') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
+        if (claim.post_id) {
+            const post = db.prepare('SELECT status FROM posts WHERE id = ?').get(claim.post_id) as any;
+            if (!post || post.status === 'cancelled') {
+                db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE id = ?").run(claim.id);
+                continue;
+            }
+        }
+
+        const { balance } = getBalance(enterprisePubkey);
+        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+
+        // Condition: positive balance AND sufficient earned surplus (Rule 5 & Rule 6)
+        if (balance >= claim.amount && earnedSurplus >= claim.amount && balance - claim.amount >= 0) {
+            let success = false;
+            try {
+                success = conservingTransaction(() => {
+                    const memo = `Deferred wage claim payout for ${claim.post_id || 'keeper work'}`;
+                    const txn = transfer(enterprisePubkey, claim.keeper_pubkey, claim.amount, memo, 'escrow', false);
+                    if (!txn) return false;
+
+                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
+                        .run(claim.amount, enterprisePubkey);
+                    db.prepare("UPDATE deferred_wage_claims SET status = 'paid', paid_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                        .run(claim.id);
+
+                    if (claim.transaction_id) {
+                        const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
+                        if (tx?.status === 'completed') {
+                            // Extra hours adjustment: base hold was already completed, increment credits by deferred diff
+                            db.prepare("UPDATE marketplace_transactions SET credits = credits + ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                                .run(claim.amount, claim.transaction_id);
+                        } else {
+                            db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
+                                .run(claim.transaction_id);
+                        }
+                    }
+                    if (claim.post_id) {
+                        db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND status != 'completed'")
+                            .run(claim.post_id);
+                    }
+                    return true;
+                });
+            } catch (err) {
+                console.error(`[DeferredClaims] Failed to pay claim ${claim.id}:`, err);
+                success = false;
+            }
+
+            if (success) {
+                paidCount++;
+                try {
+                    broadcast({
+                        type: 'deferred_wage_paid',
+                        claimId: claim.id,
+                        enterprise: enterprisePubkey,
+                        keeper: claim.keeper_pubkey,
+                        amount: claim.amount,
+                    });
+                } catch { }
+            }
+        }
+    }
+    return paidCount;
+}
+
+/**
+ * Automatically sweeps balance above working capital ceiling to COMMONS_POOL (docs/the-commons.md §2.4 Rule 7).
+ * Enterprises are decay-exempt; without a ceiling they accumulate indefinitely while members demur.
+ * When balance exceeds ceiling, the excess sweeps to COMMONS_POOL via moveToCommons inside a conservingTransaction.
+ */
+export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
+    const row = db.prepare('SELECT working_capital_ceiling, is_treasury, earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (row?.is_treasury === 1 && row.working_capital_ceiling !== null && row.working_capital_ceiling !== undefined) {
+        const ceiling = Number(row.working_capital_ceiling);
+        if (ceiling >= 0) {
+            const { balance } = getBalance(enterprisePubkey);
+            const earnedSurplus = Math.max(0, Number(row.earned_surplus ?? 0));
+            // THE SWEEP TAKES ONLY EARNED SURPLUS, NEVER GRANT MONEY (docs/the-commons.md §2.4 Rule 7).
+            // sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))
+            const excess = Math.round(Math.max(0, Math.min(balance - ceiling, earnedSurplus)) * 100) / 100;
+            if (excess > 0) {
+                let sweptTxn: Transaction | null = null;
+                try {
+                    sweptTxn = conservingTransaction(() => {
+                        const txn = moveToCommons(
+                            enterprisePubkey,
+                            excess,
+                            `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
+                        );
+                        db.prepare('UPDATE members SET earned_surplus = MAX(0, COALESCE(earned_surplus, 0) - ?) WHERE public_key = ?')
+                            .run(excess, enterprisePubkey);
+                        return txn;
+                    });
+                } catch (err) {
+                    console.error(`[EnterpriseCeiling] Failed to sweep ${excess} beans from ${enterprisePubkey}:`, err);
+                }
+                if (sweptTxn) {
+                    try {
+                        broadcast({
+                            type: 'enterprise_ceiling_swept',
+                            enterprise: enterprisePubkey,
+                            amount: excess,
+                            ceiling,
+                        });
+                    } catch { }
+                    return excess;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+export { recordDeferredWageClaim } from './engine/escrow.js';
+
+// ===================== ENTERPRISE LIFECYCLE (PAUSE, WIND-UP, LEDGER) =====================
+
+/**
+ * Pause an enterprise for a season (docs/the-commons.md §2.2).
+ * Authorised by canAdministerTreasury (a keeper or node admin).
+ * Takes a snapshot of the current credit floor (paused_floor_snapshot).
+ * Idempotent. Records auth_signer.
+ */
+export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    paused: boolean;
+    pausedAt?: string;
+    pausedFloorSnapshot?: number;
+    alreadyPaused?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
+        throw new Error('Not authorised to pause this enterprise');
+    }
+
+    if (member.paused === 1) {
+        return {
+            ok: true,
+            paused: true,
+            pausedAt: member.paused_at,
+            pausedFloorSnapshot: member.paused_floor_snapshot != null ? Number(member.paused_floor_snapshot) : undefined,
+            alreadyPaused: true,
+        };
+    }
+
+    const currentUsable = usableFloor(enterprisePubkey);
+    const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(enterprisePubkey);
+    const snapshot = currentUsable !== 0 ? currentUsable : underlyingFloor;
+
+    const now = new Date().toISOString();
+    db.prepare(`
+        UPDATE members
+        SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ?
+        WHERE public_key = ?
+    `).run(now, actorPubkey, snapshot, enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_paused', enterprisePubkey, pausedBy: actorPubkey, pausedAt: now, snapshot });
+
+    return {
+        ok: true,
+        paused: true,
+        pausedAt: now,
+        pausedFloorSnapshot: snapshot,
+    };
+}
+
+/**
+ * Resume a paused enterprise (docs/the-commons.md §2.2).
+ * Clears the credit floor snapshot; floor recomputes normally.
+ * Idempotent.
+ */
+export function resumeEnterprise(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    paused: boolean;
+    alreadyActive?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, paused, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — cannot be resumed');
+    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
+        throw new Error('Not authorised to resume this enterprise');
+    }
+
+    if (member.paused === 0 || member.paused == null) {
+        return {
+            ok: true,
+            paused: false,
+            alreadyActive: true,
+        };
+    }
+
+    db.prepare(`
+        UPDATE members
+        SET paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+        WHERE public_key = ?
+    `).run(enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_resumed', enterprisePubkey, resumedBy: actorPubkey });
+
+    return {
+        ok: true,
+        paused: false,
+    };
+}
+
+/**
+ * Set an enterprise's map location (docs/the-commons.md §2.2, §2.3, Slice 6).
+ * Only keepers or an admin can set or clear location.
+ * Range CHECK is enforced (-90 <= lat <= 90, -180 <= lng <= 180).
+ * Recorded with auth_signer.
+ */
+export function setEnterpriseLocation(
+    enterprisePubkey: string,
+    actorPubkey: string,
+    location: { lat: number | null; lng: number | null } | null
+): {
+    ok: true;
+    lat: number | null;
+    lng: number | null;
+    locationAuthSigner: string;
+    locationUpdatedAt: string;
+} {
+    const member = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has wound up — cannot update location');
+    if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
+        throw new Error('Only a keeper of this enterprise (or node admin) may set its location');
+    }
+
+    let latVal: number | null = null;
+    let lngVal: number | null = null;
+
+    if (location && (location.lat != null || location.lng != null)) {
+        if (location.lat == null || location.lng == null) {
+            throw new Error('Both latitude and longitude must be provided');
+        }
+        const lat = Number(location.lat);
+        const lng = Number(location.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            throw new Error('Latitude and longitude must be valid numbers');
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            throw new Error('Latitude must be between -90 and 90, longitude between -180 and 180');
+        }
+        latVal = lat;
+        lngVal = lng;
+    }
+
+    return writeEnterpriseLocation(enterprisePubkey, actorPubkey, latVal, lngVal);
+}
+
+function writeEnterpriseLocation(enterprisePubkey: string, actorPubkey: string, latVal: number | null, lngVal: number | null) {
+    const now = new Date().toISOString();
+    db.prepare(`
+        UPDATE members
+        SET lat = ?, lng = ?, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?, updated_at = ?
+        WHERE public_key = ?
+    `).run(latVal, lngVal, actorPubkey, actorPubkey, now, now, enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: latVal, lng: lngVal, authSigner: actorPubkey, updatedAt: now });
+
+    return {
+        ok: true as const,
+        lat: latVal,
+        lng: lngVal,
+        locationAuthSigner: actorPubkey,
+        locationUpdatedAt: now,
+    };
+}
+
+/**
+ * Clear an enterprise's map location (docs/the-commons.md §2.2, §2.3, Slice 6).
+ * Only keepers or an admin can clear location.
+ * Recorded with auth_signer.
+ *
+ * A completed (wound-up) enterprise can still be cleared, by a node admin only: its keepers were released at
+ * wind-up, and a location left behind must never be stuck (PR #839 Blocker A). Setting one stays refused.
+ */
+export function clearEnterpriseLocation(
+    enterprisePubkey: string,
+    actorPubkey: string
+): {
+    ok: true;
+    lat: null;
+    lng: null;
+    locationAuthSigner: string;
+    locationUpdatedAt: string;
+} {
+    const member = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (member?.is_treasury && member.status === 'completed') {
+        if (!(actorPubkey === 'admin' || actorPubkey === 'owner:password' || isAdminPubkey(actorPubkey))) {
+            throw new Error('Only a node admin may clear the location of a wound-up enterprise');
+        }
+        return writeEnterpriseLocation(enterprisePubkey, actorPubkey, null, null) as any;
+    }
+    return setEnterpriseLocation(enterprisePubkey, actorPubkey, null) as any;
+}
+
+/**
+ * Step 1 of Enterprise Wind-up: Lead keeper initiates wind-up with 7-day grace period.
+ * (docs/the-commons.md §2.2, mirroring §3.8).
+ * Sets status to 'winding_up'.
+ */
+export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'winding_up';
+    initiatedAt: string;
+    initiatedBy: string;
+    graceEndsAt: string;
+    alreadyInitiated?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_initiated_by FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
+
+    if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper may initiate wind-up');
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
+    if (member.status === 'winding_up') {
+        const graceEndsAt = new Date(new Date(member.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        return {
+            ok: true,
+            status: 'winding_up',
+            initiatedAt: member.wind_up_initiated_at,
+            initiatedBy: member.wind_up_initiated_by,
+            graceEndsAt,
+            alreadyInitiated: true,
+        };
+    }
+
+    const now = new Date().toISOString();
+    const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    db.prepare(`
+        UPDATE members
+        SET status = 'winding_up', wind_up_initiated_at = ?, wind_up_initiated_by = ?
+        WHERE public_key = ?
+    `).run(now, actorPubkey, enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_winding_up', enterprisePubkey, initiatedBy: actorPubkey, initiatedAt: now, graceEndsAt });
+
+    return {
+        ok: true,
+        status: 'winding_up',
+        initiatedAt: now,
+        initiatedBy: actorPubkey,
+        graceEndsAt,
+    };
+}
+
+/**
+ * Cancel wind-up during the 7-day grace period.
+ * Any keeper may cancel (§2.2, mirroring §3.8). Resets status to 'active'.
+ */
+export function cancelWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'active';
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (member.status !== 'winding_up') throw new Error('Enterprise is not winding up');
+
+    if (!canOperateTreasury(actorPubkey, enterprisePubkey) && !isAdminPubkey(actorPubkey)) {
+        throw new Error('Only a keeper of this enterprise may cancel wind-up');
+    }
+
+    db.prepare(`
+        UPDATE members
+        SET status = 'active', wind_up_initiated_at = NULL, wind_up_initiated_by = NULL
+        WHERE public_key = ?
+    `).run(enterprisePubkey);
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_wind_up_cancelled', enterprisePubkey, cancelledBy: actorPubkey });
+
+    return {
+        ok: true,
+        status: 'active',
+    };
+}
+
+/**
+ * Step 2 of Enterprise Wind-up: Finalise after 7-day grace period and 0 open escrows.
+ * Sweeps remaining balance to Commons inside conservingTransaction.
+ * Releases all operators in treasury_operators and backing pledges.
+ * Status -> 'completed'. Name stays reserved.
+ */
+export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
+    ok: true;
+    status: 'completed';
+    finalisedAt: string;
+    sweptAmount: number;
+    alreadyCompleted?: boolean;
+} {
+    const member = db.prepare("SELECT is_treasury, status, wind_up_initiated_at, wind_up_finalised_at FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!member || !member.is_treasury) throw new Error('Not an enterprise');
+    if (member.status === 'completed') {
+        return {
+            ok: true,
+            status: 'completed',
+            finalisedAt: member.wind_up_finalised_at || new Date().toISOString(),
+            sweptAmount: 0,
+            alreadyCompleted: true,
+        };
+    }
+    if (member.status !== 'winding_up') {
+        throw new Error('Enterprise must be in winding_up state to finalise');
+    }
+
+    if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper may finalise wind-up');
+    }
+
+    const initiatedAt = member.wind_up_initiated_at ? new Date(member.wind_up_initiated_at).getTime() : 0;
+    const gracePeriodMs = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - initiatedAt < gracePeriodMs) {
+        throw new Error('Cannot finalise wind-up before 7-day grace period has elapsed');
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    if (currentBal < 0) {
+        throw new Error('Cannot wind up an enterprise in deficit — debt must be resolved or written off first');
+    }
+
+    // Deliberately OUTSIDE conservingTransaction. This is an ordinary precondition — a keeper
+    // finalising while trades are still open is a normal thing to do, not an exceptional one — and
+    // conservingTransaction treats any throw as a possible conservation breach: it rolls back and
+    // then runs a full reconcileLedgerFromDb() to resync memory to rows, halting the process if
+    // that resync fails. Rebuilding the in-memory ledger every time someone clicks finalise too
+    // early is a steep price for a 400. The atomicity it would buy is illusory anyway: the sweep
+    // re-reads the balance inside the transaction, and the transaction holds the write lock, so no
+    // escrow can open between this check and the sweep.
+    const openEscrows = db.prepare(`
+        SELECT COUNT(*) as c FROM marketplace_transactions
+        WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested', 'pending', 'disputed')
+    `).get(enterprisePubkey, enterprisePubkey) as any;
+    if ((openEscrows?.c ?? 0) > 0) {
+        throw new Error(`Cannot finalise wind-up: ${openEscrows.c} open transaction(s) pending settlement`);
+    }
+
+    let sweptAmount = 0;
+    const now = new Date().toISOString();
+
+    conservingTransaction(() => {
+        const bal = ledger.getAccount(enterprisePubkey).balance;
+        if (bal > 0) {
+            const swept = moveToCommons(enterprisePubkey, bal, `Final wind-up sweep from ${enterprisePubkey.slice(0, 8)}`, { authSigner: actorPubkey });
+            if (!swept) throw new Error('Failed to sweep remaining balance to Commons');
+            sweptAmount = bal;
+        }
+
+        const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
+        db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
+
+        for (const op of ops) {
+            const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;
+            if (!remaining?.c) {
+                db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(op.member_pubkey);
+            }
+        }
+
+        db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE enterprise = ? AND released_at IS NULL").run(now, enterprisePubkey);
+        clearEnterpriseFloorCache(enterprisePubkey);
+
+        // A wound-up enterprise's map location goes with it (PR #839 Blocker A): a keeper may have pinned it
+        // on their own house, and once it is completed nobody keeps it any more. The clear is signed by the
+        // finalising actor, exactly as a keeper's own clear would be.
+        db.prepare(`
+            UPDATE members
+            SET status = 'completed', wind_up_finalised_at = ?,
+                legacy_credit_floor = NULL,
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL,
+                lat = NULL, lng = NULL, location_auth_signer = ?, auth_signer = ?, location_updated_at = ?
+            WHERE public_key = ?
+        `).run(now, actorPubkey, actorPubkey, now, enterprisePubkey);
+
+        db.prepare(`
+            UPDATE deferred_wage_claims
+            SET status = 'cancelled'
+            WHERE enterprise_pubkey = ? AND status = 'pending'
+        `).run(enterprisePubkey);
+
+        db.prepare(`
+            UPDATE posts
+            SET status = 'cancelled', active = 0
+            WHERE author_pubkey = ? AND status IN ('active', 'pending')
+        `).run(enterprisePubkey);
+    });
+
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_location_updated', enterprisePubkey, lat: null, lng: null, authSigner: actorPubkey, updatedAt: now });
+    broadcast({ type: 'enterprise_wound_up', enterprisePubkey, finalisedBy: actorPubkey, finalisedAt: now, sweptAmount });
+
+    return {
+        ok: true,
+        status: 'completed',
+        finalisedAt: now,
+        sweptAmount,
+    };
+}
+
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerSummary {
+    totalIncome: number;
+    totalSpend: number;
+    netChange: number;
+    startingBalance: number;
+    endingBalance: number;
+    transactionCount: number;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: {
+        publicKey: string;
+        name: string;
+        purpose: string | null;
+        status: string;
+        paused: boolean;
+        balance: number;
+    };
+    period: {
+        since: string | null;
+        until: string | null;
+    };
+    summary: EnterpriseLedgerSummary;
+    entries: EnterpriseLedgerEntry[];
+}
+
+/**
+ * Read-only accountability ledger (docs/the-commons.md §2.2).
+ * Accessible to any member of the node.
+ * Resolves counterparties to display names.
+ * Computes running totals directly from the transactions table. Excludes nothing.
+ */
+export function getEnterpriseLedger(
+    enterprisePubkey: string,
+    opts?: { since?: string; until?: string; limit?: number }
+): EnterpriseLedgerResponse {
+    const member = db.prepare("SELECT callsign, purpose, status, paused FROM members WHERE public_key = ? AND is_treasury = 1").get(enterprisePubkey) as any;
+    if (!member) throw new Error('Not an enterprise');
+
+    const allTxns = db.prepare(`
+        SELECT id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer
+        FROM transactions
+        WHERE from_pubkey = ? OR to_pubkey = ?
+        ORDER BY timestamp ASC, rowid ASC
+    `).all(enterprisePubkey, enterprisePubkey) as any[];
+
+    const sinceTime = opts?.since ? new Date(opts.since).getTime() : null;
+    const untilTime = opts?.until ? new Date(opts.until).getTime() : null;
+
+    let running = 0;
+    let startingBalance = 0;
+    let periodIncome = 0;
+    let periodSpend = 0;
+    const filteredEntries: EnterpriseLedgerEntry[] = [];
+
+    const nameCache = new Map<string, string>();
+    const resolveName = (pk: string): string => {
+        if (nameCache.has(pk)) return nameCache.get(pk)!;
+        let resolved = pk;
+        if (pk === 'COMMONS_POOL') resolved = 'Commons Pool';
+        else if (pk === 'genesis') resolved = 'Genesis';
+        else if (pk.startsWith('escrow_')) {
+            const postId = pk.replace('escrow_', '');
+            const post = db.prepare('SELECT title FROM posts WHERE id = ?').get(postId) as any;
+            resolved = post?.title ? `Escrow: ${post.title}` : 'Escrow';
+        } else if (pk.startsWith('bridge_')) {
+            resolved = `Federation Bridge (${pk.replace('bridge_', '')})`;
+        } else {
+            const m = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(pk) as any;
+            resolved = m?.callsign || (pk.length > 12 ? `${pk.slice(0, 8)}...` : pk);
+        }
+        nameCache.set(pk, resolved);
+        return resolved;
+    };
+
+    let periodEndingBalance = 0;
+
+    for (const tx of allTxns) {
+        const txTime = new Date(tx.timestamp).getTime();
+        const isIncoming = tx.to_pubkey === enterprisePubkey;
+        const fee = Number(tx.tax_fee) || 0;
+        const gross = Number(tx.amount) || 0;
+        const netAmount = isIncoming ? (gross - fee) : -gross;
+
+        running = Math.round((running + netAmount) * 100) / 100;
+
+        const inPeriod = (!sinceTime || txTime >= sinceTime) && (!untilTime || txTime <= untilTime);
+
+        if (sinceTime && txTime < sinceTime) {
+            startingBalance = running;
+        }
+
+        if (inPeriod) {
+            if (isIncoming) {
+                periodIncome += gross;
+            } else {
+                periodSpend += gross;
+            }
+            periodEndingBalance = running;
+
+            const counterparty = isIncoming ? tx.from_pubkey : tx.to_pubkey;
+            filteredEntries.push({
+                id: tx.id,
+                timestamp: tx.timestamp,
+                direction: isIncoming ? 'income' : 'spend',
+                amount: gross,
+                fee,
+                netAmount: Math.round(netAmount * 100) / 100,
+                counterparty,
+                counterpartyName: resolveName(counterparty),
+                memo: tx.memo || '',
+                runningBalance: running,
+                authSigner: tx.auth_signer ?? null,
+            });
+        }
+    }
+
+    if (filteredEntries.length === 0) {
+        periodEndingBalance = startingBalance;
+    }
+
+    const currentBal = getBalance(enterprisePubkey).balance;
+    const entries = opts?.limit ? filteredEntries.slice(-opts.limit) : filteredEntries;
+
+    return {
+        enterprise: {
+            publicKey: enterprisePubkey,
+            name: member.callsign,
+            purpose: member.purpose ?? null,
+            status: member.status ?? 'active',
+            paused: member.paused === 1,
+            balance: currentBal,
+        },
+        period: {
+            since: opts?.since ?? null,
+            until: opts?.until ?? null,
+        },
+        summary: {
+            totalIncome: Math.round(periodIncome * 100) / 100,
+            totalSpend: Math.round(periodSpend * 100) / 100,
+            netChange: Math.round((periodEndingBalance - startingBalance) * 100) / 100,
+            startingBalance: Math.round(startingBalance * 100) / 100,
+            endingBalance: Math.round(periodEndingBalance * 100) / 100,
+            transactionCount: filteredEntries.length,
+        },
+        entries,
+    };
+}
+
+export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
+    return closePollEngine(broadcast, postId, authorPublicKey);
+}
+
+export function votePoll(
+    postId: string,
+    voterPublicKey: string,
+    optionId: string,
+    signature?: string
+): { success: boolean; post: MarketplacePost } {
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+}
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 function getEscrowCb() {
@@ -1839,7 +3982,11 @@ function getEscrowCb() {
         dispatchPushNotification,
         getBalance,
         floorLockedError,
-        SystemMessageType
+        SystemMessageType,
+        canOperateTreasury,
+        conservingTransaction,
+        processDeferredWageClaims,
+        sweepEnterpriseCeiling,
     };
 }
 
@@ -1847,8 +3994,8 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
-    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey);
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+    return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
 
 export function rejectPostRequest(transactionId: string, authorPublicKey: string): MarketplaceTransaction | null {
@@ -1859,16 +4006,232 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number): MarketplaceTransaction {
-    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours);
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+    return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
 
-export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
-    return completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours);
+export function completePostTransaction(transactionId: string, confirmerPublicKey: string, finalHours?: number, opts?: { authSigner?: string }): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
+    const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
+    if (res) clearEnterpriseFloorCache();
+    return res;
 }
 
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
+}
+
+export type { EscrowDisputeAction };
+
+export function resolveEscrowDispute(
+    transactionId: string,
+    action: EscrowDisputeAction,
+    adminSigner: string,
+    opts?: { reason?: string }
+): MarketplaceTransaction {
+    const res = resolveEscrowDisputeEngine(getEscrowCb(), transactionId, action, adminSigner, opts);
+    clearEnterpriseFloorCache();
+    return res;
+}
+
+export interface EscrowDisputeContext {
+    id: string;
+    postId: string;
+    credits: number;
+    hours?: number;
+    status: string;
+    createdAt: string;
+    daysInEscrow: number;
+    daysStuck: number;
+    isStalled: boolean;
+    buyerPubkey: string;
+    sellerPubkey: string;
+    buyerCallsign?: string;
+    sellerCallsign?: string;
+    resolution?: EscrowDisputeAction | null;
+    resolvedAt?: number | null;
+    resolvedBy?: string | null;
+    disputeResolution?: EscrowDisputeAction | null;
+    disputeResolvedAt?: string | null;
+    disputeResolvedBy?: string | null;
+    post: {
+        id: string;
+        title: string;
+        description: string;
+        type: string;
+        category: string;
+        priceType: string;
+        credits: number;
+        authorPubkey: string;
+        photos: string[];
+    } | null;
+    parties: {
+        buyer: {
+            pubkey: string;
+            callsign: string;
+            avatarUrl?: string | null;
+        };
+        seller: {
+            pubkey: string;
+            callsign: string;
+            avatarUrl?: string | null;
+        };
+    };
+    chat?: {
+        conversationId: string | null;
+        messages: Message[];
+    };
+    chatContext: {
+        id: string;
+        senderPubkey: string;
+        recipientPubkey?: string;
+        senderCallsign?: string;
+        content: string;
+        createdAt: number;
+        type?: string;
+    }[];
+}
+
+function mapDisputeRow(r: any): EscrowDisputeContext {
+    const createdTime = new Date(r.created_at).getTime();
+    const now = Date.now();
+    const daysInEscrow = Math.max(0, (now - createdTime) / (86400 * 1000));
+    const isStalled = daysInEscrow >= 7;
+
+    const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
+        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+
+    // Chat context between buyer and seller
+    const convRow = db.prepare(`
+        SELECT c.id FROM conversations c
+        JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
+        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        LIMIT 1
+    `).get(r.buyer_pubkey, r.seller_pubkey) as any;
+
+    let chat: { conversationId: string | null; messages: Message[] } | undefined = undefined;
+    if (convRow?.id) {
+        const msgs = getConversationMessages(convRow.id, 50, 0);
+        chat = {
+            conversationId: convRow.id,
+            messages: msgs
+        };
+    }
+
+    const chatContext = (chat?.messages || []).map(m => ({
+        id: m.id,
+        senderPubkey: m.authorPubkey,
+        recipientPubkey: m.authorPubkey === r.buyer_pubkey ? r.seller_pubkey : r.buyer_pubkey,
+        senderCallsign: m.authorPubkey === r.buyer_pubkey ? (r.buyer_callsign || 'Buyer') : (m.authorPubkey === r.seller_pubkey ? (r.seller_callsign || 'Seller') : 'System'),
+        content: m.ciphertext,
+        createdAt: new Date(m.timestamp).getTime(),
+        type: m.type
+    }));
+
+    return {
+        id: r.id,
+        postId: r.post_id,
+        credits: r.credits,
+        hours: r.hours ?? undefined,
+        status: r.status,
+        createdAt: r.created_at,
+        daysInEscrow,
+        daysStuck: Math.floor(daysInEscrow),
+        isStalled,
+        buyerPubkey: r.buyer_pubkey,
+        sellerPubkey: r.seller_pubkey,
+        buyerCallsign: r.buyer_callsign || 'Anonymous',
+        sellerCallsign: r.seller_callsign || 'Anonymous',
+        resolution: r.dispute_resolution || null,
+        resolvedAt: r.dispute_resolved_at ? new Date(r.dispute_resolved_at).getTime() : null,
+        resolvedBy: r.dispute_resolved_by || null,
+        disputeResolution: r.dispute_resolution || null,
+        disputeResolvedAt: r.dispute_resolved_at || null,
+        disputeResolvedBy: r.dispute_resolved_by || null,
+        post: (r.post_title || r.post_id) ? {
+            id: r.post_id,
+            title: r.post_title || 'Untitled Post',
+            description: r.post_description || '',
+            type: r.post_type || 'offer',
+            category: r.post_category || 'general',
+            priceType: r.post_price_type || 'fixed',
+            credits: r.post_credits ?? r.credits,
+            authorPubkey: r.post_author_pubkey || r.seller_pubkey,
+            photos
+        } : null,
+        parties: {
+            buyer: {
+                pubkey: r.buyer_pubkey,
+                callsign: r.buyer_callsign || 'Anonymous',
+                avatarUrl: r.buyer_avatar_url || null
+            },
+            seller: {
+                pubkey: r.seller_pubkey,
+                callsign: r.seller_callsign || 'Anonymous',
+                avatarUrl: r.seller_avatar_url || null
+            }
+        },
+        chat,
+        chatContext
+    };
+}
+
+export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: 'all' | 'pending' | 'resolved' = 'all'): EscrowDisputeContext[] {
+    let query = `
+        SELECT mt.*,
+               p.title AS post_title,
+               p.description AS post_description,
+               p.type AS post_type,
+               p.category AS post_category,
+               p.price_type AS post_price_type,
+               p.credits AS post_credits,
+               p.author_pubkey AS post_author_pubkey,
+               buyer.callsign AS buyer_callsign,
+               buyer.avatar_url AS buyer_avatar_url,
+               seller.callsign AS seller_callsign,
+               seller.avatar_url AS seller_avatar_url
+        FROM marketplace_transactions mt
+        LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
+        LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
+        WHERE (? = 'all'
+           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
+           OR (? = 'pending' AND mt.status = 'pending'))
+    `;
+    const params: any[] = [status, status, status];
+    if (minDays > 0) {
+        query += ` AND (julianday('now') - julianday(mt.created_at)) >= ?`;
+        params.push(minDays);
+    }
+    query += ` ORDER BY mt.created_at ASC LIMIT ? OFFSET ?`;
+    params.push(Math.max(1, Math.min(200, limit)), Math.max(0, offset));
+
+    const rows = db.prepare(query).all(...params) as any[];
+    return rows.map(mapDisputeRow);
+}
+
+export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
+    const row = db.prepare(`
+        SELECT mt.*,
+               p.title AS post_title,
+               p.description AS post_description,
+               p.type AS post_type,
+               p.category AS post_category,
+               p.price_type AS post_price_type,
+               p.credits AS post_credits,
+               p.author_pubkey AS post_author_pubkey,
+               buyer.callsign AS buyer_callsign,
+               buyer.avatar_url AS buyer_avatar_url,
+               seller.callsign AS seller_callsign,
+               seller.avatar_url AS seller_avatar_url
+        FROM marketplace_transactions mt
+        LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
+        LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
+        WHERE mt.id = ?
+    `).get(transactionId) as any;
+
+    if (!row) return null;
+    return mapDisputeRow(row);
 }
 
 export function pausePost(postId: string, authorPublicKey: string): boolean {
@@ -1975,6 +4338,28 @@ export function repairConsolidatedMessagesMetadata(): void {
     return repairConsolidatedMessagesMetadataEngine();
 }
 
+export function ensureEnterpriseThread(enterprisePubkey: string): Conversation {
+    return ensureEnterpriseThreadEngine(enterprisePubkey);
+}
+
+export function getEnterpriseThreadMessages(enterprisePubkey: string, limit = 50, offset = 0): EnterpriseThreadMessage[] {
+    return getEnterpriseThreadMessagesEngine(enterprisePubkey, limit, offset);
+}
+
+export function postEnterpriseThreadMessage(enterprisePubkey: string, authorPubkey: string, text: string, clientId?: string): EnterpriseThreadMessage {
+    return postEnterpriseThreadMessageEngine(getMessagingCb(), enterprisePubkey, authorPubkey, text, clientId);
+}
+
+export function removeEnterpriseThreadMessage(enterprisePubkey: string, messageId: string, actorPubkey: string): EnterpriseThreadMessage {
+    return removeEnterpriseThreadMessageEngine(getMessagingCb(), enterprisePubkey, messageId, actorPubkey);
+}
+
+export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: string): boolean {
+    return isKeeperOfEnterpriseEngine(actorPubkey, enterprisePubkey);
+}
+
+export type { EnterpriseThreadMessage };
+
 // ===================== STATE SYNC =====================
 
 export type {
@@ -1988,6 +4373,7 @@ export type {
     SyncRecoveryRequest,
     SyncRecoveryApproval,
     SyncMarketplaceTransaction,
+    SyncPollVote,
     SyncPayload,
     ImportResult,
     NodeRole
@@ -2024,7 +4410,7 @@ export function importRemoteState(remote: SyncPayload): Promise<ImportResult> {
 }
 // ===================== RATINGS =====================
 
-export { addRating, addFriend, removeFriend, setGuardian };
+export { addRating, addFriend, removeFriend };
 
 export function getRatings(targetPubkey: string): any[] {
     return getRatingsEngine(db, targetPubkey);
@@ -2038,251 +4424,30 @@ export function getAverageRating(targetPubkey: string) {
     return getAverageRatingEngine(db, targetPubkey);
 }
 
-// ===================== FRIENDS & GUARDIANS =====================
+// ===================== FRIENDS =====================
 
 export function getFriends(pubkey: string): FriendEntry[] {
     return getFriendsEngine(db, pubkey);
 }
 
-// ===================== SOCIAL RECOVERY =====================
-
-export function getGuardiansOf(pubkey: string): string[] {
-    const rows = db.prepare(`SELECT friend_pubkey FROM friends WHERE owner_pubkey=? AND is_guardian=1`).all(pubkey) as any[];
-    return rows.map(r => r.friend_pubkey);
-}
-
-export function getMyWards(guardianPubkey: string): { publicKey: string; callsign: string; avatarUrl: string | null }[] {
-    const rows = db.prepare(`
-        SELECT f.owner_pubkey as publicKey, m.callsign, m.avatar_url as avatarUrl
-        FROM friends f 
-        JOIN members m ON f.owner_pubkey = m.public_key 
-        WHERE f.friend_pubkey=? AND f.is_guardian=1
-    `).all(guardianPubkey) as any[];
-    return rows;
-}
-
-export function createRecoveryRequest(oldPubkey: string, newPubkey: string, guardianGuessCallsign: string): RecoveryRequest | null {
-    const oldMember = getMember(oldPubkey);
-    if (!oldMember || oldMember.status === 'migrated') throw new Error('Invalid or already migrated member');
-    
-    // Guardian knowledge check
-    const guardians = getGuardiansOf(oldPubkey);
-    if (guardians.length < 3) throw new Error('Account does not have enough guardians to recover');
-    
-    const normalizedGuess = guardianGuessCallsign.toLowerCase().trim();
-    const guessMatch = guardians.some(pubkey => {
-        const m = getMember(pubkey);
-        return m ? m.callsign.toLowerCase().trim() === normalizedGuess : false;
-    });
-    
-    if (!guessMatch) {
-        throw new Error('Guardian knowledge check failed. You must provide the exact callsign of one of your guardians.');
-    }
-
-    const existingPending = db.prepare(`SELECT * FROM recovery_requests WHERE old_pubkey=? AND status='pending'`).get(oldPubkey);
-    if (existingPending) throw new Error('A recovery request is already pending for this account');
-    
-    if (getMember(newPubkey)) throw new Error('New public key is already registered');
-
-    const id = crypto.randomUUID();
-    const createdAt = new Date().toISOString();
-    
-    // Expire in 24 hours (forces active coordination and prevents stale requests)
-    const expiresAtDate = new Date();
-    expiresAtDate.setHours(expiresAtDate.getHours() + 24);
-    const expiresAt = expiresAtDate.toISOString();
-
-    db.prepare(`
-        INSERT INTO recovery_requests (id, old_pubkey, new_pubkey, status, quorum_required, created_at, expires_at)
-        VALUES (?, ?, ?, 'pending', 3, ?, ?)
-    `).run(id, oldPubkey, newPubkey, createdAt, expiresAt);
-
-    return getRecoveryRequest(id)!;
-}
-
-export function getRecoveryRequest(id: string): RecoveryRequest | undefined {
-    const row = db.prepare(`SELECT * FROM recovery_requests WHERE id=?`).get(id) as any;
-    if (!row) return undefined;
-    return {
-        id: row.id,
-        oldPubkey: row.old_pubkey,
-        newPubkey: row.new_pubkey,
-        status: row.status,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until,
-        executedAt: row.executed_at,
-        expiresAt: row.expires_at
-    };
-}
-
-export function approveRecovery(requestId: string, guardianPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'pending') throw new Error('Invalid or non-pending request');
-    
-    const guardians = getGuardiansOf(req.oldPubkey);
-    if (!guardians.includes(guardianPubkey)) throw new Error('Not a guardian for this account');
-
-    db.transaction(() => {
-        db.prepare(`INSERT OR REPLACE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at) VALUES (?, ?, 'approve', ?)`).run(requestId, guardianPubkey, new Date().toISOString());
-        
-        // Check quorum
-        const approvals = db.prepare(`SELECT COUNT(*) as count FROM recovery_approvals WHERE request_id=? AND decision='approve'`).get(requestId) as any;
-        if (approvals.count >= req.quorumRequired) {
-            const cooldownDate = new Date();
-            cooldownDate.setHours(cooldownDate.getHours() + 24);
-            db.prepare(`UPDATE recovery_requests SET status='approved', cooldown_until=? WHERE id=?`).run(cooldownDate.toISOString(), requestId);
-        }
-    })();
-    return true;
-}
-
-export function rejectRecovery(requestId: string, guardianPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'pending') throw new Error('Invalid or non-pending request');
-    
-    const guardians = getGuardiansOf(req.oldPubkey);
-    if (!guardians.includes(guardianPubkey)) throw new Error('Not a guardian for this account');
-
-    db.transaction(() => {
-        db.prepare(`INSERT OR REPLACE INTO recovery_approvals (request_id, guardian_pubkey, decision, created_at) VALUES (?, ?, 'reject', ?)`).run(requestId, guardianPubkey, new Date().toISOString());
-        
-        // Check if impossible to reach quorum
-        const rejections = db.prepare(`SELECT COUNT(*) as count FROM recovery_approvals WHERE request_id=? AND decision='reject'`).get(requestId) as any;
-        const maxPossibleApprovals = guardians.length - rejections.count;
-        if (maxPossibleApprovals < req.quorumRequired) {
-            db.prepare(`UPDATE recovery_requests SET status='cancelled' WHERE id=?`).run(requestId);
-        }
-    })();
-    return true;
-}
-
-export function cancelRecovery(requestId: string, cancellerPubkey: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || (req.status !== 'pending' && req.status !== 'approved')) throw new Error('Cannot cancel this request');
-    
-    if (req.oldPubkey !== cancellerPubkey && req.newPubkey !== cancellerPubkey) {
-        throw new Error('Only the original or new identity can cancel');
-    }
-
-    db.prepare(`UPDATE recovery_requests SET status='cancelled' WHERE id=?`).run(requestId);
-    return true;
-}
-
-export function executeRecovery(requestId: string): boolean {
-    const req = getRecoveryRequest(requestId);
-    if (!req || req.status !== 'approved') throw new Error('Request not ready for execution');
-    if (!req.cooldownUntil || new Date() < new Date(req.cooldownUntil)) throw new Error('Cooldown period has not elapsed');
-
-    const oldP = req.oldPubkey;
-    const newP = req.newPubkey;
-
-    db.transaction(() => {
-        // 1. Members and Accounts
-        db.prepare(`UPDATE members SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE accounts SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        
-        // 2. Transactions
-        db.prepare(`UPDATE transactions SET from_pubkey=? WHERE from_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE transactions SET to_pubkey=? WHERE to_pubkey=?`).run(newP, oldP);
-        
-        // 3. Posts & Marketplace
-        db.prepare(`UPDATE posts SET author_pubkey=? WHERE author_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE posts SET accepted_by=? WHERE accepted_by=?`).run(newP, oldP);
-        db.prepare(`UPDATE marketplace_transactions SET buyer_pubkey=? WHERE buyer_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE marketplace_transactions SET seller_pubkey=? WHERE seller_pubkey=?`).run(newP, oldP);
-        
-        // 4. Conversations & Messages
-        db.prepare(`UPDATE conversations SET created_by=? WHERE created_by=?`).run(newP, oldP);
-        db.prepare(`UPDATE conversation_participants SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE messages SET author_pubkey=? WHERE author_pubkey=?`).run(newP, oldP);
-        
-        // 5. Friends
-        db.prepare(`UPDATE friends SET owner_pubkey=? WHERE owner_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE friends SET friend_pubkey=? WHERE friend_pubkey=?`).run(newP, oldP);
-        
-        // 6. Ratings & Abuse
-        db.prepare(`UPDATE ratings SET target_pubkey=? WHERE target_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE ratings SET rater_pubkey=? WHERE rater_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE abuse_reports SET reporter_pubkey=? WHERE reporter_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE abuse_reports SET target_pubkey=? WHERE target_pubkey=?`).run(newP, oldP);
-        db.prepare(`UPDATE creator_channels SET owner_pubkey=?, updated_at=? WHERE owner_pubkey=?`).run(newP, new Date().toISOString(), oldP);
-        
-        // 7. Projects
-        db.prepare(`UPDATE projects SET creator_pubkey=? WHERE creator_pubkey=?`).run(newP, oldP);
-        
-        // 8. Push Tokens & Prefs
-        db.prepare(`UPDATE push_tokens SET public_key=? WHERE public_key=?`).run(newP, oldP);
-        db.prepare(`UPDATE member_preferences SET public_key=? WHERE public_key=?`).run(newP, oldP);
-
-        // 9. Mark old as migrated (already changed above, so wait. If we UPDATE members SET public_key=newP WHERE public_key=oldP, oldP is GONE).
-        // Let's create a tombstone for oldP just in case.
-        const migratedCallsign = 'migrated_' + oldP.substring(0, 8);
-        db.prepare(`INSERT INTO members (public_key, callsign, status) VALUES (?, ?, 'migrated')`).run(oldP, migratedCallsign);
-
-        // 10. Update request status
-        db.prepare(`UPDATE recovery_requests SET status='executed', executed_at=? WHERE id=?`).run(new Date().toISOString(), requestId);
-    })();
-    return true;
-}
-
-export function getPendingRecoveryRequests(guardianPubkey: string): any[] {
-    const wards = getMyWards(guardianPubkey).map(w => w.publicKey);
-    if (wards.length === 0) return [];
-    
-    const rows = selectInChunks(wards, ph => `
-        SELECT r.*, m.callsign as old_callsign, m.avatar_url,
-               (SELECT COUNT(*) FROM recovery_approvals WHERE request_id=r.id AND decision='approve') as approvals,
-               (SELECT decision FROM recovery_approvals WHERE request_id=r.id AND guardian_pubkey=?) as my_decision
-        FROM recovery_requests r
-        JOIN members m ON r.old_pubkey = m.public_key
-        WHERE r.old_pubkey IN (${ph}) AND r.status IN ('pending', 'approved')
-    `, [guardianPubkey]);
-
-    return rows.map(r => ({
-        id: r.id,
-        oldPubkey: r.old_pubkey,
-        newPubkey: r.new_pubkey,
-        oldCallsign: r.old_callsign,
-        avatarUrl: r.avatar_url,
-        status: r.status,
-        quorumRequired: r.quorum_required,
-        approvals: r.approvals,
-        myDecision: r.my_decision,
-        createdAt: r.created_at,
-        cooldownUntil: r.cooldown_until,
-        expiresAt: r.expires_at
-    }));
-}
-
-export function getRecoveryStatus(pubkey: string): any | null {
-    const row = db.prepare(`
-        SELECT r.*,
-               (SELECT COUNT(*) FROM recovery_approvals WHERE request_id=r.id AND decision='approve') as approvals
-        FROM recovery_requests r 
-        WHERE (r.old_pubkey=? OR r.new_pubkey=?) AND r.status IN ('pending', 'approved')
-        ORDER BY r.created_at DESC LIMIT 1
-    `).get(pubkey, pubkey) as any;
-    
-    if (!row) return null;
-    return {
-        id: row.id,
-        status: row.status,
-        approvals: row.approvals,
-        quorumRequired: row.quorum_required,
-        createdAt: row.created_at,
-        cooldownUntil: row.cooldown_until
-    };
-}
-
 // ===================== ABUSE REPORTS =====================
 
-export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): AbuseReport | null {
+export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
+    const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, reason.slice(0, 500), createdAt);
-    return { id, reporterPubkey, targetPubkey, targetPostId, reason: reason.slice(0, 500), createdAt, status: 'pending' };
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt);
+    return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
+}
+
+/**
+ * The owner of a live Pulse item, for reporting it. Null when the item does not exist or is
+ * already tombstoned — there is nothing left on the feed to report.
+ */
+export function getReportablePulseItemOwner(itemId: string): string | null {
+    const row = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ? AND deleted_at IS NULL').get(itemId) as { owner_pubkey: string } | undefined;
+    return row?.owner_pubkey ?? null;
 }
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
@@ -2307,11 +4472,14 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         SELECT ar.*, 
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
-               p.title as post_title
+               p.title as post_title,
+               pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
+               pi.deleted_at as pulse_deleted_at
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
         LEFT JOIN posts p ON ar.target_post_id = p.id
+        LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         ${whereClause}
         ORDER BY ar.created_at DESC
     `;
@@ -2333,7 +4501,17 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         status: r.status || 'pending',
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        postTitle: r.post_title || null
+        postTitle: r.post_title || null,
+        targetPulseItemId: r.target_pulse_item_id || undefined,
+        pulseItem: r.target_pulse_item_id
+            ? {
+                title: r.pulse_title ?? null,
+                platform: r.pulse_platform ?? 'unknown',
+                url: r.pulse_url ?? null,
+                // A missing row (never replicated here) counts as removed: there is nothing to act on.
+                removed: !r.pulse_platform || r.pulse_deleted_at !== null,
+            }
+            : null,
     }));
 
     return { reports, total, pendingCount };
@@ -2399,7 +4577,7 @@ export function dismissReport(reportId: string): boolean {
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false): boolean {
+export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false): boolean {
     return db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
@@ -2410,11 +4588,20 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
             adminDeletePost(report.target_post_id);
         }
 
+        // Tombstoned exactly as the owner's own delete does. The member is not penalised unless
+        // suspendUser is also set. The caller evicts the cached thumbnail, as the owner route does.
+        if (removePulseItem && report.target_pulse_item_id) {
+            scrubPulseItems({ id: report.target_pulse_item_id });
+        }
+
         if (suspendUser && report.target_pubkey) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
+            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+            bumpMembersVersion();
+            bumpPostsVersion();
         }
         return true;
     })();
@@ -2424,7 +4611,15 @@ export function adminBulkDeletePosts(postIds: string[]): number {
     return adminBulkDeletePostsEngine(broadcast, postIds, transfer);
 }
 
-export function getPostCount(filter?: { type?: string; category?: string; status?: string; query?: string }): number {
+export function getPostCount(filter?: {
+    type?: string;
+    category?: string;
+    status?: string;
+    query?: string;
+    audienceScope?: AudienceScope | string;
+    viewerPubkey?: string;
+    targetGroupId?: string;
+}): number {
     return getPostCountEngine(db, filter);
 }
 
@@ -2432,7 +4627,7 @@ export function getPostCount(filter?: { type?: string; category?: string; status
 
 export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
-export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
+export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
 // Reads the host watchdog's status file (dropped into the data dir by
 // ops/watchdog). Absent file = no watchdog on this host (not an error). A file
@@ -2525,14 +4720,16 @@ export function getCommunityHealth(): CommunityHealth {
     // 2. Wash Trading / Sybil Ring soft enforcement (Change 3)
     try {
         const enforcement = getWashTradingEnforcement();
+        // ⚡ Bolt: Pre-fetch member callsigns into a Map for O(1) lookups during health flag formatting
+        const callsignsMap = new Map((db.prepare("SELECT public_key, callsign FROM members").all() as any[]).map(m => [m.public_key, m.callsign]));
         for (const pairKey of enforcement.flaggedPairs) {
             const [a, b] = pairKey.split('|');
             // Skip if all involved accounts are already credit-frozen by admin
             const frozenCount = (db.prepare("SELECT COUNT(*) as cnt FROM members WHERE public_key IN (?, ?) AND credit_frozen = 1").get(a, b) as any)?.cnt || 0;
             if (frozenCount >= 2) continue;
 
-            const callsignA = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(a) as any)?.callsign || a.substring(0, 8);
-            const callsignB = (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(b) as any)?.callsign || b.substring(0, 8);
+            const callsignA = callsignsMap.get(a) || a.substring(0, 8);
+            const callsignB = callsignsMap.get(b) || b.substring(0, 8);
             const details = enforcement.pairDetails.find(p => (p.a === a && p.b === b) || (p.a === b && p.b === a));
             const gross = details ? details.gross : 0;
             const r = details ? details.r : 0;
@@ -2551,7 +4748,7 @@ export function getCommunityHealth(): CommunityHealth {
                 if (frozenCount >= detail.members.length) continue;
 
                 const names = detail.members.map((m: string) => {
-                    return (db.prepare("SELECT callsign FROM members WHERE public_key=?").get(m) as any)?.callsign || m.substring(0, 8);
+                    return callsignsMap.get(m) || m.substring(0, 8);
                 }).join(', ');
                 flags.push({
                     type: 'sybil_ring',
@@ -2761,8 +4958,13 @@ export function getCommunityHealth(): CommunityHealth {
     
     return {
         nodeName: getDirectoryInfo()?.name || 'Local Discovery',
-        version: '1.2.5',
-        minAppVersion: '1.0.75',
+        version: getVersion(),
+        // The app reads both of these. `minAppVersion` is this node's floor — below it
+        // the app says so and will not let you dismiss it. `appVersions` is what the
+        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
+        // downloaded onto a phone on a metered off-grid connection to learn one number.
+        minAppVersion: getMinAppVersion(),
+        appVersions: getAppStoreVersions(),
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         tree: { totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
         activity: {
@@ -2782,11 +4984,27 @@ export function getCommunityHealth(): CommunityHealth {
 
 // ===================== ADMIN CONTROLS =====================
 
+/**
+ * @deprecated Replaced by explicit node_roles. Use getFirstNodeAdminPubkey() or isNodeAdmin().
+ */
 export function getAdminPubkey(): string {
-    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' LIMIT 1").get() as any;
-    return row ? row.public_key : 'system';
+    const row = db.prepare("SELECT public_key FROM members WHERE invited_by = 'genesis' AND UPPER(public_key) != 'SYSTEM' AND public_key != '' AND status = 'active' ORDER BY rowid ASC LIMIT 1").get() as { public_key: string } | undefined;
+    // Empty string, not 'system', when a node has no human admin. Every override site is
+    // guarded via isAdminPubkey() so an empty admin key can never match an empty actor.
+    return (row?.public_key && typeof row.public_key === 'string') ? row.public_key.trim() : '';
 }
 
+/**
+ * Check whether a public key belongs to an active genesis administrator or holds a node admin/owner role.
+ * Guards against the empty-string sentinel hazard: an empty or missing public key
+ * must never match an empty getAdminPubkey() fallback.
+ */
+export function isAdminPubkey(publicKey: string): boolean {
+    if (!publicKey || typeof publicKey !== 'string') return false;
+    if (isNodeAdmin(publicKey)) return true;
+    const admin = getAdminPubkey();
+    return Boolean(admin && publicKey === admin);
+}
 /**
  * Write the status row only, with no broadcast.
  *
@@ -2799,6 +5017,10 @@ export function getAdminPubkey(): string {
  */
 export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    if (status !== 'active') {
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+    }
+    clearEnterpriseFloorCache();
 }
 
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
@@ -2808,6 +5030,8 @@ export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabl
 
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
     db.prepare("UPDATE members SET credit_frozen=? WHERE public_key=?").run(frozen ? 1 : 0, publicKey);
+    clearEnterpriseFloorCache(publicKey);
+    clearEnterpriseFloorCache();
     broadcast({ type: 'profile_updated', publicKey });
 }
 
@@ -2887,7 +5111,22 @@ export function createTreasury(
     // no operator present to choose a picture. The Commons card already falls back to a glyph on a blank
     // avatar, so an avatarless enterprise renders fine. Opt-in rather than dropping the guard, which stays
     // as it was for every operator-created treasury.
-    opts: { systemCreated?: boolean } = {},
+    // opts.workingCapitalCeiling sets Rule 7 ceiling (docs/the-commons.md §2.4).
+    // Unified enterprise fields (docs/the-commons.md §2.1, Slice 3): purpose, lifecycle, goalAmount, deadlineAt, paused.
+    opts: {
+        systemCreated?: boolean;
+        workingCapitalCeiling?: number | null;
+        purpose?: string;
+        lifecycle?: 'ongoing' | 'bounded';
+        goalAmount?: number | null;
+        deadlineAt?: string | null;
+        paused?: boolean;
+        publicKeyHex?: string;
+        leadKeeperPubkey?: string;
+        lat?: number | null;
+        lng?: number | null;
+        locationAuthSigner?: string;
+    } = {},
 ): { publicKey: string } {
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
@@ -2899,25 +5138,73 @@ export function createTreasury(
     if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
         throw new Error('That name is already taken');
     }
+    if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
+        throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
+    }
     const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
+    let ceiling: number | null = null;
+    if (opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null) {
+        const num = Number(opts.workingCapitalCeiling);
+        if (!Number.isFinite(num) || num < 0) {
+            throw new Error('Working capital ceiling must be a non-negative finite number or null');
+        }
+        ceiling = num;
+    }
 
-    const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519', {
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    });
-    const pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    const privKeyHex = crypto.createPrivateKey(privateKey).export({ type: 'pkcs8', format: 'der' }).subarray(-32).toString('hex');
+    const purpose = opts.purpose || '';
+    const lifecycle = opts.lifecycle || 'ongoing';
+    const goalAmount = opts.goalAmount != null ? Number(opts.goalAmount) : null;
+    const deadlineAt = opts.deadlineAt || null;
+    const paused = opts.paused ? 1 : 0;
+
+    let latVal: number | null = null;
+    let lngVal: number | null = null;
+    if (opts.lat != null || opts.lng != null) {
+        if (opts.lat == null || opts.lng == null) {
+            throw new Error('Both latitude and longitude must be provided');
+        }
+        const lat = Number(opts.lat);
+        const lng = Number(opts.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            throw new Error('Latitude and longitude must be valid numbers');
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            throw new Error('Latitude must be between -90 and 90, longitude between -180 and 180');
+        }
+        latVal = lat;
+        lngVal = lng;
+    }
+
+    let pubKeyHex = opts.publicKeyHex;
+    if (!pubKeyHex) {
+        const { publicKey } = crypto.generateKeyPairSync('ed25519', {
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+        });
+        pubKeyHex = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    }
 
     db.transaction(() => {
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?)`)
-            .run(pubKeyHex, trimmed, new Date().toISOString(), avatar, line);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
-        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)`).run(`treasury_privkey_${pubKeyHex}`, privKeyHex);
+        // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
+        // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
+        const signerVal = opts.locationAuthSigner || opts.leadKeeperPubkey || null;
+        const now = new Date().toISOString();
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
+                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, now, avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        if (opts.leadKeeperPubkey) {
+            db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
+                        VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
+            raiseCreatorOperatorSwitch(opts.leadKeeperPubkey, pubKeyHex);
+        }
+        db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
+                    VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+            .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
     })();
 
+    clearEnterpriseFloorCache(pubKeyHex);
     ledger.initializeGenesisAccount(pubKeyHex);
     ledger.setDecayExempt(pubKeyHex);
     broadcast({ type: 'member_joined', member: getMember(pubKeyHex) });
@@ -2927,10 +5214,24 @@ export function createTreasury(
 }
 
 export function adminDeletePost(postId: string) {
-    return adminDeletePostEngine(broadcast, postId, transfer);
+    return adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction);
+}
+
+export function isSoleOwner(publicKey: string): boolean {
+    if (!isNodeOwner(publicKey)) return false;
+    const ownerCount = (db.prepare(
+        `SELECT COUNT(*) as c FROM node_roles nr
+         JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+    ).get(publicKey) as any)?.c || 0;
+    return ownerCount === 0;
 }
 
 export function adminPruneUser(publicKey: string) {
+    if (isSoleOwner(publicKey)) {
+        throw new Error('Cannot prune the sole node owner; appoint another owner first');
+    }
+
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
     // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
     // them — `adminSetUserStatus` and the posts cancellation. If either throws, SQLite rolls the rows back
@@ -2968,6 +5269,7 @@ export function adminPruneUser(publicKey: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        db.prepare("UPDATE posts SET status='completed', active=0, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE author_pubkey=? AND type='poll' AND status='active'").run(publicKey);
         db.prepare("UPDATE posts SET status='cancelled', active=0 WHERE author_pubkey=? AND status IN ('active', 'pending')").run(publicKey);
         // Same scrub as purgeMemberSelf, and it has to happen here rather than being left to the
         // member: a pruned account can no longer sign a request, deleteChannel is owner-scoped, and
@@ -2976,6 +5278,8 @@ export function adminPruneUser(publicKey: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -3001,6 +5305,17 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     }
     if (member.status === 'pruned') {
         return { ok: true, message: 'Account is already pruned' };
+    }
+
+    if (isNodeOwner(publicKey)) {
+        const ownerCount = (db.prepare(
+            `SELECT COUNT(*) as c FROM node_roles nr
+             JOIN members m ON nr.member_pubkey = m.public_key
+             WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?`
+        ).get(publicKey) as any)?.c || 0;
+        if (ownerCount === 0) {
+            throw new Error('Cannot purge the sole node owner; appoint another owner first');
+        }
     }
 
     // Atomically check escrows, settle balance, anonymize profile, cancel listings, and purge personal records
@@ -3061,7 +5376,14 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE public_key = ?
         `).run(now, now, publicKey);
 
-        // 5. Cancel active/pending listings
+        // 5. Close active polls immediately, retaining votes; cancel active/pending offers/needs
+        db.prepare(`
+            UPDATE posts 
+            SET status = 'completed', 
+                active = 0, 
+                updated_at = ? 
+            WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'
+        `).run(now, publicKey);
         db.prepare(`
             UPDATE posts 
             SET status = 'cancelled', 
@@ -3081,19 +5403,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             scrubPulseItems({ ownerPubkey: publicKey }, now);
         } catch { }
         try {
-            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ? OR (holder_type = 'member' AND holder_ref = ?)").run(publicKey, publicKey);
-        } catch { }
-        try {
-            db.prepare("DELETE FROM recovery_approvals WHERE guardian_pubkey = ? OR request_id IN (SELECT id FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?)").run(publicKey, publicKey, publicKey);
-        } catch { }
-        try {
-            db.prepare("DELETE FROM recovery_requests WHERE old_pubkey = ? OR new_pubkey = ?").run(publicKey, publicKey);
+            db.prepare("DELETE FROM recovery_shares WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         try {
             db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM recovery_pin WHERE owner_pubkey = ?").run(publicKey); } catch { }
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -3102,6 +5417,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             db.prepare("DELETE FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").run(publicKey, publicKey);
         } catch { }
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
+        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
 
     broadcast({ type: 'profile_updated', publicKey });
@@ -3135,8 +5451,10 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     }
 }
 
-export function adminSendMessage(targetPubkey: string, body: string) {
-    const adminPubkey = getAdminPubkey();
+export function adminSendMessage(targetPubkey: string, body: string, senderPubkey?: string) {
+    let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!adminPubkey) throw new Error('No genesis admin configured');
+    if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
     if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
 }
@@ -3153,7 +5471,15 @@ export { recordActivity };
 
 export function getNodeConfig(): NodeConfig {
     const row = db.prepare("SELECT value FROM node_config WHERE key='node_config'").get() as any;
-    const config: any = row ? JSON.parse(row.value) : {};
+    // Reliability fix: gracefully handle JSON parse errors on corrupted DB config values
+    let config: any = {};
+    if (row && row.value) {
+        try {
+            config = JSON.parse(row.value);
+        } catch {
+            config = {};
+        }
+    }
 
     let migrated = false;
     if ('publishToDirectory' in config || 'password' in config) {
@@ -3248,6 +5574,8 @@ export function createProject(proposerPubkey: string, title: string, description
     // poison the grant + conservation math). The upper bound on what can actually
     // be funded is enforced at round close by deductFromCommons (≤ commons balance).
     if (!member || !title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return null;
+    // Checked before any write: a member whose operator switch an admin turned off must not get it back by proposing.
+    if (isOperatorSwitchedOff(proposerPubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
 
     const project: CommunityProject = {
         id: crypto.randomUUID(),
@@ -3260,17 +5588,55 @@ export function createProject(proposerPubkey: string, title: string, description
     
     // For simplicity, we store projects as JSON in node_config (since they are rare)
     // Or normally we'd make a table for them. Let's store in config to avoid more schema migrations for now.
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     projects.push(project);
-    db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
     
+    // Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3):
+    // A Commons project proposal IS an enterprise with lifecycle = 'bounded'.
+    const now = new Date().toISOString();
+    const baseCallsign = (project.title || 'Project').trim().slice(0, 40) || 'Project';
+    const existingCallsign = db.prepare(
+        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(baseCallsign, project.id) as any;
+    const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
+
+    db.transaction(() => {
+        db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
+        const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
+        if (!existingMember) {
+            db.prepare(`
+                INSERT INTO members (
+                    public_key, callsign, joined_at, bio, status,
+                    is_treasury, earned_credit, earned_surplus,
+                    purpose, goal_amount, lifecycle, paused, updated_at
+                ) VALUES (?, ?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
+            `).run(
+                project.id, callsign, now, project.description,
+                project.description || project.title, project.requestedAmount, now
+            );
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
+            ledger.initializeGenesisAccount(project.id);
+            ledger.setDecayExempt(project.id);
+            if (proposerPubkey) {
+                db.prepare(`
+                    INSERT OR IGNORE INTO treasury_operators (
+                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                    ) VALUES (?, ?, 'lead', ?, 'creator')
+                `).run(project.id, proposerPubkey, now);
+                raiseCreatorOperatorSwitch(proposerPubkey, project.id);
+            }
+        }
+    })();
+
     broadcast({ type: 'project_created', project });
     return project;
 }
 
 export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
     if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
@@ -3280,20 +5646,52 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
     projects[index].description = description.trim().slice(0, 500);
     projects[index].requestedAmount = Math.round(requestedAmount * 100) / 100;
     
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    const now = new Date().toISOString();
+    db.transaction(() => {
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+        db.prepare(`
+            UPDATE members
+            SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+            WHERE public_key = ?
+        `).run(
+            projects[index].title,
+            projects[index].description || projects[index].title,
+            projects[index].description,
+            projects[index].requestedAmount,
+            now,
+            projectId
+        );
+    })();
     broadcast({ type: 'project_updated', project: projects[index] });
     return true;
 }
 
 export function deleteProject(proposerPubkey: string, projectId: string): boolean {
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
     if (index === -1) return false;
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
     if (projects[index].status !== 'proposed') return false;
 
+    const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
+    if (acc && Math.abs(acc.balance) > 1e-9) {
+        throw new Error(`Cannot delete enterprise account with non-zero balance (${acc.balance} Beans). Sweep or refund funds first.`);
+    }
+    const acct = ledger.getAccount(projectId);
+    if (acct && Math.abs(acct.balance) > 0.0001) {
+        throw new Error('Cannot delete project with non-zero balance: would violate ledger conservation');
+    }
+
     projects.splice(index, 1);
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.transaction(() => {
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+        db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
+        writeTombstone('projects', projectId);
+        writeTombstone('members', projectId);
+    })();
     broadcast({ type: 'project_deleted', projectId });
     return true;
 }
@@ -3302,8 +5700,9 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     if (!getMember(voterPubkey)) return { success: false, error: 'Not a member' };
     if (voteCount < 1 || !Number.isInteger(voteCount)) return { success: false, error: 'Vote count must be a positive integer' };
 
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
     if (!project) return { success: false, error: 'Project not found' };
 
     const activeRound = getActiveRound();
@@ -3319,14 +5718,15 @@ export function voteForProject(voterPubkey: string, projectId: string, voteCount
     }
 
     // Remove any existing votes from this voter in this round (they are re-allocating)
-    for (const p of projects) {
+    for (const p of blobProjects) {
         if (activeRound.projectIds.includes(p.id)) {
-            p.votes = p.votes.filter(v => v.pubkey !== voterPubkey);
+            p.votes = (p.votes || []).filter(v => v.pubkey !== voterPubkey);
         }
     }
+    project.votes = project.votes || [];
     project.votes.push({ pubkey: voterPubkey, weight: voteCount, creditsUsed: creditCost });
     
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
     broadcast({ type: 'vote_cast', projectId, voterPubkey, voteCount, creditCost, totalVotes: project.votes.reduce((sum, v) => sum + (v.weight || 1), 0) });
     return { success: true, creditsUsed: creditCost };
 }
@@ -3366,15 +5766,16 @@ export function getGovernanceCredits(pubkey: string): { totalCredits: number; us
 }
 
 export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    const admin = getMember(adminPubkey);
-    if (!admin || (admin.invitedBy !== 'genesis' && admin.invitedBy !== null && admin.invitedBy !== undefined) || getActiveRound()) return null;
+    if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
 
-    const projects = getAllProjects();
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     for (const pid of projectIds) {
-        const p = projects.find(pr => pr.id === pid && pr.status === 'proposed');
+        const p = blobProjects.find(pr => pr.id === pid && pr.status === 'proposed');
         if (p) p.status = 'active';
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ? AND is_treasury = 1 AND status = 'proposed'").run(pid);
     }
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     const round: VotingRound = { id: crypto.randomUUID(), status: 'open', closesAt, projectIds, createdBy: adminPubkey, createdAt: new Date().toISOString() };
     const rounds = getVotingRounds();
@@ -3403,56 +5804,31 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
     const winner = candidates[0];
 
     if (winner && voteWeight(winner) > 0) {
-        // A2-5: the commons→proposer grant was previously credited to the proposer's
-        // IN-MEMORY ledger account only — no DB write, no transaction row. A crash
-        // before the proposer's next transfer lost the grant; with no txn row the
-        // ledger could never reconcile to balances, and the conservation audit
-        // drifted. Perform it atomically: debit commons, credit the proposer in
-        // memory AND in the DB, and record a COMMONS_POOL→proposer transaction — so
-        // the grant is durable, auditable, and conservation-consistent.
+        // A2-5: the commons→enterprise grant is credited to the enterprise's
+        // IN-MEMORY ledger account AND DB row atomically, with a COMMONS_POOL→enterprise
+        // transaction — so the grant is durable, auditable, and conservation-consistent.
         const ts = new Date().toISOString();
         const txId = crypto.randomUUID();
-        // #138 review: the grant now commits as ONE unit — the Commons debit, the proposer's credit, both
-        // rows, the decay rows and the Commons row. `persistDecayEvents()` and `persistCommonsBalance()` used
-        // to run after the transaction had already committed, leaving a window in which the proposer's credit
-        // was durable while the Commons debit was not. A restart in that window restores the pot from its
-        // unwritten, pre-grant row — so the grant becomes newly minted beans, which is the one thing a mutual
-        // credit ledger must never do.
-        //
-        // `conservingTransaction` rather than `db.transaction`, and the DEDUCT moved inside it. Both halves of
-        // this grant live in memory as well as in rows, and a SQLite rollback touches only the rows; the
-        // snapshot has to be taken before the deduct, or a rollback would restore an already-debited pot
-        // alongside a reverted credit and destroy the beans instead.
+        const isProposerTreasury = ((db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(winner.proposerPubkey) as any)?.is_treasury === 1);
+        const targetAccount = isProposerTreasury ? winner.proposerPubkey : ((winner as any).enterprisePubkey || winner.id);
         const funded = conservingTransaction(() => {
             if (!ledger.deductFromCommons(winner.requestedAmount)) return false;
-            const account = ledger.getAccount(winner.proposerPubkey);
+            const account = ledger.getAccount(targetAccount);
             account.balance += winner.requestedAmount;
-                // #138: the epoch travels with the balance, on BOTH arms. This wrote a literal 0 on insert
-                // and omitted the column entirely from the DO UPDATE, so the grant landed on a row whose
-                // demurrage window was still open — and the proposer's next read charged the whole stale
-                // interval against the granted amount. `account` came from ledger.getAccount() above, which
-                // already settled what was genuinely owed and stamped the epoch, so this just carries that
-                // settlement into the row. The old `VALUES (…, 0)` was worse than stale on the insert arm:
-                // epoch 0 is 1970, which invites ~56 years of compound decay against a balance that is NOT
-                // zero here. (Elsewhere an epoch-0 insert is harmless because the balance is 0 and
-                // applyDecay's no-decay branch stamps the epoch before anything can be charged.)
-                db.prepare(`
-                    INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(public_key) DO UPDATE SET
-                        balance = excluded.balance,
-                        last_demurrage_epoch = excluded.last_demurrage_epoch,
-                        last_updated_at = excluded.last_updated_at
-                `).run(winner.proposerPubkey, account.balance, account.lastDemurrageEpoch, ts);
+            // #138 & Slice 3: the epoch travels with the balance, on BOTH arms. The grant lands on the
+            // enterprise treasury targetAccount (or enterprise proposer) rather than creator's personal wallet.
+            db.prepare(`
+                INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(public_key) DO UPDATE SET
+                    balance = excluded.balance,
+                    last_demurrage_epoch = excluded.last_demurrage_epoch,
+                    last_updated_at = excluded.last_updated_at
+            `).run(targetAccount, account.balance, account.lastDemurrageEpoch, ts);
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
-                .run(txId, 'COMMONS_POOL', winner.proposerPubkey, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
-            // The getAccount() above may have queued a decay event, and this path DESTROYS BEANS without
-            // draining it. Measured by reverting this line: 1.99 beans gone. #137 made `loadState` unwind an
-            // undrained Commons credit along with its debit, which is right when the debit lives only in
-            // memory — but the UPSERT above has already written the post-decay balance to the row, so the
-            // debit is durable and the unwind takes back a credit that had a real counterpart. Draining here
-            // settles both halves before anything can resync. It also gives the collection its `demurrage_`
-            // transaction row, without which the demurrage is invisible to an audit.
+                .run(txId, 'COMMONS_POOL', targetAccount, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
+            // #137: persistDecayEvents drains any demurrage event collected during getAccount, settling both halves
+            // before anything can resync and giving the collection its demurrage_ transaction row.
             persistDecayEvents();
             persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
             return true;
@@ -3462,25 +5838,56 @@ export function closeVotingRound(roundId: string): { success: boolean; winner?: 
         if (funded) {
             winner.status = 'funded';
             winner.fundedAt = new Date().toISOString();
+            try {
+                db.prepare("UPDATE members SET status = 'funded', updated_at = ? WHERE public_key = ?").run(winner.fundedAt, winner.id);
+            } catch { }
+            // Community-voted project grants are capital grants (raise balance, never earned_surplus).
+            // Under Rule 7 (docs/the-commons.md §2.4), sweeps take only earned surplus, never grant money.
         } else {
             winner.status = 'proposed';
         }
     }
 
-    for (const c of candidates) if (c.id !== winner?.id && c.status === 'active') c.status = 'proposed';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const blobWinner = blobProjects.find(p => p.id === winner?.id);
+    if (blobWinner && winner) {
+        blobWinner.status = winner.status;
+        if (winner.fundedAt) blobWinner.fundedAt = winner.fundedAt;
+    }
+    const fundedWinnerId = winner?.status === 'funded' ? winner.id : null;
+    for (const c of candidates) {
+        if (c.id !== fundedWinnerId && c.status === 'active') {
+            c.status = 'proposed';
+            const bp = blobProjects.find(p => p.id === c.id);
+            if (bp) bp.status = 'proposed';
+            try {
+                db.prepare("UPDATE members SET status = 'proposed' WHERE public_key = ? AND status = 'active' AND is_treasury = 1").run(c.id);
+            } catch { }
+        }
+    }
+    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
 
     broadcast({ type: 'voting_round_closed', roundId, winnerId: winner?.status === 'funded' ? winner.id : null });
     return { success: true, winner: winner?.status === 'funded' ? winner : undefined };
 }
 
 export function adminRejectProject(projectId: string): boolean {
-    const projects = getAllProjects();
-    const project = projects.find(p => p.id === projectId);
-    if (!project) return false;
-    project.status = 'rejected';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-    return true;
+    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const project = blobProjects.find(p => p.id === projectId);
+    let found = false;
+    if (project) {
+        project.status = 'rejected';
+        db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
+        found = true;
+    }
+    const member = db.prepare("SELECT public_key FROM members WHERE public_key = ? AND is_treasury = 1").get(projectId);
+    if (member) {
+        db.prepare("UPDATE members SET status = 'rejected' WHERE public_key = ?").run(projectId);
+        found = true;
+    }
+    return found;
 }
 
 export function getProjects(): CommunityProject[] {
@@ -3489,7 +5896,51 @@ export function getProjects(): CommunityProject[] {
 
 export function getAllProjects(): CommunityProject[] {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    return row ? JSON.parse(row.value) : [];
+    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
+    const knownIds = new Set(blobProjects.map(p => p.id));
+
+    // Unify with bounded enterprises from members table (docs/the-commons.md §2.1, Slice 3)
+    try {
+        const enterprises = db.prepare(`
+            SELECT m.public_key, m.callsign, m.bio, m.purpose, m.goal_amount, m.status, m.joined_at,
+                   (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
+                   (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
+            FROM members m
+            WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
+              AND m.public_key NOT IN (SELECT id FROM projects)
+        `).all() as any[];
+
+        for (const e of enterprises) {
+            const lead = e.lead_keeper || e.any_keeper || e.public_key;
+            const leadMember = getMember(lead);
+            const existing = blobProjects.find(p => p.id === e.public_key);
+            if (existing) {
+                // Keep live values from members table so blob doesn't shadow SQL
+                existing.title = e.callsign || existing.title;
+                existing.description = e.purpose || e.bio || existing.description;
+                if (e.goal_amount != null) existing.requestedAmount = Number(e.goal_amount);
+                if (e.status) existing.status = e.status.toLowerCase() as any;
+            } else {
+                blobProjects.push({
+                    id: e.public_key,
+                    title: e.callsign,
+                    description: e.purpose || e.bio || '',
+                    proposerPubkey: lead,
+                    proposerCallsign: leadMember?.callsign || e.callsign,
+                    requestedAmount: Number(e.goal_amount || 0),
+                    status: (e.status || 'proposed').toLowerCase() as any,
+                    votes: [],
+                    createdAt: e.joined_at || new Date().toISOString(),
+                });
+                knownIds.add(e.public_key);
+            }
+        }
+    } catch { }
+
+    const prunedIds = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE status IN ('pruned', 'deleted')").all() as any[]).map(r => r.public_key)
+    );
+    return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
 export function getVotingRounds(): VotingRound[] {
@@ -3658,8 +6109,7 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_requests', 'recovery_approvals', 'recovery_shares',
-        'recovery_pin', 'settlements', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {
@@ -3923,6 +6373,11 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
             body: `A dispute has been opened for "${postTitle}"`,
             data: { screen: 'post', postId }
         },
+        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: {
+            title: '⚖️ Dispute Resolved',
+            body: `Dispute arbitrated by admin for "${postTitle}": ${meta.resolution || 'Resolved'}`,
+            data: { screen: 'post', postId }
+        },
         [SystemMessageType.REVIEW_LEFT]: {
             title: '⭐ New Review',
             body: `${actorName} left a review on "${postTitle}"`,
@@ -3941,4 +6396,132 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         notification.data,
         'escrow'
     );
+}
+
+// ===================== GROUPS & CONVENOR MODERATION (§9) =====================
+
+let _groupsVersion = 1;
+export function getGroupsVersion(): number { return _groupsVersion; }
+export function bumpGroupsVersion(): void { _groupsVersion++; }
+
+function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] = []): string[] {
+    const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as any[];
+    return Array.from(new Set([...rows.map(r => r.member_pubkey), ...extraPubkeys.filter(Boolean)]));
+}
+
+export function createGroup(params: CreateGroupParams): Group {
+    const res = createGroupEngine(db, params);
+    bumpGroupsVersion();
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_created', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
+        broadcast({ type: 'group_created', group: res }, recipients);
+    }
+    return res;
+}
+
+export function getGroup(idOrSlug: string, viewerPubkey?: string): Group | null {
+    return getGroupEngine(db, idOrSlug, viewerPubkey);
+}
+
+export function listGroups(filter?: ListGroupsFilter, viewerPubkey?: string): Group[] {
+    return listGroupsEngine(db, filter, viewerPubkey);
+}
+
+export function getGroupMembers(groupId: string, filter?: { status?: GroupMemberStatus; role?: GroupRole }): GroupMember[] {
+    return getGroupMembersEngine(db, groupId, filter);
+}
+
+export function getGroupMember(groupId: string, memberPubkey: string): GroupMember | null {
+    return getGroupMemberEngine(db, groupId, memberPubkey);
+}
+
+export function isGroupConvenor(groupId: string, memberPubkey: string): boolean {
+    return isGroupConvenorEngine(db, groupId, memberPubkey);
+}
+
+export function isGroupMember(groupId: string, memberPubkey: string): boolean {
+    return isGroupMemberEngine(db, groupId, memberPubkey);
+}
+
+export function getMemberGroupIds(memberPubkey: string): string[] {
+    return getMemberGroupIdsEngine(db, memberPubkey);
+}
+
+export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+    const res = joinGroupEngine(db, groupId, memberPubkey);
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
+    return res;
+}
+
+export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
+    const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
+    return res;
+}
+
+export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+    const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+    if (res) {
+        bumpGroupsVersion();
+        const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+        broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, recipients);
+    }
+    return res;
+}
+
+export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {
+    const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
+    bumpGroupsVersion();
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_updated', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(groupId);
+        broadcast({ type: 'group_updated', group: res }, recipients);
+    }
+    return res;
+}
+
+export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
+    const res = updateGroupEngine(db, groupId, convenorPubkey, updates);
+    bumpGroupsVersion();
+    if (res.joinPolicy === 'open') {
+        broadcast({ type: 'group_updated', group: res });
+    } else {
+        const recipients = getGroupActiveMemberRecipients(groupId);
+        broadcast({ type: 'group_updated', group: res }, recipients);
+    }
+    return res;
+}
+
+export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+    const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+    broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
+    return res;
+}
+
+export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+    const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    bumpGroupsVersion();
+    const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
+    const recipients = Array.from(new Set([...convenors.map(r => r.member_pubkey), targetPubkey]));
+    broadcast({ type: 'group_member_invited', groupId, member: res }, recipients);
+    return res;
+}
+
+export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {
+    const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
+    if (res) {
+        bumpPostsVersion();
+        const recipients = getGroupActiveMemberRecipients(groupId);
+        broadcast({ type: 'post_removed', id: postId }, recipients);
+    }
+    return res;
 }

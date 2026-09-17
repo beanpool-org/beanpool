@@ -45,4 +45,19 @@ jobs:
         run: pnpm install
 
       - name: Run test-all checks
+        env:
+          # On failure test-all.sh copies every check log here; a passing run writes nothing.
+          TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
         run: bash scripts/test-all.sh --all
+
+      # The job output shows the failing package's own error, but only its last lines. The full
+      # log of every check is here, so a failure never has to be re-run to be read.
+      - name: Upload test-all logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-all-logs
+          path: ${{ runner.temp }}/test-all-logs
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14

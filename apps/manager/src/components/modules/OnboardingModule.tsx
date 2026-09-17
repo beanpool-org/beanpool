@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchOnboardingFunnel, type FunnelRow } from '../../lib/node-client';
+import { fetchOnboardingFunnel, getTfaSessionToken, type FunnelRow } from '../../lib/node-client';
 
 export interface OnboardingModuleProps {
     profiles: NodeProfile[];
@@ -53,7 +53,7 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
         // leaves the previous node's numbers on screen under an error banner — and worse,
         // shows one community's figures under another community's name.
         setRows(null);
-        fetchOnboardingFunnel(active.url, active.adminPassword, days)
+        fetchOnboardingFunnel(active.url, active.adminPassword, days, active ? getTfaSessionToken(active.id) : undefined)
             .then(res => { if (!cancelled) setRows(res.rows); })
             .catch(e => { if (!cancelled) setError(e.message || 'Could not reach this node'); })
             .finally(() => { if (!cancelled) setLoading(false); });
@@ -138,6 +138,18 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
 
         return { steps, failures, reentry, comparableReentry, protectionStates, countingSince, top };
     }, [rows, days]);
+
+    if (!active || profiles.length === 0) {
+        return (
+            <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in font-sans">
+                <span className="text-4xl opacity-50 grayscale" aria-hidden="true">🚪</span>
+                <h4 className="text-sm font-bold text-nature-300 m-0">No Node Profiles Available</h4>
+                <p className="text-xs text-nature-500 m-0 max-w-sm">
+                    Configure or select a sovereign node profile in Fleet Settings to inspect onboarding funnel metrics.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animate-fade-in font-sans">
@@ -308,11 +320,12 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
 
                         <div className="p-4 rounded-xl bg-nature-800/60 border border-nature-700">
                             <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block mb-2">
-                                Keepers at signup
+                                Keepers at signup (historical)
                             </span>
                             {Object.keys(view.protectionStates).length === 0 ? (
                                 <p className="text-xs text-nature-500 italic m-0">
-                                    Arrives with the new protection screen.
+                                    Nothing recorded. Keeper enrolment was removed from both
+                                    clients, so no new signups land here.
                                 </p>
                             ) : (
                                 <ul className="m-0 p-0 list-none space-y-1.5">
@@ -330,6 +343,12 @@ export function OnboardingModule({ profiles, activeProfileId, onSelectNode }: On
                                             </li>
                                         ))}
                                 </ul>
+                            )}
+                            {Object.keys(view.protectionStates).length > 0 && (
+                                <p className="text-[10px] text-nature-500 italic mt-2 mb-0">
+                                    Closed funnel — keeper enrolment was removed from both
+                                    clients, so these counts no longer grow.
+                                </p>
                             )}
                         </div>
                     </div>

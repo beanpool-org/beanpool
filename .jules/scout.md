@@ -28,6 +28,10 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-09 — Marketplace post pause/resume integration test suite LANDED in #678.
+Added `apps/server/src/test-post-pause-resume.ts` covering validation, authorization, and feed visibility filtering for `POST /api/marketplace/posts/pause` and `/resume`. Registered in `scripts/test-all.sh`. Do not re-file.
+When creating new API integration test suites, cover validation errors, non-author authorization rejection, and feed visibility state mutations, and always register the suite in `scripts/test-all.sh`.
+
 ### 2026-08-25 — invite-trampoline suite LANDED in #362. Raised four times.
 #389, #396, #405 closed as duplicates. All four wrote the same suite and registered it correctly
 in `scripts/test-all.sh`. Search open PRs for the target module before writing a suite — see

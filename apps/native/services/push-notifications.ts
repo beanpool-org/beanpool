@@ -4,18 +4,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import type { NotificationResponse } from 'expo-notifications';
 import { signedRequest } from '../utils/db';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedHeaders } from '../utils/crypto';
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-let Notifications: any = null;
+let Notifications: typeof import('expo-notifications') | null = null;
 
 if (!isExpoGo) {
     try {
         Notifications = require('expo-notifications');
         // Configure how notifications appear when app is in foreground
-        Notifications.setNotificationHandler({
+        Notifications?.setNotificationHandler({
             handleNotification: async () => ({
                 shouldShowAlert: true,
                 shouldPlaySound: true,
@@ -174,7 +175,7 @@ export function setupNotificationResponseHandler() {
         return { remove: () => {} };
     }
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response: import("expo-notifications").NotificationResponse) => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response: NotificationResponse) => {
         const data = response.notification.request.content.data;
         
         if (data?.kind === 'recovery_started') {

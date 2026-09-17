@@ -1,0 +1,45 @@
+#!/bin/zsh
+# Fake agy for selftest.sh — never talks to a model. FAKE_AGY_MODE picks the behaviour; every call is appended to
+# $FAKE_STATE/agy.calls.
+S=${FAKE_STATE:?}
+prompt= model= timeout= fmt=text
+while (( $# )); do
+  case "$1" in
+    -p=*) prompt=${1#-p=};; -p) prompt=$2; shift;;
+    --model) model=$2; shift;; --print-timeout) timeout=$2; shift;; --output-format) fmt=$2; shift;;
+  esac; shift
+done
+if [[ "$prompt" == *PROBE-OK* ]]; then
+  n=$(( $(cat "$S/agy.probes" 2>/dev/null || print 0) + 1 )); print $n > "$S/agy.probes"
+  print -r -- "probe $n model=$model" >> "$S/agy.calls"
+  if (( n > ${FAKE_AGY_PROBE_FAILS:-0} )); then print '{"event":"result","result":{"status":"SUCCESS","response":"PROBE-OK"}}'
+  else print '{"event":"result","result":{"status":"ERROR","error":"RESOURCE_EXHAUSTED: quota exceeded"}}'; fi
+  exit 0
+fi
+n=$(( $(cat "$S/agy.runs" 2>/dev/null || print 0) + 1 )); print $n > "$S/agy.runs"
+rules=no; [[ "$prompt" == *"RULES — READ FIRST"* ]] && rules=yes
+wtint=no; [[ "$prompt" == *WT_INT=* ]] && wtint=yes
+print -r -- "run $n model=$model timeout=$timeout format=$fmt cwd=$PWD rules=$rules wtint=$wtint" >> "$S/agy.calls"
+print -r -- "{\"event\":\"init\",\"init\":{\"model\":\"$model\",\"cwd\":\"$PWD\",\"tools\":\"$(printf '%0600d' 0)\"}}"
+# The report deliberately DISCUSSES rate limiting and 429s: that must not read as a failure banner.
+ok='{"event":"result","result":{"status":"SUCCESS","response":"Done and pushed. Notes: the handler now maps HTTP 429 and rate limit exceeded responses to a retry."}}'
+banner='{"event":"step_update","step_update":{"state":"ACTIVE","text_delta":"root agent idle; waiting for 1 background task(s) (bounded by --print-timeout)"}}'
+case "${FAKE_AGY_MODE:-success}" in
+  success) sleep 1; print -r -- "$ok";;
+  idlehang)
+    print -r -- "$banner"
+    sleep 600 &
+    print $! > "$S/agy.child"
+    wait;;
+  idlebusy)
+    print -r -- "$banner"
+    for i in 1 2 3 4 5 6 7 8; do touch "$PWD/.selftest-busy"; sleep 1; done
+    rm -f "$PWD/.selftest-busy"; print -r -- "$ok";;
+  quota_once)
+    if (( n == 1 )); then print '{"event":"result","result":{"status":"ERROR","error":"RESOURCE_EXHAUSTED: quota exceeded for this model"}}'; exit 1; fi
+    sleep 1; print -r -- "$ok";;
+  capacity_once)
+    if (( n == 1 )); then print -u2 'UNAVAILABLE (code 503): No capacity available for model'; exit 1; fi
+    sleep 1; print -r -- "$ok";;
+  *) print -u2 "fake agy: unknown mode $FAKE_AGY_MODE"; exit 2;;
+esac

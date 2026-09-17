@@ -3,10 +3,15 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import { loadIdentity } from './identity';
-import { toEd25519Pkcs8, type PublicCreatorChannel } from '@beanpool/core';
+import { loadIdentity, type BeanPoolIdentity } from './identity';
+import {
+    toEd25519Pkcs8,
+    type PublicCreatorChannel,
+    type ChannelPlatform,
+    type ChannelCategory,
+} from '@beanpool/core';
 
-export type { PublicCreatorChannel };
+export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
 export function getNodeApiUrl(): string {
     const custom = (typeof localStorage !== 'undefined' ? localStorage.getItem('bp_node_url') : null) || ((import.meta as any).env?.VITE_BEANPOOL_NODE_URL as string);
@@ -103,7 +108,7 @@ export async function buildSignedWsParams(path: string): Promise<string> {
 export async function request<T>(method: string, path: string, body?: any): Promise<T> {
     const opts: RequestInit = {
         method,
-        cache: 'no-store',
+        cache: 'no-cache',
         headers: {
             'Content-Type': 'application/json',
         } as Record<string, string>,
@@ -142,9 +147,65 @@ export async function request<T>(method: string, path: string, body?: any): Prom
     const res = await fetch(`${baseUrl}${path}`, opts);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.message || err.error || `Request failed: ${res.status}`);
+    }
+    return res.json();
+}
+
+/** Helper to sign and send requests with a custom / ephemeral keypair. */
+export async function signedRequestWithKey<T>(
+    method: string,
+    path: string,
+    body: any,
+    privateKeyHex: string,
+    publicKeyHex: string,
+): Promise<T> {
+    const opts: RequestInit = {
+        method,
+        cache: 'no-cache',
+        headers: {
+            'Content-Type': 'application/json',
+        } as Record<string, string>,
+    };
+
+    const bodyString = body ? JSON.stringify(body) : '';
+    if (body) {
+        opts.body = bodyString;
+    }
+
+    const timestamp = String(Date.now());
+    const nonce = crypto.randomUUID();
+    const signPath = path.split('?')[0];
+    const canonical = `${method}\n${signPath}\n${timestamp}\n${nonce}\n${bodyString}`;
+    const signature = await signEd25519(privateKeyHex, canonical);
+    const h = opts.headers as Record<string, string>;
+    h['X-Public-Key'] = publicKeyHex;
+    h['X-Signature'] = signature;
+    h['X-Timestamp'] = timestamp;
+    h['X-Nonce'] = nonce;
+
+    const baseUrl = getNodeApiUrl();
+    const res = await fetch(`${baseUrl}${path}`, opts);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || `Request failed: ${res.status}`);
     }
     return res.json();
+}
+
+function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+    if (a.length !== b.length) {
+        throw new Error(`XOR mismatch: lengths ${a.length} and ${b.length}`);
+    }
+    const out = new Uint8Array(a.length);
+    for (let i = 0; i < a.length; i++) {
+        out[i] = a[i] ^ b[i];
+    }
+    return out;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ===================== COMMUNITY =====================
@@ -189,7 +250,7 @@ export async function getCommunityInfo(): Promise<CommunityInfo> {
 }
 
 export async function getMembers(): Promise<Member[]> {
-    return request('GET', `/api/community/members?_t=${Date.now()}`);
+    return request('GET', '/api/community/members');
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
@@ -241,7 +302,7 @@ export async function getCommunityHealth(): Promise<any> {
 }
 
 export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
-    return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}?_t=${Date.now()}`);
+    return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
@@ -262,6 +323,7 @@ export interface MemberProfile {
     joinedAt?: string;
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
+    archetype?: string | null;
 }
 
 export async function updateMemberProfile(publicKey: string, update: {
@@ -269,6 +331,7 @@ export async function updateMemberProfile(publicKey: string, update: {
     bio?: string;
     contact?: { value: string; visibility: 'hidden' | 'trade_partners' | 'community' | 'friends' } | null;
     callsign?: string;
+    archetype?: string | null;
 }): Promise<{ success: boolean; profile: MemberProfile }> {
     return request('POST', '/api/profile/update', { publicKey, ...update });
 }
@@ -298,8 +361,8 @@ export async function setHolidayModeApi(enabled: boolean): Promise<{ success: bo
 export async function getMemberProfile(publicKey: string, requester?: string): Promise<MemberProfile> {
     const params = new URLSearchParams();
     if (requester) params.set('requester', requester);
-    params.set('_t', Date.now().toString());
-    return request('GET', `/api/profile/${encodeURIComponent(publicKey)}?${params}`);
+    const qs = params.toString();
+    return request('GET', `/api/profile/${encodeURIComponent(publicKey)}${qs ? `?${qs}` : ''}`);
 }
 
 /**
@@ -308,6 +371,197 @@ export async function getMemberProfile(publicKey: string, requester?: string): P
  */
 export async function getPublicChannels(publicKey: string): Promise<{ channels: PublicCreatorChannel[] }> {
     return request('GET', `/api/members/${encodeURIComponent(publicKey)}/channels`);
+}
+
+// ===================== PULSE & CHANNELS =====================
+
+export interface MemberCreatorChannel {
+    id: string;
+    platform: ChannelPlatform;
+    url: string | null;
+    handle: string | null;
+    category: ChannelCategory;
+    isPrimaryVideo: boolean;
+    supportsAutolist: boolean;
+    oauthVerifiedAt: string | null;
+    syndicateToNode: boolean;
+    postCountSeen?: number | null;
+}
+
+export interface PulseFeedItem {
+    id: string;
+    ownerPubkey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    platform: ChannelPlatform | string;
+    category: ChannelCategory | string;
+    url: string | null;
+    title: string | null;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    source: string;
+    isVerified: boolean;
+}
+
+export interface PulseFeedResponse {
+    items: PulseFeedItem[];
+    nextCursor: string | null;
+}
+
+export interface ResolvedPulsePreview {
+    channelId: string;
+    platform: ChannelPlatform;
+    externalId: string | null;
+    url: string;
+    title: string;
+    thumbnailUrl: string | null;
+    publishedAt: string | null;
+    category: ChannelCategory;
+    alreadyImported: boolean;
+    existingItemId?: string | null;
+}
+
+export interface PostCountNudge {
+    channelId: string;
+    platform: ChannelPlatform;
+    handle: string | null;
+    url?: string | null;
+    currentCount: number;
+    postCountSeen: number;
+    newPostsCount: number;
+}
+
+/**
+ * Fetch pulse feed items.
+ * GET /api/pulse/feed
+ */
+export async function getPulseFeed(options?: {
+    cursor?: string | null;
+    category?: string | null;
+    limit?: number;
+}): Promise<PulseFeedResponse> {
+    const params = new URLSearchParams();
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.category && options.category !== 'all') params.set('category', options.category);
+    if (options?.limit) params.set('limit', String(options.limit));
+    const qs = params.toString();
+    return request('GET', `/api/pulse/feed${qs ? `?${qs}` : ''}`);
+}
+
+/**
+ * The caller's own channels, including ones switched off for the feed.
+ * Signed POST /api/channels/mine
+ */
+export async function getMemberChannels(): Promise<{ channels: MemberCreatorChannel[] }> {
+    return request('POST', '/api/channels/mine', {});
+}
+
+/**
+ * Add a new creator channel.
+ * Signed POST /api/member/channels
+ */
+export async function addMemberChannel(data: {
+    platform: string;
+    url?: string;
+    handle?: string;
+    category: string;
+    syndicateToNode?: boolean;
+    isPrimaryVideo?: boolean;
+}): Promise<{ success: boolean; channel: MemberCreatorChannel; otherVideoChannels: MemberCreatorChannel[] }> {
+    return request('POST', '/api/member/channels', data);
+}
+
+/**
+ * Update an existing creator channel.
+ * Signed POST /api/member/channels/:id
+ */
+export async function updateMemberChannel(
+    id: string,
+    data: {
+        category?: string;
+        syndicateToNode?: boolean;
+        isPrimaryVideo?: boolean;
+        autopublish?: boolean;
+    }
+): Promise<{ success: boolean; channel: MemberCreatorChannel }> {
+    return request('POST', `/api/member/channels/${encodeURIComponent(id)}`, data);
+}
+
+/**
+ * Remove a creator channel.
+ * Signed POST /api/member/channels/:id/delete
+ */
+export async function deleteMemberChannel(id: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/member/channels/${encodeURIComponent(id)}/delete`, {});
+}
+
+/**
+ * Preview a post URL for manual intake.
+ * Signed POST /api/member/pulse/preview
+ */
+export async function previewPulsePost(
+    url: string,
+    channelId?: string
+): Promise<{ success: boolean; preview: ResolvedPulsePreview }> {
+    return request('POST', '/api/member/pulse/preview', {
+        url,
+        channelId: channelId || undefined,
+    });
+}
+
+/**
+ * Submit a post manually to The Pulse.
+ * Signed POST /api/member/pulse/submit
+ */
+export async function submitPulsePost(data: {
+    url: string;
+    channelId: string;
+    title?: string;
+    thumbnailUrl?: string;
+    category?: string;
+    externalId?: string;
+}): Promise<{ success: boolean; item: PulseFeedItem; deduplicated: boolean }> {
+    return request('POST', '/api/member/pulse/submit', data);
+}
+
+/**
+ * Fetch post count nudges for member's channels.
+ * Signed POST /api/member/pulse/nudges
+ */
+export async function getPulseNudges(): Promise<{ nudges: PostCountNudge[] }> {
+    return request('POST', '/api/member/pulse/nudges', {});
+}
+
+/**
+ * Dismiss a post count nudge by advancing watermark.
+ * Signed POST /api/member/pulse/channels/:id/dismiss-nudge
+ */
+export async function dismissPulseNudge(
+    channelId: string,
+    seenCount?: number
+): Promise<{ success: boolean; channelId: string; postCountSeen: number }> {
+    return request('POST', `/api/member/pulse/channels/${encodeURIComponent(channelId)}/dismiss-nudge`, {
+        seenCount,
+    });
+}
+
+/**
+ * Mute / un-mute a pulse feed item owned by the member.
+ * Signed POST /api/member/pulse/items/:id/mute
+ */
+export async function mutePulseItem(
+    itemId: string,
+    muted: boolean
+): Promise<{ success: boolean; item?: PulseFeedItem }> {
+    return request('POST', `/api/member/pulse/items/${encodeURIComponent(itemId)}/mute`, { muted });
+}
+
+/**
+ * Delete a pulse feed item owned by the member.
+ * Signed POST /api/member/pulse/items/:id/delete
+ */
+export async function deletePulseItem(itemId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/member/pulse/items/${encodeURIComponent(itemId)}/delete`, {});
 }
 
 // ===================== MESSAGING =====================
@@ -329,6 +583,7 @@ export interface Conversation {
     peerCallsign?: string;
     peerAvatar?: string | null;
     peerLastReadAt?: string | null;
+    readCursors?: { publicKey: string; lastReadAt: string | null }[];
 }
 
 export enum SystemMessageType {
@@ -359,6 +614,8 @@ export interface ApiMessage {
     systemType?: SystemMessageType;
     metadata?: string;
     timestamp: string;
+    editedAt?: string | null;
+    updatedAt?: string | null;
 }
 
 export interface MessageAttachment {
@@ -387,6 +644,23 @@ export async function sendMessageApi(
     metadata?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
     return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+}
+
+export async function editMessageApi(
+    messageId: string,
+    authorPubkey: string,
+    ciphertext: string,
+    nonce: string,
+): Promise<{ success: boolean; message: ApiMessage }> {
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
+}
+
+export async function toggleMessageReactionApi(
+    messageId: string,
+    authorPubkey: string,
+    emoji: string,
+): Promise<{ success: boolean; metadata: string }> {
+    return request('POST', '/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
 export async function getConversations(publicKey: string): Promise<{ conversations: Conversation[]; totalUnread: number }> {
@@ -428,6 +702,7 @@ export interface BalanceInfo {
     avgRating?: number;       // reputation multiplier inputs
     reviewCount?: number;
     commonsBalance: number;
+    commons?: number;
     callsign: string;
     trustStats?: {
         tradeCount: number;
@@ -495,7 +770,7 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
 
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -520,6 +795,18 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    pollClosesAt?: string;
+    totalVotes?: number;
+    userVotedOptionId?: string;
+    pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
+    // Audience scoping (docs/the-commons.md §9, Item 10)
+    audienceScope?: 'public' | 'group' | 'direct';
+    targetGroupId?: string;
+    targetGroupName?: string;
+    targetPubkey?: string;
+    assignedTo?: string;
+    targetArchetypes?: string;
 }
 
 export interface MarketplaceTransaction {
@@ -539,18 +826,36 @@ export interface MarketplaceTransaction {
     ratedBySeller?: boolean;
 }
 
-export async function getMarketplacePosts(filter?: { id?: string; type?: string; category?: string; author?: string; beansOnly?: boolean }): Promise<MarketplacePost[]> {
+export async function getMarketplacePosts(filter?: {
+    id?: string;
+    type?: string;
+    category?: string;
+    author?: string;
+    beansOnly?: boolean;
+    updatedAfter?: string;
+    audienceScope?: string;
+    targetGroupId?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
     if (filter?.category) params.set('category', filter.category);
     if (filter?.author) params.set('author', filter.author);
     if (filter?.beansOnly) params.set('beansOnly', 'true');
+    if (filter?.updatedAfter) params.set('updatedAfter', filter.updatedAfter);
+    if (filter?.audienceScope) params.set('audienceScope', filter.audienceScope);
+    if (filter?.targetGroupId) params.set('targetGroupId', filter.targetGroupId);
+    if (filter?.q) params.set('q', filter.q);
+    if (filter?.limit) params.set('limit', String(filter.limit));
+    if (filter?.offset) params.set('offset', String(filter.offset));
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
 export async function createMarketplacePost(post: {
-    type: 'offer' | 'need';
+    type: 'offer' | 'need' | 'poll';
     category: string;
     title: string;
     description: string;
@@ -566,8 +871,141 @@ export async function createMarketplacePost(post: {
     reach?: PostReach;
     /** Peer ids, only meaningful with reach 'peers'. An empty list makes the server keep it local. */
     reachPeers?: string[];
+    pollOptions?: Array<{ id: string; text: string }>;
+    durationDays?: number;
+    audienceScope?: 'public' | 'group' | 'direct';
+    targetGroupId?: string;
+    targetPubkey?: string;
+    assignedTo?: string;
+    targetArchetypes?: string;
 }): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts', post);
+}
+
+// ===================== GROUPS =====================
+// Docs: docs/the-commons.md §9 (Item 10)
+// Hard rules: roles are convenor / member / observer. Never "steward", never "admin".
+// A group is an audience scope and NOTHING else.
+
+export type GroupRole = 'convenor' | 'member' | 'observer';
+export type JoinPolicy = 'open' | 'request_to_join' | 'invite_only';
+export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+
+export interface Group {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+    avatarUrl?: string | null;
+    category: GroupCategory;
+    createdBy: string;
+    joinPolicy: JoinPolicy;
+    createdAt: string;
+    updatedAt?: string;
+    memberCount?: number;
+    viewerRole?: GroupRole | null;
+    viewerStatus?: GroupMemberStatus | null;
+    convenorPubkey?: string;
+    convenorCallsign?: string;
+    convenorAvatarUrl?: string | null;
+}
+
+export interface GroupMember {
+    groupId: string;
+    memberPubkey: string;
+    callsign?: string;
+    avatarUrl?: string | null;
+    role: GroupRole;
+    status: GroupMemberStatus;
+    joinedAt: string;
+    invitedBy?: string | null;
+    updatedAt?: string;
+}
+
+export async function getGroups(filter?: { category?: string; q?: string; member?: string; limit?: number; offset?: number }): Promise<Group[]> {
+    const params = new URLSearchParams();
+    if (filter?.category) params.set('category', filter.category);
+    if (filter?.q) params.set('q', filter.q);
+    if (filter?.member) params.set('member', filter.member);
+    if (filter?.limit) params.set('limit', String(filter.limit));
+    if (filter?.offset) params.set('offset', String(filter.offset));
+    const qs = params.toString();
+    return request('GET', `/api/groups${qs ? `?${qs}` : ''}`);
+}
+
+export async function getGroup(id: string): Promise<Group> {
+    return request('GET', `/api/groups/${encodeURIComponent(id)}`);
+}
+
+export async function createGroup(data: {
+    name: string;
+    slug?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: GroupCategory | string;
+    joinPolicy?: JoinPolicy;
+}): Promise<Group> {
+    return request('POST', '/api/groups', data);
+}
+
+export async function joinGroup(groupId: string): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+}
+
+export async function getGroupMembers(groupId: string, filter?: { status?: string; role?: string }): Promise<GroupMember[]> {
+    const params = new URLSearchParams();
+    if (filter?.status) params.set('status', filter.status);
+    if (filter?.role) params.set('role', filter.role);
+    const qs = params.toString();
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/members${qs ? `?${qs}` : ''}`);
+}
+
+export async function approveGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        action: 'approve'
+    });
+}
+
+export async function inviteGroupMember(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<{ success: boolean; member: GroupMember }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
+        memberPubkey,
+        role,
+        action: 'invite'
+    });
+}
+
+export async function setGroupMemberRole(groupId: string, memberPubkey: string, role: GroupRole): Promise<{ success: boolean; member: GroupMember }> {
+    return request('PATCH', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`, {
+        role
+    });
+}
+
+export async function removeGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+}
+
+export async function updateGroup(groupId: string, data: {
+    name?: string;
+    description?: string;
+    avatarUrl?: string;
+    category?: GroupCategory | string;
+    joinPolicy?: JoinPolicy;
+}): Promise<{ success: boolean; group: Group }> {
+    return request('PATCH', `/api/groups/${encodeURIComponent(groupId)}`, data);
+}
+
+export async function deleteGroupPost(groupId: string, postId: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
+}
+
+export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/vote`, { optionId });
+}
+
+export async function closePoll(postId: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/close`, {});
 }
 
 /** How far a listing travels (#143 step 4). Mirrors PostReach in @beanpool/core. */
@@ -754,8 +1192,8 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
 
 // ===================== REPORTS =====================
 
-export async function reportAbuse(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/reports', { reporterPubkey, targetPubkey, reason, targetPostId });
+export async function reportAbuse(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/reports', { reporterPubkey, targetPubkey, reason, targetPostId, targetPulseItemId });
 }
 
 // ===================== FRIENDS =====================
@@ -765,6 +1203,7 @@ export interface FriendEntry {
     callsign: string;
     addedAt: string;
     isGuardian: boolean;
+    avatarUrl?: string | null;
 }
 
 export async function getFriends(publicKey: string): Promise<FriendEntry[]> {
@@ -779,9 +1218,7 @@ export async function removeFriendApi(ownerPubkey: string, friendPubkey: string)
     return request('POST', '/api/friends/remove', { ownerPubkey, friendPubkey });
 }
 
-export async function setGuardianApi(ownerPubkey: string, friendPubkey: string, isGuardian: boolean): Promise<{ success: boolean }> {
-    return request('POST', '/api/friends/guardian', { ownerPubkey, friendPubkey, isGuardian });
-}
+
 
 // ===================== MEMBERS =====================
 
@@ -792,7 +1229,7 @@ export interface MemberSummary {
 }
 
 export async function getAllMembers(): Promise<MemberSummary[]> {
-    return request('GET', `/api/members?_t=${Date.now()}`);
+    return request('GET', '/api/members');
 }
 
 // ===================== FEDERATION =====================
@@ -948,15 +1385,165 @@ export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredi
     return request('GET', `/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
 }
 
+// ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
+
+export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionFranchise = '1m1v' | 'quadratic_trade';
+export type DecisionStatus =
+    | 'open'
+    | 'passed'
+    | 'failed'
+    | 'unresolved'
+    | 'passed_queued_for_funds'
+    | 'execution_pending_grace'
+    | 'execution_blocked'
+    | 'execution_void'
+    | 'executed'
+    | 'admin_halted';
+
+export type DecisionEffect =
+    | 'suspend_member'
+    | 'unsuspend_member'
+    | 'freeze_credit'
+    | 'unfreeze_credit'
+    | 'grant_voucher'
+    | 'revoke_voucher'
+    | 'grant_tier'
+    | 'revoke_tier'
+    | 'grant_elder'
+    | 'revoke_elder'
+    | 'remove_lead_keeper'
+    | 'reinstate_member'
+    | 'remove_member'
+    | 'grant_enterprise'
+    | 'grant_hardship'
+    | 'write_off_deficit'
+    | 'set_levy'
+    | 'set_rule'
+    | 'poll';
+
+export interface Decision {
+    id: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject: string | null;
+    params: any | null;
+    franchise: DecisionFranchise;
+    status: DecisionStatus;
+    opensAt: string;
+    closesAt: string;
+    gracePeriodEndsAt: string | null;
+    createdAt: string;
+    executedAt: string | null;
+    executionError: string | null;
+    executionReason: string | null;
+    adminHaltedAt: string | null;
+    adminHaltedBy: string | null;
+    adminHaltReason: string | null;
+    updatedAt: string;
+}
+
+export interface DecisionVote {
+    decisionId: string;
+    voterPubkey: string;
+    support: number; // 1 = yes, 0 = no
+    weight: number;
+    creditsUsed: number;
+    signature?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DecisionTally {
+    decisionId: string;
+    status: DecisionStatus;
+    totalVoters: number;
+    quorumRequired: number;
+    quorumMet: boolean;
+    yesWeight: number;
+    noWeight: number;
+    totalWeight: number;
+    supportRatio: number;
+    thresholdRequired: number;
+    passed: boolean;
+}
+
+export interface DecisionWithTally extends Decision {
+    tally: DecisionTally;
+}
+
+export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
+    return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
+}
+
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[] }> {
+    return request('GET', `/api/commons/decisions/${encodeURIComponent(id)}`);
+}
+
+export async function createDecision(options: {
+    authorPubkey: string;
+    title: string;
+    description: string;
+    touches: DecisionTouch;
+    effect: DecisionEffect;
+    subject?: string | null;
+    params?: any;
+    closesAt?: string;
+}): Promise<{ success: boolean; decision: Decision }> {
+    return request('POST', '/api/commons/decisions', options);
+}
+
+export async function castDecisionVote(decisionId: string, options: {
+    voterPubkey: string;
+    support: boolean;
+    voteCount?: number;
+    signature?: string;
+}): Promise<{ success: boolean; creditsUsed: number }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, options);
+}
+
 // ===================== COMMUNITY TREASURIES =====================
 // A treasury is a real member account (the Commons' trading face for an enterprise, e.g. the eggs).
 export interface Treasury {
     publicKey: string;
     name: string;
+    callsign?: string;
     avatar?: string | null;
+    avatarUrl?: string | null;
     balance: number;
     creditLine: number;
+    floor?: number;
+    usableFloor?: number;
     liveOffers: number;
+    earnedSurplus?: number;
+    workingCapitalCeiling?: number | null;
+    purpose?: string | null;
+    description?: string | null;
+    goalAmount?: number | null;
+    currentAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: string;
+    status?: 'active' | 'winding_up' | 'completed' | string;
+    paused?: boolean;
+    pausedAt?: string | null;
+    pausedBy?: string | null;
+    pausedFloorSnapshot?: number | null;
+    pauseExpiresAt?: string | null;
+    pauseDaysRemaining?: number | null;
+    pauseExpiringSoon?: boolean;
+    pauseWarning?: string | null;
+    windUpInitiatedAt?: string | null;
+    windUpInitiatedBy?: string | null;
+    windUpFinalisedAt?: string | null;
+    windUpGraceEndsAt?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
+    keepers?: Array<{ pubkey?: string; publicKey?: string; callsign: string; role?: string; avatarUrl?: string | null; grantedAt?: string | null }>;
     /**
      * Present only when this enterprise is a federation link (#143 step 3), absent for an ordinary one.
      *
@@ -979,12 +1566,152 @@ export interface Treasury {
     } | null;
 }
 
+export interface EnterpriseLedgerEntry {
+    id: string;
+    timestamp: string;
+    direction: 'income' | 'spend';
+    amount: number;
+    fee: number;
+    netAmount: number;
+    counterparty: string;
+    counterpartyName: string;
+    memo: string;
+    runningBalance: number;
+    authSigner: string | null;
+}
+
+export interface EnterpriseLedgerSummary {
+    totalIncome: number;
+    totalSpend: number;
+    netChange: number;
+    startingBalance: number;
+    endingBalance: number;
+    transactionCount: number;
+}
+
+export interface EnterpriseLedgerResponse {
+    enterprise: {
+        publicKey: string;
+        name: string;
+        purpose: string | null;
+        status: string;
+        paused: boolean;
+        balance: number;
+    };
+    period: {
+        since: string | null;
+        until: string | null;
+    };
+    summary: EnterpriseLedgerSummary;
+    entries: EnterpriseLedgerEntry[];
+}
+
+export interface EnterpriseStatus {
+    publicKey: string;
+    name: string;
+    paused: boolean;
+    status: string;
+}
+
+export async function getEnterpriseStatuses(): Promise<{ enterprises: EnterpriseStatus[] }> {
+    return request('GET', '/api/enterprises/statuses');
+}
+
+export interface EnterpriseMapPin {
+    publicKey: string;
+    name: string;
+    callsign: string;
+    avatar: string | null;
+    avatarUrl?: string | null;
+    purpose?: string | null;
+    lat: number;
+    lng: number;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
+    paused: boolean;
+    status: string;
+}
+
+export async function getEnterpriseMapPins(): Promise<{ enterprises: EnterpriseMapPin[] }> {
+    return request('GET', '/api/enterprises/map');
+}
+
 export async function getTreasuries(): Promise<{ treasuries: Treasury[] }> {
     return request('GET', '/api/treasuries');
 }
 
 export async function getTreasury(publicKey: string): Promise<any> {
     return request('GET', `/api/treasury/${encodeURIComponent(publicKey)}`);
+}
+
+// Enterprise Season / Lifecycle API (docs/the-commons.md §2.2)
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/pause`);
+}
+
+export async function resumeEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; alreadyActive?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/resume`);
+}
+
+export async function initiateWindUp(treasury: string): Promise<{ success: boolean; status: string; initiatedAt: string; initiatedBy: string; graceEndsAt: string; alreadyInitiated?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/initiate`);
+}
+
+export async function cancelWindUp(treasury: string): Promise<{ success: boolean; status: string }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`);
+}
+
+export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`);
+}
+
+// Enterprise map pin (docs/the-commons.md §2.2). Keeper route: the server takes the actor from the signature only.
+export interface EnterpriseLocationResponse {
+    success: boolean;
+    lat: number | null;
+    lng: number | null;
+    locationAuthSigner?: string | null;
+    locationUpdatedAt?: string | null;
+}
+
+export async function setEnterpriseLocation(treasury: string, location: { lat: number; lng: number }): Promise<EnterpriseLocationResponse> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/location`, { lat: location.lat, lng: location.lng });
+}
+
+export async function clearEnterpriseLocation(treasury: string): Promise<EnterpriseLocationResponse> {
+    return request('DELETE', `/api/enterprise/${encodeURIComponent(treasury)}/location`);
+}
+
+export async function getEnterpriseLedger(treasury: string, opts?: { since?: string; until?: string; limit?: number }): Promise<EnterpriseLedgerResponse> {
+    const params = new URLSearchParams();
+    if (opts?.since) params.set('since', opts.since);
+    if (opts?.until) params.set('until', opts.until);
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
+}
+
+export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+}
+
+export async function createEnterprise(data: {
+    name: string;
+    avatar?: string;
+    photos?: string[];
+    purpose?: string;
+    description?: string;
+    goalAmount?: number | null;
+    deadlineAt?: string | null;
+    lifecycle?: 'ongoing' | 'bounded';
+    creditLine?: number;
+    workingCapitalCeiling?: number | null;
+}): Promise<any> {
+    return request('POST', '/api/treasury', data);
+}
+
+export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/crowdfund/projects/delete', { id: projectId, creatorPubkey });
 }
 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
@@ -998,52 +1725,136 @@ export async function treasuryPostNeed(treasury: string, body: { category: strin
 export async function treasuryApprove(treasury: string, transactionId: string): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/approve`, { transactionId });
 }
-export async function treasuryComplete(treasury: string, transactionId: string): Promise<{ success: boolean }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId });
+export async function treasuryReject(treasury: string, transactionId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
+}
+export async function treasuryComplete(treasury: string, transactionId: string, hours?: number): Promise<{ success: boolean }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
 }
 export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
+}
+export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+}
+export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+}
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null }> {
+    return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
+}
+
+// Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
+export interface KeeperRequestItem {
+    id: string;
+    enterprisePubkey: string;
+    memberPubkey: string;
+    pledgedBacking: number;
+    status: 'pending' | 'approved' | 'declined';
+    createdAt: string;
+    decidedAt?: string | null;
+    decidedBy?: string | null;
+    callsign?: string;
+    avatarUrl?: string | null;
+}
+
+export interface SuccessionProposalItem {
+    id: string;
+    enterprisePubkey: string;
+    leadPubkey: string;
+    candidatePubkey: string;
+    proposedBy?: string;
+    proposerPubkey?: string;
+    proposedAt?: string;
+    createdAt?: string;
+    status: 'active' | 'passed' | 'cancelled';
+    resolvedAt?: string | null;
+    executedAt?: string | null;
+    votesCount: number;
+    votesRequired?: number;
+    requiredVotes?: number;
+    totalEligible?: number;
+    votes?: Array<{ voterPubkey: string; callsign?: string; votedAt?: string }>;
+    candidateCallsign?: string;
+    candidateAvatarUrl?: string | null;
+    leadCallsign?: string;
+    hasVoted?: boolean;
+}
+
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+}
+
+export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending'): Promise<{ success: boolean; requests: KeeperRequestItem[] }> {
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
+}
+
+export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`);
+}
+
+export async function declineKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/decline`);
+}
+
+export async function getEnterpriseSuccession(treasury: string): Promise<{ success: boolean; leadInactivity: any; proposals: SuccessionProposalItem[]; activeProposal: SuccessionProposalItem | null }> {
+    return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/succession`);
+}
+
+export async function proposeEnterpriseSuccession(treasury: string, candidatePubkey: string): Promise<{
+    success: boolean;
+    executed: boolean;
+    leadMoved?: boolean;
+    votesCount?: number;
+    votesRequired?: number;
+    status?: string;
+    proposal: SuccessionProposalItem;
+}> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string): Promise<{
+    success: boolean;
+    executed: boolean;
+    leadMoved?: boolean;
+    votesCount?: number;
+    votesRequired?: number;
+    status?: string;
+    proposal?: SuccessionProposalItem;
+}> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`);
+}
+
+export interface EnterpriseThreadMessage {
+    id: string;
+    conversationId: string;
+    authorPubkey: string;
+    authorCallsign?: string;
+    authorAvatar?: string | null;
+    ciphertext: string;
+    nonce: string;
+    type: 'text' | 'removed' | string;
+    metadata?: string;
+    timestamp: string;
+    editedAt?: string | null;
+}
+
+export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: EnterpriseThreadMessage[]; readOnly: boolean }> {
+    return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/thread?limit=${limit}&offset=${offset}`);
+}
+
+export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+export async function removeEnterpriseThreadMessage(treasury: string, messageId: string): Promise<{ success: boolean; message: EnterpriseThreadMessage }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/thread/remove`, { messageId });
 }
 
 export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {
     return request('GET', '/api/commons/rounds');
 }
 
-// ===================== CROWDFUNDING =====================
-
-export interface CrowdfundProject {
-    id: string;
-    creator_pubkey: string;
-    title: string;
-    description: string;
-    photos: string; // JSON string array
-    goal_amount: number;
-    current_amount: number;
-    commons_allocation?: number; // Amount allocated from the Commons Pool (admin-triggered)
-    deadline_at: string | null;
-    status: string;
-    created_at: string;
-}
-
-export async function getCrowdfundProjects(): Promise<{ projects: CrowdfundProject[], maxProjectExpiryDays: number }> {
-    return request('GET', '/api/crowdfund/projects');
-}
-
-export async function getCrowdfundProject(id: string): Promise<{ project: CrowdfundProject }> {
-    return request('GET', `/api/crowdfund/projects/${id}`);
-}
-
-export async function createCrowdfundProject(creatorPubkey: string, title: string, description: string, photos: string[], goalAmount: number, deadlineAt: string | null): Promise<{ success: boolean; project: CrowdfundProject }> {
-    return request('POST', '/api/crowdfund/projects', { creatorPubkey, title, description, photos, goalAmount, deadlineAt });
-}
-
-export async function updateCrowdfundProject(id: string, creatorPubkey: string, title: string, description: string, photos: string[], goalAmount: number, deadlineAt: string | null = null): Promise<{ success: boolean; project: CrowdfundProject }> {
-    return request('POST', '/api/crowdfund/projects/update', { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt });
-}
-
-export async function pledgeToCrowdfundProject(projectId: string, fromPubkey: string, amount: number, memo: string): Promise<{ success: boolean; txId: string }> {
-    return request('POST', `/api/crowdfund/projects/${projectId}/pledge`, { fromPubkey, amount, memo });
-}
 
 // ===================== NODE CONFIG =====================
 
@@ -1056,39 +1867,39 @@ export async function getNodeConfig(): Promise<NodeConfig> {
     return request('GET', '/api/node/config');
 }
 
-// ===================== SOCIAL RECOVERY & GUARDIANS =====================
+// ===================== RECOVERY ALERT (OWNER SIDE) =====================
 
-export async function lookupRecoveryCallsign(callsign: string): Promise<any[]> {
-    return request<any[]>('GET', `/api/recovery/lookup/${encodeURIComponent(callsign)}`);
+export interface RecoverySessionInfo {
+    collectionId: string;
+    generation: number;
+    startedAt?: string;
+    expiresAt?: string;
+    status?: string;
+    progress?: any;
 }
 
-export async function createRecoveryRequest(oldPubkey: string, guardianGuess: string, newIdentity: any): Promise<any> {
-    return request<any>('POST', '/api/recovery/request', {
-        oldPubkey,
-        guardianGuess,
-        newPubkey: newIdentity.publicKey,
+/**
+ * Owner side: Checks active recovery sessions against the member's account.
+ */
+export async function getMyActiveRecoveryCollections(): Promise<RecoverySessionInfo[]> {
+    try {
+        const res = await request<{ collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
+        return res?.collections || [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Owner side: Cancels an active recovery session.
+ */
+export async function cancelRecoveryCollection(collectionId: string): Promise<boolean> {
+    const res = await request<{ cancelled: boolean }>('POST', '/api/recovery/collect/cancel', {
+        collectionId,
     });
+    return !!res?.cancelled;
 }
 
-export async function getPendingRecoveryRequests(pubkey: string): Promise<any[]> {
-    return request<any[]>('GET', `/api/recovery/pending/${encodeURIComponent(pubkey)}`);
-}
-
-export async function approveRecoveryRequest(requestId: string): Promise<void> {
-    await request<void>('POST', '/api/recovery/approve', { requestId });
-}
-
-export async function rejectRecoveryRequest(requestId: string): Promise<void> {
-    await request<void>('POST', '/api/recovery/reject', { requestId });
-}
-
-export async function cancelRecoveryRequest(requestId: string): Promise<void> {
-    await request<void>('POST', '/api/recovery/cancel', { requestId });
-}
-
-export async function getRecoveryStatus(pubkey: string): Promise<any> {
-    return request<any>('GET', `/api/recovery/status/${encodeURIComponent(pubkey)}`);
-}
 
 // ===================== NOTIFICATION PREFERENCES =====================
 
@@ -1104,7 +1915,15 @@ export async function updateNotificationPreferences(pubkey: string, preferences:
 
 export async function getNodeStats(): Promise<{ members: number; posts: number; transactions: number } | null> {
     try {
-        return await request<{ members: number; posts: number; transactions: number }>('GET', '/api/stats');
+        const health = await request<{
+            tree?: { totalMembers?: number };
+            activity?: { totalPosts?: number; totalTransactions?: number };
+        }>('GET', '/api/community/health');
+        return {
+            members: health?.tree?.totalMembers ?? 0,
+            posts: health?.activity?.totalPosts ?? 0,
+            transactions: health?.activity?.totalTransactions ?? 0,
+        };
     } catch {
         return null;
     }

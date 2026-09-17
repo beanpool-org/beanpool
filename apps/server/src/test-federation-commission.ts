@@ -45,7 +45,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { setCommonsBalance } from '@beanpool/core';
 import {
     initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createTreasury, createPost, adminAssignTreasuryOperator, getAdminPubkey,
+    createTreasury, createPost, adminAssignTreasuryOperator, adminRevokeTreasuryOperator, getFirstNodeAdminPubkey, getAdminPubkey, seedGenesisMember,
 } from './state-engine.js';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
@@ -258,6 +258,10 @@ async function main() {
     const remotePost = createPost('offer', 'other', 'A performance in Byron', 'd', 60, 'fixed', remoteSeller)!;
     db.prepare("UPDATE posts SET origin_node = ? WHERE id = ?").run(PEER_URL, remotePost.id);
 
+    // §10 below asserts the admin's node-wide override reaches a link. makeMember() leaves
+    // invited_by NULL, so without this there is no human admin at all and the assertion tested
+    // nothing — it passed only while getAdminPubkey() returned the self-matching 'SYSTEM' row.
+    seedGenesisMember('NodeAdmin', 'NodeAdmin');
     const keeper = makeMember('Keeper', 50);
     const bystander = makeMember('Bystander', 50);
     adminAssignTreasuryOperator(link.treasuryPubkey, keeper);
@@ -333,12 +337,24 @@ async function main() {
         `9b. AND NOTHING WAS FUNDED (pot ${r4(getCommonsBalanceExact())}, link ${bal(link.treasuryPubkey)}) — funding is the last thing the route does, so every refusal above it costs the community nothing`);
     assert(nodeTotal() === before9, '9c. node total unchanged');
 
-    // ── 10. The admin's node-wide override reaches a link like any other enterprise (#106). ────────────
-    const admin = getAdminPubkey();
+    // ── 10. An admin cannot spend without a keeper binding; once appointed, they can. ─────────
+    let admin = getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!admin) {
+        admin = makeMember('genesis-admin', 0);
+        seedGenesisMember(admin, 'genesis-admin');
+    }
     if (admin) {
         const asAdmin = await commission(admin, { postId: remotePost.id });
-        assert(asAdmin.status === 503,
-            `10. the admin gets as far as the transport check (got ${asAdmin.status}) — they create the enterprises, so they keep the node-wide override`);
+        assert(asAdmin.status === 403,
+            `10a. an unappointed admin cannot commission for an enterprise (got ${asAdmin.status}) — SPENDING has no admin bypass`);
+        adminAssignTreasuryOperator(link.treasuryPubkey, admin, 'admin');
+        const asAppointedAdmin = await commission(admin, { postId: remotePost.id });
+        assert(asAppointedAdmin.status === 503,
+            `10b. an admin appointed as keeper reaches the transport check (got ${asAppointedAdmin.status})`);
+        adminRevokeTreasuryOperator(link.treasuryPubkey, admin);
+        const asRevokedAdmin = await commission(admin, { postId: remotePost.id });
+        assert(asRevokedAdmin.status === 403,
+            `10c. revoking keeper appointment removes spending rights again (got ${asRevokedAdmin.status})`);
     } else {
         assert(false, '10. setup: no admin pubkey to check the override with');
     }

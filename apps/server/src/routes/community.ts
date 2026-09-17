@@ -3,6 +3,7 @@
  * Friends, Recovery, Push Notifications, Preferences, Ratings routes.
  */
 
+import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
     registerMember, getMembers, getAllMembers, getMember,
@@ -11,24 +12,27 @@ import {
     getCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer,
+    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount,
-    getFriends, addFriend, removeFriend, setGuardian,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner,
+    getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
     exportLedgerAudit,
     registerPushToken, removePushToken,
     getMemberPreferences, setMemberPreferences, setHolidayMode,
     getMemberStats,
-    getGuardiansOf, createRecoveryRequest, getRecoveryRequest, dispatchPushNotification, getPendingRecoveryRequests, approveRecovery, rejectRecovery, getRecoveryStatus, cancelRecovery,
+    dispatchPushNotification,
     getNodeRole, exportSyncState,
     createTreasury,
     purgeMemberSelf,
+    getMembersVersion,
 } from '../state-engine.js';
+import { completeRekey } from '../engine/member-wizards.js';
+import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
     getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
     validatePasswordStrength,
@@ -49,7 +53,6 @@ import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
-import { pendingKeeperActionsFor } from '../engine/recovery-release.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -216,8 +219,12 @@ router.post('/api/local/update-identity', async (ctx) => {
     }
 
     if (callsign !== undefined) config.callsign = (callsign || '').slice(0, 20);
-    if (lat !== undefined && lng !== undefined) {
-        config.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+    if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
+        const parsedLat = parseFloat(lat);
+        const parsedLng = parseFloat(lng);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+            config.location = { lat: parsedLat, lng: parsedLng };
+        }
     }
     if (communityName !== undefined) config.communityName = (communityName || '').slice(0, 60) || null;
     if (contactEmail !== undefined) config.contactEmail = (contactEmail || '').slice(0, 100) || null;
@@ -676,7 +683,18 @@ router.get('/api/community/info', async (ctx) => {
 });
 
 router.get('/api/community/health', async (ctx) => {
-    ctx.body = getCommunityHealth();
+    // `flags` is the node's fraud and moderation analysis — wash-trading findings, sybil-ring
+    // findings, delinquency, and the PUBLIC KEYS of every member involved. This route is in
+    // PUBLIC_READ_EXACT, so all of that was served unauthenticated to anyone who could reach
+    // the node, and re-sent to every phone every 30 seconds by the header's health ping:
+    // 1552 of the payload's 2048 bytes on the test node, which no client has ever read.
+    //
+    // The fleet manager — the only thing that displays flags — reads them from
+    // POST /api/local/admin/data, which calls getCommunityHealth() in-process behind
+    // checkAdminAuth. Nothing changes for it.
+    const { flags, ...publicHealth } = getCommunityHealth();
+    void flags;
+    ctx.body = publicHealth;
 });
 
 // Lightweight membership probe — returns whether a public key is a registered member or recovering
@@ -685,20 +703,51 @@ router.get('/api/community/membership/:publicKey', async (ctx) => {
     if (member) {
         ctx.body = { isMember: true, callsign: member.callsign };
     } else {
-        const recovery = getRecoveryStatus(ctx.params.publicKey);
-        const isRecovering = recovery && (recovery.status === 'pending' || recovery.status === 'approved');
         ctx.body = {
             isMember: false,
             callsign: null,
-            isRecovering: !!isRecovering,
-            recoveryStatus: recovery?.status || null
+            isRecovering: false,
+            recoveryStatus: null
         };
     }
 });
 
 router.get('/api/community/members', async (ctx) => {
+    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
+    const etag = `W/"community-members-${getMembersVersion()}${querySig}"`;
+
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
-    ctx.body = getMembers().filter(m => !m.isTreasury);
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+    const members = getMembers()
+        .filter(m => !m.isTreasury)
+        .map(m => ({
+            ...m,
+            nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+            avatarUrl: m.avatarUrl
+                ? (m.avatarUrl.startsWith('bundled://')
+                    ? m.avatarUrl
+                    : `/api/avatar/${m.publicKey}?size=thumb`)
+                : null,
+        }));
+
+    const bodyStr = JSON.stringify(members);
+
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = bodyStr;
 });
 
 router.post('/api/community/register', async (ctx) => {
@@ -808,6 +857,11 @@ router.get('/api/invite/tree', async (ctx) => {
 
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
+    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own invites' };
+        return;
+    }
     const invites = getInvitesByMember(publicKey);
     ctx.body = { invites };
 });
@@ -816,10 +870,10 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
 
 router.post('/api/profile/update', async (ctx) => {
     const { avatar, bio, contact, callsign, archetype } = (ctx as any).requestBody || {};
-    const activeKey = ctx.state.actor || (ctx as any).requestBody?.publicKey;
+    const activeKey = ctx.state.actor as string | undefined;
     if (!activeKey) {
-        ctx.status = 400;
-        ctx.body = { error: 'publicKey is required' };
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
     // Funnel: step 2. Asked before the write — afterwards there is no telling a first
@@ -867,6 +921,53 @@ router.post('/api/member/purge', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to purge account' };
+    }
+});
+
+router.post('/api/member/re-enroll', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    const { code, newPublicKey, signature } = body;
+
+    if (!code || typeof code !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Re-enrolment code is required' };
+        return;
+    }
+    if (!newPublicKey || typeof newPublicKey !== 'string' || !/^[0-9a-f]{64}$/i.test(newPublicKey.trim())) {
+        ctx.status = 400;
+        ctx.body = { error: 'Valid 64-character hex new public key is required' };
+        return;
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const cleanNew = newPublicKey.trim().toLowerCase();
+
+    // Verify Proof of Possession signature (mandatory to prevent unauthenticated takeover)
+    if (!signature || typeof signature !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'Signature is required: proof of possession of new private key must be provided' };
+        return;
+    }
+    if (!verifyEd25519Signature(cleanCode, signature, cleanNew)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid signature: proof of possession failed for new public key' };
+        return;
+    }
+
+    try {
+        const req = db.prepare("SELECT * FROM rekey_requests WHERE code = ?").get(cleanCode) as any;
+        if (!req) {
+            ctx.status = 404;
+            ctx.body = { error: 'Invalid re-enrolment code' };
+            return;
+        }
+
+        const result = completeRekey(req.old_pubkey, cleanNew, cleanCode, req.operator_pubkey);
+        ctx.body = result;
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e?.message || 'Failed to complete re-enrolment' };
     }
 });
 
@@ -997,14 +1098,30 @@ router.post('/api/profile/unvouch', async (ctx) => {
 });
 
 router.post('/api/ledger/transfer', async (ctx) => {
-    const { to, amount, memo } = (ctx as any).requestBody || {};
-    const from = ctx.state.actor || (ctx as any).requestBody?.from;
+    const { to, amount, memo, from: bodyFrom } = (ctx as any).requestBody || {};
+    // The sender is the authenticated signer, and only that. The signature middleware sets both the actor
+    // and authSig; requiring them to agree here keeps this route fail-closed on its own, rather than
+    // trusting that every path to it was authenticated. transfer() cannot carry this check itself: its
+    // internal callers legitimately move value the signer does not own (escrow payouts, offboarding gifts,
+    // settlement holds, wage claims).
+    const from = ctx.state.actor as string | undefined;
+    const authSigner = (ctx.state as any).authSig?.signer as string | undefined;
+    if (!from || authSigner !== from) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (bodyFrom !== undefined && bodyFrom !== from) {
+        ctx.status = 403;
+        ctx.body = { error: 'from must match the signing key' };
+        return;
+    }
     const parsedAmount = Number(amount);
     // SECURITY (SRV-8): require a positive, finite amount at the route. Don't
     // rely solely on transfer()'s internal guard / the transactions CHECK.
-    if (!from || !to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
         ctx.status = 400;
-        ctx.body = { error: 'from, to, and a positive amount are required' };
+        ctx.body = { error: 'to and a positive amount are required' };
         return;
     }
 
@@ -1062,7 +1179,13 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or token' };
         return;
     }
-    const success = registerPushToken(publicKey, token, platform || 'ios');
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const success = registerPushToken(activeKey, token, platform || 'ios');
     ctx.body = { success };
 });
 
@@ -1073,7 +1196,13 @@ router.delete('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'Missing publicKey' };
         return;
     }
-    const success = removePushToken(publicKey, token);
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const success = removePushToken(activeKey, token);
     ctx.body = { success };
 });
 
@@ -1086,6 +1215,11 @@ router.get('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'Missing publicKey' };
         return;
     }
+    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own preferences' };
+        return;
+    }
     ctx.body = getMemberPreferences(publicKey);
 });
 
@@ -1096,7 +1230,13 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'Missing publicKey or preferences' };
         return;
     }
-    const success = setMemberPreferences(publicKey, preferences);
+    const activeKey = ctx.state.actor as string | undefined;
+    if (!activeKey) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const success = setMemberPreferences(activeKey, preferences);
     ctx.body = { success };
 });
 
@@ -1163,13 +1303,41 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 // ===================== ABUSE REPORTS =====================
 
 router.post('/api/reports', async (ctx) => {
-    const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
-    if (!reporterPubkey || !targetPubkey || !reason) {
-        ctx.status = 400;
-        ctx.body = { error: 'reporterPubkey, targetPubkey, and reason are required' };
+    const { reporterPubkey, reason, targetPostId, targetPulseItemId } = (ctx as any).requestBody || {};
+    let { targetPubkey } = (ctx as any).requestBody || {};
+    const activeReporter = ctx.state.actor as string | undefined;
+    if (!activeReporter) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const report = submitReport(reporterPubkey, targetPubkey, reason, targetPostId);
+    if (targetPulseItemId !== undefined && targetPulseItemId !== null) {
+        // A Pulse item report names the item; the reported member is always its owner, whatever
+        // targetPubkey the client sent.
+        if (typeof targetPulseItemId !== 'string' || !targetPulseItemId.trim()) {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPulseItemId must be a non-empty string' };
+            return;
+        }
+        const owner = getReportablePulseItemOwner(targetPulseItemId);
+        if (!owner) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'That Pulse item no longer exists.' };
+            return;
+        }
+        if (owner === activeReporter) {
+            ctx.status = 400;
+            ctx.body = { error: 'own_item', message: 'You cannot report your own item.' };
+            return;
+        }
+        targetPubkey = owner;
+    }
+    if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
+        return;
+    }
+    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };
@@ -1187,12 +1355,18 @@ router.get('/api/friends/:publicKey', async (ctx) => {
 
 router.post('/api/friends/add', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    if (!ownerPubkey || !friendPubkey) {
+    const activeOwner = ctx.state.actor as string | undefined;
+    if (!activeOwner) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const entry = addFriend(ownerPubkey, friendPubkey);
+    const entry = addFriend(activeOwner, friendPubkey);
     if (!entry) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — both must be registered members' };
@@ -1203,12 +1377,18 @@ router.post('/api/friends/add', async (ctx) => {
 
 router.post('/api/friends/remove', async (ctx) => {
     const { ownerPubkey, friendPubkey } = (ctx as any).requestBody || {};
-    if (!ownerPubkey || !friendPubkey) {
+    const activeOwner = ctx.state.actor as string | undefined;
+    if (!activeOwner) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!friendPubkey) {
         ctx.status = 400;
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const ok = removeFriend(ownerPubkey, friendPubkey);
+    const ok = removeFriend(activeOwner, friendPubkey);
     if (!ok) {
         ctx.status = 400;
         ctx.body = { error: 'Failed to remove friend — friend relationship not found' };
@@ -1217,22 +1397,7 @@ router.post('/api/friends/remove', async (ctx) => {
     ctx.body = { success: true };
 });
 
-router.post('/api/friends/guardian', async (ctx) => {
-    const ownerPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.friendPubkey || typeof body.isGuardian !== 'boolean') {
-        ctx.status = 400; ctx.body = { error: 'Invalid payload' }; return;
-    }
-
-    const success = setGuardian(ownerPubkey, body.friendPubkey, body.isGuardian);
-    if (success) {
-        ctx.status = 200; ctx.body = { success: true };
-    } else {
-        ctx.status = 400; ctx.body = { error: 'Could not set guardian status' };
-    }
-});
-
-// ======================== SOCIAL RECOVERY ========================
+// ======================== SSO RECOVERY LOOKUP ========================
 
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
@@ -1259,178 +1424,26 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
     ctx.body = { callsign: raw, available, tooShort: raw.length < 2 };
 });
 
-// 2. Submit a recovery request (Signed by NEW pubkey)
-router.post('/api/recovery/request', async (ctx) => {
-    if (!rateLimit(ctx)) return; // SRV-4: throttle recovery-request spam / guardian-guessing
-    const newPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    
-    if (!body || !body.oldPubkey || !body.guardianGuess) {
-        ctx.status = 400; ctx.body = { error: 'Missing oldPubkey or guardianGuess' }; return;
-    }
-
-    try {
-        const req = createRecoveryRequest(body.oldPubkey, newPubkey, body.guardianGuess);
-        
-        // Push notification to guardians
-        // Disabled push notifications to prevent complacent approvals without offline verification.
-        // Guardians must be actively contacted by the recovering user.
-        /*
-        const guardians = getGuardiansOf(body.oldPubkey);
-        const targetMember = getMember(body.oldPubkey);
-        if (targetMember) {
-            dispatchPushNotification(
-                guardians,
-                body.oldPubkey, // actor
-                '🛡️ Recovery Request',
-                `${targetMember.callsign} is requesting identity recovery. Open BeanPool to review.`,
-                { screen: 'settings' }, // data payload
-                'escrow' // closest matching notification category
-            );
-        }
-        */
-
-        ctx.status = 200;
-        ctx.body = req;
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message };
-    }
-});
-
-// 3. Get pending requests for a guardian
-router.get('/api/recovery/pending/:guardianPubkey', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    const guardianPubkey = ctx.params.guardianPubkey;
-    // A2-16: under ENFORCE_READ_AUTH this route is gated, so ctx.state.actor is the
-    // CRYPTOGRAPHICALLY VERIFIED signer — require it to be the guardian. The
-    // x-public-key header check below is non-authenticating (a caller just sets it
-    // to the value being queried); it remains only as the flag-off fallback. Full
-    // fix is a guardian-signed-proof recovery flow (tracked).
-    if (ENFORCE_READ_AUTH) {
-        if (ctx.state.actor !== guardianPubkey) {
-            ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
-        }
-    } else if (ctx.request.header['x-public-key'] !== guardianPubkey) {
-        ctx.status = 403; ctx.body = { error: 'Unauthorized' }; return;
-    }
-    try {
-        const reqs = getPendingRecoveryRequests(guardianPubkey);
-
-        // The approve RESPONSE can only report an obligation that already exists at the moment of
-        // the vote — and the usual ordering is the other way round: the guardian votes first, the
-        // recovering device opens its collection afterwards. A keeper who approved early would
-        // otherwise never be told their fragment is still needed, which is the same silent stall
-        // in a different order (CR #239).
-        //
-        // This list is where a keeper's client already polls, and it keeps returning a request
-        // after that guardian has voted (status IN 'pending','approved'), so the obligation
-        // surfaces on the next poll whenever the collection opens. Attached per request rather
-        // than alongside the array, so the response stays an array and old clients are unaffected.
-        ctx.status = 200;
-        ctx.body = reqs.map((r: any) => {
-            const pending = pendingKeeperActionsFor(guardianPubkey, r.oldPubkey);
-            return pending.length
-                ? { ...r, keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })) }
-                : r;
-        });
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e.message };
-    }
-});
-
-// 4. Approve recovery
-router.post('/api/recovery/approve', async (ctx) => {
-    const guardianPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        approveRecovery(body.requestId, guardianPubkey);
-
-        // ONBOARDING Part 5: "the approve endpoint gains a side effect: releasing that approver's
-        // piece." It cannot, quite — a member fragment is released only when it has been re-wrapped
-        // to the recovering device's ephemeral key, and that needs the keeper's PRIVATE key. The
-        // node has no plaintext and must not pretend otherwise.
-        //
-        // What it can do is refuse to let the approval read as finished when it is not. The old
-        // guardian vote and the keyholder split are two mechanisms wearing the same word on the
-        // same button: a guardian who is also a keeper taps Approve, is told it worked, and stops —
-        // while the fragment recovery actually needs has not moved. The owner then sees an approval
-        // and no piece, with nothing to explain the gap.
-        //
-        // So the response carries the outstanding obligation and the client finishes it against
-        // /api/recovery/approve-keeper, which stays the single path that releases anything.
-        const req = getRecoveryRequest(body.requestId);
-        const pending = req ? pendingKeeperActionsFor(guardianPubkey, req.oldPubkey) : [];
-
-        ctx.status = 200;
-        ctx.body = {
-            success: true,
-            // Absent rather than empty when there is nothing to do, so a client that ignores this
-            // field behaves exactly as before.
-            ...(pending.length ? {
-                keeperActionRequired: pending.map(p => ({
-                    collectionId: p.collectionId,
-                    // Whose account. Without it the client has a session id and no way to say who
-                    // it belongs to without a second lookup — and "someone needs your help" with
-                    // no name attached is exactly the prompt people dismiss (CR #239).
-                    ownerPubkey: p.ownerPubkey,
-                    expiresAt: p.expiresAt,
-                })),
-            } : {}),
-        };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
-});
-
-// 5. Reject recovery
-router.post('/api/recovery/reject', async (ctx) => {
-    const guardianPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        rejectRecovery(body.requestId, guardianPubkey);
-        ctx.status = 200; ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
-});
-
-// 6. Check recovery status
-router.get('/api/recovery/status/:pubkey', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    const pubkey = ctx.params.pubkey;
-    const status = getRecoveryStatus(pubkey);
-    ctx.status = 200;
-    ctx.body = status || { status: 'none' };
-});
-
-// 7. Cancel recovery
-router.post('/api/recovery/cancel', async (ctx) => {
-    const cancellerPubkey = ctx.request.header['x-public-key'] as string;
-    const body = (ctx as any).requestBody;
-    if (!body || !body.requestId) { ctx.status = 400; ctx.body = { error: 'Missing requestId' }; return; }
-
-    try {
-        cancelRecovery(body.requestId, cancellerPubkey);
-        ctx.status = 200; ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 400; ctx.body = { error: e.message };
-    }
-});
-
 // ======================== MEMBERS LIST ========================
 
 
 router.get('/api/members', async (ctx) => {
+    const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
+    const etag = `W/"members-${getMembersVersion()}${querySig}"`;
+
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+
+    const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (ifNoneMatch) {
+        const cleanInm = ifNoneMatch.replace(/^W\//, '');
+        const cleanEtag = etag.replace(/^W\//, '');
+        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+            ctx.status = 304;
+            return;
+        }
+    }
+
     // Use getMembers() (excludes pruned) so the directory matches the count reported by
     // /api/community/info — otherwise clients keep pruned members locally and read as
     // permanently "out of sync" against the node's pruned-excluding member count.
@@ -1449,16 +1462,28 @@ router.get('/api/members', async (ctx) => {
         );
     }
 
-    ctx.body = allMembers.map(m => ({
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+    const members = allMembers.map(m => ({
         publicKey: m.publicKey,
         callsign: m.callsign,
         joinedAt: m.joinedAt,
-        avatarUrl: m.avatarUrl,
+        nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+        avatarUrl: m.avatarUrl
+            ? (m.avatarUrl.startsWith('bundled://')
+                ? m.avatarUrl
+                : `/api/avatar/${m.publicKey}?size=thumb`)
+            : null,
         profileUpdatedAt: m.profileUpdatedAt,
         earnedCredit: m.earnedCredit ?? 0,
         elderVouchedBy: m.elderVouchedBy || null,
         archetype: m.archetype || null,
     }));
+
+    const bodyStr = JSON.stringify(members);
+
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = bodyStr;
 });
 
 router.post('/api/admin/reports', async (ctx) => {

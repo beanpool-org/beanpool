@@ -39,6 +39,8 @@ import {
     extractYouTubeChannelIdFromHtml,
     discoverFeedUrlFromHtml,
     buildYouTubeFeedUrl,
+    extractSoundCloudUserIdFromHtml,
+    buildSoundCloudFeedUrl,
     YOUTUBE_HANDLE_PROBE_MAX_BYTES,
     resolveChannel,
     ssrfSafeFetch,
@@ -353,6 +355,28 @@ async function main(): Promise<void> {
         'buildYouTubeFeedUrl normalizes protocol-less www.youtube.com/channel/UC... URL'
     );
 
+    // SoundCloud User ID Extraction & Feed Resolution
+    const scProfileHtml1 = `<!DOCTYPE html><html><head><meta property="al:ios:url" content="soundcloud://users:987654321"><title>DJ Cool</title></head><body><h1>DJ Cool</h1></body></html>`;
+    assert(
+        extractSoundCloudUserIdFromHtml(scProfileHtml1) === '987654321',
+        'extractSoundCloudUserIdFromHtml extracts user ID from al:ios:url meta tag'
+    );
+
+    const scProfileHtml2 = `<!DOCTYPE html><html><head><meta property="twitter:app:url:googleplay" content="soundcloud://users:12345678"><title>Artist</title></head><body></body></html>`;
+    assert(
+        extractSoundCloudUserIdFromHtml(scProfileHtml2) === '12345678',
+        'extractSoundCloudUserIdFromHtml extracts user ID from twitter googleplay meta tag'
+    );
+
+    assert(
+        await buildSoundCloudFeedUrl('https://feeds.soundcloud.com/users/soundcloud:users:12345678/sounds.rss') === 'https://feeds.soundcloud.com/users/soundcloud:users:12345678/sounds.rss',
+        'buildSoundCloudFeedUrl passes through direct feed URL'
+    );
+    assert(
+        await buildSoundCloudFeedUrl('https://evil-phishing.com/artist') === null,
+        'buildSoundCloudFeedUrl rejects non-SoundCloud domain'
+    );
+
     // ── 3. Malformed XML Robustness ─────────────────────────────────────────────────────
     console.log('\n--- 3. Malformed XML Robustness ---');
     const truncatedXml = `<rss version="2.0"><channel><item><title>Truncated Item<link>https://example.com/t`;
@@ -498,6 +522,8 @@ async function main(): Promise<void> {
 
     // ── 5. Database Channel & Items Insertion & Deduplication ────────────────────────────
     console.log('\n--- 5. Database Items & Deduplication ---');
+    db.prepare("DELETE FROM pulse_items WHERE curated = 1").run();
+    db.prepare("DELETE FROM creator_channels WHERE category = 'learn'").run();
     const ch = addChannel({
         ownerPubkey: kayla,
         platform: 'youtube',
@@ -611,12 +637,12 @@ async function main(): Promise<void> {
     assert(scrubbedRow.title === null, 'title NULLed on tombstone');
     assert(scrubbedRow.thumbnail_url === null, 'thumbnail_url NULLed on tombstone');
 
-    // 30-Day Pruner: insert an old item and run prunePulseItems
+    // Per-Channel Pruner: insert an old item and run prunePulseItems with keepPerChannel = 1
     const oldPublished = new Date(Date.now() - (35 * 24 * 60 * 60 * 1000)).toISOString();
     insertStmt.run('item_old', ch.id, kayla, 'youtube', 'vid_old', 'https://youtube.com/watch?v=vid_old', 'Old Video', 'https://img.com/old.jpg', oldPublished, 'craft', now, now);
 
-    const prunedCount = prunePulseItems(30);
-    assert(prunedCount === 1, 'prunePulseItems tombstoned the 35-day-old item');
+    const prunedCount = prunePulseItems(1);
+    assert(prunedCount === 1, 'prunePulseItems tombstoned the item beyond keepPerChannel (age is no longer the rule)');
     const oldRow = db.prepare('SELECT deleted_at, url FROM pulse_items WHERE id = ?').get('item_old') as any;
     assert(oldRow.deleted_at !== null && oldRow.url === null, 'Old item tombstoned and content nullified');
 

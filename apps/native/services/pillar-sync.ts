@@ -16,6 +16,7 @@ import Constants from 'expo-constants';
 import { BeanPoolMerkleTree } from '@beanpool/core';
 import { applyDelta, fetchFriendsFromServer, getDb } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
+import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 
 const SYNC_TIMEOUT_MS = 20_000;
 const MAX_STORED_TRANSACTIONS = 1000;
@@ -52,6 +53,11 @@ async function discoverAnchor(): Promise<string | null> {
     try {
         const savedAnchor = await AsyncStorage.getItem('beanpool_anchor_url');
         if (savedAnchor) {
+            // Block insecure cleartext HTTP connections to public nodes
+            if (shouldBlockCleartextNodeUrl(savedAnchor)) {
+                console.warn('[Pillar Sync] 🚫 Blocked cleartext public node URL:', savedAnchor);
+                return null;
+            }
             // NEVER fallback to a different community if an explicit anchor has been set via Invite.
             return savedAnchor;
         }
@@ -74,7 +80,7 @@ async function discoverAnchor(): Promise<string | null> {
         );
 
         // Attempt to derive Expo LAN IP for physical dev devices
-        const hostUri = Constants.experienceUrl || Constants.expoConfig?.hostUri;
+        const hostUri = Constants.expoConfig?.hostUri;
         if (hostUri) {
             // hostUri is usually something like "192.168.1.100:8081"
             const match = hostUri.match(/([0-9.]+):/);
@@ -88,14 +94,16 @@ async function discoverAnchor(): Promise<string | null> {
     // Clear saved node address temporarily to force Azure discovery
     await AsyncStorage.removeItem('pillar:anchor-url');
 
-    if (candidates.length === 0) {
+    const safeCandidates = candidates.filter(url => !shouldBlockCleartextNodeUrl(url));
+
+    if (safeCandidates.length === 0) {
         return null;
     }
 
     const controllers: AbortController[] = [];
     try {
         const winningUrl = await Promise.any(
-            candidates.map(async (url) => {
+            safeCandidates.map(async (url) => {
                 const controller = new AbortController();
                 controllers.push(controller);
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -263,7 +271,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         let postsData: any;
         try {
-            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}&_t=${Date.now()}`, {
+            const postsRes = await fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true${postsSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal
@@ -325,7 +333,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch balance
         if (pubKey) {
             try {
-                const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}?_t=${Date.now()}`, {
+                const balanceRes = await fetch(`${anchorUrl}/api/ledger/balance/${pubKey}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: balanceController.signal
@@ -346,7 +354,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch directory (members)
         if (shouldFetchMembers) {
             try {
-                const directoryRes = await fetch(`${anchorUrl}/api/members?_t=${Date.now()}`, {
+                const directoryRes = await fetch(`${anchorUrl}/api/members`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -374,7 +382,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // so we must NOT set membersComplete — otherwise applyDelta would garbage-collect
             // every local member absent from this small delta.
             try {
-                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}&_t=${Date.now()}`, {
+                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -397,7 +405,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         onProgress?.(3, 5, 'Synchronizing Active Posts & Projects...');
         // Fetch projects
         try {
-            const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}&_t=${Date.now()}`, {
+            const projectsRes = await fetch(`${anchorUrl}/api/crowdfund/projects?limit=1000${lastSyncParam}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
                 signal: postsController.signal
@@ -420,7 +428,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch transactions
         if (pubKey) {
             try {
-                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000&_t=${Date.now()}`, {
+                const txRes = await fetch(`${anchorUrl}/api/ledger/transactions?publicKey=${pubKey}&limit=1000`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: balanceController.signal
@@ -439,7 +447,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Fetch marketplace transactions
         if (pubKey) {
             try {
-                const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50&_t=${Date.now()}`, {
+                const mkptxRes = await fetch(`${anchorUrl}/api/marketplace/transactions?publicKey=${pubKey}&limit=50`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: postsController.signal
@@ -481,8 +489,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         if (pubKey) {
             try {
                 const [receivedRes, givenRes] = await Promise.all([
-                    fetch(`${anchorUrl}/api/ratings/${pubKey}?_t=${Date.now()}`),
-                    fetch(`${anchorUrl}/api/ratings/${pubKey}?direction=given&_t=${Date.now()}`)
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}`),
+                    fetch(`${anchorUrl}/api/ratings/${pubKey}?direction=given`)
                 ]);
                 const rList: any[] = [];
                 if (receivedRes && receivedRes.ok) {

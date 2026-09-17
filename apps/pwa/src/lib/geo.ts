@@ -23,6 +23,19 @@ export function haversineDistance(
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Round geographic coordinates to roughly 100 meters (3 decimal places).
+ * 0.001 degrees of latitude is ~111 meters.
+ */
+export function approximateLocation(lat: number, lng: number): { lat: number; lng: number } {
+    return {
+        lat: Math.round(lat * 1000) / 1000,
+        lng: Math.round(lng * 1000) / 1000,
+    };
+}
+
+export const roundToRoughly100m = approximateLocation;
+
 /** Storage key for persisted radius settings */
 export const RADIUS_STORAGE_KEY = 'beanpool-radius';
 

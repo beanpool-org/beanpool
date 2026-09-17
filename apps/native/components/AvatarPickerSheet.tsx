@@ -121,11 +121,11 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                         ) : (
                             <>
                                 <View style={styles.sourceButtonsRow}>
-                                    <Pressable style={styles.sourceButton} accessibilityRole="button" onPress={handleTakePhotos}>
+                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel="Take photo with camera" onPress={handleTakePhotos}>
                                         <Text style={styles.sourceEmoji}>📸</Text>
                                         <Text style={styles.sourceLabel}>Camera</Text>
                                     </Pressable>
-                                    <Pressable style={styles.sourceButton} accessibilityRole="button" onPress={handleGallery}>
+                                    <Pressable style={styles.sourceButton} accessibilityRole="button" accessibilityLabel="Choose photo from gallery" onPress={handleGallery}>
                                         <Text style={styles.sourceEmoji}>🖼️</Text>
                                         <Text style={styles.sourceLabel}>Gallery</Text>
                                     </Pressable>

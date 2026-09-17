@@ -40,6 +40,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
   paused posts. (Closed PR #116 made exactly this mistake — do not re-file it.)
 - NOTE: the federation-api `verify_member`/`relay_message` lookups some PRs "fixed"
   are inside a commented-out `[SECURITY PATCH]` block (dead code) — do not edit.
+- Friends avatar lookups → O(1) (#782): `getFriends` SQL query includes `m.avatar_url` directly, avoiding $O(M)$ member directory fetch.
 
 ### Coordination note (2026-06-25, from the primary agent)
 - **Connector-lookup optimization — canonical open PR is #141.** Duplicates **#133,
@@ -122,3 +123,63 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-15 - O(1) Parent Message Lookups in Chat Thread Renders
 **Learning:** In `apps/native/app/chat/[id].tsx` and `apps/pwa/src/pages/MessagesPage.tsx`, resolving replied-to parent messages ran `messages.find(m => m.id === ...)` inside the render loop for every message row. In large chat threads with $M$ messages, this created an $O(M^2)$ nested search on every render cycle.
 **Action:** Pre-computed a `messagesById` Map indexed by message `id` prior to rendering message rows, reducing parent message resolution to $O(1)$ constant-time lookups ($O(M)$ overall).
+
+## 2026-09-18 - Memoize friendPubkeys Set Allocation in PWA PeoplePage
+**Learning:** In `apps/pwa/src/pages/PeoplePage.tsx`, `const friendPubkeys = new Set(friends.map(f => f.publicKey))` was constructed unmemoized directly inside the component body, rebuilding the Set and iterating `friends` on every single state change or parent render cycle.
+**Action:** Wrapped `friendPubkeys` (and `guardians`) in `React.useMemo` keyed on `friends`, eliminating redundant array iterations and Set allocations across component re-renders.
+
+## 2026-09-19 - O(N) Array Allocation in Bridge Account Display Name Lookup
+**Learning:** In `apps/server/src/federation-bridge.ts`, resolving human-readable bridge account labels via `bridgeDisplayName` invoked `getConnectors().find(c => c.peerId === peerId)`. Calling `getConnectors()` mapped over the entire connectors array and materialized a `ConnectorStatus` object for every configured connector on every call.
+**Action:** Replaced `getConnectors().find(...)` in `bridgeDisplayName` with `getConnectorByPeerId(peerId)`, which directly iterates the raw internal connectors array and materializes only the single matching record.
+
+## 2026-09-03 - Redundant .find() After an id-Filtered Single-Row Query
+**Learning:** In `apps/server/src/engine/posts.ts`, a single post was fetched with `getPosts(db, { id }).find(p => p.id === id)`. `getPosts` already appends `AND p.id = ?` and `posts.id` is the primary key, so the array holds at most one row and the `.find()` re-checks a predicate the SQL already guaranteed.
+**Action:** Replaced `.find(p => p.id === id)` with `[0]` in `createPost` and `updatePost`. Note this is a readability change, not a measurable speedup — the scan it removes was over a one-element array.
+
+## 2026-09-20 - O(N*M) Gossip Pin Lookups in Core GossipManager
+**Learning:** In `packages/beanpool-core/src/gossip.ts`, `processIncomingGossip` iterated through incoming gossiped pins and called `localPins.find(p => p.id === incomingPin.id)` for each incoming pin. With $N$ incoming pins and $M$ local pins, this resulted in an $O(N \times M)$ nested array scan on every gossip message received.
+**Action:** Pre-computed `localPinsById` Map before the incoming pin iteration loop, turning local pin lookups into constant-time $O(1)$ retrievals ($O(N + M)$ total).
+
+## 2026-09-21 - N+1 Member Queries in Admin Commons Projects Route
+**Learning:** In `apps/server/src/routes/admin.ts`, the `/api/local/admin/commons/projects` route mapped through `crowdfundProjects` and called `getMember(p.creator_pubkey)` for every project. This triggered $N$ separate SQLite database queries ($N+1$ query pattern) when mapping project creators to UI representations.
+**Action:** Pre-fetched members using `getAllMembers()` into a `Map<string, Member>` indexed by `publicKey` before mapping projects, converting per-project creator resolution into constant-time $O(1)$ Map retrievals.
+
+## 2026-09-22 - O(1) Selected Member Lookup in PWA LedgerPage
+**Learning:** In `apps/pwa/src/pages/LedgerPage.tsx`, looking up selected recipient member details via `members.find(m => m.publicKey === sendTo)` ran an $O(M)$ array scan on render cycles.
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by `publicKey` to convert recipient resolution into an $O(1)$ lookup.
+
+## 2026-09-22 - N+1 Member Callsign Queries in Community Health Flags
+**Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` formatted wash trading and Sybil ring health flag descriptions by executing `db.prepare("SELECT callsign FROM members WHERE public_key=?")` for every flagged pair or ring member. This caused repeated SQLite queries per flagged member during health checks.
+**Action:** Pre-fetched member callsigns into a `callsignsMap` before evaluating health flags, converting per-member callsign resolution into constant-time $O(1)$ Map retrievals.
+
+## 2026-09-23 - O(1) Conversation List Member and Transaction Lookups in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, rendering conversation lists invoked `getConversationTitle` and `relatedTx` resolution for every conversation item, which repeatedly ran `members.find(...)` and `userTransactions.find(...)` array scans on every render cycle ($O(C \times M + C \times T)$ complexity).
+**Action:** Hoisted `membersByPublicKey` and `completedTransactionsByPostId` Maps using `useMemo` at component scope, converting conversation title and related transaction resolution into constant-time $O(1)$ retrievals ($O(C + M + T)$ overall).
+
+## 2026-09-24 - O(1) Edge Lookups for Cluster Internal Volume in Wash Analysis
+**Learning:** In `packages/beanpool-engine/src/trust.ts`, `runWashTradingAnalysis` previously calculated internal 30-day trade volume for connected component clusters by scanning all entries in `edgeVol30` for every component ($O(K \times E)$ complexity across $K$ components and $E$ edges).
+**Action:** Replaced the full $O(E)$ edge scan per component with $O(N^2)$ direct pair lookups (`edgeVol30.get(...)`) over members in `comp` (where $N \le 12$), reducing overall component volume calculation to constant-time pair retrievals.
+
+## 2026-09-25 - Grouping Active Transactions in Native MyDealsSheet
+**Learning:** In `apps/native/components/MyDealsSheet.tsx`, deriving `myPosts`, `pendingDeals`, `usePendingDealsCount`, and rendering deal items previously executed `transactions.some(...)` and `transactions.find(...)` scans inside `posts.filter` loops and list renders, leading to $O(P \times T)$ nested array iterations per render.
+**Action:** Grouped active (`pending` / `requested`) transactions by `postId` into a `Map<string, Transaction[]>` via `useMemo`. This turns `myPosts` and `pendingDeals` filter checks and `renderDealItem` related-transaction lookups into $O(1)$ retrievals ($O(P + T)$ overall).
+
+## 2026-09-26 - O(1) Selected Member Lookup in Native Ledger Tab
+**Learning:** In `apps/native/app/(tabs)/ledger.tsx`, resolving selected recipient member details via `members.find(m => m.publicKey === sendTo)` performed an $O(M)$ linear array scan on every render cycle.
+**Action:** Pre-computed `membersMap` using `useMemo` indexed by `publicKey` to convert selected recipient member resolution into an $O(1)$ Map retrieval.
+
+## 2026-09-27 - O(1) Member and Profile Lookups in Server Admin Settings Audit Tree Rendering
+**Learning:** In `apps/server/static/settings.js`, rendering the admin member audit tree invoked `members.find(...)` and `profiles.find(...)` inside the recursive `buildNode` function for every member node in the hierarchy, resulting in an $O(M \times (M + P))$ nested linear scan.
+**Action:** Pre-computed `membersMap` and `profilesMap` indexed by `publicKey` in `renderAdminMembers` prior to executing `buildNode`, reducing member and profile resolution to $O(1)$ constant-time Map retrievals ($O(M + P)$ overall).
+
+## 2026-09-28 - Include avatarUrl in getFriends Response to Avoid O(M) Member Directory Fetch
+**Learning:** In `packages/beanpool-engine/src/social.ts`, `getFriends` only selected `friend_pubkey`, `callsign`, and `added_at`. To display friend avatars, PWA `PeoplePage.tsx` was forced to load all community members (`/api/community/members` - an $O(M)$ network payload) and map public keys to avatars.
+**Action:** Added `m.avatar_url` to `getFriends` SQL `SELECT` query in `packages/beanpool-engine/src/social.ts` (leveraging the existing `JOIN members m` at zero extra query cost) and added `avatarUrl` to `FriendEntry` interfaces in `@beanpool/engine` and `apps/pwa/src/lib/api.ts`. Updated `PeoplePage.tsx` to pass `f.avatarUrl` directly, rendering friend avatars in $O(1)$ time without fetching the entire $O(M)$ community member directory over the network.
+
+## 2026-09-29 - O(1) Invite Code Lookups in Native People Screen
+**Learning:** In `apps/native/app/(tabs)/people.tsx`, `loadOfflineInvites` iterated over `localInvites` and called `serverInvites.find(...)` for every local invite, followed by `serverInvites.forEach` calling `updatedInvites.some(...)` for every server invite. This resulted in an $O(N \times M)$ nested array scan during offline invite synchronization.
+**Action:** Pre-computed `serverInvitesMap` (indexed by lowercase invite code) and `updatedCodes` Set before array operations, converting invite code lookups and uniqueness checks into $O(1)$ retrievals ($O(N + M)$ overall).
+
+## 2026-09-30 - O(1) Option Lookups in Poll Open Ballot Voter Lists
+**Learning:** In `apps/pwa/src/components/PollCard.tsx` and `apps/native/components/PollCard.tsx`, rendering open ballot voter lists iterated over `votesList` and ran `options.find(o => o.id === ...)` for every vote, causing $O(V \times O)$ linear array scans when displaying voter choices.
+**Action:** Pre-computed `optionsById` Map (indexed by option ID via `useMemo`) at component scope to reduce poll option resolution to constant-time $O(1)$ retrievals ($O(V + O)$ overall).

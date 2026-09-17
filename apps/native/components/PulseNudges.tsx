@@ -110,6 +110,10 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
                     matchedPlatform = 'facebook';
                     break;
                 }
+                if (ch.platform === 'soundcloud' && (lowerUrl.includes('soundcloud.com/') || lowerUrl.includes('snd.sc/'))) {
+                    matchedPlatform = 'soundcloud';
+                    break;
+                }
                 if ((ch.platform === 'website' || ch.platform === 'rss') && ch.url) {
                     try {
                         const chHost = new URL(ch.url).hostname.replace(/^www\./, '').toLowerCase();

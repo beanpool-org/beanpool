@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, getBalance } from '../../utils/db';
+import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, type GroupItem } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { requestSync } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
@@ -18,6 +18,8 @@ import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { PollCard } from '../../components/PollCard';
+import { NewPollModal } from '../../components/NewPollModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
 
@@ -126,7 +128,7 @@ export default function MarketScreen() {
         setShowFirstOfferQuest(false);
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
-    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you'>('all');
+    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you' | 'polls'>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -477,6 +479,64 @@ export default function MarketScreen() {
         segmentBtnFavActive: { backgroundColor: colors.accent.primary },
         segmentBtnOfferActive: { backgroundColor: colors.brand.primary },
         segmentBtnNeedActive: { backgroundColor: colors.action.fab },
+        segmentBtnPollActive: { backgroundColor: '#7c3aed' },
+
+        actionSheetBackdrop: {
+            flex: 1,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            justifyContent: 'flex-end',
+        },
+        actionSheetContainer: {
+            backgroundColor: colors.surface.card,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 20,
+            paddingBottom: 36,
+        },
+        actionSheetTitle: {
+            fontSize: 18,
+            fontWeight: '800',
+            color: colors.text.body,
+            marginBottom: 4,
+        },
+        actionSheetSubtitle: {
+            fontSize: 13,
+            color: colors.text.secondary,
+            marginBottom: 16,
+        },
+        actionSheetOption: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: theme === 'dark' ? '#374151' : '#f3f4f6',
+            gap: 14,
+        },
+        actionSheetEmoji: {
+            fontSize: 26,
+        },
+        actionSheetOptionTitle: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
+        actionSheetOptionDesc: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginTop: 2,
+        },
+        actionSheetCancel: {
+            marginTop: 16,
+            backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6',
+            borderRadius: 12,
+            paddingVertical: 12,
+            alignItems: 'center',
+        },
+        actionSheetCancelText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
 
         dropdownsRow: {
             flexDirection: 'row',
@@ -580,6 +640,8 @@ export default function MarketScreen() {
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [categoryFilter, setCategoryFilter] = useState('all');
+    const [groupFilter, setGroupFilter] = useState('all');
+    const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [radiusKm, setRadiusKm] = useState<number | null>(null);
     const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
@@ -588,9 +650,18 @@ export default function MarketScreen() {
     // Deals Sheet
     const [showDealsSheet, setShowDealsSheet] = useState(false);
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
+    const [showNewPollModal, setShowNewPollModal] = useState(false);
+    const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
     const [myTransactions, setMyTransactions] = useState<any[]>([]);
 
     const pendingCount = usePendingDealsCount(identity, posts, myTransactions);
+
+    useEffect(() => {
+        fetchGroups().then(groups => {
+            const active = groups.filter(g => g.viewerStatus === 'active');
+            setUserGroups(active);
+        }).catch(console.error);
+    }, [identity?.publicKey]);
 
     useEffect(() => {
         getBlockedUsers().then(setBlockedUsers);
@@ -603,7 +674,7 @@ export default function MarketScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadPosts();
-        }, [filter, identity?.publicKey])
+        }, [filter, groupFilter, identity?.publicKey])
     );
 
     const params = useLocalSearchParams<{ tab?: string, dealsTab?: string }>();
@@ -682,7 +753,7 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                const type = filter === 'all' ? '' : filter === 'needs' ? '&type=need' : '&type=offer';
+                const type = filter === 'all' || filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
                 const cat = categoryFilter !== 'all' ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
@@ -732,9 +803,15 @@ export default function MarketScreen() {
     }, [searchQuery, filter, categoryFilter]);
 
     const loadPosts = async (): Promise<boolean> => {
-        const queryFilter = filter === 'all' ? undefined : { type: filter === 'needs' ? 'need' : 'offer' };
+        const queryFilter: any = {};
+        if (filter !== 'all' && filter !== 'for-you') {
+            queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll';
+        }
+        if (groupFilter !== 'all') {
+            queryFilter.targetGroupId = groupFilter;
+        }
         const runLoad = async () => {
-            const data = await getPosts(queryFilter);
+            const data = await getPosts(Object.keys(queryFilter).length > 0 ? queryFilter : undefined);
             setPosts(data);
             if (identity) {
                 const txs = await getMarketplaceTransactions(identity.publicKey);
@@ -773,20 +850,31 @@ export default function MarketScreen() {
     // Use server search results when available, otherwise filter locally
     const basePosts = searchResults !== null ? searchResults : posts;
 
-    const filteredPosts = basePosts.filter(p => {
-        if (p.status !== 'active') return false;
+    let filteredPosts = basePosts.filter(p => {
+        if (p.type === 'poll') {
+            if (p.status !== 'active' && p.status !== 'completed') return false;
+        } else {
+            if (p.status !== 'active') return false;
+        }
         if (blockedUsers.includes(p.author_pubkey)) return false;
-        if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
-        // #108: beans-only browse. Rows predating the column read as 0, i.e. beans-only.
-        if (beansOnly && p.cash_also_needed === 1) return false;
+        // Group filter (Item 10)
+        if (groupFilter !== 'all') {
+            const postGroupId = p.target_group_id || p.targetGroupId;
+            if (postGroupId !== groupFilter) return false;
+        }
+        // Category filter: polls are civic governance posts and bypass goods category filters
+        if (categoryFilter !== 'all' && p.category !== categoryFilter && filter !== 'polls') return false;
+        // #108: beans-only browse excludes polls
+        if (beansOnly && (p.type === 'poll' || p.cash_also_needed === 1)) return false;
         
         // Type / For You filters
         if (filter === 'offers' && p.type !== 'offer') return false;
         if (filter === 'needs' && p.type !== 'need') return false;
-        if (filter === 'for-you' && !favCategories.includes(p.category)) return false;
+        if (filter === 'polls' && p.type !== 'poll') return false;
+        if (filter === 'for-you' && (p.type === 'poll' || !favCategories.includes(p.category))) return false;
         
         // Trust Level filters
-        if (trustFilter === 'founding' && !p.authorFoundingNeeded) return false;
+        if (trustFilter === 'founding' && (p.type === 'poll' || !p.authorFoundingNeeded)) return false;
         if (trustFilter === 'new' && (p.author_energy_cycled ?? 0) >= 120) return false;
         if (trustFilter === 'resident' && (p.author_energy_cycled ?? 0) < 120) return false;
         if (trustFilter === 'steward' && (p.author_energy_cycled ?? 0) < 520) return false;
@@ -798,6 +886,9 @@ export default function MarketScreen() {
             const dist = getDistanceInKm(centerLat, centerLng, p.lat, p.lng);
             if (dist > radiusKm) return false;
         }
+
+        // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
+        if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
         // Synonym-aware local search: expand query using synonym map
         // Works on ALL servers, even those without FTS5 deployed
@@ -815,6 +906,15 @@ export default function MarketScreen() {
         return true;
     });
 
+    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+    const realMemberListingsCount = posts.filter(p => {
+        const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
+        return !isPulse && p.type !== 'poll' && p.status === 'active';
+    }).length;
+    if (realMemberListingsCount >= 2) {
+        filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
+    }
+
     // Pin Daily Pulse to the top of the feed (local only)
     filteredPosts.sort((a, b) => {
         const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' && !a.origin_node && !a.originNode;
@@ -826,7 +926,7 @@ export default function MarketScreen() {
 
     const selectedCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0;
+    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0 || groupFilter !== 'all';
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
@@ -944,6 +1044,14 @@ export default function MarketScreen() {
                     >
                         <Text style={[styles.segmentText, filter === 'needs' && styles.segmentTextActive]}>🟠 Needs</Text>
                     </Pressable>
+                    <Pressable
+                        onPress={() => setFilter(filter === 'polls' ? 'all' : 'polls')}
+                        style={[styles.segmentBtn, filter === 'polls' && styles.segmentBtnPollActive]}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: filter === 'polls' }}
+                    >
+                        <Text style={[styles.segmentText, filter === 'polls' && styles.segmentTextActive]}>🗳️ Polls</Text>
+                    </Pressable>
                 </View>
 
                 {/* Row 3: Symmetrical Filter Dropdowns (Category, Distance, New Members) */}
@@ -1039,6 +1147,45 @@ export default function MarketScreen() {
                         )}
                     </Pressable>
                 </View>
+
+                {/* Row 4: Group Filter Chips (Item 10) */}
+                {userGroups.length > 0 && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
+                    >
+                        <Pressable
+                            onPress={() => setGroupFilter('all')}
+                            style={[styles.chip, groupFilter === 'all' && styles.chipActive]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: groupFilter === 'all' }}
+                        >
+                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextActive]}>
+                                👥 All Groups & Public
+                            </Text>
+                        </Pressable>
+                        {userGroups.map((g) => {
+                            const isSelected = groupFilter === g.id;
+                            return (
+                                <Pressable
+                                    key={g.id}
+                                    onPress={() => setGroupFilter(isSelected ? 'all' : g.id)}
+                                    style={[
+                                        styles.chip,
+                                        isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary }
+                                    ]}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: isSelected }}
+                                >
+                                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                                        👥 {g.name}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
+                )}
             </View>
 
             {/* Interests Tag Cloud when in For You mode */}
@@ -1194,6 +1341,16 @@ export default function MarketScreen() {
             );
         }
 
+        if (item.type === 'poll') {
+            return (
+                <PollCard
+                    post={item}
+                    currentPubkey={identity?.publicKey}
+                    onVoteSuccess={() => loadPosts()}
+                />
+            );
+        }
+
         let coverImage: string | null = null;
         if (item.photos) {
             try {
@@ -1206,6 +1363,9 @@ export default function MarketScreen() {
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
         const elderCard = !isPulse && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
+        const groupName = item.target_group_name || item.targetGroupName || 'Group';
+        const groupScopeBadgeText = isGroupScope ? `🔒 Only ${groupName} can see this` : null;
 
         const priceLabel = item.price_type === 'hourly' ? '/Hr' :
                            item.price_type === 'daily' ? '/Dy' :
@@ -1224,8 +1384,9 @@ export default function MarketScreen() {
                         elderCard && styles.elderCard,
                         isPulse && styles.pulseCard,
                     ]}
-                    onPress={() => router.push(`/post/${item.id}`)}
-                    accessibilityRole="button"
+                    disabled={isPulse}
+                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                    accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
                         {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
@@ -1237,16 +1398,27 @@ export default function MarketScreen() {
                                 </Text>
                             </View>
                         )}
-                        <View style={styles.gridPriceBadge}>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={styles.gridPriceText}
-                                asView={true}
-                            />
-                        </View>
+                        {!isPulse && (
+                            <View style={styles.gridPriceBadge}>
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={styles.gridPriceText}
+                                    asView={true}
+                                />
+                            </View>
+                        )}
                         {isPulse && (
-                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined, backgroundColor: palette.amber500 }]}>
-                                <Text style={[styles.gridPriceText, { color: '#ffffff', fontWeight: '900' }]}>🗞️ PULSE</Text>
+                            <View style={[
+                                styles.gridPriceBadge,
+                                {
+                                    left: 8,
+                                    right: undefined,
+                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
+                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
+                                    borderWidth: 1,
+                                }
+                            ]}>
+                                <Text style={[styles.gridPriceText, { color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e', fontWeight: '900' }]}>🗞️ PULSE</Text>
                             </View>
                         )}
                         {!!item.repeatable && !isPulse && (
@@ -1259,15 +1431,24 @@ export default function MarketScreen() {
                                 <Text style={styles.gridPriceText}>👤 YOU</Text>
                             </View>
                         )}
-                        <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                            <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                        </View>
+                        {!isPulse && (
+                            <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
+                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                            </View>
+                        )}
                     </View>
                     <View style={styles.gridTextContent}>
                         <Text style={styles.gridCardTitle} numberOfLines={1}>
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={item.authorFoundingNeeded} />
+                        {groupScopeBadgeText && (
+                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
+                                    {groupScopeBadgeText}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                 </Pressable>
             );
@@ -1276,7 +1457,11 @@ export default function MarketScreen() {
         // Compact View
         if (viewMode === 'compact') {
             return (
-                <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
+                <Pressable
+                    disabled={isPulse}
+                    accessibilityRole={isPulse ? undefined : "button"}
+                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+                >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <Text style={styles.compactEmoji}>
                             {catEmoji}
@@ -1288,13 +1473,22 @@ export default function MarketScreen() {
                             <Text style={styles.compactAuthor} numberOfLines={1}>
                                 by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
                             </Text>
+                            {groupScopeBadgeText && (
+                                <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
+                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
+                                        {groupScopeBadgeText}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                         <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={styles.compactPrice}
-                                asView={true}
-                            />
+                            {!isPulse && (
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={styles.compactPrice}
+                                    asView={true}
+                                />
+                            )}
                             <View style={[
                                 styles.compactBadge, 
                                 isPulse ? {
@@ -1321,7 +1515,11 @@ export default function MarketScreen() {
 
         // List View
         return (
-            <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${item.id}`)}>
+            <Pressable
+                disabled={isPulse}
+                accessibilityRole={isPulse ? undefined : "button"}
+                onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
+            >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -1335,9 +1533,11 @@ export default function MarketScreen() {
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                                <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
-                                    <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                                </View>
+                                {!isPulse && (
+                                    <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
+                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
+                                    </View>
+                                )}
                                 {isPulse && (
                                     <View style={{
                                         backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
@@ -1373,12 +1573,21 @@ export default function MarketScreen() {
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>💸 CASH TOO</Text>
                                     </View>
                                 )}
+                                {groupScopeBadgeText && (
+                                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.brand.primary }}>
+                                            {groupScopeBadgeText}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
-                            <CurrencyDisplay
-                                amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                style={[styles.price, { fontSize: 16 }]}
-                                asView={true}
-                            />
+                            {!isPulse && (
+                                <CurrencyDisplay
+                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
+                                    style={[styles.price, { fontSize: 16 }]}
+                                    asView={true}
+                                />
+                            )}
                         </View>
 
                         <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text.body, marginBottom: 4 }} numberOfLines={1}>
@@ -1497,7 +1706,7 @@ export default function MarketScreen() {
                     )
                 }
             />
-            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}>
+            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
                     <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
@@ -1541,6 +1750,90 @@ export default function MarketScreen() {
                 identity={identity}
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
+            />
+
+            {/* New Post Type Action Sheet */}
+            <Modal
+                visible={showNewPostTypePicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowNewPostTypePicker(false)}
+            >
+                <Pressable
+                    style={styles.actionSheetBackdrop}
+                    onPress={() => setShowNewPostTypePicker(false)}
+                >
+                    <Pressable
+                        style={styles.actionSheetContainer}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <Text style={styles.actionSheetTitle}>Create New Post</Text>
+                        <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>
+
+                        <Pressable
+                            style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Offer: List goods, skills, food, or tools on the map"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                router.push({ pathname: '/map', params: { newPost: 'true' } });
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>📦</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Offer</Text>
+                                <Text style={styles.actionSheetOptionDesc}>List goods, skills, food, or tools on the map</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.actionSheetOption}
+                            accessibilityRole="button"
+                            accessibilityLabel="Need: Ask your neighbours for something you need"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                router.push({ pathname: '/map', params: { newPost: 'true' } });
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>❤️</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Need</Text>
+                                <Text style={styles.actionSheetOptionDesc}>Ask your neighbours for something you need</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel="Community Poll: Ask a question with 2–4 options in the feed"
+                            onPress={() => {
+                                setShowNewPostTypePicker(false);
+                                setShowNewPollModal(true);
+                            }}
+                        >
+                            <Text style={styles.actionSheetEmoji}>🗳️</Text>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.actionSheetOptionTitle}>Community Poll</Text>
+                                <Text style={styles.actionSheetOptionDesc}>Ask a question with 2–4 options in the feed</Text>
+                            </View>
+                        </Pressable>
+
+                        <Pressable
+                            style={styles.actionSheetCancel}
+                            accessibilityRole="button"
+                            accessibilityLabel="Cancel"
+                            onPress={() => setShowNewPostTypePicker(false)}
+                        >
+                            <Text style={styles.actionSheetCancelText}>Cancel</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            <NewPollModal
+                visible={showNewPollModal}
+                onClose={() => setShowNewPollModal(false)}
+                onSuccess={() => loadPosts()}
             />
         </View>
     );

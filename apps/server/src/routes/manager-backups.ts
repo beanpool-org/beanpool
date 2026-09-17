@@ -106,8 +106,21 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
+        if (nodeId.includes('/') || nodeId.includes('\\') || nodeId.includes('..')) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid nodeId parameter' };
+            return;
+        }
+
         const slug = nodeSlug(nodeId);
-        const dbPath = path.join(BACKUPS_DIR, slug, 'state.db');
+        const nodeDir = path.resolve(BACKUPS_DIR, slug);
+        if (path.dirname(nodeDir) !== path.resolve(BACKUPS_DIR)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid nodeId parameter' };
+            return;
+        }
+
+        const dbPath = path.join(nodeDir, 'state.db');
         if (!fs.existsSync(dbPath)) {
             ctx.status = 404;
             ctx.body = { error: `Backup DB not found for node (${slug})` };
@@ -159,15 +172,24 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         const nodeId = String(ctx.query.nodeId || '');
         const filename = String(ctx.query.filename || '');
 
-        if (!nodeId || !filename || filename.includes('/') || filename.includes('..')) {
+        if (
+            !nodeId ||
+            !filename ||
+            filename !== path.basename(filename) ||
+            filename.includes('/') ||
+            filename.includes('\\') ||
+            filename.includes('..') ||
+            !/^beanpool-[\w-]+\.db$/.test(filename)
+        ) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid parameters' };
             return;
         }
 
         const slug = nodeSlug(nodeId);
-        const filePath = path.join(BACKUPS_DIR, slug, 'history', filename);
-        if (!fs.existsSync(filePath)) {
+        const historyDir = path.resolve(BACKUPS_DIR, slug, 'history');
+        const filePath = path.resolve(historyDir, filename);
+        if (path.dirname(filePath) !== historyDir || !fs.existsSync(filePath)) {
             ctx.status = 404;
             ctx.body = { error: 'Archive file not found' };
             return;
@@ -190,8 +212,21 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             return;
         }
 
+        if (nodeId.includes('/') || nodeId.includes('\\') || nodeId.includes('..')) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid nodeId parameter' };
+            return;
+        }
+
         const slug = nodeSlug(nodeId);
-        const identityDir = path.join(BACKUPS_DIR, slug, 'identity');
+        const nodeDir = path.resolve(BACKUPS_DIR, slug);
+        if (path.dirname(nodeDir) !== path.resolve(BACKUPS_DIR)) {
+            ctx.status = 400;
+            ctx.body = { error: 'Invalid nodeId parameter' };
+            return;
+        }
+
+        const identityDir = path.join(nodeDir, 'identity');
         if (!fs.existsSync(identityDir)) {
             ctx.status = 404;
             ctx.body = { error: `Identity bundle not found for node (${slug})` };

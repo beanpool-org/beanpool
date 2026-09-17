@@ -221,7 +221,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
                         <View>
                             <Text style={{ color: colors.text.heading, fontWeight: 'bold', fontSize: 14, marginBottom: 4 }}>Community Projects</Text>
                             <Text style={{ color: colors.text.body, fontSize: 13, lineHeight: 18 }}>
-                                Any surplus in the Commons Pool beyond maintaining solvency is recycled back into community projects proposed and voted on by members.
+                                Any surplus in the Commons Pool beyond maintaining solvency is recycled back into community enterprises and projects through community Decisions.
                             </Text>
                         </View>
                     </View>

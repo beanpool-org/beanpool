@@ -383,21 +383,24 @@ export default function GroupPostScreen() {
                         </View>
                     </Pressable>
                 </ScrollView>
-            </KeyboardAvoidingView>
 
-            <View style={styles.footer}>
-                <Pressable
-                    style={styles.submitBtn}
-                    onPress={handleSubmit}
-                    disabled={submitting}
-                >
-                    {submitting ? (
-                        <ActivityIndicator color={colors.text.inverse} />
-                    ) : (
-                        <Text style={styles.submitBtnText}>Post to {groupName}</Text>
-                    )}
-                </Pressable>
-            </View>
+                {/* Inside the KeyboardAvoidingView (as on treasury-post) so the Post button rides above the keyboard
+                    instead of being hidden behind it while typing. */}
+                <View style={styles.footer}>
+                    <Pressable
+                        style={styles.submitBtn}
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                        accessibilityRole="button"
+                    >
+                        {submitting ? (
+                            <ActivityIndicator color={colors.text.inverse} />
+                        ) : (
+                            <Text style={styles.submitBtnText} numberOfLines={1}>Post to {groupName}</Text>
+                        )}
+                    </Pressable>
+                </View>
+            </KeyboardAvoidingView>
 
             <CategoryPickerSheet
                 visible={showCategoryPicker}

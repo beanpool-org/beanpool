@@ -38,7 +38,7 @@
 
         <h3>Delete the channel</h3>
         <p>In the app: <strong>Settings &rarr; Channels &amp; showcase</strong>, open the platform card, and tap <strong>Delete</strong>.</p>
-        <p>This is the complete removal. The node immediately scrubs the channel record and every feed item imported from it — the post URLs, titles, captions and thumbnail URLs are overwritten to <code>NULL</code> in the database, not merely hidden. What remains is an identifier and two timestamps, which exist only so that other nodes replicating the deletion converge on it.</p>
+        <p>This is the complete removal. The node immediately scrubs the channel record and every feed item imported from it — the post URLs, titles, captions and thumbnail URLs are overwritten to <code>NULL</code> in the database, not merely hidden. What remains is each item's identifiers (the platform name and the platform's post identifier, and your member public key), its publication date and category, and timestamps, which exist only so that other nodes replicating the deletion converge on it.</p>
         <p>The node also keeps a cached copy of each post's preview image so the feed loads quickly. It stops serving those images the moment the channel is deleted. Each cached image file is then removed from the node's disk the next time it is requested, or when it is displaced from the size-limited cache (100&nbsp;MB per node). Deleting an individual post from the feed removes its cached image immediately.</p>
 
         <h3>Automatic retention limit</h3>

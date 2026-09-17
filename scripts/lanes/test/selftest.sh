@@ -309,6 +309,43 @@ scenario "25. the appended headless rules make the run start from origin/<base>,
 hb=$(lane_brief claude "Build the thing on feat/z.")
 check "headless brief carries: git fetch origin && git checkout -B <branch> origin/<base>" eval '[[ "$hb" == *"git fetch origin && git checkout -B <branch> origin/<base>"* ]]'
 check "headless brief carries the --detach origin/<base> form for verification-only work" eval '[[ "$hb" == *"git checkout --detach origin/<base>"* ]]'
+hb_has(){ print -r -- "$hb" | grep -qF -- "$1"; }
+check "the -B form is only for a branch that exists neither locally nor on origin" hb_has "exists neither locally nor on origin"
+check "a branch that exists locally OR on origin gets a plain fetch + checkout" eval 'hb_has "exists locally OR on origin" && hb_has "\`git fetch origin && git checkout <branch>\`"'
+check "headless brief keeps an interrupted run's commits and edits (RETRIES clause)" eval 'hb_has "work: KEEP THEM" && hb_has "\`checkout -B\` an existing branch, stash, or start over"'
+check "headless brief never resets a branch onto itself (checkout -B <branch> origin/<branch>)" eval '! hb_has "checkout -B <branch> origin/<branch>"'
+
+scenario "26. the rules' command for an EXISTING branch keeps unpushed commits (clean, untracked dirt, diverged, local-only)"
+# The command is lifted from the rules file, so wording that resets the branch fails here: on a throwaway repo
+# `git checkout -B <branch> origin/<branch>` silently dropped the unpushed commit in the clean, untracked and diverged
+# cases. That is the idle-kill → CONTINUE path, where committed-but-unpushed work sits.
+rules=$(tr -s '\n ' '  ' < "$LANE_CLAUDE_RULES")
+cmd=$(print -r -- "$rules" | sed -n 's/.*(a CONTINUE\/FIX\/SYNC stage[^`]*`\([^`]*\)`.*/\1/p')
+merges=0; print -r -- "$rules" | grep -qF 'git merge origin/<branch>' && merges=1
+print -r -- "existing-branch command from the rules: ${cmd:-<none found>} (then merge origin/<branch>: $merges)" >> "$LOG"
+keep_case(){ # CASE — push feat/keep-CASE, commit once more WITHOUT pushing, dirty or diverge per CASE, apply the rule
+  local c=$1 d=$T/keep-$1 b=feat/keep-$1 kept
+  git clone -q -b main "$T/origin.git" "$d" && git -C "$d" checkout -qb "$b" || return 1
+  [ "$c" = local-only ] || git -C "$d" push -q origin "$b"
+  print unpushed > "$d/unpushed.txt"; git -C "$d" add unpushed.txt; git -C "$d" commit -qm "unpushed work ($c)"
+  kept=$(git -C "$d" rev-parse HEAD)
+  case $c in
+    untracked) print scratch > "$d/untracked.txt" ;;
+    diverged)  git clone -q -b "$b" "$T/origin.git" "$d-other" && print other > "$d-other/other.txt" \
+                 && git -C "$d-other" add other.txt && git -C "$d-other" commit -qm "pushed from elsewhere" \
+                 && git -C "$d-other" push -q origin "$b" || return 1 ;;
+  esac
+  ( cd "$d" && eval "${cmd//"<branch>"/$b}" ) >> "$LOG" 2>&1
+  if (( merges )) && git -C "$d" rev-parse -q --verify "refs/remotes/origin/$b" >/dev/null; then
+    git -C "$d" merge -q --no-edit "origin/$b" >> "$LOG" 2>&1
+  fi
+  [ "$(git -C "$d" branch --show-current)" = "$b" ] && git -C "$d" merge-base --is-ancestor "$kept" HEAD; }
+check "found the rules' command for an existing branch"          [ -n "$cmd" ]
+check "clean tree: the unpushed commit survives"                 keep_case clean
+check "untracked-only dirt: the unpushed commit survives"        keep_case untracked
+check "origin moved (diverged): the unpushed commit survives"    keep_case diverged
+check "local-only branch, never pushed: the commit survives"     keep_case local-only
+show
 
 print
 print "selftest: $PASS passed, $FAILS failed"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -22,6 +22,8 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard } from '../../components/EventCard';
 import { NewEventModal } from '../../components/NewEventModal';
+import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { composeTargetFor } from '../../utils/compose-options';
 import { isEventInFeed, EVENT_TYPES_QUERY } from '../../utils/events';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -484,63 +486,6 @@ export default function MarketScreen() {
         segmentBtnOfferActive: { backgroundColor: colors.brand.primary },
         segmentBtnNeedActive: { backgroundColor: colors.action.fab },
         segmentBtnPollActive: { backgroundColor: '#7c3aed' },
-
-        actionSheetBackdrop: {
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            justifyContent: 'flex-end',
-        },
-        actionSheetContainer: {
-            backgroundColor: colors.surface.card,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            padding: 20,
-            paddingBottom: 36,
-        },
-        actionSheetTitle: {
-            fontSize: 18,
-            fontWeight: '800',
-            color: colors.text.body,
-            marginBottom: 4,
-        },
-        actionSheetSubtitle: {
-            fontSize: 13,
-            color: colors.text.secondary,
-            marginBottom: 16,
-        },
-        actionSheetOption: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 14,
-            borderBottomWidth: 1,
-            borderBottomColor: theme === 'dark' ? '#374151' : '#f3f4f6',
-            gap: 14,
-        },
-        actionSheetEmoji: {
-            fontSize: 26,
-        },
-        actionSheetOptionTitle: {
-            fontSize: 16,
-            fontWeight: '700',
-            color: colors.text.body,
-        },
-        actionSheetOptionDesc: {
-            fontSize: 12,
-            color: colors.text.secondary,
-            marginTop: 2,
-        },
-        actionSheetCancel: {
-            marginTop: 16,
-            backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6',
-            borderRadius: 12,
-            paddingVertical: 12,
-            alignItems: 'center',
-        },
-        actionSheetCancelText: {
-            fontSize: 15,
-            fontWeight: '700',
-            color: colors.text.body,
-        },
 
         dropdownsRow: {
             flexDirection: 'row',
@@ -1809,99 +1754,20 @@ export default function MarketScreen() {
                 initialTab={dealsInitialTab}
             />
 
-            {/* New Post Type Action Sheet */}
-            <Modal
+            {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}
+            <NewPostTypeSheet
                 visible={showNewPostTypePicker}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowNewPostTypePicker(false)}
-            >
-                <Pressable
-                    style={styles.actionSheetBackdrop}
-                    onPress={() => setShowNewPostTypePicker(false)}
-                >
-                    <Pressable
-                        style={styles.actionSheetContainer}
-                        onPress={(e) => e.stopPropagation()}
-                    >
-                        <Text style={styles.actionSheetTitle}>Create New Post</Text>
-                        <Text style={styles.actionSheetSubtitle}>What would you like to share with the village?</Text>
-
-                        <Pressable
-                            style={styles.actionSheetOption}
-                            accessibilityRole="button"
-                            accessibilityLabel="Offer: List goods, skills, food, or tools on the map"
-                            onPress={() => {
-                                setShowNewPostTypePicker(false);
-                                router.push({ pathname: '/map', params: { newPost: 'true' } });
-                            }}
-                        >
-                            <Text style={styles.actionSheetEmoji}>📦</Text>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>Offer</Text>
-                                <Text style={styles.actionSheetOptionDesc}>List goods, skills, food, or tools on the map</Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.actionSheetOption}
-                            accessibilityRole="button"
-                            accessibilityLabel="Need: Ask your neighbours for something you need"
-                            onPress={() => {
-                                setShowNewPostTypePicker(false);
-                                router.push({ pathname: '/map', params: { newPost: 'true' } });
-                            }}
-                        >
-                            <Text style={styles.actionSheetEmoji}>❤️</Text>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>Need</Text>
-                                <Text style={styles.actionSheetOptionDesc}>Ask your neighbours for something you need</Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.actionSheetOption}
-                            accessibilityRole="button"
-                            accessibilityLabel="Community Poll: Ask a question with 2–4 options in the feed"
-                            onPress={() => {
-                                setShowNewPostTypePicker(false);
-                                setShowNewPollModal(true);
-                            }}
-                        >
-                            <Text style={styles.actionSheetEmoji}>🗳️</Text>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>Community Poll</Text>
-                                <Text style={styles.actionSheetOptionDesc}>Ask a question with 2–4 options in the feed</Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={[styles.actionSheetOption, { borderBottomWidth: 0 }]}
-                            accessibilityRole="button"
-                            accessibilityLabel="Event: A gathering with a time and a place"
-                            onPress={() => {
-                                setShowNewPostTypePicker(false);
-                                setShowNewEventModal(true);
-                            }}
-                        >
-                            <Text style={styles.actionSheetEmoji}>📅</Text>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.actionSheetOptionTitle}>Event</Text>
-                                <Text style={styles.actionSheetOptionDesc}>A gathering with a time and a place</Text>
-                            </View>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.actionSheetCancel}
-                            accessibilityRole="button"
-                            accessibilityLabel="Cancel"
-                            onPress={() => setShowNewPostTypePicker(false)}
-                        >
-                            <Text style={styles.actionSheetCancelText}>Cancel</Text>
-                        </Pressable>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+                onClose={() => setShowNewPostTypePicker(false)}
+                onSelect={(type) => {
+                    const target = composeTargetFor(type);
+                    if (target === 'poll-modal') { setShowNewPollModal(true); return; }
+                    if (target === 'event-modal') { setShowNewEventModal(true); return; }
+                    // The offer/need form lives on the map, so this hands the chosen type over in the
+                    // deep link. It used to push a bare `newPost=true`, which dropped the choice and
+                    // opened the form on Offer even when the member had picked Need.
+                    router.push({ pathname: '/map', params: { newPost: type } });
+                }}
+            />
 
             <NewPollModal
                 visible={showNewPollModal}

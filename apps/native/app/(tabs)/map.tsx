@@ -8,7 +8,7 @@ import * as Crypto from 'expo-crypto';
 import { Picker } from '@react-native-picker/picker';
 import MapView, { Marker, Circle, PROVIDER_DEFAULT } from '../../components/Map';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getPosts, createPost, getBalance, getMemberProfile, getReachablePeers } from '../../utils/db';
 import { getCanonicalAvatar } from '../../utils/canonical-profile';
@@ -22,6 +22,12 @@ import { PricingInfoModal } from '../../components/info-content/PricingInfoModal
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
+import { NewPollModal } from '../../components/NewPollModal';
+import { NewEventModal } from '../../components/NewEventModal';
+import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { EVENT_ACCENT } from '../../components/EventCard';
+import { EVENT_WINDOWS, eventInWindow, type EventWindow } from '../../utils/events';
+import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType } from '../../utils/compose-options';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel, normalizeCategory } from '../../constants/categories';
@@ -206,6 +212,36 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
     );
 });
 
+/**
+ * An event's pin, in the deep violet the event card and the web map's pin already use. Drawn here rather
+ * than through UnifiedMapPin, which knows only Offer (green) and Need (orange) and is off-limits — an event
+ * routed through it came out as a Need.
+ */
+const EventMapMarker = React.memo(({ coordinate, post, isSelected, onPress }: any) => (
+    <Marker
+        coordinate={coordinate}
+        tracksViewChanges={false}
+        anchor={PIN_ANCHOR}
+        onPress={(e) => { e.stopPropagation(); onPress(post); }}
+    >
+        <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, alignItems: 'center', justifyContent: 'flex-start' }}>
+            <View style={{
+                width: 34, height: 34, borderRadius: 17, backgroundColor: EVENT_ACCENT,
+                borderWidth: isSelected ? 3.5 : 2.5, borderColor: '#ffffff',
+                alignItems: 'center', justifyContent: 'center',
+            }}>
+                <Text allowFontScaling={false} style={{ fontSize: 17, lineHeight: 21 }}>📅</Text>
+            </View>
+            {/* The stem, so an event pin points at its spot the way every other pin does. */}
+            <View style={{
+                width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 8,
+                borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: EVENT_ACCENT,
+                marginTop: -1,
+            }} />
+        </View>
+    </Marker>
+));
+
 export default function MapScreen() {
     const currencyStr = useCurrencyString();
     const { theme, colors } = useTheme();
@@ -226,10 +262,20 @@ export default function MapScreen() {
         filterChipActive: { backgroundColor: colors.border.strong },
         filterChipActiveOffers: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#10b981' },
         filterChipActiveNeeds: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#ea580c' },
+        // The event violet — the same one the event card and the web map's pin use.
+        filterChipActiveEvents: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: EVENT_ACCENT },
         filterChipText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         filterChipTextActive: { color: colors.text.heading, fontWeight: '800' },
         filterChipTextOnGreen: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
         filterChipTextOnOrange: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
+        filterChipTextOnViolet: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
+        // A second row under the pills, no wider than the screen, appearing only with Events on.
+        eventChipsRow: { marginTop: 6, maxWidth: '92%', flexGrow: 0 },
+        eventChipsContent: {
+            alignItems: 'center', paddingHorizontal: 4, gap: 2,
+            backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)',
+            borderRadius: 24,
+        },
         filterDivider: { width: 1, height: 16, backgroundColor: colors.border.strong, marginHorizontal: 4 },
         filterClear: { paddingHorizontal: 8, paddingVertical: 8 },
         filterClearText: { fontSize: 14, color: colors.text.muted, fontWeight: '800' },
@@ -267,7 +313,21 @@ export default function MapScreen() {
 
         // Full-Screen Sheet — LIGHT theme
         sheetWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, maxHeight: SCREEN_HEIGHT * 0.95, zIndex: 500 },
-        sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 14, paddingBottom: 16, maxHeight: SCREEN_HEIGHT * 0.95, flex: 1 },
+        // No `flex: 1` here. Both users of this style sit in a full-height, `justifyContent: 'flex-end'`
+        // parent, where flex:1 makes a bottom sheet fill that whole parent instead of sizing to its
+        // content — which is what put the sheet's top edge under the tab row and left a blank band above
+        // its title. Each user caps its own height instead.
+        sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 14, paddingBottom: 16 },
+        /**
+         * The New Post sheet. `95%` is of the SCREEN AREA THIS SCREEN OWNS — which starts below the brand
+         * header and the top tab row (_layout.tsx sets tabBarPosition: 'top') — not of the device.
+         *
+         * There is deliberately no top safe-area inset: GlobalHeader already consumes insets.top, and the
+         * sheet is nowhere near the status bar. Adding it here was the blank strip.
+         */
+        composerSheet: { maxHeight: '95%', paddingTop: 8 },
+        /** The grabber. The title sits directly under it. */
+        sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border.strong, marginBottom: 10 },
         sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
         sheetTitle: { color: colors.text.heading, fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
         sheetClose: { color: colors.text.muted, fontSize: 24, fontWeight: '300', width: 32, height: 32, textAlign: 'center', lineHeight: 32 },
@@ -431,22 +491,31 @@ export default function MapScreen() {
         latitude: -28.5398, longitude: 153.4996,
         latitudeDelta: 0.0922, longitudeDelta: 0.0421,
     });
-    const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
 
     const params = useLocalSearchParams<{ newPost?: string }>();
 
     useFocusEffect(
         useCallback(() => {
-            if (params.newPost === 'true') {
-                openComposer();
-                router.setParams({ newPost: '' });
-            }
+            // `newPost=true` is the long-standing link and still opens the chooser; a named type opens
+            // that form directly, which is how the Market tab's Offer and Need rows land here.
+            const wanted = parseNewPostParam(params.newPost);
+            if (!wanted) return;
+            router.setParams({ newPost: '' });
+            if (wanted === 'chooser') setShowNewPostTypePicker(true);
+            else startCompose(wanted);
         }, [params.newPost])
     );
 
     // New Post state
     const [showNewPost, setShowNewPost] = useState(false);
+    // The one way to post: the + opens the same chooser as the Market tab, and Poll and Event open their
+    // own modals from here rather than the offer/need sheet.
+    const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
+    const [showNewPollModal, setShowNewPollModal] = useState(false);
+    const [showNewEventModal, setShowNewEventModal] = useState(false);
+    /** A pin already dropped on the map, handed to the event form as its place. */
+    const [eventInitialPin, setEventInitialPin] = useState<{ lat: number; lng: number } | null>(null);
     const [postType, setPostType] = useState<'offer' | 'need'>('offer');
     // Contribution-first gate: until the member has listed an Offer they can't post Needs.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
@@ -505,8 +574,13 @@ export default function MapScreen() {
     );
 
     // Filter state
-    const [mapTypeFilter, setMapTypeFilter] = useState<'all' | 'offers' | 'needs'>('all');
+    const [mapTypeFilter, setMapTypeFilter] = useState<'all' | 'offers' | 'needs' | 'events'>('all');
     const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
+    /**
+     * Which date chip the event pins are filtered by. The chips only appear while the Events pill is on,
+     * which is what keeps the filter row short at 320dp + 1.3x text.
+     */
+    const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const [showMapCategoryPicker, setShowMapCategoryPicker] = useState(false);
     const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
 
@@ -569,8 +643,10 @@ export default function MapScreen() {
     const initialClusterTriggered = useRef(false);
 
     const loadPosts = async () => {
-        try { 
-            const p = await getPosts();
+        try {
+            // Events are opt-in on this query as they are on the node's list route, so a client that
+            // cannot draw them never receives one. This map draws them, so it asks for them.
+            const p = await getPosts({ includeEvents: true });
             setPosts(p); 
             
             // Workaround for react-native-map-clustering: 
@@ -682,7 +758,7 @@ export default function MapScreen() {
     // Open the composer, but check the profile photo UP FRONT (so nobody
     // composes a whole offer only to be blocked at the end) and offer to resume
     // an unfinished draft.
-    const openComposer = async () => {
+    const openComposer = async (type?: 'offer' | 'need') => {
         // A name AND a photo are required before you can post — checked up front
         // (not after a whole draft) and routed to the setup wizard to fix.
         const nameOk = (identity?.callsign?.trim().length ?? 0) >= 2;
@@ -707,14 +783,60 @@ export default function MapScreen() {
                 const restorable = d && d.anchorUrl === anchorUrl && (d.postTitle?.trim() || d.postDescription?.trim() || (d.postPhotos?.length));
                 if (restorable) {
                     Alert.alert('Unfinished post', 'You started a post earlier. Continue it, or start fresh?', [
-                        { text: 'Start fresh', style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); setShowNewPost(true); } },
+                        // Start fresh honours the type just chosen in the chooser; Continue keeps the
+                        // draft's own type, because that is the post the member asked to go back to.
+                        { text: 'Start fresh', style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
                         { text: 'Continue', onPress: () => { restoreDraft(d); setShowNewPost(true); } },
                     ]);
                     return;
                 }
             }
         } catch { /* fall through to a blank composer */ }
+        if (type) setPostType(type);
         setShowNewPost(true);
+    };
+
+    /**
+     * The pin the member has already dropped on the map, so it can carry into the next form they open.
+     * Taken from the live composer state first, then from the saved draft — a pin dropped in a post that
+     * was abandoned last session is still a place the member chose.
+     */
+    const resolveDroppedPin = async (): Promise<{ lat: number; lng: number } | null> => {
+        if (postLat != null && postLng != null) return { lat: postLat, lng: postLng };
+        try {
+            const raw = await AsyncStorage.getItem(OFFER_DRAFT_KEY);
+            const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!raw) return null;
+            const d = JSON.parse(raw);
+            if (d?.anchorUrl !== anchorUrl) return null;
+            if (typeof d.postLat !== 'number' || typeof d.postLng !== 'number') return null;
+            return { lat: d.postLat, lng: d.postLng };
+        } catch {
+            return null;
+        }
+    };
+
+    /**
+     * What the chooser's decision does — from the + or from a `?newPost=<type>` link. Offer and Need open
+     * the map's own New Post sheet with the type preselected; Poll and Event open the very modals the
+     * Market tab opens, so there is one form per type in the app rather than two.
+     *
+     * An already-dropped pin carries into Offer, Need and Event. A poll stays in the list and has no pin
+     * (maintainer's decision, 2026-09-18), so it is offered here but inherits nothing.
+     */
+    const startCompose = async (type: ComposePostType) => {
+        const target = composeTargetFor(type);
+        if (target === 'poll-modal') {
+            setShowNewPollModal(true);
+            return;
+        }
+        if (target === 'event-modal') {
+            setEventInitialPin(composeCarriesPin(type) ? await resolveDroppedPin() : null);
+            setShowNewEventModal(true);
+            return;
+        }
+        // Offer and Need share the sheet, and its pin is postLat/postLng — the pin already carries.
+        await openComposer(type === 'need' ? 'need' : 'offer');
     };
 
     // Auto-save the draft as the user edits (only while the composer is open and
@@ -944,8 +1066,12 @@ export default function MapScreen() {
                         if (isNaN(l1) || isNaN(l2)) return false;
 
                         const pt = (p.type || '').toLowerCase();
+                        // Events have their own layer below, in their own colour. UnifiedMapPin knows only
+                        // Offer and Need, so an event routed through here came out looking like a Need.
+                        if (pt === 'event') return false;
                         if (mapTypeFilter === 'offers' && pt !== 'offer') return false;
                         if (mapTypeFilter === 'needs' && pt !== 'need') return false;
+                        if (mapTypeFilter === 'events') return false;
                         if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
 
                         return true;
@@ -966,6 +1092,26 @@ export default function MapScreen() {
                             />
                         );
                     })}
+
+                    {/* Event pins. Their own layer in the event violet, shown under All and under the
+                        Events pill, and filtered by the date chips. `eventInWindow` applies the slice-1
+                        feed rule first, so an event that has ended or been cancelled never pins — the
+                        sync pull is a replica of the list, not the list, and carries both. */}
+                    {(mapTypeFilter === 'all' || mapTypeFilter === 'events') && posts.filter(p => {
+                        if ((p.type || '').toLowerCase() !== 'event') return false;
+                        if (p.lat == null || p.lng == null) return false;
+                        if (isNaN(Number(p.lat)) || isNaN(Number(p.lng))) return false;
+                        if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
+                        return eventInWindow(p, mapTypeFilter === 'events' ? eventWindow : 'all');
+                    }).map(post => (
+                        <EventMapMarker
+                            key={`event-${post.id}-${selectedPostPreview?.id === post.id}`}
+                            coordinate={{ latitude: Number(post.lat), longitude: Number(post.lng) }}
+                            post={{ ...post, lat: Number(post.lat), lng: Number(post.lng) }}
+                            isSelected={selectedPostPreview?.id === post.id}
+                            onPress={setSelectedPostPreview}
+                        />
+                    ))}
 
                     {/* Service radius circle overlay */}
                     {nodeRadius && nodeRadius.radiusKm > 0 && (
@@ -1004,6 +1150,9 @@ export default function MapScreen() {
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} onPress={() => setMapTypeFilter('needs')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'needs' && styles.filterChipTextOnOrange]}>Needs</Text>
                         </Pressable>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => setMapTypeFilter('events')}>
+                            <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>Events</Text>
+                        </Pressable>
                         <View style={styles.filterDivider} />
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapCategoryFilter !== 'all' }} style={[styles.filterChip, mapCategoryFilter !== 'all' && styles.filterChipActive]} onPress={() => setShowMapCategoryPicker(true)}>
                             <Text style={[styles.filterChipText, mapCategoryFilter !== 'all' && styles.filterChipTextActive]}>
@@ -1012,11 +1161,35 @@ export default function MapScreen() {
                         </Pressable>
                         {/* Clear all icon if filters active */}
                         {(mapTypeFilter !== 'all' || mapCategoryFilter !== 'all') && (
-                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); setMapCategoryFilter('all'); }}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); setMapCategoryFilter('all'); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}
                     </View>
+
+                    {/* Date chips, only while Events is on — the pill row has to stay readable at 320dp
+                        with 1.3x text, and four more chips in it would not. Horizontally scrollable for
+                        the same reason: at the small end "This weekend" and "Next 7 days" are wide. */}
+                    {mapTypeFilter === 'events' && (
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.eventChipsRow}
+                            contentContainerStyle={styles.eventChipsContent}
+                        >
+                            {EVENT_WINDOWS.map(w => (
+                                <Pressable
+                                    key={w.id}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: eventWindow === w.id }}
+                                    style={[styles.filterChip, eventWindow === w.id && styles.filterChipActiveEvents]}
+                                    onPress={() => setEventWindow(w.id)}
+                                >
+                                    <Text style={[styles.filterChipText, eventWindow === w.id && styles.filterChipTextOnViolet]}>{w.label}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+                    )}
                 </View>
             )}
 
@@ -1132,7 +1305,8 @@ export default function MapScreen() {
                                 );
                                 return;
                             }
-                            openComposer();
+                            // The same chooser the Market tab's + opens — one way to post.
+                            setShowNewPostTypePicker(true);
                         }}
                         activeOpacity={0.8}
                     >
@@ -1180,7 +1354,9 @@ export default function MapScreen() {
                     style={[StyleSheet.absoluteFill, { zIndex: 500, justifyContent: 'flex-end' }]}
                     behavior="padding"
                 >
-                    <View style={[styles.sheet, { paddingTop: Math.max(insets.top + 10, 20) }]}>
+                    <View style={[styles.sheet, styles.composerSheet]}>
+                        <View style={styles.sheetHandle} />
+
                         {/* Validation Toast */}
                         {validationToast !== '' && (
                             <View style={styles.toastBanner}>
@@ -1196,7 +1372,9 @@ export default function MapScreen() {
                             </Pressable>
                         </View>
 
-                        <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={{ paddingBottom: 40 }}>
+                        {/* flexShrink so the form scrolls inside the sheet's 95% cap rather than the sheet
+                            growing past it — the sheet sizes to content now that it is not flex:1. */}
+                        <ScrollView ref={scrollViewRef} style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={{ paddingBottom: 40 }}>
                             {/* Type Toggle — colours match map pins */}
                             <View style={styles.typeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'offer' }} style={[styles.typeBtn, postType === 'offer' && styles.typeBtnOffer]} onPress={() => setPostType('offer')}>
@@ -1492,6 +1670,27 @@ export default function MapScreen() {
                     setPostCredits(String(effectivePrice));
                     setShowNewPost(true);
                 }}
+            />
+
+            {/* The one way to post: the same chooser the Market tab's + opens, with the same four
+                options in the same order, each opening the same form. */}
+            <NewPostTypeSheet
+                visible={showNewPostTypePicker}
+                onClose={() => setShowNewPostTypePicker(false)}
+                onSelect={startCompose}
+            />
+
+            <NewPollModal
+                visible={showNewPollModal}
+                onClose={() => setShowNewPollModal(false)}
+                onSuccess={() => loadPosts()}
+            />
+
+            <NewEventModal
+                visible={showNewEventModal}
+                initialPin={eventInitialPin}
+                onClose={() => { setShowNewEventModal(false); setEventInitialPin(null); }}
+                onSuccess={() => loadPosts()}
             />
         </View>
     );

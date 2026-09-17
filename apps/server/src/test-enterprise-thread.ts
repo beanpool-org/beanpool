@@ -32,6 +32,8 @@
  *     - GET /api/treasury/:treasury/thread (and /api/enterprises/:treasury/thread)
  *     - POST /api/treasury/:treasury/thread/message
  *     - POST /api/treasury/:treasury/thread/remove & DELETE .../message/:messageId
+ *     - POST /api/messages/edit refuses thread messages (blob bloat, rewriting a removed
+ *       message, wound-up thread) and removed messages anywhere; DM edits still work.
  *  8. Ledger conservation:
  *     - SUM(balances) + COMMONS_POOL = 0 remains strictly preserved.
  *
@@ -49,7 +51,7 @@ import {
     ensureEnterpriseThread, getEnterpriseThreadMessages,
     postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, getConversationsByMember, getUnreadCounts,
-    getCommonsBalanceExact,
+    getCommonsBalanceExact, createConversation, sendMessage,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -265,6 +267,9 @@ async function main() {
     // Resume Bakery
     resumeEnterprise(bakery, leadAlice.pubKeyHex);
 
+    // Posted while ToolLibrary is still active; Step 7b tries to edit it after wind-up.
+    const toolMsg = postEnterpriseThreadMessage(toolLibrary, danActive.pubKeyHex, "Tool library opens Saturday.");
+
     // Wound-up enterprise (status = 'completed')
     // Set ToolLibrary status to 'completed'
     db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(toolLibrary);
@@ -446,6 +451,82 @@ async function main() {
     const msgToDelete = postEnterpriseThreadMessage(bakery, danActive.pubKeyHex, "Test DELETE alias");
     const deleteRes = await signedFetch('DELETE', `/api/treasury/${bakery}/thread/message/${msgToDelete.id}`, bobKeeper);
     assert(deleteRes.status === 200, `DELETE alias by keeper returns 200 (got ${deleteRes.status})`);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 7b: The DM edit route cannot reach thread messages
+    // ─────────────────────────────────────────────────────────────────────────
+    // POST /api/messages/edit only checked author, non-system and the 15-minute window,
+    // so it could bloat a thread message, rewrite a keeper-removed message and ignore
+    // wind-up. Thread messages are not editable at all; removed messages never are.
+    // Every check here runs before failing, so a regression reports all of them.
+    console.log('── Step 7b: DM edit route cannot reach thread messages ──');
+    const editFailures: string[] = [];
+    const check = (cond: boolean, msg: string) => {
+        run++;
+        if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); editFailures.push(msg); }
+    };
+    const rowOf = (id: string) => db.prepare("SELECT type, ciphertext, nonce, edited_at FROM messages WHERE id = ?").get(id) as any;
+    const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
+
+    // (1) One character, then an edit into a ~1.9 MB blob every viewer would download.
+    const tinyMsg = postEnterpriseThreadMessage(bakery, danActive.pubKeyHex, "k");
+    const tinyBefore = rowOf(tinyMsg.id);
+    const blobRes = await signedFetch('POST', '/api/messages/edit', danActive, {
+        messageId: tinyMsg.id, ciphertext: 'A'.repeat(1_900_000), nonce: 'bloat-nonce'
+    });
+    check(blobRes.status === 403, `Edit of a thread message into a 1.9 MB blob returns 403 (got ${blobRes.status})`);
+    check(!!blobRes.error?.includes('discussion thread'), `Refusal names the discussion thread (got "${blobRes.error}")`);
+    const tinyAfter = rowOf(tinyMsg.id);
+    check(tinyAfter.ciphertext === tinyBefore.ciphertext && tinyAfter.nonce === tinyBefore.nonce,
+        `Thread message ciphertext unchanged (length ${tinyAfter.ciphertext.length})`);
+    check(tinyAfter.edited_at === null, 'Thread message not marked edited');
+
+    // (2) Rewriting a message a keeper removed (msg1, Dan's, removed in Step 5).
+    const removedBefore = rowOf(msg1.id);
+    const rewriteRes = await signedFetch('POST', '/api/messages/edit', danActive, {
+        messageId: msg1.id, ciphertext: b64('rewritten after removal'), nonce: 'rewrite-nonce'
+    });
+    check(rewriteRes.status === 403, `Edit of a keeper-removed thread message returns 403 (got ${rewriteRes.status})`);
+    const rawRes = await signedFetch('GET', `/api/messages/${bakery}`, danActive);
+    const rawRemoved = (rawRes.body?.messages || []).find((m: any) => m.id === msg1.id);
+    check(rawRes.status === 200 && !!rawRemoved, `Raw GET /api/messages/<enterprise> returns the removed message (got ${rawRes.status})`);
+    check(rawRemoved?.ciphertext === removedBefore.ciphertext,
+        `Raw GET still returns the tombstone text (got "${rawRemoved ? Buffer.from(rawRemoved.ciphertext, 'base64').toString('utf8') : ''}")`);
+    check(rowOf(msg1.id).type === 'removed', 'Removed message keeps type removed');
+
+    // (3) Editing a message in a wound-up (completed) enterprise's read-only thread.
+    const toolBefore = rowOf(toolMsg.id);
+    const woundUpEditRes = await signedFetch('POST', '/api/messages/edit', danActive, {
+        messageId: toolMsg.id, ciphertext: b64('Tool library is back!'), nonce: 'woundup-nonce'
+    });
+    check(woundUpEditRes.status === 403, `Edit in a wound-up enterprise thread returns 403 (got ${woundUpEditRes.status})`);
+    check(rowOf(toolMsg.id).ciphertext === toolBefore.ciphertext, 'Wound-up thread message ciphertext unchanged');
+
+    // A removed message is never editable, whatever conversation it sits in.
+    const dmConv = createConversation('dm', [danActive.pubKeyHex, leadAlice.pubKeyHex], danActive.pubKeyHex);
+    const removedDm = sendMessage(dmConv!.id, danActive.pubKeyHex, b64('to be removed'), 'dm-nonce-0')!;
+    db.prepare("UPDATE messages SET type = 'removed' WHERE id = ?").run(removedDm.id);
+    const removedDmRes = await signedFetch('POST', '/api/messages/edit', danActive, {
+        messageId: removedDm.id, ciphertext: b64('edited anyway'), nonce: 'dm-nonce-x'
+    });
+    check(removedDmRes.status === 403, `Edit of a removed message outside a thread returns 403 (got ${removedDmRes.status})`);
+    check(rowOf(removedDm.id).ciphertext === b64('to be removed'), 'Removed DM message ciphertext unchanged');
+
+    // Ordinary DM editing is unchanged: the author can edit within the window.
+    const dmMsg = sendMessage(dmConv!.id, danActive.pubKeyHex, b64('see you at 9'), 'dm-nonce-1')!;
+    const dmEditRes = await signedFetch('POST', '/api/messages/edit', danActive, {
+        messageId: dmMsg.id, ciphertext: b64('see you at 10'), nonce: 'dm-nonce-2'
+    });
+    check(dmEditRes.status === 200 && dmEditRes.body?.success === true, `Ordinary DM edit returns 200 (got ${dmEditRes.status})`);
+    const dmAfter = rowOf(dmMsg.id);
+    check(dmAfter.ciphertext === b64('see you at 10') && dmAfter.nonce === 'dm-nonce-2', 'DM edit stored the new ciphertext and nonce');
+    check(!!dmAfter.edited_at, 'DM edit sets edited_at');
+    const dmOtherRes = await signedFetch('POST', '/api/messages/edit', leadAlice, {
+        messageId: dmMsg.id, ciphertext: b64('hijacked'), nonce: 'dm-nonce-3'
+    });
+    check(dmOtherRes.status === 400, `Non-author DM edit still returns 400 (got ${dmOtherRes.status})`);
+
+    assert(editFailures.length === 0, `Edit route refusals all hold (${editFailures.length} failed)`);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Step 8: Conservation invariant audit

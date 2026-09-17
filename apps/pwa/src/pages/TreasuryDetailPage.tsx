@@ -714,7 +714,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const hasMapPin = detail?.lat != null && detail?.lng != null;
 
     return (
-        <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed inset-0 bg-nature-100 dark:bg-black z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
+            {/* z-[110]: above the mobile app header (App.tsx, zIndex 100). This page carries its own Back bar,
+                and at z-50 that bar sat under the header where Back could not be tapped. */}
             {/* Header */}
             <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between z-10">
                 <button

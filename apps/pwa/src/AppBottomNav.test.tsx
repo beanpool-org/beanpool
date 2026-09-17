@@ -86,6 +86,12 @@ vi.mock('./pages/ProjectsPage', () => ({
     ),
 }));
 
+vi.mock('./pages/SettingsPage', () => ({
+    SettingsPage: ({ onBack }: { onBack: () => void }) => (
+        <button onClick={onBack}>← Back</button>
+    ),
+}));
+
 describe('App mobile bottom nav dynamic visibility & CSS variable regression (#791 / #792)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -215,5 +221,49 @@ describe('App mobile bottom nav labels on a 320px phone at 1.3x text', () => {
             expect(button.style.flexBasis).toBe('0px');
             expect(button.style.minWidth).toBe('0px');
         }
+    });
+});
+
+// On a phone the mobile header is sticky at zIndex 100. Overlays that carry their own Back bar
+// were mounted at z-50 / zIndex 60, so Back sat under the header and a tap on it did nothing.
+describe('Overlays with their own Back bar stack above the mobile header', () => {
+    const mobileHeader = () => document.querySelector('header.md\\:hidden') as HTMLElement;
+
+    it('draws the profile and enterprise pages above the header', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+        expect(mobileHeader().style.zIndex).toBe('100');
+
+        fireEvent.click(screen.getByText('Open Peer Profile'));
+        const profile = await screen.findByTestId('page-overlay');
+        expect(profile).toHaveClass('fixed', 'inset-0', 'z-[110]');
+        fireEvent.click(screen.getByRole('button', { name: /back/i }));
+        await waitFor(() => expect(screen.queryByTestId('page-overlay')).not.toBeInTheDocument());
+
+        fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
+        fireEvent.click(await screen.findByText('Open Treasury'));
+        const enterprise = await screen.findByTestId('page-overlay');
+        expect(enterprise).toHaveClass('fixed', 'inset-0', 'z-[110]');
+    });
+
+    it('draws Settings over the header but under the bottom nav, which stays usable', async () => {
+        render(<App />);
+        await waitFor(() => {
+            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
+        });
+        const header = mobileHeader();
+        fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
+
+        const back = await screen.findByRole('button', { name: '← Back' });
+        const wrapper = back.closest('main > div') as HTMLElement;
+        const nav = screen.getByTestId('mobile-bottom-nav');
+        expect(wrapper.style.position).toBe('fixed');
+        // Equal zIndex: document order decides, so the header must come before Settings and the nav after.
+        expect(wrapper.style.zIndex).toBe(header.style.zIndex);
+        expect(wrapper.style.zIndex).toBe(nav.style.zIndex);
+        expect(header.compareDocumentPosition(wrapper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(wrapper.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });

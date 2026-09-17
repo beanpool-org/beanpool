@@ -299,6 +299,7 @@ run_federation_suites() {
       test-enterprise-location
       test-enterprise-thread
       test-enterprise-closed-states
+      test-slice6-review-findings
     )
     for t in "${SUITES[@]}"; do
       echo "━━━ $t ━━━"

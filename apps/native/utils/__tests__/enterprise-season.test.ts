@@ -75,6 +75,18 @@ describe('state banners every member sees', () => {
         expect(over?.kind === 'winding_up' && over.graceEndedNote).toBe('The 7-day grace period has elapsed. Ready to be finalised.');
     });
 
+    it('winding up: never more days left than the 7-day grace period', () => {
+        const at = (ms: number) => seasonBanner(enterprise({ status: 'winding_up', windUpInitiatedBy: 'lead', windUpGraceEndsAt: new Date(NOW + ms).toISOString() }), NOW);
+        // Just started, phone clock a few seconds behind the server: ceil would say 8.
+        expect(at(7 * DAY + 5000)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(7 * DAY)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(7 * DAY - 1)?.headline).toBe('Winding up (7 days left · started by Rosa)');
+        expect(at(6 * DAY)?.headline).toBe('Winding up (6 days left · started by Rosa)');
+        // Derived from windUpInitiatedAt a moment in the phone's future.
+        const fromStart = seasonBanner(enterprise({ status: 'winding_up', windUpInitiatedBy: 'lead', windUpInitiatedAt: new Date(NOW + 3000).toISOString() }), NOW);
+        expect(fromStart?.headline).toBe('Winding up (7 days left · started by Rosa)');
+    });
+
     it('completed wins over a stale paused flag', () => {
         const b = seasonBanner(enterprise({ status: 'completed', paused: true }), NOW);
         expect(b?.kind).toBe('completed');

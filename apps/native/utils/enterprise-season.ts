@@ -72,7 +72,9 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
     if (status === 'winding_up') {
         const endsAt = windUpGraceEndsAt(detail);
         const endsMs = endsAt ? new Date(endsAt).getTime() : NaN;
-        const daysLeft = isNaN(endsMs) ? 0 : Math.max(0, Math.ceil((endsMs - now) / DAY_MS));
+        // Capped at the grace period: right after starting, a phone clock slightly behind the server's made
+        // Math.ceil read "8 days left" beside "the 7-day grace period".
+        const daysLeft = isNaN(endsMs) ? 0 : Math.min(GRACE_DAYS, Math.max(0, Math.ceil((endsMs - now) / DAY_MS)));
         const graceEnded = !isNaN(endsMs) && now >= endsMs;
         const by = detail.windUpInitiatedBy as string | null | undefined;
         const initiator = Array.isArray(detail.keepers) ? detail.keepers.find((k: any) => keeperKey(k) === by) : undefined;

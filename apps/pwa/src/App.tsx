@@ -657,7 +657,10 @@ export function App() {
                     position: 'relative',
                 }} className="md:pb-0">
                     {showSettings && (
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, overflowY: 'auto' }}>
+                        // zIndex 100 ties the mobile header and bottom nav, so DOM order decides: Settings
+                        // (in <main>) draws over the header before it, keeping its own Back tappable, and
+                        // under the bottom nav after it, which stays usable. At 60 Back sat under the header.
+                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, overflowY: 'auto' }}>
                             <SettingsPage
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
@@ -721,7 +724,7 @@ export function App() {
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} />}
+                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />}
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}

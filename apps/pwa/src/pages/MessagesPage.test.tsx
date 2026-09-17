@@ -444,3 +444,19 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
         }
     });
 });
+
+describe('MessagesPage conversation filters at 320px with 1.3x text', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockConversations = [];
+    });
+
+    it('wraps All / Transactions / Direct onto a second line instead of hiding Direct behind a scrollbar', async () => {
+        render(<MessagesPage identity={mockIdentity} />);
+
+        const row = await screen.findByTestId('conversation-filter-chips');
+        expect(row).toHaveStyle({ flexWrap: 'wrap' });
+        expect(row).toHaveClass('scrollbar-none');
+        expect(Array.from(row.querySelectorAll('button')).map(b => b.textContent)).toEqual(['All', 'Transactions', 'Direct']);
+    });
+});

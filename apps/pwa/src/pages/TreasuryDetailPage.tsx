@@ -86,6 +86,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [threadError, setThreadError] = useState<string | null>(null);
     const [threadRemovingId, setThreadRemovingId] = useState<string | null>(null);
     const [threadUnavailable, setThreadUnavailable] = useState(false);
+    // The avatar URL that failed to load, if any: that image falls back to the no-avatar placeholder.
+    const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
 
     // Post Modal State
     const [postModalMode, setPostModalMode] = useState<'offer' | 'need' | null>(null);
@@ -672,6 +674,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const balance = detail?.balance ?? 0;
     const name = detail?.name || 'Community Enterprise';
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
+    // What the node's P&L summary counts as "came in" is gross; net change is net of the community fee.
+    const ledgerFees = ledgerData?.summary
+        ? Math.round((ledgerData.summary.totalIncome - ledgerData.summary.totalSpend - ledgerData.summary.netChange) * 100) / 100
+        : 0;
+    const showAvatar = !!avatarUrl && avatarUrl !== failedAvatarUrl;
     const pendingBids: any[] = detail?.pendingBids || [];
     const activeDeals: any[] = detail?.activeDeals || [];
     const posts: any[] = detail?.posts || [];
@@ -714,9 +721,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const hasMapPin = detail?.lat != null && detail?.lng != null;
 
     return (
-        <div className="fixed inset-0 bg-nature-100 dark:bg-black z-50 overflow-y-auto animate-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed inset-0 bg-nature-100 dark:bg-black z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
+            {/* z-[110]: above the mobile app header (App.tsx, zIndex 100). This page carries its own Back bar,
+                and at z-50 that bar sat under the header where Back could not be tapped. */}
             {/* Header */}
-            <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between z-10">
+            <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between gap-2 z-10">
                 <button
                     onClick={onBack}
                     className="text-nature-600 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1.5"
@@ -727,7 +736,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     </svg>
                     Back
                 </button>
-                <div className="font-extrabold text-nature-900 dark:text-white text-base sm:text-lg truncate max-w-[200px] sm:max-w-md">
+                <div className="min-w-0 font-extrabold text-nature-900 dark:text-white text-base sm:text-lg truncate max-w-[200px] sm:max-w-md">
                     {name}
                 </div>
                 <div className="w-12" />
@@ -752,20 +761,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 ) : (
                     <>
                         {/* Identity Banner */}
-                        <div className="flex items-center gap-4 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                            {avatarUrl ? (
+                        <div className="flex items-center gap-3 sm:gap-4 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 shadow-sm">
+                            {showAvatar ? (
                                 <img
                                     src={avatarUrl}
                                     alt={name}
-                                    className="w-16 h-16 rounded-full object-cover border-2 border-emerald-500/40"
+                                    onError={() => setFailedAvatarUrl(avatarUrl)}
+                                    className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-full object-cover border-2 border-emerald-500/40"
                                 />
                             ) : (
-                                <div className="w-16 h-16 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-3xl border border-nature-200 dark:border-nature-700">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl sm:text-3xl border border-nature-200 dark:border-nature-700" data-testid="enterprise-avatar-placeholder">
                                     {detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}
                                 </div>
                             )}
                             <div className="flex-1 min-w-0">
-                                <h1 className="text-xl sm:text-2xl font-black text-nature-900 dark:text-white truncate">
+                                {/* Wraps rather than truncating: at 320px with 1.3x text "Community Eggs" needs two lines. */}
+                                <h1 className="text-lg sm:text-2xl font-black text-nature-900 dark:text-white leading-tight line-clamp-2 break-words">
                                     {name}
                                 </h1>
                                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 mt-0.5">
@@ -959,7 +970,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800">
+                            {/* Tiles are at least 8rem wide, so they drop to one column when two would not fit "Uncapped"
+                                at the text size in use (rem-based, so this follows the phone's font scale too). */}
+                            <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800" data-testid="enterprise-balance-tiles">
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
                                     <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
                                         Credit Line
@@ -1768,7 +1781,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         Went out
                                     </div>
                                     <div className="text-lg font-black text-amber-700 dark:text-amber-400 mt-1">
-                                        -{ledgerData?.summary?.totalSpend?.toFixed(2) ?? '0.00'} 🫘
+                                        {ledgerData?.summary?.totalSpend ? `-${ledgerData.summary.totalSpend.toFixed(2)}` : '0.00'} 🫘
                                     </div>
                                 </div>
                                 <div className="col-span-2 sm:col-span-1 bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
@@ -1785,6 +1798,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                             </div>
+                            {ledgerFees > 0 && (
+                                // The node counts "came in" before the community fee, while net change is what the
+                                // balance actually moved, so without this the three numbers do not add up.
+                                <p className="text-[11px] text-nature-500 dark:text-nature-400 -mt-1" data-testid="ledger-fee-note">
+                                    Came in is before fees: {ledgerFees.toFixed(2)} 🫘 in fees came off it.
+                                </p>
+                            )}
 
                             {/* Ledger Entries Table */}
                             {ledgerLoading ? (
@@ -1812,9 +1832,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 </div>
                             ) : (
                                 <div className="space-y-3">
-                                    <div className="overflow-x-auto -mx-5 px-5" tabIndex={0} role="region" aria-label="Enterprise ledger transactions">
-                                        <table className="w-full text-left text-xs border-collapse min-w-[500px]">
-                                            <thead>
+                                    {/* Below sm each transaction is a stacked row (what for + amount, with + running
+                                        balance, when): six columns needed 642px of a 272px card on a 320px phone. */}
+                                    <div className="sm:overflow-x-auto sm:-mx-5 sm:px-5" tabIndex={0} role="region" aria-label="Enterprise ledger transactions">
+                                        <table className="block sm:table w-full text-left text-xs border-collapse sm:min-w-[500px]">
+                                            <thead className="hidden sm:table-header-group">
                                                 <tr className="border-b border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 font-bold uppercase text-[10px] tracking-wider">
                                                     <th scope="col" className="py-2 pr-3">When</th>
                                                     <th scope="col" className="py-2 px-3">What for</th>
@@ -1824,33 +1846,33 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <th scope="col" className="py-2 pl-3 text-right">Running balance</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-nature-100 dark:divide-nature-800">
+                                            <tbody className="block sm:table-row-group divide-y divide-nature-100 dark:divide-nature-800">
                                                 {ledgerData.entries.map((entry) => (
-                                                    <tr key={entry.id} className="hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors">
-                                                        <td className="py-2.5 pr-3 text-nature-500 dark:text-nature-400 whitespace-nowrap">
+                                                    <tr key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 py-2.5 sm:py-0 sm:table-row hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors" data-testid="ledger-entry">
+                                                        <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-400 whitespace-nowrap">
                                                             {formatShortDate(entry.timestamp)}
                                                         </td>
-                                                        <td className="py-2.5 px-3 font-semibold text-nature-800 dark:text-nature-200 max-w-[140px] truncate" title={entry.memo}>
+                                                        <td className="order-1 sm:order-none sm:py-2.5 sm:px-3 font-semibold text-nature-800 dark:text-nature-200 [overflow-wrap:anywhere] sm:max-w-[140px] sm:truncate" title={entry.memo}>
                                                             {entry.memo || 'Transfer'}
                                                         </td>
-                                                        <td className="py-2.5 px-3 text-nature-600 dark:text-nature-300 max-w-[110px] truncate" title={entry.counterpartyName}>
+                                                        <td className="order-3 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:px-3 text-nature-600 dark:text-nature-300 [overflow-wrap:anywhere] sm:max-w-[110px] sm:truncate" title={entry.counterpartyName}>
                                                             {entry.counterpartyName || 'Member'}
                                                         </td>
-                                                        <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                                        <td className={`${entry.direction === 'income' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap`}>
                                                             {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
                                                         </td>
-                                                        <td className="py-2.5 px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                                        <td className={`${entry.direction === 'spend' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap`}>
                                                             {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
                                                         </td>
-                                                        <td className="py-2.5 pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
-                                                            {entry.runningBalance.toFixed(2)} 🫘
+                                                        <td className="order-4 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
+                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-400">bal </span>{entry.runningBalance.toFixed(2)} 🫘
                                                         </td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
                                     </div>
-                                    <div className="pt-2 border-t border-nature-100 dark:border-nature-800 flex items-center justify-between text-[11px] text-nature-500 dark:text-nature-400">
+                                    <div className="pt-2 border-t border-nature-100 dark:border-nature-800 flex flex-wrap items-center justify-between gap-x-3 text-[11px] text-nature-500 dark:text-nature-400">
                                         <span>Starting balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.startingBalance.toFixed(2)} 🫘</strong></span>
                                         <span>Ending balance: <strong className="text-nature-700 dark:text-nature-300">{ledgerData.summary.endingBalance.toFixed(2)} 🫘</strong></span>
                                     </div>

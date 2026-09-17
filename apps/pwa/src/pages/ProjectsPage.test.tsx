@@ -5,6 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
+import { getTreasuries } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -362,5 +363,28 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf-8');
         expect(css).toMatch(/\.scrollbar-none[\s\S]*?scrollbar-width:\s*none/);
         expect(css).toMatch(/\.scrollbar-none::-webkit-scrollbar[\s\S]*?display:\s*none/);
+    });
+});
+
+describe('ProjectsPage enterprise card avatar', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('falls back to the no-avatar placeholder when the avatar image fails to load', async () => {
+        vi.mocked(getTreasuries).mockResolvedValueOnce({
+            treasuries: [{ ...mockTreasuries[0], avatar: '/uploads/avatars/missing.png' }],
+        } as any);
+        render(<ProjectsPage identity={backerIdentity} />);
+
+        const img = await screen.findByRole('img', { name: 'Community Garden Solar Irrigation' });
+        const box = img.parentElement as HTMLElement;
+        fireEvent.error(img);
+
+        await waitFor(() => {
+            expect(screen.queryByRole('img', { name: 'Community Garden Solar Irrigation' })).not.toBeInTheDocument();
+        });
+        // The same placeholder a card without an avatar shows — not the alt text spilling out.
+        expect(box).toHaveTextContent('🌱');
     });
 });

@@ -183,3 +183,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-09-30 - O(1) Option Lookups in Poll Open Ballot Voter Lists
 **Learning:** In `apps/pwa/src/components/PollCard.tsx` and `apps/native/components/PollCard.tsx`, rendering open ballot voter lists iterated over `votesList` and ran `options.find(o => o.id === ...)` for every vote, causing $O(V \times O)$ linear array scans when displaying voter choices.
 **Action:** Pre-computed `optionsById` Map (indexed by option ID via `useMemo`) at component scope to reduce poll option resolution to constant-time $O(1)$ retrievals ($O(V + O)$ overall).
+
+## 2026-10-01 - O(1) Member Lookups in ProposeDecisionModal
+**Learning:** In `apps/pwa/src/components/ProposeDecisionModal.tsx`, resolving selected member details on input keystrokes executed `members.find(...)` scans across `members` for each keystroke.
+**Action:** Pre-computed `membersByKeyMap` using `useMemo` indexed by both public key and callsign to convert selected member resolution into $O(1)$ Map retrievals.

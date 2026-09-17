@@ -32,11 +32,11 @@ import {
     treasuryKeepers, isLeadOrSoleKeeperOrAdmin,
     requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
-    cancelActiveSuccessionIfLeadActive, adminSetOperator,
+    cancelActiveSuccessionIfLeadActive, adminSetOperator, canOperateTreasury, createProject,
 } from './state-engine.js';
 import { createDecision, castDecisionVote, tickDecisions, getDecision, getQuorumRequired } from './decisions-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db, initSchema } from './db/db.js';
+import { db, initSchema, createCrowdfundProject, raiseCreatorOperatorSwitch } from './db/db.js';
 import { recordActivity } from './engine/members.js';
 
 const PORT = 8626;
@@ -725,6 +725,65 @@ async function main() {
     assert(new Date(afterSigned.last_active_at).getTime() > new Date(thirtyFiveDaysAgo).getTime(), 'B2: signed request from the lead records activity');
     assert((db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(actProp.proposal.id) as any).status === 'cancelled',
         'B2: signed request from the lead cancels the proposal');
+
+    // 8. An admin's operator suspension sticks through creation. A member whose switch is off (bindings kept,
+    //    can_operate = 0) cannot create an enterprise, a commons project or a crowdfund project — each of those
+    //    used to run an unconditional `can_operate = 1`, which switched every enterprise they already keep back on.
+    const suspOwnEnt = createTreasury('SuspendedHomeEnterprise', 'avatarSusp', 0).publicKey;
+    const suspKeeper = makeIdentity('SuspKeeper', 50);
+    adminAssignTreasuryOperator(suspOwnEnt, suspKeeper.pubKeyHex, 'admin', 0);
+    adminSetOperator(suspKeeper.pubKeyHex, false);
+    const switchOf = (pk: string) => (db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(pk) as any).can_operate;
+    const bindingsOf = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?").get(pk) as any).c;
+
+    const suspEntRes = await signedFetch('POST', '/api/enterprise', suspKeeper, { name: 'Throwaway Enterprise', purpose: 'switch me back on' });
+    assert(suspEntRes.status >= 400 && /operator access is switched off/.test(suspEntRes.error || ''),
+        `Suspended: POST /api/enterprise is refused with a clear message (got ${suspEntRes.status} ${suspEntRes.error})`);
+    assert(!db.prepare("SELECT 1 FROM members WHERE callsign = 'Throwaway Enterprise'").get(), 'Suspended: no enterprise was created');
+    assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused enterprise creation leaves can_operate at 0');
+
+    const suspProjRes = await signedFetch('POST', '/api/commons/projects', suspKeeper, { title: 'Throwaway Project', description: 'x', requestedAmount: 10 });
+    assert(suspProjRes.status >= 400 && /operator access is switched off/.test(suspProjRes.error || ''),
+        `Suspended: POST /api/commons/projects is refused with a clear message (got ${suspProjRes.status} ${suspProjRes.error})`);
+    assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused commons project leaves can_operate at 0');
+
+    const suspCrowdRes = await signedFetch('POST', '/api/crowdfund/projects', suspKeeper, { title: 'Throwaway Crowdfund', description: 'x', goalAmount: 10 });
+    assert(suspCrowdRes.status >= 400 && /operator access is switched off/.test(suspCrowdRes.error || ''),
+        `Suspended: POST /api/crowdfund/projects is refused with a clear message (got ${suspCrowdRes.status} ${suspCrowdRes.error})`);
+    assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: refused crowdfund project leaves can_operate at 0');
+
+    // The engine refuses too, so a route that forgets the check still cannot switch them back on.
+    expectThrow(() => createTreasury('Engine Throwaway', 'avatarX', 0, { leadKeeperPubkey: suspKeeper.pubKeyHex }),
+        'operator access is switched off', 'Suspended: createTreasury refuses a switched-off lead keeper');
+    expectThrow(() => createProject(suspKeeper.pubKeyHex, 'Engine Throwaway Project', 'x', 10),
+        'operator access is switched off', 'Suspended: createProject refuses a switched-off proposer');
+    expectThrow(() => createCrowdfundProject(crypto.randomUUID(), suspKeeper.pubKeyHex, 'Engine Throwaway Crowdfund', 'x', [], 10, null),
+        'operator access is switched off', 'Suspended: createCrowdfundProject refuses a switched-off creator');
+    // And the write itself never raises the switch for a member who already keeps another enterprise.
+    raiseCreatorOperatorSwitch(suspKeeper.pubKeyHex, 'some-new-enterprise');
+    assert(switchOf(suspKeeper.pubKeyHex) === 0, 'Suspended: raiseCreatorOperatorSwitch leaves an existing keeper\'s switch off');
+
+    assert(bindingsOf(suspKeeper.pubKeyHex) === 1, 'Suspended: no new binding was created by any refused attempt');
+    assert(canOperateTreasury(suspKeeper.pubKeyHex, suspOwnEnt) === false, 'Suspended: the existing enterprise stays off for them');
+
+    // An ordinary, unsuspended keeper still creates enterprises and projects, and becomes their lead.
+    const okKeeper = makeIdentity('OkKeeper', 50);
+    adminAssignTreasuryOperator(suspOwnEnt, okKeeper.pubKeyHex, 'admin', 0);
+    const okEntRes = await signedFetch('POST', '/api/enterprise', okKeeper, { name: 'Ok Keeper Enterprise', purpose: 'bread' });
+    assert(okEntRes.status === 200 && !!okEntRes.body?.publicKey, `Unsuspended keeper creates an enterprise (got ${okEntRes.status} ${okEntRes.error})`);
+    assert((db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(okEntRes.body?.publicKey, okKeeper.pubKeyHex) as any)?.role === 'lead',
+        'Unsuspended keeper is lead of the new enterprise');
+    assert(switchOf(okKeeper.pubKeyHex) === 1 && canOperateTreasury(okKeeper.pubKeyHex, okEntRes.body?.publicKey) === true,
+        'Unsuspended keeper can operate the new enterprise');
+    const okProjRes = await signedFetch('POST', '/api/commons/projects', okKeeper, { title: 'Ok Keeper Project', description: 'x', requestedAmount: 10 });
+    assert(okProjRes.status === 200 && okProjRes.body?.success === true, `Unsuspended keeper creates a commons project (got ${okProjRes.status} ${okProjRes.error})`);
+
+    // A member with no binding at all starts with the switch off, and creating their first enterprise raises it, as before.
+    const firstTimer = makeIdentity('FirstTimeCreator', 20);
+    db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(firstTimer.pubKeyHex);
+    const firstEntRes = await signedFetch('POST', '/api/enterprise', firstTimer, { name: 'First Timer Enterprise', purpose: 'eggs' });
+    assert(firstEntRes.status === 200 && switchOf(firstTimer.pubKeyHex) === 1,
+        `A member with no prior binding creates an enterprise and gains the switch (got ${firstEntRes.status} ${firstEntRes.error})`);
 
     console.log(`\n==============================================`);
     console.log(`🎉 All ${passed}/${run} tests passed successfully!`);

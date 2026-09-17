@@ -1,12 +1,15 @@
 # Events — design note
 
-Decisions made with Marty on 2026-09-17 and 2026-09-18 (23 of them, logged in
+Decisions made with Marty on 2026-09-17 and 2026-09-18 (32 of them, logged in
 `scratch/events-design/decisions.md`), turned into a buildable design and checked against the code on `main`
-at v1.2.19 (#857). This replaces the 2026-09-01 research draft, which proposed a separate table, a blurred pin
-with host approval, and delta-sync federation; each of those was overtaken by polls-as-a-post-type, the public
-enterprise pin with Approximate (#844), and the listings pull. The old text is in this branch's history.
+at v1.2.19 (#857). The last nine answer the questions the first version of this note asked; they are folded
+into the body below and listed in §6. This replaces the 2026-09-01 research draft, which proposed a separate
+table, a blurred pin with host approval, and delta-sync federation; each of those was overtaken by
+polls-as-a-post-type, the public enterprise pin with Approximate (#844), and the listings pull. The old text
+is in this branch's history.
 
-Nothing here is built. Status: **design agreed, questions in §6 open, no build brief yet.**
+Nothing here is built. Status: **design decided in full on 2026-09-18; Marty reads this note before any
+build brief is written.**
 
 ---
 
@@ -16,36 +19,45 @@ An event is a community gathering with a time and a place: a working bee, a repa
 meeting. It is free. The point is people showing up. Today the only way to announce one is a chat message or
 an offer with a date typed into the description.
 
-**What.** One post of a new type `event` with title, description, photo, start and end time, a map pin
-(required) plus a place name, and a **private note** shown only to people who tapped Going (gate code,
-parking, what to bring). No capacity limit. No Beans: paying helpers stays an enterprise Need with escrow,
-and an event may link to one. One-off only, with **Copy to a new date**; no repeat rules.
+**What.** One post of a new type `event` with title, description, photo, a start time, an end time
+(optional; defaults to start + 2 hours), a map pin (required) plus a place name, and a **private note** shown
+only to people who tapped Going (gate code, parking, what to bring). No capacity limit. No Beans: paying
+helpers stays an enterprise Need with escrow, and an event may link to one. One-off only, with **Copy to a
+new date**; no repeat rules.
 
 **Who.** Any member creates one. Tiers gate nothing. An enterprise hosts through a keeper, a group through
-a convenor, exactly as enterprise-authored and group-only posts work today. The card shows the host name.
+a convenor, exactly as enterprise-authored and group-only posts work today. Every keeper of that enterprise,
+and every active convenor of that group, is a host with full host rights; not only the member who posted it.
+The card shows the host name.
 
 **Where it shows.** In the Market feed as a card, like polls. On the map as a pin with **Today / This
 weekend / Next 7 days** chips. Not in the Pulse and not on a host page in v1. The pin is exact by default with
-**Approximate (~100 m)** one tap away and the same plain warning enterprise pins use. Audience is the same
-choice as any post: this community by default, group-only, or shared to linked communities.
+**Approximate (~100 m)** one tap away and the same plain warning enterprise pins use. Audience is this
+community (default) or group-only. Sharing to linked communities is not in v1: reach is forced to `local`
+the way polls force it, until the federation listings pull carries event fields (§2.4).
 
 **RSVP.** Going or Interested, one tap, no host approval. The card shows the two counts and my status; the
 host sees the list.
 
 **Chat.** Every event gets a chat. Members are the host plus everyone marked Going; switching to Interested
 or Not going removes you. The private note is pinned at the top. The host can remove messages, like a keeper
-in an enterprise thread. Read-only when the event ends; gone with the event after 30 days.
+in an enterprise thread. It is stored node-readable like the enterprise thread, not end-to-end like DMs, and
+the screen says so in one line. Read-only when the event ends; gone with the event after 30 days.
 
-**Lifecycle.** Cancel, or a change of time or place, pushes a notification to everyone marked Going (not
-Interested) and the card shows CANCELLED or UPDATED. When the event ends it drops off the map and feed; host
-and attendees can still open it for 30 days; then it is removed.
+**Lifecycle.** The host may edit everything, RSVPs or not. Cancel, or a change of time or place, pushes a
+notification to everyone marked Going (not Interested) and the card shows CANCELLED or UPDATED; other edits
+are silent. Notifications go out on the existing Marketplace push category. When the event ends it drops off
+the map and feed; host and attendees can still open it for 30 days; then it is scrubbed: RSVPs, chat and the
+private note are deleted and the post row stays, inactive, as every other post does.
 
-**Limits.** The existing report → admin removal flow, plus a cap on upcoming events per member
-(recommended 5; an enterprise or group is counted as its own author). No far-future limit.
+**Limits.** The existing report → admin removal flow, plus a cap of 5 upcoming events per author, checked
+at create like the poll limit; each enterprise and each group is its own author, separate from the member
+posting for it. No far-future limit.
 
 **Rollout.** Server, phone app and web ship together in one release; nodes deploy after the app is in the
-store. Step 1 is events in the phone feed plus the web map. Step 2, its own PR, opens the protected native map
-files for the pin and chips.
+store. Events are opt-in on the list route, so apps already in the store never receive one (§2.6). Step 1 is
+events in the phone feed plus the web map. Step 2, its own PR, opens the protected native map files for the
+pin and chips.
 
 ---
 
@@ -96,9 +108,9 @@ which uses the enterprise pubkey as the conversation id). Messages go in `messag
 stores them: base64 text with `nonce = 'plaintext-v1'` (`enterprise-thread.ts:175`), not the XChaCha20 DM
 scheme that binds ciphertext to a fixed participant set (`apps/server/src/engine/messaging.ts:126-133`). That
 is the only way membership can follow RSVPs and a host can remove a message the server can read. It also means
-the node operator can read event chat; the screen should say so in one line. Membership is written to
-`conversation_participants` in step with `event_rsvps` (§2.2) so the chat appears in the Talk list with unread
-counts, and the read and post handlers re-check the RSVP anyway.
+the node operator can read event chat, which is accepted for v1; the chat screen carries a one-line notice.
+Membership is written to `conversation_participants` in step with `event_rsvps` (§2.2) so the chat appears in
+the Talk list with unread counts, and the read and post handlers re-check the RSVP anyway.
 
 **The private note** lives on the post row and is served by `rowToPost` only when the viewer is the host or
 has a `going` RSVP; every other reader gets the field omitted, including guests and the listings pull. It is
@@ -110,13 +122,16 @@ the note never leaves a stale copy.
 **Create** goes through `createPost` (`posts.ts:101`) with a `type === 'event'` branch beside the poll branch
 (`posts.ts:190-232`):
 
-- Validate: `event_start_at` in the future, `event_end_at` after it, `lat`/`lng` present, place name ≤ 80
-  chars, private note ≤ 1000 chars. Photos validated by `validatePostPhotos` as for offers.
+- Validate: `event_start_at` in the future; `event_end_at` optional, set to start + 2 hours when omitted, and
+  must be after the start when given; `lat`/`lng` present, place name ≤ 80 chars, private note ≤ 1000 chars.
+  Photos validated by `validatePostPhotos` as for offers.
 - Force what polls force: `credits = 0`, `price_type = 'fixed'`, `repeatable = 0`, `cash_also_needed = 0`,
-  `category = 'community'`. Unlike polls, keep `lat`/`lng` and photos, and keep `reach` (see §2.4).
+  `category = 'community'`, and `reach = 'local'` (`posts.ts:229`; see §2.4). Unlike polls, keep `lat`/`lng`
+  and photos.
 - The **upcoming cap** runs inside the same transaction the poll rate limit uses (`posts.ts:243-251`):
-  count `type = 'event' AND status = 'active' AND author_pubkey = ?`; refuse at 5. An enterprise's events count
-  against the enterprise's pubkey, a group's against the convenor who authored them.
+  count `type = 'event' AND status = 'active'` for the same author; refuse at 5. A member's own events count
+  against their pubkey, an enterprise's against the enterprise's pubkey (`author_pubkey`), a group's against
+  the group (`audience_scope = 'group' AND target_group_id = ?`); the three pools are separate.
 - Create the `event_thread` conversation and add the author (or, for an enterprise, the acting keeper from
   `created_by`) as the first participant.
 - No offer-first rule: `CONTRIBUTION_REQUIRED_ERROR` applies to needs only (`posts.ts:239`).
@@ -158,9 +173,11 @@ what keeps a replica consistent.
 
 **Notifications** use `dispatchPushNotification` (`apps/server/src/state-engine.ts:6245`). Recipients are
 `going` RSVPs minus the actor. Payload `{ screen: 'post', postId }`, which the phone already routes to
-`/post/:id` (`apps/native/services/push-notifications.ts:186-188`). Category `'marketplace'`: old apps have
-that Android channel and the `notify_marketplace` preference (`push-notifications.ts:111`,
-`state-engine.ts:6257`); a new category would fall through on every phone not yet updated.
+`/post/:id` (`apps/native/services/push-notifications.ts:186-188`). Category `'marketplace'` in v1: every
+app in the store has that Android channel and the `notify_marketplace` preference
+(`push-notifications.ts:111`, `state-engine.ts:6257`), so no phone needs an update to hear about a
+cancellation. A dedicated Events channel and preference is a later slice, after the release that adds it to
+the client.
 
 **Chat rules** reuse the enterprise-thread functions with an event flavour: post requires an RSVP of
 `going` or host, 2000-char cap and the frozen-member block as at `enterprise-thread.ts:121-140`; read requires
@@ -201,10 +218,11 @@ model, not a leak.
 (`apps/server/src/federation-listings.ts:72-91`): active, public, `reach != 'local'` posts, filtered by
 `reachAdmitsPeer`. The pull carries id, type, category, title, description, credits, price and author, and
 nothing else: no `lat`/`lng`, no photos, no dates. The receiving side refuses anything but `offer` and `need`
-(`federation-listings.ts:153`) and caches a text-only copy (`:185`). So a shared event would arrive at a peer as
-a title with no pin, no time, no RSVP and no chat. Decision 9 keeps the audience/reach choice; the code makes it
-nearly useless until the pull grows `eventStartAt`, `eventEndAt`, `eventPlaceName` and `lat`/`lng`. See §6 Q5.
-RSVPs and the note never cross nodes either way.
+(`federation-listings.ts:153`) and caches a text-only copy (`:185`). A shared event would arrive at a peer as a
+title with no pin, no time, no RSVP and no chat. So v1 forces `reach = 'local'` at create and hides the
+linked-communities option on the event form; the pull is extended later to carry `eventStartAt`,
+`eventEndAt`, `eventPlaceName` and `lat`/`lng` and to accept `type = 'event'`, and only then does the reach
+control appear. RSVPs and the note never cross nodes either way.
 
 ### 2.5 Moderation
 
@@ -250,14 +268,15 @@ gains a fourth row: 📅 **Event** — "A gathering with a time and a place". Of
 map screen; Event opens a new `NewEventModal`, the way Poll opens `NewPollModal`, so the protected files are
 untouched. The PWA's form toggle (`MapPage.tsx:1056`, `'offer' | 'need' | 'poll'`) gains `'event'`.
 
-**Create form**, one column, in this order: title; date and time, two rows "Starts" and "Ends", each a
-button that opens the native picker (`@react-native-community/datetimepicker`, already used in
-`propose-project.tsx`; on Android 8 it is the system dialog, date then time, which works with large fonts
-because it is the OS's own dialog; on the PWA `<input type="datetime-local">`); place name; the pin picker
-with Approximate and the warning, reused from enterprises; description; photo; "Note for people who are
-going" with the helper "Only people who tap Going see this"; audience (the existing control); host selector
-shown only when the member is a keeper or convenor ("Post as: me / Bindarrabi Hall / Repair group"). Copy to a
-new date opens this form pre-filled with the dates cleared.
+**Create form**, one column, in this order: title; date and time, two rows "Starts" and "Ends (optional,
+2 hours after start if blank)", each a button that opens the native picker
+(`@react-native-community/datetimepicker`, already used in `propose-project.tsx`; on Android 8 it is the
+system dialog, date then time, which works with large fonts because it is the OS's own dialog; on the PWA
+`<input type="datetime-local">`); place name; the pin picker with Approximate and the warning, reused from
+enterprises; description; photo; "Note for people who are going" with the helper "Only people who tap Going
+see this"; audience (the existing control, limited to this community or a group; linked communities are
+later); host selector shown only when the member is a keeper or convenor ("Post as: me / Bindarrabi Hall /
+Repair group"). Copy to a new date opens this form pre-filled with the dates cleared.
 
 **Card** in the feed and the map preview, 320dp:
 
@@ -281,9 +300,9 @@ buttons, the private note in a shaded box when the viewer may see it, then "Open
 host, "Who's going" and "Cancel event" / "Copy to a new date".
 
 **Chat entry.** The chat screen is the existing `/chat/:id` (event id), with the private note pinned as a
-non-scrolling card at the top and a one-line footer "Visible to the host and everyone going". After the end:
-"This event has ended. The chat is read-only." The Talk list shows it with the event title because the
-conversation row carries `name`.
+non-scrolling card at the top and a one-line footer "Visible to the host, everyone going, and this node's
+operator". After the end: "This event has ended. The chat is read-only." The Talk list shows it with the
+event title because the conversation row carries `name`.
 
 **Web map** (`MapPage.tsx`, not protected): a purple pin with a calendar glyph via the `L.divIcon` path
 enterprise pins use (`:825`); a chip strip **Today · This weekend · Next 7 days · All** above the map, filtering
@@ -302,15 +321,18 @@ because the opt-in guard keeps old apps blind to events until they choose to see
 
 | # | Slice | Size | Risk | Touches | Test |
 |---|---|---|---|---|---|
-| 1 | **Server: event post + RSVP + guard.** Type, columns, `event_rsvps`, create/edit/cancel/RSVP rules, cap, auto-hide, opt-in `types=` parameter, sync registration. | M | low | `engine/posts.ts`, `packages/beanpool-engine/src/posts.ts`, `db/db.ts`, `schema.sql`, `routes/marketplace.ts`, both `sync.ts`, `state-engine.ts` (hash, clear), `audit.ts` | Unit tests beside the poll tests: create/validate, cap at 5, RSVP upsert/delete, list omits events without `types=`, by-id after end for host and Going only, sync round-trip of `event_rsvps`. |
+| 1 | **Server: event post + RSVP + guard.** Type, columns, `event_rsvps`, create/edit/cancel/RSVP rules, end-time default, forced `reach = 'local'`, cap of 5 per author, auto-hide, opt-in `types=` parameter, sync registration. | M | low | `engine/posts.ts`, `packages/beanpool-engine/src/posts.ts`, `db/db.ts`, `schema.sql`, `routes/marketplace.ts`, both `sync.ts`, `state-engine.ts` (hash, clear), `audit.ts` | Unit tests beside the poll tests: create/validate, end defaults to start + 2 h, reach forced local, cap at 5 with enterprise and group pools separate, RSVP upsert/delete, list omits events without `types=`, by-id after end for host and Going only, sync round-trip of `event_rsvps`. |
 | 2 | **PWA: create, card, detail, RSVP, note, map pin + chips.** | M | low | `MapPage.tsx`, `MarketplacePage.tsx`, new `EventCard.tsx`, `lib/api.ts` | Vitest for the card at 320px; manual: create with Approximate, RSVP flips counts, note hidden until Going, chips filter. |
 | 3 | **Native (no protected files): chooser row, `NewEventModal`, feed tile, detail with RSVP and note.** | M | medium: the feed screen is large | `index.tsx`, new `components/NewEventModal.tsx`, `app/post/[id].tsx`, `utils/db.ts` (send `types=`, cache columns) | Emulator at the floor: form with the Android 8 picker, tile, detail, RSVP. Old build still shows no events against the same node. |
-| 4 | **Event chat, server + both clients.** `event_thread` conversation, membership mirror, read/post/remove rules, read-only after end, pinned note. | M | medium: touches messaging | new `engine/event-thread.ts`, `routes/marketplace.ts`, `messaging.ts` (thread exemptions), `/chat/:id` on both clients | Unit: Going adds, Interested removes, host removal, read-only after end, non-member read refused. Manual: chat appears in Talk with unread. |
-| 5 | **Change and cancel notifications, Copy to a new date.** | S | low | `engine/posts.ts`, `state-engine.ts` (push), both create forms | Unit: time change notifies Going only; cancel sets state and read-only chat. Device: push arrives on the `marketplace` channel. |
+| 4 | **Event chat, server + both clients.** `event_thread` conversation (`plaintext-v1`), membership mirror with RSVP re-check, read/post/remove rules, read-only after end, pinned note, node-readable notice. | M | medium: touches messaging | new `engine/event-thread.ts`, `routes/marketplace.ts`, `messaging.ts` (thread exemptions), `/chat/:id` on both clients | Unit: Going adds, Interested removes, host removal, read-only after end, non-member read refused. Manual: chat appears in Talk with unread. |
+| 5 | **Change and cancel notifications, Copy to a new date.** Host edits everything; time/place → UPDATED + push on the `marketplace` category. | S | low | `engine/posts.ts`, `state-engine.ts` (push), both create forms | Unit: time or place change notifies Going only, other edits silent; cancel sets state and read-only chat. Device: push arrives on the `marketplace` channel. |
 | 6 | **Moderation hook and 30-day scrub.** `adminDeletePost` event branch, scheduler job, replica consistency. | S | low | `engine/posts.ts`, `pulse-resolver.ts` scheduler, `audit.ts` | Unit: scrub deletes RSVPs, messages, note; keeps the row; hash matches on a replica. |
 | 7 | **Native map layer** (separate PR, after Marty opens the protected files). | M | high: protected, PNG pin pipeline | `map.tsx`, `UnifiedMapPin.tsx`, `Map.web.tsx` | Screenshot at the floor, pin variants regenerate, chips do not wrap. |
+| later | **Federation: events in the listings pull.** Pull carries dates, place name and pin, accepts `type = 'event'`; reach control appears on the form. | S | low | `federation-listings.ts`, both event forms | Unit: peer receives an event with its fields; RSVP and note still never cross. |
+| later | **Dedicated Events push channel** and `notify_events` preference, once the client that has it is in the store. | S | low | `push-notifications.ts`, `state-engine.ts`, settings screens | Device: old build still receives on `marketplace`; new build on `events`. |
 
-Order: 1 → 2 and 3 in parallel → 4 → 5 → 6 → store release → node deploy → 7. Full suite last, in CI.
+Order: 1 → 2 and 3 in parallel → 4 → 5 → 6 → store release → node deploy → 7. The two "later" slices are not
+scheduled; each starts only when Marty asks for it. Full suite last, in CI.
 
 ---
 
@@ -319,56 +341,33 @@ Order: 1 → 2 and 3 in parallel → 4 → 5 → 6 → store release → node de
 Paid entry or tickets. Capacity limits and waitlists. Repeat rules or a materialiser (Copy to a new date
 only). Host approval of attendees. A Pulse "happening soon" strip. A host page listing its events. Calendar
 export or OAuth. QR check-in. Cross-node RSVPs. Reminder pushes before the start. Member-to-member invites.
-Federation of the pin, photo and dates (see Q5).
+Sharing to linked communities (reach forced local; the listings pull grows event fields later). A dedicated
+Events push channel (later). Hard deletion of ended events (scrubbed instead).
 
 ---
 
-## 6. Questions for Marty
+## 6. Decided 2026-09-18
 
-Each is something the code forces that the 23 decisions do not settle. Recommendation first, then why.
+The first version of this note asked ten questions the code forced. Marty answered all of them (decisions
+24–32 in the log); each is now part of the body above.
 
-1. **Compatibility guard: opt-in `types=` parameter on the list route?** Recommend yes, as in §2.6.
-   Why: there is no version header today, and the phone pulls the whole feed unfiltered into a local cache
-   (`pillar-sync.ts:274`), so anything else means detecting old clients server-side.
+1. **Old apps:** events are opt-in on the list route via the `types=` parameter; store apps never receive
+   them (§2.6).
+2. **Chat storage:** node-readable `plaintext-v1` like the enterprise thread, with a one-line on-screen
+   notice (§2.1).
+3. **Chat membership:** mirrored into `conversation_participants` as RSVPs change, re-checked on every read
+   and post (§2.2; follows from decisions 20 and 25).
+4. **Push:** the existing `marketplace` category in v1; a dedicated Events channel is a later slice (§2.2).
+5. **Federation:** this community only in v1, `reach` forced `local` like polls; extend the listings pull
+   later (§2.4).
+6. **Upcoming cap:** 5 per author, enforced at create like the poll limit; each enterprise and group is its
+   own author (§2.2).
+7. **Editing after RSVPs:** the host may edit everything; time or place changes mark UPDATED and notify
+   Going, other edits are silent (§2.2).
+8. **30-day removal:** a scrub, not a hard delete; RSVPs, chat and note deleted, the inactive post row kept
+   (§2.2).
+9. **Host rights:** every keeper of the enterprise, every active convenor of the group; the same set
+   `removePost` trusts (§2.2).
+10. **End time:** optional, default start + 2 hours (§2.2, §3).
 
-2. **Event chat stored server-readable (`plaintext-v1`, like the enterprise thread), not end-to-end like
-   DMs?** Recommend server-readable, with one line on the screen saying the node can read it.
-   Why: DM encryption binds ciphertext to a fixed conversation and participants (`messaging.ts:126-133`);
-   membership that follows RSVPs, a host removing messages and a pinned note all need the server to hold text.
-
-3. **Chat membership mirrored into `conversation_participants` as RSVPs change?** Recommend yes, plus an RSVP
-   re-check on every read and post.
-   Why: only participants rows put the chat in the Talk list with unread counts; the re-check is what makes
-   "Interested removes you" true even if the mirror lags.
-
-4. **Push category `marketplace` for event notifications in v1, not a new `events` category?** Recommend
-   `marketplace`.
-   Why: every phone in the store already has that Android channel and preference (`push-notifications.ts:111`);
-   a new category needs a client release before any phone hears it.
-
-5. **Sharing to linked communities: keep the reach choice but force `local` in v1, or extend the listings pull
-   first?** Recommend force `local` for now, like polls (`posts.ts:229`), and grow the pull in a later slice.
-   Why: the pull carries no pin, photo or dates and refuses non-offer/need types
-   (`federation-listings.ts:72-91, 153`); a shared event today would land as a bare title.
-
-6. **Upcoming cap: 5 per author, enterprise and group counted as their own author?** Recommend 5, enforced in
-   the create transaction like the poll limit (`posts.ts:243-251`).
-   Why: the number is yours to set; the mechanism has one precedent and it is that one.
-
-7. **After RSVPs exist, may the host still edit everything?** Recommend yes: time and place changes set
-   UPDATED and notify Going, other edits are silent.
-   Why: polls lock the question after votes (`posts.ts:369-383`); an event that could not move its start time
-   after the first RSVP would be cancelled and re-posted instead, losing the RSVPs.
-
-8. **"Removed after 30 days" as a scrub (RSVPs, chat, note deleted; the post row kept inactive), not a hard
-   delete?** Recommend scrub.
-   Why: no post is ever hard-deleted today and posts carry no tombstones; a hard delete would be the first, and
-   replicas would keep the row anyway.
-
-9. **Who counts as host for an enterprise- or group-hosted event: every keeper / every active convenor, or only
-   the member who posted it?** Recommend every keeper or convenor, matching `removePost` (`posts.ts:299-320`).
-   Why: the poster may be away on the day; the enterprise thread already lets any keeper moderate.
-
-10. **End time required, or optional with a default of start + 2 hours?** Recommend optional with the default.
-    Why: decision 5 names both fields; the picker on Android 8 is two dialogs per field, and most working
-    bees do not know when they will finish. The default keeps auto-hide and read-only chat working.
+Next: Marty reads this note; a build brief for slice 1 follows only after that.

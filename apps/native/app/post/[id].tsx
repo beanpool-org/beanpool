@@ -1749,7 +1749,7 @@ export default function PostDetailModal() {
             {rejectModalTxId && (
                 <View style={StyleSheet.absoluteFill}>
                     <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalOverlay} onPress={() => setRejectModalTxId(null)}>
-                        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={64} style={{ width: '100%' }}>
+                        <KeyboardAvoidingView behavior="padding" style={{ width: '100%' }}>
                             <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
                                 <Text style={styles.modalTitle}>Decline Offer</Text>
                                 <Text style={styles.modalSubtext}>Are you sure you want to decline this offer?</Text>

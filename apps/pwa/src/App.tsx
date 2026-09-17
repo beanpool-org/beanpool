@@ -675,7 +675,8 @@ export function App() {
                     )}
 
                     {showProfileSetup && (
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 70, overflowY: 'auto', background: 'var(--bg-primary)' }}>
+                        // 110: above the mobile header and the bottom nav (both 100), or the last step's Back sits under the nav.
+                        <div data-testid="profile-setup-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 110, overflowY: 'auto', background: 'var(--bg-primary)' }}>
                             <ProfileSetup
                                 identity={identity}
                                 onDone={() => setShowProfileSetup(false)}

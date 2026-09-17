@@ -594,6 +594,32 @@ async function main() {
     const crPropCancelled = db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(crProp.proposal.id) as any;
     assert(crPropCancelled.status === 'cancelled', 'Proposal cancelled when candidate not active operator');
 
+    // 2.7 (PR #838 B2) Deploy backfill: a member with no recorded activity is stamped with the migration's
+    // run time, so a long-standing lead is not instantly eligible for succession on the joined_at fallback.
+    const { publicKey: backfillEnt } = createTreasury('BackfillEnterprise', 'avatarBackfill', 0);
+    const backfillLead = makeIdentity('BackfillLead', 20);
+    const backfillKeeper = makeIdentity('BackfillKeeper', 20);
+    adminAssignTreasuryOperator(backfillEnt, backfillLead.pubKeyHex, 'admin', 0);
+    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(backfillEnt, backfillLead.pubKeyHex);
+    adminAssignTreasuryOperator(backfillEnt, backfillKeeper.pubKeyHex, 'admin', 0);
+    const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare("UPDATE members SET joined_at = ?, last_active_at = NULL WHERE public_key = ?").run(yearAgo, backfillLead.pubKeyHex);
+    db.prepare("DELETE FROM node_config WHERE key = 'migration_backfill_last_active_at_v1'").run();
+    const beforeBackfill = Date.now();
+    initSchema();
+    const backfilled = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillLead.pubKeyHex) as any;
+    assert(!!backfilled.last_active_at, 'B2: NULL last_active_at is backfilled by the migration');
+    assert(!!backfilled.last_active_at && new Date(backfilled.last_active_at).getTime() >= beforeBackfill - 1000,
+        'B2: backfill stamps the migration run time, not joined_at');
+    assert(getLeadInactivity(backfillEnt).isEligible === false, 'B2: long-standing lead is not eligible for succession right after deploy');
+    // Runs once: a later NULL (and a later boot) is left alone.
+    db.prepare("UPDATE members SET last_active_at = NULL WHERE public_key = ?").run(backfillKeeper.pubKeyHex);
+    initSchema();
+    assert((db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillKeeper.pubKeyHex) as any).last_active_at === null,
+        'B2: backfill does not run again on a later boot');
+    assert((db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(backfillLead.pubKeyHex) as any).last_active_at === backfilled.last_active_at,
+        'B2: re-running initSchema leaves the backfilled value untouched');
+
     // =========================================================================
     // HTTP ROUTE LEVEL VERIFICATION
     // =========================================================================
@@ -668,6 +694,37 @@ async function main() {
     assert(succGetRes.body?.proposals?.[0]?.status === 'passed', 'Proposal status is passed');
     assert(succGetRes.body?.proposals?.[0]?.candidateCallsign === 'HTTPApplicant', 'Candidate is HTTPApplicant');
     assert(succGetRes.body?.proposals?.[0]?.votes?.length === 1, 'Proposer vote recorded and visible');
+
+    // 7. (PR #838 B2) Only a VERIFIED signer's request counts as lead activity.
+    const { publicKey: actEnt } = createTreasury('ActivityEnterprise', 'avatarAct', 0);
+    const actLead = makeIdentity('ActLead', 20);
+    const actK1 = makeIdentity('ActK1', 20);
+    const actK2 = makeIdentity('ActK2', 20);
+    adminAssignTreasuryOperator(actEnt, actLead.pubKeyHex, 'admin', 0);
+    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(actEnt, actLead.pubKeyHex);
+    adminAssignTreasuryOperator(actEnt, actK1.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(actEnt, actK2.pubKeyHex, 'admin', 0);
+    db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyFiveDaysAgo, actLead.pubKeyHex);
+    const actProp = proposeLeadSuccession(actEnt, actK1.pubKeyHex, actK1.pubKeyHex);
+    assert(actProp.proposal.status === 'active', 'B2: succession proposal active (1 of 2 votes)');
+
+    const unsignedRes = await fetch(`${BASE}/api/enterprise/${actEnt}/keepers/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publicKey: actLead.pubKeyHex, pledgedBacking: 0 }),
+    });
+    assert(unsignedRes.status === 401, 'B2: unsigned request is rejected');
+    const afterUnsigned = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(actLead.pubKeyHex) as any;
+    assert(afterUnsigned.last_active_at === thirtyFiveDaysAgo, "B2: unsigned request carrying the lead's key does not change last_active_at");
+    assert((db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(actProp.proposal.id) as any).status === 'active',
+        "B2: unsigned request carrying the lead's key does not cancel the proposal");
+
+    // A signed request from the lead. The route's own answer does not matter here — the signer is verified.
+    await signedFetch('POST', `/api/enterprise/${actEnt}/keepers/request`, actLead, { pledgedBacking: 0 });
+    const afterSigned = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(actLead.pubKeyHex) as any;
+    assert(new Date(afterSigned.last_active_at).getTime() > new Date(thirtyFiveDaysAgo).getTime(), 'B2: signed request from the lead records activity');
+    assert((db.prepare("SELECT status FROM enterprise_succession_proposals WHERE id = ?").get(actProp.proposal.id) as any).status === 'cancelled',
+        'B2: signed request from the lead cancels the proposal');
 
     console.log(`\n==============================================`);
     console.log(`🎉 All ${passed}/${run} tests passed successfully!`);

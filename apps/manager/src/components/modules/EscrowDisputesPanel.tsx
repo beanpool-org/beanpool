@@ -5,6 +5,7 @@ import {
     resolveEscrowDisputeApi,
     type EscrowDisputeItem,
 } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
@@ -28,6 +29,7 @@ export function EscrowDisputesPanel({
     const [selectedAction, setSelectedAction] = useState<'release_to_seller' | 'refund_to_buyer' | 'split' | null>(null);
     const [reason, setReason] = useState<string>('');
     const [resolving, setResolving] = useState(false);
+    const autoCloseTimer = useTimeout();
     const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Collapsible chat context map
@@ -120,7 +122,7 @@ export function EscrowDisputesPanel({
             if (onRefresh) onRefresh();
 
             // Auto-close modal after brief delay
-            setTimeout(() => {
+            autoCloseTimer.schedule(() => {
                 handleCloseResolveModal();
             }, 1200);
         } catch (err: any) {

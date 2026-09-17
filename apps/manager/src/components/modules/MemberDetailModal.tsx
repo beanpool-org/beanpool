@@ -4,6 +4,7 @@ import { PruneBranchModal } from './PruneBranchModal';
 import { Avatar } from '../common/Avatar';
 import { RekeyMemberWizard } from './RekeyMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
+import { useTimeout } from '../../lib/use-timeout';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
@@ -84,6 +85,7 @@ export function MemberDetailModal({
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
+    const copiedPubkeyTimer = useTimeout();
     const [revokedVouch, setRevokedVouch] = useState(false);
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
     const [showPruneBranch, setShowPruneBranch] = useState(false);
@@ -121,7 +123,7 @@ export function MemberDetailModal({
         if (!pubkey) return;
         navigator.clipboard?.writeText(pubkey);
         setCopiedPubkey(true);
-        setTimeout(() => setCopiedPubkey(false), 2000);
+        copiedPubkeyTimer.schedule(() => setCopiedPubkey(false), 2000);
     };
 
     const handleGrantRole = async (targetRole: MemberNodeRole) => {

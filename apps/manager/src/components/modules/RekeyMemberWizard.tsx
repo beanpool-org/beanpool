@@ -5,6 +5,7 @@ import {
     fetchRekeyStatusApi,
     type RekeyStatusResponse,
 } from '../../lib/node-client';
+import { useTimeout } from '../../lib/use-timeout';
 
 export interface RekeyMemberWizardProps {
     member: {
@@ -42,6 +43,7 @@ export function RekeyMemberWizard({
     const [issuedCode, setIssuedCode] = useState<string | null>(null);
     const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [copiedCode, setCopiedCode] = useState(false);
+    const copiedCodeTimer = useTimeout();
 
     // New pubkey input
     const [newPubkey, setNewPubkey] = useState('');
@@ -119,7 +121,7 @@ export function RekeyMemberWizard({
         if (!issuedCode) return;
         navigator.clipboard?.writeText(issuedCode);
         setCopiedCode(true);
-        setTimeout(() => setCopiedCode(false), 2000);
+        copiedCodeTimer.schedule(() => setCopiedCode(false), 2000);
     };
 
     return (

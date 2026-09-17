@@ -829,6 +829,32 @@ export async function removeReportedPulseItem(
     return res.json();
 }
 
+/**
+ * Marks an abuse report reviewed on the node, so it leaves the pending queue for every operator
+ * and replica rather than only this browser's view.
+ */
+export async function dismissNodeReport(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('Valid report ID is required to dismiss a report');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/dismiss`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,

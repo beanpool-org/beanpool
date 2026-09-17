@@ -28,6 +28,8 @@ interface ThreatReviewModalProps {
     frozenPubkeys?: string[] | Set<string>;
     onClose: () => void;
     onDismiss?: (threat: ThreatItem) => void;
+    /** Tells the node a member report was reviewed. Awaited before the modal dismisses; a throw keeps it open. */
+    onDismissReport?: (threat: ThreatItem) => Promise<unknown>;
     onFreezePubkeys?: (pubkeys: string[]) => void;
     onInspectMember?: (member: MemberItem) => void;
 }
@@ -39,10 +41,13 @@ export function ThreatReviewModal({
     frozenPubkeys,
     onClose,
     onDismiss,
+    onDismissReport,
     onFreezePubkeys,
     onInspectMember
 }: ThreatReviewModalProps) {
     const [actionState, setActionState] = useState<string | null>(null);
+    const [dismissing, setDismissing] = useState(false);
+    const [dismissError, setDismissError] = useState<string | null>(null);
     const [copiedLog, setCopiedLog] = useState(false);
 
     // ⚡ Bolt: Pre-compute Map for O(1) member lookups by exact key or prefix token
@@ -123,7 +128,20 @@ export function ThreatReviewModal({
 
     const parsedMetrics = parseMetrics();
 
-    const handleAction = (action: string) => {
+    const handleAction = async (action: string) => {
+        // A report lives on the node: dismissing it only here would leave it pending for everyone else.
+        if (action === 'dismiss' && isReport && threat?.id && onDismissReport) {
+            setDismissing(true);
+            setDismissError(null);
+            try {
+                await onDismissReport(threat);
+            } catch (e: any) {
+                setDismissError(e?.message || 'Failed to dismiss the report');
+                return;
+            } finally {
+                setDismissing(false);
+            }
+        }
         setActionState(action);
         if (action === 'freeze' && onFreezePubkeys) {
             onFreezePubkeys(involvedPubkeys);
@@ -272,6 +290,12 @@ export function ThreatReviewModal({
                     </div>
                 )}
 
+                {dismissError && (
+                    <div role="alert" className="p-3 bg-red-950/80 border border-red-800 text-red-300 rounded-xl text-xs">
+                        {dismissError}
+                    </div>
+                )}
+
                 {/* Remediation Action Controls */}
                 <div className="flex items-center justify-between gap-3 border-t border-nature-800/80 pt-4 text-xs">
                     <button
@@ -284,9 +308,10 @@ export function ThreatReviewModal({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => handleAction('dismiss')}
-                            className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold border border-nature-700 transition-all"
+                            disabled={dismissing}
+                            className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-bold border border-nature-700 transition-all disabled:opacity-50"
                         >
-                            Dismiss Flag
+                            {dismissing ? 'Dismissing...' : 'Dismiss Flag'}
                         </button>
                         <button
                             onClick={() => handleAction('freeze')}

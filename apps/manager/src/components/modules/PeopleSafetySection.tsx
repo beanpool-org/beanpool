@@ -7,7 +7,7 @@ import { PostModerationPanel } from './PostModerationPanel';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport } from '../../lib/node-client';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -399,6 +399,9 @@ export function PeopleSafetySection({
                         setSelectedThreat(null);
                         onRefresh();
                     }}
+                    onDismissReport={(threat) =>
+                        dismissNodeReport(activeNode.url, String(threat.id), activeNode.adminPassword, getTfaSessionToken(activeNode.id))
+                    }
                     onFreezePubkeys={async (pks) => {
                         for (const pk of pks) {
                             await onFreezeUser(pk, true);

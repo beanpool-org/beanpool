@@ -4450,8 +4450,42 @@ export function getFriends(pubkey: string): FriendEntry[] {
 
 // ===================== ABUSE REPORTS =====================
 
+/** Reports one member may file in a rolling hour. Each report is a replicated row every operator reads. */
+export const REPORTS_PER_REPORTER_PER_HOUR = 10;
+
+/**
+ * The reporter's still-pending report on exactly this target (member, post and Pulse item alike),
+ * or null. A second report on the same thing adds nothing an operator does not already have.
+ */
+export function findPendingReport(reporterPubkey: string, targetPubkey: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
+    const row = db.prepare(
+        `SELECT id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at
+           FROM abuse_reports
+          WHERE reporter_pubkey = ? AND target_pubkey = ?
+            AND target_post_id IS ? AND target_pulse_item_id IS ?
+            AND (status = 'pending' OR status IS NULL)
+          ORDER BY created_at ASC LIMIT 1`
+    ).get(reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null) as any;
+    if (!row) return null;
+    return {
+        id: row.id, reporterPubkey: row.reporter_pubkey, targetPubkey: row.target_pubkey,
+        targetPostId: row.target_post_id ?? undefined, targetPulseItemId: row.target_pulse_item_id ?? undefined,
+        reason: row.reason, createdAt: row.created_at, status: 'pending',
+    };
+}
+
+/** True once the reporter has filed REPORTS_PER_REPORTER_PER_HOUR reports in the last hour. */
+export function isReportRateLimited(reporterPubkey: string, now: number = Date.now()): boolean {
+    const since = new Date(now - 60 * 60 * 1000).toISOString();
+    const row = db.prepare(`SELECT COUNT(*) AS c FROM abuse_reports WHERE reporter_pubkey = ? AND created_at > ?`)
+        .get(reporterPubkey, since) as { c: number };
+    return row.c >= REPORTS_PER_REPORTER_PER_HOUR;
+}
+
 export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
+    const existing = findPendingReport(reporterPubkey, targetPubkey, targetPostId, targetPulseItemId);
+    if (existing) return existing;
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -4591,7 +4625,9 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
 }
 
 export function dismissReport(reportId: string): boolean {
-    const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed' WHERE id = ?").run(reportId);
+    // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
+    // showing the report as pending.
+    const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
     return res.changes > 0;
 }
 
@@ -4600,7 +4636,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
         
-        db.prepare("UPDATE abuse_reports SET status = 'actioned' WHERE id = ?").run(reportId);
+        db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
         if (deletePost && report.target_post_id) {
             adminDeletePost(report.target_post_id);

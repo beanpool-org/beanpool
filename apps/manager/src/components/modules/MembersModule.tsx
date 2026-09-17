@@ -4,7 +4,7 @@ import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
-import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, type NodeTreasury } from '../../lib/node-client';
+import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, type NodeTreasury } from '../../lib/node-client';
 
 export interface MemberItem {
     publicKey?: string;
@@ -968,6 +968,10 @@ export function MembersModule({
                     frozenPubkeys={frozenPubkeys}
                     onClose={() => setActiveThreat(null)}
                     onDismiss={handleDismissThreat}
+                    onDismissReport={activeNodeUrl ? async (threat) => {
+                        await dismissNodeReport(activeNodeUrl, String(threat.id), adminPassword, tfaToken);
+                        onRefresh();
+                    } : undefined}
                     onFreezePubkeys={handleFreezePubkeys}
                     onInspectMember={(m) => setSelectedMember(m as MemberItem)}
                 />

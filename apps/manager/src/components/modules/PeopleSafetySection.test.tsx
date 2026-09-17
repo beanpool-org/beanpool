@@ -202,6 +202,53 @@ describe('PeopleSafetySection Component', () => {
         vi.unstubAllGlobals();
     });
 
+    it('dismissing a report tells the node, not just this browser', async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const onRefresh = renderModeration([
+            { id: 'rep_member', targetPubkey: mockMembers[1].publicKey, reason: 'Rude in chat', status: 'pending' },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Dismiss Flag' }));
+        });
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(String(url)).toContain('/api/local/admin/reports/rep_member/dismiss');
+        expect(init.method).toBe('POST');
+
+        await act(async () => {
+            vi.advanceTimersByTime(1200);
+        });
+        expect(onRefresh).toHaveBeenCalled();
+        expect(screen.queryByText('USER REPORTED ABUSE')).not.toBeInTheDocument();
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+    });
+
+    it('keeps the report open with the error when the node refuses the dismiss', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'Abuse report not found' }) });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const onRefresh = renderModeration([
+            { id: 'rep_gone', targetPubkey: mockMembers[1].publicKey, reason: 'Rude in chat', status: 'pending' },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Dismiss Flag' }));
+        });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Abuse report not found');
+        expect(screen.getByText('USER REPORTED ABUSE')).toBeInTheDocument();
+        expect(onRefresh).not.toHaveBeenCalled();
+        vi.unstubAllGlobals();
+    });
+
     it('shows a removed Pulse item without a remove button, and no Pulse controls on member reports', async () => {
         renderModeration([
             {

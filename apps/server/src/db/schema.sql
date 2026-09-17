@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS conversation_participants (
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key);
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_updated_at ON conversation_participants(updated_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type);
 
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,

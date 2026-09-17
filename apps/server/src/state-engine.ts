@@ -254,6 +254,14 @@ import {
     repairConsolidatedMessagesMetadata as repairConsolidatedMessagesMetadataEngine
 } from './engine/messaging.js';
 import {
+    ensureEnterpriseThread as ensureEnterpriseThreadEngine,
+    getEnterpriseThreadMessages as getEnterpriseThreadMessagesEngine,
+    postEnterpriseThreadMessage as postEnterpriseThreadMessageEngine,
+    removeEnterpriseThreadMessage as removeEnterpriseThreadMessageEngine,
+    isKeeperOfEnterprise as isKeeperOfEnterpriseEngine,
+    type EnterpriseThreadMessage
+} from './engine/enterprise-thread.js';
+import {
     getNodeRole,
     setNodeRole,
     type NodeRole,
@@ -3531,6 +3539,28 @@ export function repairConsolidatedMessagesMetadata(): void {
     return repairConsolidatedMessagesMetadataEngine();
 }
 
+export function ensureEnterpriseThread(enterprisePubkey: string): Conversation {
+    return ensureEnterpriseThreadEngine(enterprisePubkey);
+}
+
+export function getEnterpriseThreadMessages(enterprisePubkey: string, limit = 50, offset = 0): EnterpriseThreadMessage[] {
+    return getEnterpriseThreadMessagesEngine(enterprisePubkey, limit, offset);
+}
+
+export function postEnterpriseThreadMessage(enterprisePubkey: string, authorPubkey: string, text: string, clientId?: string): EnterpriseThreadMessage {
+    return postEnterpriseThreadMessageEngine(getMessagingCb(), enterprisePubkey, authorPubkey, text, clientId);
+}
+
+export function removeEnterpriseThreadMessage(enterprisePubkey: string, messageId: string, actorPubkey: string): EnterpriseThreadMessage {
+    return removeEnterpriseThreadMessageEngine(getMessagingCb(), enterprisePubkey, messageId, actorPubkey);
+}
+
+export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: string): boolean {
+    return isKeeperOfEnterpriseEngine(actorPubkey, enterprisePubkey);
+}
+
+export type { EnterpriseThreadMessage };
+
 // ===================== STATE SYNC =====================
 
 export type {
@@ -4339,6 +4369,9 @@ export function createTreasury(
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
             db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(opts.leadKeeperPubkey);
         }
+        db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
+                    VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+            .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
     })();
 
     clearEnterpriseFloorCache(pubKeyHex);

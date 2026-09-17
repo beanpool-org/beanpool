@@ -278,6 +278,7 @@ run_federation_suites() {
       test-node-roles
       test-federation-link-binding
       test-ws-pong-watchdog
+      test-ws-http-port
       test-polls
       test-migration-projects-enterprises
       test-commons-reject-project
@@ -376,6 +377,17 @@ run_federation_suites() {
       $SUITE_TIMEOUT pnpm exec tsx src/test-messaging-consolidation.ts
     RC=$?
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-messaging-consolidation(TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-messaging-consolidation"; fi
+    rm -rf "$TMP_DIR"
+
+    # WebSocket upgrades on the plain HTTP port, which is the Cloudflare tunnel origin, again with ws
+    # auth ON. ENFORCE_WS_AUTH is read once at import, and the pass above only proves the flag-off path;
+    # this one proves an unsigned /ws is refused on 8080 exactly as on 8443.
+    echo "━━━ test-ws-http-port (ws auth ON) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_WS_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-http-port.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(wsauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(wsauth)"; fi
     rm -rf "$TMP_DIR"
 
     # The recovery WebSocket suite, which asserts the ws path REFUSES an unauthenticated subscriber.

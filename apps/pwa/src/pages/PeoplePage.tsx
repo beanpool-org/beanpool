@@ -4,7 +4,7 @@
  * Multi-view People tab with search, avatars, and relative dates.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
     getFriends, addFriendApi, removeFriendApi,
     getMembers,
@@ -23,6 +23,10 @@ interface Props {
 }
 
 type SubView = 'friends' | 'community' | 'invites';
+
+const SUB_VIEWS: SubView[] = ['friends', 'community', 'invites'];
+const tabId = (v: SubView) => `people-tab-${v}`;
+const panelId = (v: SubView) => `people-panel-${v}`;
 
 /** Convert a date to a relative "Xd ago" / "Xw ago" string */
 function relativeDate(dateStr: string): string {
@@ -80,6 +84,23 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     const [searchQuery, setSearchQuery] = useState('');
 
     const [blocklistVersion, setBlocklistVersion] = useState(0);
+
+    const tabRefs = useRef<Partial<Record<SubView, HTMLButtonElement | null>>>({});
+
+    // WAI-ARIA tabs pattern: one tab in the Tab order (the selected one); Left/Right move between tabs and
+    // wrap, Home/End jump to the ends. Moving focus also selects, as the tabs only swap an in-page view.
+    const onTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+        const i = SUB_VIEWS.indexOf(view);
+        let next: SubView | null = null;
+        if (e.key === 'ArrowRight') next = SUB_VIEWS[(i + 1) % SUB_VIEWS.length];
+        else if (e.key === 'ArrowLeft') next = SUB_VIEWS[(i - 1 + SUB_VIEWS.length) % SUB_VIEWS.length];
+        else if (e.key === 'Home') next = SUB_VIEWS[0];
+        else if (e.key === 'End') next = SUB_VIEWS[SUB_VIEWS.length - 1];
+        if (!next) return;
+        e.preventDefault();
+        setView(next);
+        tabRefs.current[next]?.focus();
+    };
 
     useEffect(() => { loadFriends(); }, []);
     useEffect(() => { if (view === 'community') loadMembers(); }, [view]);
@@ -159,14 +180,19 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         <div className="p-4 md:p-6 max-w-4xl mx-auto w-full">
             {/* Sub-nav pills */}
             <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label="People navigation">
-                {(['friends', 'community', 'invites'] as SubView[]).map(v => (
+                {SUB_VIEWS.map(v => (
                     <button
                         key={v}
+                        ref={el => { tabRefs.current[v] = el; }}
                         type="button"
                         role="tab"
+                        id={tabId(v)}
                         aria-selected={view === v}
+                        aria-controls={panelId(v)}
+                        tabIndex={view === v ? 0 : -1}
                         onClick={() => setView(v)}
-                        className={`flex-1 py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        onKeyDown={onTabKeyDown}
+                        className={`flex-1 min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'
@@ -179,7 +205,10 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 ))}
             </div>
 
+            {/* Each tab's panel always exists so aria-controls points at something; only the selected one is shown
+                and has content, so Community and Invites still load only when opened. */}
             {/* ===== FRIENDS ===== */}
+            <div role="tabpanel" id={panelId('friends')} aria-labelledby={tabId('friends')} hidden={view !== 'friends'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'friends' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     {visibleFriends.length === 0 ? (
@@ -248,7 +277,10 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 </div>
             )}
 
+            </div>
+
             {/* ===== COMMUNITY ===== */}
+            <div role="tabpanel" id={panelId('community')} aria-labelledby={tabId('community')} hidden={view !== 'community'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'community' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <p className="text-[13px] font-medium text-nature-500 dark:text-nature-400 mb-4 bg-oat-50 dark:bg-nature-900 p-3 rounded-xl border border-nature-200 dark:border-nature-800 shadow-sm">
@@ -320,12 +352,16 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 </div>
             )}
 
+            </div>
+
             {/* ===== INVITES ===== */}
+            <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
                     <InvitePage identity={identity} />
                 </div>
             )}
+            </div>
 
 
         </div>

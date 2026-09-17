@@ -19,9 +19,16 @@ interface Props {
     onOpenTreasury?: (publicKey: string) => void;
     initialSection?: 'decide' | 'enterprises' | 'groups';
     onNavigate?: (tab: string, contextId?: string) => void;
+    /**
+     * Whether the viewer is a member of this node. False for a guest (a local key the node has no member
+     * for), so the viewer's balance is never requested. Null while App is still checking, so the request
+     * waits for the answer. Omitted means a member.
+     */
+    isMember?: boolean | null;
 }
 
-export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
+    const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
     // Avatar URLs that failed to load; those cards show the no-avatar placeholder instead of alt text.
     const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
@@ -76,18 +83,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         try {
             setLoading(true);
             setError(null);
-            const [tresData, decData, commonsData, membersData, balData] = await Promise.all([
+            const [tresData, decData, commonsData, membersData] = await Promise.all([
                 getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
                 getDecisions ? getDecisions().catch(() => ({ decisions: [], activeMembers30d: 0 })) : { decisions: [], activeMembers30d: 0 },
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 getAllMembers ? getAllMembers().catch(() => []) : [],
-                identity?.publicKey && getBalance ? getBalance(identity.publicKey).catch(() => null) : null,
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
             setActiveMembers30d(decData.activeMembers30d || 0);
             setCommonsBalance(commonsData.balance || 0);
-            if (balData) setBalanceInfo(balData);
             if (Array.isArray(membersData)) {
                 setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
             }
@@ -109,10 +114,19 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     useEffect(() => {
         fetchEnterprises();
-        if (identity?.publicKey && getBalance) {
-            getBalance(identity.publicKey).then(setBalanceInfo).catch(() => {});
-        }
     }, [identity?.publicKey]);
+
+    // The viewer's balance (only earnedCredit, for proposing a Decision) is a member's alone. App learns
+    // membership after mount, so this waits for it and a guest never asks the node.
+    useEffect(() => {
+        if (!canLoadBalance || !identity || !getBalance) {
+            if (isMember === false) setBalanceInfo(null);
+            return;
+        }
+        let cancelled = false;
+        getBalance(identity.publicKey).then(b => { if (!cancelled) setBalanceInfo(b); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [identity?.publicKey, canLoadBalance]);
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;

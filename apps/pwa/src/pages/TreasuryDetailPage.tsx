@@ -42,9 +42,11 @@ interface Props {
      * and the viewer's own balance are skipped. Omitted means "a member if signed in".
      */
     isMember?: boolean;
+    /** Opens a member's profile — a keeper row is tapped. */
+    onOpenProfile?: (pubkey: string) => void;
 }
 
-export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember }: Props) {
+export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile }: Props) {
     const viewerIsMember = !!identity && isMember !== false;
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -728,7 +730,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 p-4 flex items-center justify-between gap-2 z-10">
                 <button
                     onClick={onBack}
-                    className="text-nature-600 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1.5"
+                    className="shrink-0 min-h-[48px] text-nature-600 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1.5"
                     aria-label="Go back"
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -736,10 +738,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     </svg>
                     Back
                 </button>
-                <div className="min-w-0 font-extrabold text-nature-900 dark:text-white text-base sm:text-lg truncate max-w-[200px] sm:max-w-md">
+                {/* Up to two lines below sm, so a name like "Community Eggs" reads whole at 320px with 1.3x text; a
+                    longer one ends in an ellipsis on the second line. Back never shrinks, so it stays on the row. */}
+                <div className="flex-1 min-w-0 font-extrabold text-nature-900 dark:text-white text-base sm:text-lg leading-tight line-clamp-2 break-words sm:line-clamp-none sm:truncate sm:flex-none sm:max-w-md">
                     {name}
                 </div>
-                <div className="w-12" />
+                <div className="hidden sm:block w-12 shrink-0" />
             </div>
 
             <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
@@ -1703,10 +1707,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         // Suspended keepers are shown, not hidden: they still count as keepers of this
                                         // enterprise, but cannot act until the suspension is lifted.
                                         const isSuspended = !!k.suspended;
+                                        const keeperKey: string | undefined = k.publicKey || k.pubkey || k.memberPubkey;
+                                        const canOpen = !!keeperKey && !!onOpenProfile;
+                                        // A row opens that keeper's profile, as a row in People does. 48px target.
+                                        const KeeperRow = canOpen ? 'button' : 'div';
                                         return (
-                                            <div
-                                                key={k.publicKey || k.pubkey || k.memberPubkey}
-                                                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 ${isSuspended ? 'opacity-60' : ''}`}
+                                            <KeeperRow
+                                                key={keeperKey}
+                                                {...(canOpen ? { type: 'button' as const, onClick: () => onOpenProfile!(keeperKey!) } : {})}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 min-h-[48px] rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 text-left ${canOpen ? 'cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors' : ''} ${isSuspended ? 'opacity-60' : ''}`}
                                             >
                                                 <span aria-hidden="true">👤</span>
                                                 <span>{k.callsign}</span>
@@ -1729,7 +1738,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         +{k.backing} 🫘
                                                     </span>
                                                 )}
-                                            </div>
+                                            </KeeperRow>
                                         );
                                     })}
                                 </div>
@@ -1748,7 +1757,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         Transparent accounting · visible to every member
                                     </p>
                                 </div>
-                                <div className="inline-flex rounded-xl bg-nature-100 dark:bg-nature-800 p-1 self-start sm:self-auto">
+                                {/* Two by two below sm: at 320px with 1.3x text the four periods in one row ran into the card's
+                                    right padding. */}
+                                <div className="grid grid-cols-2 w-full sm:inline-flex sm:w-auto rounded-xl bg-nature-100 dark:bg-nature-800 p-1 self-start sm:self-auto">
                                     {(['all', '30d', '90d', '365d'] as const).map((period) => (
                                         <button
                                             key={period}

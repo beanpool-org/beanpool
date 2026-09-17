@@ -11,7 +11,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
@@ -293,9 +293,22 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // route serves it, to the same people.
     if (conv.type === 'event_thread') {
         let allowed = false;
+        let gone = false;
         try {
-            allowed = canReadEventThread(loadEventForThread(conversationId), ctx.state.actor as string | undefined);
+            const eventRow = loadEventForThread(conversationId);
+            // The 30-day window is the chat's, not the event-chat route's: past it the event chat route
+            // answers 410 and this one has to agree, or a host or a Going member could keep reading a
+            // chat the scrub is about to take — and, between the window closing and the next scheduler
+            // tick, read it here after being refused there. Checked BEFORE the membership check so the
+            // answer does not depend on who is asking.
+            gone = isEventThreadExpired(eventRow);
+            allowed = !gone && canReadEventThread(eventRow, ctx.state.actor as string | undefined);
         } catch { allowed = false; }
+        if (gone) {
+            ctx.status = 410;
+            ctx.body = { error: EVENT_CHAT_GONE };
+            return;
+        }
         if (!allowed) {
             ctx.status = 403;
             ctx.body = { error: 'Only the host and people going can open this event chat' };

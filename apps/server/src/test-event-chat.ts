@@ -113,6 +113,9 @@ async function main(): Promise<void> {
         clampLimit: (n: any) => Number(n) || 50,
         clampOffset: (n: any) => Number(n) || 0,
         enforceReadAuth: true,
+        // Wide open here: this suite is about who may read and post, not about throttling. The limiter on
+        // the chat/message route has its own coverage in test-event-scrub.ts.
+        rateLimit: () => true,
     } as any;
     const market = createMarketplaceRoutes(deps);
     const messaging = createMessagingRoutes(deps);

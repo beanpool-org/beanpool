@@ -24,7 +24,7 @@ import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH, rateLimit } = deps;
 
     const isTreasury = (pk: string): boolean =>
         !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
@@ -502,6 +502,11 @@ router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
+    // The only route on this router that writes a row per call with no cost, no cap and no cooldown: an
+    // event chat is the host plus everyone Going, so a flood lands in a real inbox and a push-free write
+    // loop is cheap to run. Throttled per IP like every other write-heavy route the node exposes, ahead
+    // of the auth check so an unsigned flood is refused just as fast.
+    if (!rateLimit(ctx)) return;
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;

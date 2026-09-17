@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EconomySection } from './EconomySection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -173,9 +173,15 @@ describe('EconomySection Component', () => {
             fireEvent.click(setLocationBtn);
         });
 
-        // Plain words visibility requirement
-        expect(screen.getByText('Everyone on this node will see this spot on the map.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /approximate \(~100m\)/i })).toBeInTheDocument();
+        // Plain words visibility requirement. Enterprise pins are PUBLIC like post pins (docs/the-commons.md §2.2,
+        // §10, Marty 2026-09-17): the warning must not suggest only node members can see them.
+        const warning = screen.getByText("Anyone who opens this node's map will see this spot.");
+        expect(warning).toBeInTheDocument();
+        expect(screen.queryByText(/everyone on this node/i)).not.toBeInTheDocument();
+        // The Approximate option sits next to that warning, one tap away.
+        const visibilityBox = warning.closest('[data-testid="enterprise-location-visibility"]') as HTMLElement;
+        expect(visibilityBox).not.toBeNull();
+        expect(within(visibilityBox).getByRole('button', { name: /approximate \(~100m\)/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /save location/i })).toBeInTheDocument();
 
         // Reuses Leaflet map container

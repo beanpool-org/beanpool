@@ -199,14 +199,27 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 </button>
             </div>
 
-            {/* Plain-words visibility statement & privacy guidance */}
-            <div className="p-2.5 rounded-lg bg-terra-950/40 border border-terra-800/60 text-xs text-terra-200 space-y-1">
+            {/* Plain-words visibility statement & privacy guidance. Enterprise pins are public, exactly like
+                marketplace post pins (docs/the-commons.md §2.2, §10), so the warning must say so — and the
+                Approximate option stays right beside it. */}
+            <div
+                data-testid="enterprise-location-visibility"
+                className="p-2.5 rounded-lg bg-terra-950/40 border border-terra-800/60 text-xs text-terra-200 space-y-1.5"
+            >
                 <p className="font-semibold text-terra-100 m-0">
-                    Everyone on this node will see this spot on the map.
+                    Anyone who opens this node&apos;s map will see this spot.
                 </p>
                 <p className="text-[11px] text-nature-300 m-0">
-                    The flock, shed, or garden is often at someone’s house. Use the <strong>Approximate</strong> button to round the location to roughly 100&nbsp;m.
+                    The flock, shed, or garden is often at someone’s house. Use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m.
                 </p>
+                <button
+                    type="button"
+                    onClick={handleApproximate}
+                    disabled={lat == null || lng == null}
+                    className="px-2.5 py-1 rounded-md bg-terra-900/40 hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-300 border border-terra-700/60 transition-colors"
+                >
+                    Approximate (~100m)
+                </button>
             </div>
 
             {/* Interactive Leaflet Map container */}
@@ -216,7 +229,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 className="w-full h-48 rounded-lg border border-nature-800 bg-nature-900 overflow-hidden relative shadow-inner z-0"
             />
 
-            {/* Coordinates & Approximate Action */}
+            {/* Coordinates */}
             <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2 font-mono text-[11px] text-nature-300">
@@ -228,14 +241,6 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                             </span>
                         )}
                     </div>
-                    <button
-                        type="button"
-                        onClick={handleApproximate}
-                        disabled={lat == null || lng == null}
-                        className="px-2.5 py-1 rounded-md bg-terra-900/40 hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-xs font-semibold text-terra-300 border border-terra-700/60 transition-colors"
-                    >
-                        Approximate (~100m)
-                    </button>
                 </div>
 
                 {/* Direct coordinate inputs for accessibility / testing */}

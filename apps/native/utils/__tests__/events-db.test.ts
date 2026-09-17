@@ -41,7 +41,7 @@ vi.mock('../crypto', async (orig) => ({
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 
-import { applyDelta, getPosts, getMyPosts, rsvpEvent, fetchEventDetail } from '../db';
+import { applyDelta, getPosts, getMyPosts, getMemberPosts, rsvpEvent, fetchEventDetail } from '../db';
 import { buildSignedHeaders, signData, decodeUtf8, decodeBase64 } from '../crypto';
 
 const fetchMock = vi.fn();
@@ -161,5 +161,29 @@ describe('fetchEventDetail', () => {
     it('returns null for a post that is not an event', async () => {
         fetchMock.mockResolvedValueOnce(reply(200, [{ id: 'o1', type: 'offer' }]));
         expect(await fetchEventDetail('o1')).toBeNull();
+    });
+});
+
+describe("a member's profile listings", () => {
+    // From the slice 3 review: getMemberPosts selected every active post, so once the phone started caching
+    // events the Listings tab rendered them as trade tiles — "EVENT", Need styling, "0" beans next to a bean
+    // icon. The web profile never shows one (it asks the node with no `types=`, and events are opt-in there),
+    // so the phone matches it: no events in Listings. A host page listing its events is not in v1 (§1, §5).
+    it('leaves events out, so an event never renders as a zero-bean listing', async () => {
+        await getMemberPosts('host-pub');
+        const [sql, params] = mockGetAllAsync.mock.calls.at(-1)!;
+        expect(String(sql)).toContain('FROM posts');
+        expect(String(sql)).toContain("COALESCE(type, '') != 'event'");
+        expect(params).toEqual(['host-pub']);
+    });
+
+    it('still returns the offers and needs the tab is for', async () => {
+        mockGetAllAsync.mockResolvedValueOnce([
+            { id: 'o1', type: 'offer', title: 'Spare tomatoes', credits: 5, photos: '["/api/marketplace/posts/o1/photos/0"]' },
+        ]);
+        const rows = await getMemberPosts('host-pub');
+        expect(rows).toHaveLength(1);
+        expect(rows[0].type).toBe('offer');
+        expect(rows[0].photos[0]).toBe('https://test.beanpool.org/api/marketplace/posts/o1/photos/0');
     });
 });

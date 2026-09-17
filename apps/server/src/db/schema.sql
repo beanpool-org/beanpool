@@ -181,6 +181,14 @@ CREATE TABLE IF NOT EXISTS posts (
     target_pubkey TEXT REFERENCES members(public_key),
     assigned_to TEXT REFERENCES members(public_key),
     target_archetypes TEXT, -- dormant: never read or written (archetypes gate nothing)
+    -- Events (docs/events-on-the-map.md §2.1). Times are ISO UTC. The pin is lat/lng above.
+    event_start_at DATETIME,
+    event_end_at DATETIME,
+    event_place_name TEXT,
+    -- Shown only to the host and members marked Going; never in a public listing.
+    event_private_note TEXT,
+    event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled')),
+    event_conversation_id TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_audience_scope ON posts(audience_scope);
@@ -198,6 +206,21 @@ CREATE TABLE IF NOT EXISTS poll_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
+
+-- Event RSVPs (docs/events-on-the-map.md §2.1). "Not going" is a delete, not a third value, and travels
+-- to a replica as an `event_rsvps` tombstone. updated_at rather than created_at because an RSVP changes,
+-- and the sync import is last-write-wins on it.
+CREATE TABLE IF NOT EXISTS event_rsvps (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('going', 'interested')),
+    signature TEXT NOT NULL,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (post_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_event_rsvps_member ON event_rsvps(member_pubkey);
+CREATE INDEX IF NOT EXISTS idx_event_rsvps_updated_at ON event_rsvps(updated_at);
+CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would

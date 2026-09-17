@@ -282,6 +282,7 @@ run_federation_suites() {
       test-ws-pong-watchdog
       test-ws-http-port
       test-polls
+      test-events
       test-migration-projects-enterprises
       test-commons-reject-project
       test-commons-projects-update-delete

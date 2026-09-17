@@ -20,6 +20,7 @@ export interface AuditSyncPayload {
     messages?: any[];
     creatorChannels?: any[];
     pulseItems?: any[];
+    eventRsvps?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -175,6 +176,7 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // failure showed a matching hash and ok:true, and only surfaced at failover.
         ['creator_channels', payload.creatorChannels?.length ?? 0],
         ['pulse_items', payload.pulseItems?.length ?? 0],
+        ['event_rsvps', payload.eventRsvps?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

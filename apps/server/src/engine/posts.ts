@@ -13,8 +13,11 @@ import {
     validatePostPhotos,
     generateSearchKeywords,
     hasListedOffer,
+    isEventHost,
+    publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
-    type MarketplacePost
+    type MarketplacePost,
+    type EventRsvpStatus
 } from '@beanpool/engine';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
@@ -84,6 +87,59 @@ function existingReachPeers(id: string): string[] {
     return parseReachPeers(row?.reach_peers);
 }
 
+// ===================== EVENTS (docs/events-on-the-map.md) =====================
+
+export const EVENT_DEFAULT_DURATION_MS = 2 * 60 * 60 * 1000;
+export const EVENT_PLACE_NAME_MAX = 80;
+export const EVENT_PRIVATE_NOTE_MAX = 1000;
+export const EVENT_UPCOMING_CAP = 5;
+
+function parseEventTime(raw: unknown, label: string): string {
+    const ms = typeof raw === 'string' || typeof raw === 'number' ? new Date(raw).getTime() : NaN;
+    if (!Number.isFinite(ms)) throw new Error(`${label} must be a valid date and time`);
+    return new Date(ms).toISOString();
+}
+
+function cleanPlaceName(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (typeof raw !== 'string') throw new Error('Place name must be text');
+    const v = raw.trim();
+    if (v.length > EVENT_PLACE_NAME_MAX) throw new Error(`Place name must be ${EVENT_PLACE_NAME_MAX} characters or fewer`);
+    return v || null;
+}
+
+function cleanPrivateNote(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (typeof raw !== 'string') throw new Error('The note for people going must be text');
+    const v = raw.trim();
+    if (v.length > EVENT_PRIVATE_NOTE_MAX) throw new Error(`The note for people going must be ${EVENT_PRIVATE_NOTE_MAX} characters or fewer`);
+    return v || null;
+}
+
+function assertEventPin(lat: unknown, lng: unknown): void {
+    if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error('An event needs a place on the map');
+    }
+}
+
+/** The end an event gets: the given one (after the start), or start + 2 hours when none is given. */
+function resolveEventEnd(startIso: string, rawEnd: unknown): string {
+    if (rawEnd == null || rawEnd === '') {
+        return new Date(Date.parse(startIso) + EVENT_DEFAULT_DURATION_MS).toISOString();
+    }
+    const endIso = parseEventTime(rawEnd, 'End time');
+    if (Date.parse(endIso) <= Date.parse(startIso)) throw new Error('An event must end after it starts');
+    return endIso;
+}
+
+function audienceRecipients(row: { audience_scope?: string | null; target_group_id?: string | null }): string[] | undefined {
+    if (row.audience_scope === 'group' && row.target_group_id) {
+        const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(row.target_group_id) as any[];
+        return rows.map(r => r.member_pubkey);
+    }
+    return undefined;
+}
+
 function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReach; reachPeers: string | null } {
     if (rawReach === 'everywhere') return { reach: 'everywhere', reachPeers: null };
     if (rawReach === 'peers') {
@@ -98,7 +154,7 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
 
 export function createPost(
     broadcast: BroadcastFn,
-    type: 'offer' | 'need' | 'poll',
+    type: 'offer' | 'need' | 'poll' | 'event',
     category: string,
     title: string,
     description: string,
@@ -121,6 +177,10 @@ export function createPost(
         targetGroupId?: string;
         targetPubkey?: string;
         assignedTo?: string;
+        eventStartAt?: unknown;
+        eventEndAt?: unknown;
+        eventPlaceName?: unknown;
+        eventPrivateNote?: unknown;
     },
 ): MarketplacePost | null {
     assertMemberActive(authorPublicKey);
@@ -138,6 +198,10 @@ export function createPost(
 
     if (audienceScope !== 'public') {
         options = { ...options, reach: 'local', reachPeers: null };
+    }
+    // Events are for this community or one of its groups (§1). A direct event has no meaning.
+    if (type === 'event' && audienceScope === 'direct') {
+        throw new Error('An event is for this community or a group');
     }
 
     if (audienceScope === 'group') {
@@ -174,6 +238,10 @@ export function createPost(
 
     let cleanPollOptions: Array<{ id: string; text: string }> | null = null;
     let pollClosesAt: string | null = null;
+    let eventStartAt: string | null = null;
+    let eventEndAt: string | null = null;
+    let eventPlaceName: string | null = null;
+    let eventPrivateNote: string | null = null;
 
     if (type === 'poll') {
         const memberRow = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(authorPublicKey) as any;
@@ -223,6 +291,23 @@ export function createPost(
         photos = [];
         cashAlsoNeeded = false;
         options = { ...options, reach: 'local', reachPeers: null };
+    } else if (type === 'event') {
+        eventStartAt = parseEventTime(options?.eventStartAt, 'Start time');
+        if (Date.parse(eventStartAt) <= Date.now()) throw new Error('An event must start in the future');
+        eventEndAt = resolveEventEnd(eventStartAt, options?.eventEndAt);
+        assertEventPin(lat, lng);
+        eventPlaceName = cleanPlaceName(options?.eventPlaceName);
+        eventPrivateNote = cleanPrivateNote(options?.eventPrivateNote);
+        validatePostPhotos(photos);
+
+        // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
+        // carries event fields (§2.4).
+        category = 'community';
+        credits = 0;
+        priceType = 'fixed';
+        repeatable = false;
+        cashAlsoNeeded = false;
+        options = { ...options, reach: 'local', reachPeers: null };
     } else {
         validatePostPhotos(photos);
     }
@@ -247,9 +332,25 @@ export function createPost(
             }
         }
 
+        if (type === 'event') {
+            // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and
+            // everything else against the author — a member, or the enterprise a keeper posts for.
+            // "Upcoming" is active and not yet ended; an ended event stays active until the 30-day scrub
+            // and must not hold a slot for that month.
+            const upcoming = audienceScope === 'group'
+                ? db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
+                              AND audience_scope = 'group' AND target_group_id = ?`).get(createdAt, options!.targetGroupId) as any
+                : db.prepare(`SELECT COUNT(*) as c FROM posts WHERE type = 'event' AND status = 'active' AND event_end_at > ?
+                              AND author_pubkey = ? AND (audience_scope IS NULL OR audience_scope != 'group')`).get(createdAt, authorPublicKey) as any;
+            if (upcoming && upcoming.c >= EVENT_UPCOMING_CAP) {
+                throw new Error(`Limit reached: ${EVENT_UPCOMING_CAP} upcoming events at a time`);
+            }
+        }
+
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to,
+            event_start_at, event_end_at, event_place_name, event_private_note, event_state
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -258,7 +359,9 @@ export function createPost(
             audienceScope,
             audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
-            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null
+            audienceScope === 'direct' ? (options?.assignedTo ?? null) : null,
+            eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote,
+            type === 'event' ? 'scheduled' : null
         );
 
         if (photos && photos.length > 0) {
@@ -280,7 +383,7 @@ export function createPost(
         recipients = Array.from(new Set([authorPublicKey, options?.targetPubkey, options?.assignedTo].filter(Boolean) as string[]));
     }
 
-    broadcast({ type: 'new_post', post }, recipients);
+    broadcast({ type: 'new_post', post: publicBroadcastPost(post) }, recipients);
 
     // Activity feed isolation (docs/the-commons.md §9, Item 10)
     // Only public posts are recorded to the public activity feed
@@ -338,6 +441,8 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
+        // Removing an event is cancelling it: the card shows CANCELLED to anyone who can still open it.
+        db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
         db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
     })();
@@ -357,8 +462,24 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
 }
 
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
+    const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
+    if (eventRow?.type === 'event') {
+        // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
+        if (!isEventHost(db, eventRow, authorPublicKey)) return null;
+        if (eventRow.event_state === 'cancelled' || eventRow.status === 'cancelled' || !eventRow.active) {
+            throw new Error('Cannot edit a cancelled event');
+        }
+        if (eventRow.event_end_at && Date.parse(eventRow.event_end_at) <= Date.now()) {
+            throw new Error('Cannot edit an event that has ended');
+        }
+    }
     const existingPost = getPosts(db, { id, includeAllScopes: true })[0] ?? null;
-    if (!existingPost || existingPost.authorPublicKey !== authorPublicKey) return null;
+    if (!existingPost) return null;
+    if (existingPost.type === 'event') {
+        authorPublicKey = existingPost.authorPublicKey;
+    } else if (existingPost.authorPublicKey !== authorPublicKey) {
+        return null;
+    }
 
     if (existingPost.audienceScope !== 'public') {
         delete updates.reach;
@@ -390,6 +511,61 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         delete updates.cashAlsoNeeded;
         delete updates.reach;
         delete (updates as any).reachPeers;
+    }
+
+    // Events: the host may edit everything, RSVPs or not. A change of time or place marks the event
+    // UPDATED; title, description, photo and note changes are silent (§2.2).
+    const eventFields: string[] = [];
+    const eventValues: any[] = [];
+    if (existingPost.type === 'event') {
+        delete updates.credits;
+        delete updates.category;
+        delete updates.priceType;
+        delete updates.repeatable;
+        delete updates.cashAlsoNeeded;
+        delete updates.reach;
+        delete (updates as any).reachPeers;
+        delete (updates as any).pollOptions;
+
+        const raw = updates as any;
+        const prevStart = existingPost.eventStartAt!;
+        const prevEnd = existingPost.eventEndAt!;
+        let nextStart = prevStart;
+        if (raw.eventStartAt !== undefined) {
+            nextStart = parseEventTime(raw.eventStartAt, 'Start time');
+            if (nextStart !== prevStart && Date.parse(nextStart) <= Date.now()) {
+                throw new Error('An event must start in the future');
+            }
+        }
+        let nextEnd: string;
+        if (raw.eventEndAt === undefined) {
+            // Moving the start without naming an end keeps the event's length.
+            nextEnd = nextStart === prevStart
+                ? prevEnd
+                : new Date(Date.parse(nextStart) + (Date.parse(prevEnd) - Date.parse(prevStart))).toISOString();
+        } else {
+            nextEnd = resolveEventEnd(nextStart, raw.eventEndAt);
+        }
+        if (Date.parse(nextEnd) <= Date.parse(nextStart)) throw new Error('An event must end after it starts');
+
+        const nextLat = updates.lat !== undefined ? updates.lat : existingPost.lat;
+        const nextLng = updates.lng !== undefined ? updates.lng : existingPost.lng;
+        assertEventPin(nextLat, nextLng);
+
+        let placeChanged = nextLat !== existingPost.lat || nextLng !== existingPost.lng;
+        if (raw.eventPlaceName !== undefined) {
+            const nextPlace = cleanPlaceName(raw.eventPlaceName);
+            if (nextPlace !== (existingPost.eventPlaceName ?? null)) placeChanged = true;
+            eventFields.push('event_place_name = ?'); eventValues.push(nextPlace);
+        }
+        if (raw.eventPrivateNote !== undefined) {
+            eventFields.push('event_private_note = ?'); eventValues.push(cleanPrivateNote(raw.eventPrivateNote));
+        }
+        const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
+        eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
+        if (timeChanged || placeChanged) {
+            eventFields.push("event_state = 'updated'");
+        }
     }
 
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
@@ -457,6 +633,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         fields.push('reach_peers = ?'); values.push(norm.reachPeers);
     }
 
+    fields.push(...eventFields);
+    values.push(...eventValues);
+
     const now = new Date().toISOString();
     fields.push('updated_at = ?');
     values.push(now);
@@ -492,9 +671,105 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         } else if (updated.audienceScope === 'direct') {
             recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
         }
-        broadcast({ type: 'post_updated', post: updated }, recipients);
+        broadcast({ type: 'post_updated', post: publicBroadcastPost(updated) }, recipients);
     }
     return updated;
+}
+
+/**
+ * RSVP to an event: `going`, `interested`, or null for "not going", which deletes the row (§2.2).
+ * One tap, no host approval. Modelled on votePoll.
+ */
+export function rsvpEvent(
+    broadcast: BroadcastFn,
+    postId: string,
+    memberPublicKey: string,
+    status: EventRsvpStatus | null,
+    signature?: string,
+): { success: boolean; post: MarketplacePost } {
+    if (status !== null && status !== 'going' && status !== 'interested') {
+        throw new Error("RSVP status must be 'going', 'interested' or null");
+    }
+    assertMemberActive(memberPublicKey);
+    const memberRow = db.prepare("SELECT status FROM members WHERE public_key = ?").get(memberPublicKey) as any;
+    if (!memberRow || memberRow.status !== 'active') {
+        throw new Error('Only active members can RSVP to events');
+    }
+
+    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(postId) as any;
+    if (!row || row.type !== 'event') {
+        throw new Error('Event not found');
+    }
+    if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
+        throw new Error('This event has been cancelled');
+    }
+    const nowIso = new Date().toISOString();
+    if (row.event_end_at && row.event_end_at <= nowIso) {
+        throw new Error('This event has ended');
+    }
+    if (row.audience_scope === 'group') {
+        const isMem = row.target_group_id && db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active' AND role IN ('convenor', 'member')"
+        ).get(row.target_group_id, memberPublicKey);
+        if (!isMem && row.author_pubkey !== memberPublicKey) {
+            throw new Error('UNAUTHORIZED: Must be an active convenor or member of the group to RSVP to this event');
+        }
+    }
+
+    if (signature) {
+        try {
+            const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
+            const spki = Buffer.concat([spkiHeader, Buffer.from(memberPublicKey, 'hex')]);
+            const publicKeyObject = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+            const valid = crypto.verify(undefined, Buffer.from(`${postId}:${status ?? 'none'}`), publicKeyObject, Buffer.from(signature, 'base64'));
+            if (!valid) throw new Error('Invalid cryptographic signature for RSVP');
+        } catch (err: any) {
+            if (err.message === 'Invalid cryptographic signature for RSVP') throw err;
+            throw new Error('Invalid RSVP signature format');
+        }
+    }
+
+    db.transaction(() => {
+        // Atomically re-check the event is still open and bump updated_at so delta sync carries the change.
+        const res = db.prepare(
+            "UPDATE posts SET updated_at = ? WHERE id = ? AND active = 1 AND status = 'active' AND COALESCE(event_state, '') != 'cancelled' AND event_end_at > ?"
+        ).run(nowIso, postId, nowIso);
+        if (res.changes === 0) {
+            throw new Error('This event is no longer open');
+        }
+        // RSVP writes and their tombstones must be strictly ordered in time, or a replica cannot tell
+        // "not going, then going again" from "going, then not going" when both land in one millisecond.
+        const rowKey = `${postId}|${memberPublicKey}`;
+        const prev = db.prepare(`
+            SELECT MAX(ts) AS ts FROM (
+                SELECT updated_at AS ts FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?
+                UNION ALL
+                SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?
+            )`).get(postId, memberPublicKey, rowKey) as { ts: string | null } | undefined;
+        const writeAt = prev?.ts && prev.ts >= nowIso
+            ? new Date(Date.parse(prev.ts) + 1).toISOString()
+            : nowIso;
+        if (status === null) {
+            const del = db.prepare("DELETE FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?").run(postId, memberPublicKey);
+            if (del.changes > 0) {
+                db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('event_rsvps', ?, ?)`).run(rowKey, writeAt);
+            }
+        } else {
+            db.prepare(`
+                INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(post_id, member_pubkey) DO UPDATE SET
+                    status = excluded.status,
+                    signature = excluded.signature,
+                    updated_at = excluded.updated_at
+            `).run(postId, memberPublicKey, status, signature || '', writeAt);
+        }
+    })();
+
+    bumpPostsVersion();
+    const updatedPost = getPosts(db, { id: postId, viewerPubkey: memberPublicKey, includeAllScopes: true })[0]!;
+    broadcast({ type: 'post_updated', post: publicBroadcastPost(updatedPost) }, audienceRecipients(row));
+    return { success: true, post: updatedPost };
 }
 
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {

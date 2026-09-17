@@ -13,7 +13,7 @@ import {
     requestPost, approvePostRequest, rejectPostRequest, cancelPostRequest,
     getMember, getBalance, getPostsVersion,
     canOperateTreasury,
-    closePoll, votePoll,
+    closePoll, votePoll, rsvpEvent,
 } from '../state-engine.js';
 import { db } from '../db/db.js';
 import { getPeerOrigins } from '../connector-manager.js';
@@ -147,8 +147,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
         }
     }
 
+    // Events are OPT-IN on this route (docs/events-on-the-map.md §2.6). Every app already in the store pulls
+    // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
+    // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
+    // fetch is not guarded — only a screen that knows events can hold an event's id.
+    const types = typeof ctx.query.types === 'string'
+        ? ctx.query.types.split(',').map(t => t.trim()).filter(Boolean)
+        : undefined;
+    const wantsEvents = type === 'event' || !!types?.includes('event');
+    const excludeEvents = !id && !wantsEvents;
+
     // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't.
-    const posts = getPosts({ id, type, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo });
+    const posts = getPosts({ id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey, sync, beansOnly, audienceScope, targetGroupId, assignedTo });
     const bodyStr = JSON.stringify(posts);
 
     ctx.status = 200;
@@ -157,7 +167,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
 });
 
 router.post('/api/marketplace/posts', async (ctx) => {
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
+        eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -178,7 +189,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo }
+            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo,
+              eventStartAt, eventEndAt, eventPlaceName, eventPrivateNote }
         );
         if (!post) {
             ctx.status = 400;
@@ -399,6 +411,38 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message || 'Failed to close poll' };
+    }
+});
+
+// ===================== EVENTS API =====================
+
+// RSVP: body `{ status: 'going' | 'interested' | null }`; null is "not going". The member is always the
+// signed actor — nobody RSVPs for someone else. Cancelling an event is the existing remove route.
+router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
+    try {
+        const { id } = ctx.params;
+        const body = (ctx as any).requestBody || {};
+        const actor = ctx.state?.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'Authentication required' };
+            return;
+        }
+        if ((body.memberPublicKey && body.memberPublicKey !== actor) || (body.memberPubkey && body.memberPubkey !== actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Cannot RSVP on behalf of another member' };
+            return;
+        }
+        const status = body.status ?? null;
+        if (status !== null && status !== 'going' && status !== 'interested') {
+            ctx.status = 400;
+            ctx.body = { error: "status must be 'going', 'interested' or null" };
+            return;
+        }
+        ctx.body = rsvpEvent(id, actor, status, body.signature);
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message || 'Failed to record RSVP' };
     }
 });
 

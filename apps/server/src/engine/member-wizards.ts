@@ -304,6 +304,7 @@ export function completeRekey(
 
         // (g) poll_votes
         db.prepare('UPDATE poll_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE event_rsvps SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
 
         // (h) conversations & participants
         db.prepare('UPDATE conversations SET created_by = ? WHERE created_by = ?').run(cleanNew, cleanOld);

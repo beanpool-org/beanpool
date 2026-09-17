@@ -130,7 +130,13 @@ describe('Posts ignore archetypes', () => {
                 target_group_id TEXT,
                 target_pubkey TEXT,
                 assigned_to TEXT,
-                target_archetypes TEXT
+                target_archetypes TEXT,
+                event_start_at DATETIME,
+                event_end_at DATETIME,
+                event_place_name TEXT,
+                event_private_note TEXT,
+                event_state TEXT,
+                event_conversation_id TEXT
             );
             INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');
             INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, target_archetypes)

@@ -173,6 +173,7 @@ export function GroupDetailModal({
             onClick={onClose}
             role="dialog"
             aria-modal="true"
+            aria-labelledby="group-detail-title"
         >
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <div
@@ -182,14 +183,15 @@ export function GroupDetailModal({
                 {/* Header */}
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
                     <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xl">👥</span>
-                        <h2 className="text-lg font-black text-nature-950 dark:text-white truncate">
+                        <span className="text-xl" aria-hidden="true">👥</span>
+                        <h2 id="group-detail-title" className="text-lg font-black text-nature-950 dark:text-white truncate">
                             {groupData.name}
                         </h2>
                     </div>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors"
+                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         aria-label="Close"
                     >
                         ✕
@@ -200,21 +202,21 @@ export function GroupDetailModal({
                     {/* Tags */}
                     <div className="flex flex-wrap gap-2">
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            🏷️ {groupData.category.replace(/_/g, ' ')}
+                            <span aria-hidden="true">🏷️ </span>{groupData.category.replace(/_/g, ' ')}
                         </span>
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
-                            🚪 {groupData.joinPolicy.replace(/_/g, ' ')}
+                            <span aria-hidden="true">🚪 </span>{groupData.joinPolicy.replace(/_/g, ' ')}
                         </span>
                         {isConvenor && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                                🛡️ Convenor
+                                <span aria-hidden="true">🛡️ </span>Convenor
                             </span>
                         )}
                     </div>
 
                     {/* Framing statement */}
                     <div className="p-3 bg-nature-200/60 dark:bg-nature-900/60 border border-nature-300 dark:border-nature-800 rounded-xl text-xs text-nature-700 dark:text-nature-300 leading-relaxed">
-                        ℹ️ <strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust.
+                        <span aria-hidden="true">ℹ️ </span><strong>A group is a place to talk to some people rather than everyone.</strong> It does not hold beans and does not confer trust.
                     </div>
 
                     {error && (
@@ -233,7 +235,7 @@ export function GroupDetailModal({
                     {isConvenor && (
                         <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl space-y-3">
                             <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
-                                🛡️ Convenor Tools
+                                <span aria-hidden="true">🛡️ </span>Convenor Tools
                             </h3>
 
                             {/* Set Join Policy */}
@@ -380,21 +382,23 @@ export function GroupDetailModal({
                     <div className="pt-2 space-y-2">
                         {isMember && onPostToGroup && (
                             <button
+                                type="button"
                                 onClick={() => {
                                     onClose();
                                     onPostToGroup(groupData);
                                 }}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
-                                ✏️ Post to {groupData.name}
+                                <span aria-hidden="true">✏️ </span>Post to {groupData.name}
                             </button>
                         )}
 
                         {isMember ? (
                             <button
+                                type="button"
                                 onClick={handleLeave}
                                 disabled={actionLoading}
-                                className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                                className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                             >
                                 Leave Group
                             </button>
@@ -408,9 +412,10 @@ export function GroupDetailModal({
                             </div>
                         ) : (
                             <button
+                                type="button"
                                 onClick={handleJoin}
                                 disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                             </button>

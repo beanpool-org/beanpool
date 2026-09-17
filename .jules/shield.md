@@ -33,6 +33,13 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 - Sensitive storage should use `expo-secure-store`, NOT `AsyncStorage`
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-18 — `usesCleartextTraffic=false` in the Android manifest (#872). Closed.
+BeanPool nodes are self-hosted and are often reached on a LAN or by bare IP over http: `normalizeNodeUrl`
+(apps/native/utils/node-url.ts) deliberately returns `http://` for IPv4 and localhost, and the settings field's
+placeholder is `e.g. http://192.168.1.55`. The protection already exists a layer up — `shouldBlockCleartextNodeUrl`
+(#778) blocks plaintext to public hosts while LAN sync keeps working. Flipping the manifest flag breaks every LAN and
+direct-IP node in release builds. Any future cleartext finding must first say what happens to a member whose node is
+`http://192.168.x.x`.
 ### 2026-08-25 — Hardcoded `GOOGLE_MAPS_API_KEY` in `apps/native/eas.json`. Closed five times.
 #310, #360, #370, #395, #407 — all closed. The key is **restricted on Google Cloud Console**, so
 removing it from `eas.json` is not required and is already in git history regardless. Do not re-file.

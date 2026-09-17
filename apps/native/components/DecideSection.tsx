@@ -180,13 +180,18 @@ export function DecideSection({
             borderWidth: 1,
             borderColor: colors.border.default,
         },
+        // Wraps: at 320dp + 1.3x text the title fills the row and "No bond required" ran off the right edge.
         proposeHeaderRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             alignItems: 'center',
             justifyContent: 'space-between',
+            columnGap: 8,
+            rowGap: 4,
             marginBottom: 8,
         },
         proposeTitle: {
+            flexShrink: 1,
             fontSize: 16,
             fontWeight: '800',
             color: colors.text.heading,
@@ -546,14 +551,14 @@ export function DecideSection({
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
                 <>
-                    {/* Propose Decision Banner (Gated by earnedCredit > 0 & 1 open per author, No Bond) */}
+                    {/* Propose Decision Banner (open to anyone who has completed a trade; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
                             <Text style={styles.proposeTitle}>🌱 Propose Community Action</Text>
                             <Text style={{ fontSize: 12, color: colors.text.muted }}>No bond required</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            Binding decisions execute automatically upon passing (§3.7). Proposing is gated by your earned trading standing.
+                            Binding decisions execute automatically upon passing (§3.7). Open to anyone who has completed a trade.
                         </Text>
                         <Pressable
                             accessibilityRole="button"
@@ -561,7 +566,7 @@ export function DecideSection({
                             style={[styles.proposeBtn, (!canPropose || hasOpenDecision) && styles.proposeBtnDisabled]}
                             onPress={() => {
                                 if (!canPropose) {
-                                    Alert.alert('Standing Required', 'Proposing a Decision requires earned trade standing (earnedCredit > 0).');
+                                    Alert.alert('Complete a Trade First', 'You can propose a Decision once you have completed a trade.');
                                     return;
                                 }
                                 if (hasOpenDecision) {
@@ -577,7 +582,7 @@ export function DecideSection({
                         </Pressable>
                         {!canPropose && (
                             <Text style={styles.gateWarning}>
-                                ⚠️ Requires earned trade standing (earnedCredit &gt; 0). Complete a trade to unlock.
+                                ⚠️ You can propose once you have completed a trade.
                             </Text>
                         )}
                         {canPropose && hasOpenDecision && (

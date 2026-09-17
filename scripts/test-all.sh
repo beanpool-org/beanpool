@@ -177,6 +177,7 @@ run_federation_suites() {
       test-pulse-admin-channels
       test-pulse-report-takedown
       test-pulse-thumbnail
+      test-pulse-cache-eviction
       test-callsign-predicates
       test-recovery-shares
       test-sso
@@ -207,6 +208,7 @@ run_federation_suites() {
       test-totp-admin-2fa
       test-totp-helpers
       test-moderation-admin
+      test-report-dedup-and-sync
       test-ledger-export
       test-ledger-audit-startup
       test-mirror-sync-audit-log

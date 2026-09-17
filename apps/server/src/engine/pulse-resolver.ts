@@ -1865,9 +1865,28 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
 // ============================================================================
 
 /**
+ * Takes a tombstoned item's cached thumbnail bytes off the node. Registered by pulse-thumbnail.ts
+ * (which imports this module, so it cannot be imported back); a no-op until then, which only means
+ * no cache has been built in this process.
+ */
+let evictPulseItemCache: (itemId: string) => void = () => {};
+export function setPulseItemCacheEvictor(evict: (itemId: string) => void): void {
+    evictPulseItemCache = evict;
+}
+
+function evictScrubbed(rows: { id: string }[]): void {
+    for (const { id } of rows) {
+        try { evictPulseItemCache(id); } catch { }
+    }
+}
+
+/**
  * Single tombstone scrubbing helper conforming to Contract A:
  * Non-negotiable rule 1: Deleting an item sets deleted_at and NULLs url, title, and thumbnail_url
  * in the SAME statement so the deletion replicates without carrying the content.
+ * The cached thumbnail goes too, so every path that deletes an item — owner delete, operator
+ * takedown, channel delete, account purge, inactivity prune — removes the image from disk at once
+ * rather than on its next request.
  */
 export function scrubPulseItems(
     target: { channelId?: string; ownerPubkey?: string; id?: string },
@@ -1892,8 +1911,9 @@ export function scrubPulseItems(
         params.push(target.ownerPubkey);
     }
 
-    const info = db.prepare(query).run(...params);
-    return info.changes;
+    const scrubbed = db.prepare(query + ' RETURNING id').all(...params) as { id: string }[];
+    evictScrubbed(scrubbed);
+    return scrubbed.length;
 }
 
 export const PULSE_KEEP_PER_CHANNEL = 20;
@@ -1908,7 +1928,7 @@ export const PULSE_KEEP_PER_CHANNEL = 20;
 export function prunePulseItems(keepPerChannel = PULSE_KEEP_PER_CHANNEL): number {
     const now = new Date().toISOString();
 
-    const info = db.prepare(
+    const pruned = db.prepare(
         `UPDATE pulse_items
             SET deleted_at = ?, url = NULL, title = NULL, thumbnail_url = NULL, updated_at = ?
           WHERE deleted_at IS NULL AND curated = 0 AND id NOT IN (
@@ -1917,10 +1937,12 @@ export function prunePulseItems(keepPerChannel = PULSE_KEEP_PER_CHANNEL): number
                  AND p2.curated = 0
                ORDER BY p2.published_at DESC, p2.id DESC
                LIMIT ?
-          )`
-    ).run(now, now, keepPerChannel);
+          )
+          RETURNING id`
+    ).all(now, now, keepPerChannel) as { id: string }[];
 
-    return info.changes;
+    evictScrubbed(pruned);
+    return pruned.length;
 }
 
 // ============================================================================

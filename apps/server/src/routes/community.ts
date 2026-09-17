@@ -17,7 +17,7 @@ import {
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, findPendingReport, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1340,6 +1340,18 @@ router.post('/api/reports', async (ctx) => {
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
+        return;
+    }
+    // Repeating a still-pending report succeeds without a new row, even at the limit: the member's
+    // report is already on file.
+    const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
+    if (pending) {
+        ctx.body = { success: true, report: pending, duplicate: true };
+        return;
+    }
+    if (isReportRateLimited(activeReporter)) {
+        ctx.status = 429;
+        ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
         return;
     }
     const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);

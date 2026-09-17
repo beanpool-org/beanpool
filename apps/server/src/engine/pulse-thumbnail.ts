@@ -28,6 +28,7 @@ import {
     SsrfSecurityError,
     ProhibitedContentTypeError,
     PayloadTooLargeError,
+    setPulseItemCacheEvictor,
     type SsrfSafeFetchOptions,
     type SsrfSafeResponse,
 } from './pulse-resolver.js';
@@ -567,16 +568,14 @@ export class PulseThumbnailService {
 
         // 1. The tombstone check comes FIRST, ahead of both cache tiers.
         //
-        // Caching the URL was harmless to get wrong; caching the bytes is not. Only
-        // POST /api/member/pulse/items/:id/delete calls thumbnailService.delete — a member
-        // erasing their account (purgeMemberSelf), an inactivity prune, removing a channel
-        // (deleteChannel — an OAuth disconnect leaves items alone) and the keep-newest-per-channel
-        // retention pruner all reach scrubPulseItems directly,
-        // which stamps deleted_at and NULLs thumbnail_url but knows nothing about a disk
-        // cache. Behind the old ordering their images kept answering 200 forever, and
-        // because each hit refreshed lastAccessedAt they were never evicted either. A
-        // primary-key lookup costs microseconds; a deletion that does not delete costs the
-        // promise the app makes about erasing an account.
+        // Caching the URL was harmless to get wrong; caching the bytes is not. scrubPulseItems
+        // and prunePulseItems now evict the default service's cache as they tombstone, but a
+        // tombstone can still arrive without them — a replica importing one through sync, a
+        // service instance other than the default, a fetch that lands after the scrub. Behind
+        // the old ordering such images kept answering 200 forever, and because each hit
+        // refreshed lastAccessedAt they were never evicted either. A primary-key lookup costs
+        // microseconds; a deletion that does not delete costs the promise the app makes about
+        // erasing an account.
         const row = db.prepare(
             `SELECT id, platform, url, external_id, thumbnail_url, deleted_at FROM pulse_items WHERE id = ?`
         ).get(itemId) as {
@@ -1027,6 +1026,10 @@ export class PulseThumbnailService {
 }
 
 export const defaultPulseThumbnailService = new PulseThumbnailService();
+
+// Every tombstone written through scrubPulseItems/prunePulseItems evicts here, not only the routes
+// that remember to call delete().
+setPulseItemCacheEvictor((itemId) => defaultPulseThumbnailService.delete(itemId));
 
 export function getPulseThumbnailService(): PulseThumbnailService {
     return defaultPulseThumbnailService;

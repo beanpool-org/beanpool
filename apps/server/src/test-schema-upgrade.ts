@@ -342,7 +342,7 @@ function main() {
         posts: ['updated_at', 'search_keywords', 'price_type', 'cash_also_needed'],
         members: ['earned_credit', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate',
                   'can_vouch', 'vouch_credit', 'credit_frozen', 'elder_vouched_by'],
-        abuse_reports: ['status', 'updated_at'],
+        abuse_reports: ['status', 'updated_at', 'target_pulse_item_id'],
     };
     for (const [table, missing] of Object.entries(LEGACY_SHAPES)) {
         const dir = tmp(`legacy-${table}`);

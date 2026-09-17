@@ -95,6 +95,73 @@ export const EVENT_PLACE_NAME_MAX = 80;
 export const EVENT_PRIVATE_NOTE_MAX = 1000;
 export const EVENT_UPCOMING_CAP = 5;
 
+/**
+ * Change and cancel notifications (docs/events-on-the-map.md §2.2, decision 10, slice 5).
+ *
+ * A change of time or place, and a cancellation, push to everyone marked `going` — never to Interested, and
+ * never for a title, description, photo or note edit. The push goes out on the EXISTING `marketplace`
+ * category (decision 27): every app already in the store has that Android channel and the
+ * `notify_marketplace` preference, so a phone needs no update to hear that an event it is going to has moved
+ * or is off. A dedicated Events channel is a later slice.
+ *
+ * The dispatcher is passed in rather than imported: state-engine.ts imports this module, so importing it
+ * back would be a cycle. It is optional so the engine keeps working headless (sync import, tests).
+ */
+type PushFn = (
+    targetPubkeys: string[],
+    actorPubkey: string,
+    title: string,
+    body: string,
+    data: Record<string, any>,
+    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
+) => void;
+
+export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
+export const EVENT_UPDATED_PUSH_TITLE = 'Event changed';
+export const EVENT_CANCELLED_PUSH_TITLE = 'Event cancelled';
+
+export function eventPushBody(kind: 'updated' | 'cancelled', eventTitle: string): string {
+    const name = (eventTitle || 'An event').trim() || 'An event';
+    return kind === 'cancelled'
+        ? `${name} is not going ahead.`
+        : `${name} has a new time or place.`;
+}
+
+/** Everyone marked Going. Interested is deliberately not notified (decision 10). */
+export function eventGoingPubkeys(postId: string): string[] {
+    return (db.prepare(
+        "SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'"
+    ).all(postId) as any[]).map(r => r.member_pubkey as string);
+}
+
+/**
+ * Fire-and-forget: a push failure must never fail the edit or the cancellation that caused it. The
+ * dispatcher drops the actor itself, so a host who is also Going does not notify themselves.
+ */
+function notifyEventChange(
+    push: PushFn | undefined,
+    kind: 'updated' | 'cancelled',
+    postId: string,
+    eventTitle: string,
+    actorPubkey: string,
+): void {
+    if (!push) return;
+    try {
+        const going = eventGoingPubkeys(postId);
+        if (going.length === 0) return;
+        push(
+            going,
+            actorPubkey,
+            kind === 'cancelled' ? EVENT_CANCELLED_PUSH_TITLE : EVENT_UPDATED_PUSH_TITLE,
+            eventPushBody(kind, eventTitle),
+            { screen: 'post', postId },
+            EVENT_PUSH_CATEGORY,
+        );
+    } catch (e) {
+        console.warn('[Events] change notification not sent:', e);
+    }
+}
+
 function parseEventTime(raw: unknown, label: string): string {
     const ms = typeof raw === 'string' || typeof raw === 'number' ? new Date(raw).getTime() : NaN;
     if (!Number.isFinite(ms)) throw new Error(`${label} must be a valid date and time`);
@@ -404,8 +471,8 @@ export function createPost(
     return post;
 }
 
-export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string): boolean {
-    const postRow = db.prepare("SELECT id, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
+export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {
+    const postRow = db.prepare("SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
     if (!postRow) return false;
 
     const isDirectAuthor = postRow.author_pubkey === callerPublicKey;
@@ -465,10 +532,20 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     }
 
     broadcast({ type: 'post_removed', id }, recipients);
+    // Cancelling an event tells everyone who said they were going (§2.2). The chat turns read-only on its
+    // own: event-thread.ts reads `event_state`, which the transaction above has already set to 'cancelled'.
+    if (postRow.type === 'event') {
+        notifyEventChange(push, 'cancelled', id, postRow.title, callerPublicKey);
+    }
     return true;
 }
 
-export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
+export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string): MarketplacePost | null {
+    // Who made the edit, for the change notification: never notify the person who caused it. `actorPubkey`
+    // is the signed caller when a route has one — a keeper editing an enterprise's event sends the
+    // ENTERPRISE as `authorPublicKey`, and `authorPublicKey` is rewritten below anyway so the UPDATE's WHERE
+    // matches for a keeper or convenor. Falling back to `authorPublicKey` keeps direct engine callers working.
+    const actorPublicKey = actorPubkey || authorPublicKey;
     const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
     if (eventRow?.type === 'event') {
         // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
@@ -524,6 +601,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // UPDATED; title, description, photo and note changes are silent (§2.2).
     const eventFields: string[] = [];
     const eventValues: any[] = [];
+    // Set when this edit moved the time or the pin/place name — the only edits that notify (decision 29).
+    let eventTimeOrPlaceChanged = false;
     if (existingPost.type === 'event') {
         delete updates.credits;
         delete updates.category;
@@ -572,6 +651,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
             eventFields.push("event_state = 'updated'");
+            eventTimeOrPlaceChanged = true;
         }
     }
 
@@ -679,6 +759,11 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             recipients = Array.from(new Set([updated.authorPublicKey, updated.targetPubkey, updated.assignedTo].filter(Boolean) as string[]));
         }
         broadcast({ type: 'post_updated', post: publicBroadcastPost(updated) }, recipients);
+        // Time or place moved: tell everyone going, and nobody else (§2.2). A title, description, photo or
+        // note edit is silent, which is why this sits behind the same flag that sets the UPDATED badge.
+        if (updated.type === 'event' && eventTimeOrPlaceChanged) {
+            notifyEventChange(push, 'updated', id, updated.title, actorPublicKey);
+        }
     }
     return updated;
 }

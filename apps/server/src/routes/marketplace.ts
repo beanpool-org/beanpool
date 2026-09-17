@@ -289,7 +289,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
-        const post = updatePost(id, authorPublicKey, updates);
+        const post = updatePost(id, authorPublicKey, updates, ctx.state?.actor);
         if (!post) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found or not owned by you' };

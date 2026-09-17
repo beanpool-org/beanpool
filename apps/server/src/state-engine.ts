@@ -3272,11 +3272,13 @@ export function getPosts(filter?: PostFilter): MarketplacePost[] {
 }
 
 export function removePost(id: string, authorPublicKey: string): boolean {
-    return removePostEngine(broadcast, id, authorPublicKey);
+    // The push dispatcher is handed in rather than imported by the engine module (it imports this one), so
+    // cancelling an event can notify everyone going (docs/events-on-the-map.md §2.2, slice 5).
+    return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }): MarketplacePost | null {
-    return updatePostEngine(broadcast, id, authorPublicKey, updates);
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
 
 /**

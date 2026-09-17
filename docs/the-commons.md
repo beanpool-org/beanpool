@@ -1241,6 +1241,26 @@ Antigravity's counter-argument is better than my proposal.)*
 "Community Eggs Team" like anyone else would. Two objects, no foreign key, nothing to desynchronise.
 The "somewhere to discuss it" gap in §2.2 is then filled by groups generally, not by a special case.
 
+### 9.5 Working-style archetypes: a preference, never a label
+
+The archetype quiz says how a member likes to work ("You prefer…, works best when…"). It is not a
+role, a rank or an identity, and like a trust tier it gates nothing: no beans, no credit, no pricing,
+no listing audience. Two standing refusals, from the decision note on PR #591 (2026-09-17):
+
+- **No public archetype labels anywhere.** No chips or tags on profiles, member lists, listings or the
+  map. A member sees their own type. What they see about another member (the Collaboration Chemistry
+  card, the outreach message it prefills) carries tips and strengths, never a type name. A "Champion"
+  tag next to a name becomes a permanent reputation label in a community nobody can leave.
+- **No per-type breakdown of a group or enterprise.** "2 Sparks, 1 Guardian" on a four-person
+  enterprise lets anyone who knows two members work out the others. If a composition view is ever
+  wanted, the only safe shape is three coarse energies with nothing shown below four members, and it
+  needs its own decision first.
+
+Enforcement today is a display rule in both clients, not the server: the member directory still
+serves each member's saved result (primary, secondary, mode, date) because the card needs it. The
+`posts.target_archetypes` filter from #823 was removed before anything used it; the column is left
+in place, unread and unwritten.
+
 ---
 
 ## 10. Decisions log
@@ -1271,6 +1291,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Credit floor while paused | snapshot on pause (`paused_floor_snapshot`, `paused_at`); usable floor is `max(snapshot, derived)` — cannot pull below pause-day floor, earned growth counts, not recomputed downward; expires at **90 days paused** (warn visibly before); clear on resume; keeper exits during pause still release backing per §2.6 (Marty, 2026-09-16, §2.2) |
 | Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
 | Enterprise map pins | **public, exactly like marketplace post pins** — anyone who opens the node's map sees them; the map routes stay on the public read list. Findability is the point; the picker says so plainly and keeps **Approximate** (~100 m) beside the warning to protect a home. A wound-up enterprise's location is cleared and never served (Marty, 2026-09-17, §2.2) |
+| Working-style archetypes | **a preference, never a label** — no public archetype labels anywhere, no per-type breakdown of a group or enterprise, and archetypes gate nothing (2026-09-17, §9.5) |
 
 ---
 

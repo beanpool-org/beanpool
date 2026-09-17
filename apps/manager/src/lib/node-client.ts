@@ -132,6 +132,9 @@ export interface NodeReport {
     reason?: string;
     severity?: string;
     status?: string;
+    targetPulseItemId?: string;
+    /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
+    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
     [key: string]: unknown;
 }
 
@@ -801,6 +804,30 @@ export async function deleteNodePost(
 }
 
 
+/**
+ * Actions a Pulse-item report by taking the item off the Pulse. The owner is not suspended.
+ */
+export async function removeReportedPulseItem(
+    nodeUrl: string,
+    reportId: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; error?: string }> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('Valid report ID is required to remove a Pulse item');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/action`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ removePulseItem: true, password: adminPassword }),
+    });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
 
 export async function generateNodeInvite(
     nodeUrl: string,

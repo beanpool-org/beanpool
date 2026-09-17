@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
 
@@ -12,8 +12,15 @@ import {
     treasuryComplete, treasuryReject, treasuryPledge, reportAbuse,
     deleteCrowdfundProjectApi, requestToJoinEnterprise, approveKeeperRequest,
     declineKeeperRequest, proposeEnterpriseSuccession, voteEnterpriseSuccession,
-    getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage
+    getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
+    pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp,
+    getEnterpriseLedger, type EnterpriseLedgerResponse
 } from '../utils/db';
+import {
+    seasonBanner, seasonControls, anySeasonControl, pauseConfirmText, RESUME_CONFIRM_TEXT, windUpConfirmText,
+    windUpDeficitText, cancelWindUpConfirmText, finaliseWindUpConfirmText, postingBlockedText,
+    LEDGER_PERIODS, ledgerSince, ledgerLineLabels, signedBeans, type LedgerPeriod
+} from '../utils/enterprise-season';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -27,6 +34,11 @@ function decodeThreadMessage(ciphertext: string, type: string): string {
         return ciphertext;
     }
 }
+
+type LifecycleAction = 'pause' | 'resume' | 'windUp' | 'cancelWindUp' | 'finaliseWindUp';
+
+// Ledger lines render in pages: an all-time ledger can run to hundreds of lines on a low-end phone.
+const LEDGER_PAGE = 20;
 
 // A community enterprise's detail screen. Everyone sees the transparency view (balance, credit line,
 // purpose, goal progress if bounded, live listings, recent activity — the Commons is meant to be legible).
@@ -72,6 +84,19 @@ export default function TreasuryDetailScreen() {
     const [threadInput, setThreadInput] = useState('');
     const [threadPosting, setThreadPosting] = useState(false);
     const [threadRemovingId, setThreadRemovingId] = useState<string | null>(null);
+
+    // Enterprise Season & Wind-up (docs/the-commons.md §2.2). One confirmation open at a time; each says
+    // what will happen in plain words before the confirming tap.
+    const [confirmingLifecycle, setConfirmingLifecycle] = useState<LifecycleAction | null>(null);
+    const [lifecycleBusy, setLifecycleBusy] = useState(false);
+
+    // Income & Spend (P&L), public to every member
+    const [ledger, setLedger] = useState<EnterpriseLedgerResponse | null>(null);
+    const [ledgerLoading, setLedgerLoading] = useState(false);
+    const [ledgerError, setLedgerError] = useState<string | null>(null);
+    const [ledgerPeriod, setLedgerPeriod] = useState<LedgerPeriod>('all');
+    const [ledgerShown, setLedgerShown] = useState(LEDGER_PAGE);
+    const ledgerRequest = useRef(0);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.app },
@@ -134,15 +159,17 @@ export default function TreasuryDetailScreen() {
         // Pending Requests Review (for Lead / Sole / Admin)
         requestsCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
         requestsTitle: { fontSize: 12, fontWeight: '800', color: colors.feedback.warning.fg, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
-        requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        requestInfo: { flex: 1 },
+        // Name and pledge stacked above a full-width button row: side by side, the two buttons left the name
+        // ~65dp at 320dp + 1.3x font, breaking it mid-word and wrapping the pledge onto three lines.
+        requestRow: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        requestInfo: { marginBottom: 10 },
         requestCallsign: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         requestBacking: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
-        approveBtn: { backgroundColor: colors.brand.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-        approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 12 },
-        declineBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
-        declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 12 },
+        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 12, borderRadius: 8 },
+        approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
+        declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
+        declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 13 },
 
         // Lead Succession
         successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
@@ -179,9 +206,13 @@ export default function TreasuryDetailScreen() {
         opBtnRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.primary, paddingVertical: 12, borderRadius: 12 },
         opBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
-        sweepRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-        sweepInput: { flex: 1, height: 46, backgroundColor: colors.surface.card, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
-        sweepBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.brand.primary, paddingHorizontal: 14, height: 46, borderRadius: 12, justifyContent: 'center' },
+        opBtnDisabled: { opacity: 0.45 },
+        opNotice: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, backgroundColor: colors.feedback.warning.bg, borderRadius: 8, padding: 8, marginTop: -4, marginBottom: 12, textAlign: 'center', overflow: 'hidden' },
+        // Field above button, each full width: side by side at 320dp the field was ~100dp and cut its
+        // placeholder to "Sweep s".
+        sweepRow: { gap: 8 },
+        sweepInput: { height: 48, backgroundColor: colors.surface.card, borderRadius: 12, paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
+        sweepBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.brand.primary, paddingHorizontal: 14, height: 48, borderRadius: 12, justifyContent: 'center' },
         sweepBtnDisabled: { opacity: 0.4 },
         sweepBtnText: { color: colors.brand.primary, fontWeight: '800', fontSize: 13 },
         opHint: { fontSize: 12, color: colors.brand.primary, marginTop: 10, lineHeight: 17 },
@@ -213,16 +244,67 @@ export default function TreasuryDetailScreen() {
         threadMsgRow: { flexDirection: 'row', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         threadMsgAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface.subtle },
         threadMsgContent: { flex: 1, minWidth: 0 },
-        threadMsgMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
-        threadMsgAuthor: { fontSize: 12, fontWeight: '700', color: colors.text.heading },
-        threadMsgTime: { fontSize: 10, color: colors.text.muted },
+        threadMsgMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+        threadMsgAuthor: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: colors.text.heading },
+        threadMsgTime: { flexShrink: 0, fontSize: 10, color: colors.text.muted },
         threadMsgText: { fontSize: 13, color: colors.text.body, lineHeight: 18 },
         threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
         threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
-        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 42, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
-        threadSendBtn: { height: 42, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
+        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
         threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
-        threadRemoveBtn: { padding: 4, marginLeft: 4 },
+        // A real 48x48dp target (was ~22x23). hitSlop cannot stand in: Android drops touches outside the parent row.
+        threadRemoveBtn: { width: 48, height: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+
+        // Season state banners (every member)
+        banner: { borderRadius: 16, padding: 14, borderWidth: 2, marginBottom: 16, gap: 6 },
+        bannerPaused: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.solid },
+        bannerWindingUp: { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.solid },
+        bannerCompleted: { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong },
+        bannerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        bannerLabel: { flex: 1, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+        bannerHeadline: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
+        bannerBody: { fontSize: 12, lineHeight: 17 },
+        bannerWarning: { fontSize: 12, fontWeight: '700', lineHeight: 17, paddingTop: 6, marginTop: 2, borderTopWidth: 1 },
+
+        // Season & lifecycle keeper controls
+        seasonCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        seasonTitle: { flex: 1, fontSize: 13, fontWeight: '800', color: colors.text.heading, letterSpacing: 0.3 },
+        seasonBtn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, marginTop: 8 },
+        seasonBtnText: { flexShrink: 1, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+        confirmCard: { borderRadius: 12, padding: 12, borderWidth: 2, gap: 8, marginTop: 4 },
+        confirmTitle: { fontSize: 14, fontWeight: '800' },
+        confirmText: { fontSize: 13, lineHeight: 19, fontWeight: '600' },
+        confirmBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+        confirmBtnText: { fontSize: 14, fontWeight: '800', textAlign: 'center', color: colors.text.inverse },
+        confirmCancelBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingHorizontal: 12 },
+        confirmCancelText: { fontSize: 14, fontWeight: '700', color: colors.text.body, textAlign: 'center' },
+
+        // Income & Spend (P&L)
+        plCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 14, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
+        plTitle: { fontSize: 11, fontWeight: '800', color: colors.text.secondary, letterSpacing: 0.8, textTransform: 'uppercase' },
+        plSubtitle: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 10 },
+        periodStrip: { flexDirection: 'row', backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 3, marginBottom: 12 },
+        periodTab: { flex: 1, minWidth: 0, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 9, paddingHorizontal: 2 },
+        periodTabActive: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
+        periodTabText: { fontSize: 12, fontWeight: '700', color: colors.text.secondary },
+        periodTabTextActive: { color: colors.text.heading, fontWeight: '800' },
+        plSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+        plBox: { flex: 1, minWidth: 0, borderRadius: 12, padding: 10, borderWidth: 1 },
+        plBoxLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+        plBoxValue: { fontSize: 16, fontWeight: '900', marginTop: 3 },
+        ledgerRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border.default, gap: 2 },
+        ledgerLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+        ledgerWhat: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: '700', color: colors.text.heading },
+        ledgerAmount: { flexShrink: 0, fontSize: 14, fontWeight: '800' },
+        ledgerWith: { fontSize: 12, color: colors.text.secondary },
+        ledgerFlow: { fontWeight: '800' },
+        ledgerWhen: { flex: 1, minWidth: 0, fontSize: 11, color: colors.text.muted },
+        ledgerRunning: { flexShrink: 0, fontSize: 11, fontWeight: '700', color: colors.text.body },
+        ledgerFooter: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 10, marginTop: 2, gap: 2 },
+        ledgerFooterText: { fontSize: 12, color: colors.text.secondary },
+        ledgerMoreBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.border.default, marginTop: 4, marginBottom: 8 },
+        ledgerMoreText: { fontSize: 13, fontWeight: '700', color: colors.brand.primary },
 
         emptyNote: { fontSize: 13, color: colors.text.muted, fontStyle: 'italic', paddingVertical: 12 },
         centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -290,7 +372,9 @@ export default function TreasuryDetailScreen() {
         }
     };
 
-    const handleRemoveThreadMessage = (messageId: string) => {
+    const handleRemoveThreadMessage = async (messageId: string) => {
+        // The trash button keeps the keyboard up (keyboardShouldPersistTaps); an Alert over it leaves phantom padding.
+        await KeyboardController.dismiss();
         Alert.alert(
             'Remove Message',
             'Are you sure you want to remove this message? It will show as "removed by a keeper".',
@@ -318,9 +402,83 @@ export default function TreasuryDetailScreen() {
 
     useFocusEffect(load);
 
+    const loadLedger = useCallback(async (period: LedgerPeriod) => {
+        if (!treasuryKey) return;
+        // Only the latest request may land: switching period quickly must not let a slower, older reply win.
+        const request = ++ledgerRequest.current;
+        setLedgerLoading(true);
+        setLedgerError(null);
+        try {
+            const data = await getEnterpriseLedger(treasuryKey, { since: ledgerSince(period) });
+            if (request !== ledgerRequest.current) return;
+            setLedger(data);
+            setLedgerShown(LEDGER_PAGE);
+        } catch (e: any) {
+            if (request !== ledgerRequest.current) return;
+            setLedgerError(e?.message || 'Could not load enterprise ledger');
+        } finally {
+            if (request === ledgerRequest.current) setLedgerLoading(false);
+        }
+    }, [treasuryKey]);
+
+    // On focus, and again whenever the period changes.
+    useFocusEffect(useCallback(() => { loadLedger(ledgerPeriod); }, [loadLedger, ledgerPeriod]));
+
+    const runLifecycleAction = async (action: LifecycleAction) => {
+        if (!treasuryKey || lifecycleBusy) return;
+        setLifecycleBusy(true);
+        let title = '';
+        let message = '';
+        try {
+            if (action === 'pause') {
+                await pauseEnterprise(treasuryKey);
+                title = 'Paused for the season ❄️';
+                message = 'Enterprise paused for the season. Credit held at snapshot.';
+            } else if (action === 'resume') {
+                await resumeEnterprise(treasuryKey);
+                title = 'Enterprise resumed ▶️';
+                message = 'Enterprise resumed! Active listings are now buyable again.';
+            } else if (action === 'windUp') {
+                await initiateWindUp(treasuryKey);
+                title = 'Wind-up started';
+                message = 'Wind-up initiated. 7-day grace period has begun.';
+            } else if (action === 'cancelWindUp') {
+                await cancelWindUp(treasuryKey);
+                title = 'Wind-up stopped';
+                message = 'Wind-up cancelled. Enterprise restored to active status.';
+            } else {
+                const res = await finaliseWindUp(treasuryKey);
+                title = 'Wind-up finalised 🏁';
+                message = `Wind-up finalised. Swept ${res?.sweptAmount ?? 0} 🫘 to Commons and released keepers.`;
+            }
+            setConfirmingLifecycle(null);
+        } catch (e: any) {
+            const fallback = {
+                pause: 'Failed to pause enterprise',
+                resume: 'Failed to resume enterprise',
+                windUp: 'Failed to initiate wind-up',
+                cancelWindUp: 'Failed to cancel wind-up',
+                finaliseWindUp: 'Failed to finalise wind-up',
+            }[action];
+            title = 'Could not complete that';
+            message = e?.message || fallback;
+        } finally {
+            setLifecycleBusy(false);
+        }
+        // An Alert over an open keyboard leaves phantom keyboard padding behind.
+        await KeyboardController.dismiss();
+        Alert.alert(title, message);
+        load();
+        loadLedger(ledgerPeriod);
+    };
+
     const balance = detail?.balance ?? 0;
     const name = detail?.name || nameParam || 'Community Enterprise';
     const avatar = detail?.avatar || avatarParam;
+
+    const banner = seasonBanner(detail);
+    const controls = seasonControls(detail, identity?.publicKey);
+    const postingBlocked = postingBlockedText(detail);
 
     const availableToBack = detail?.availableToBack ?? 0;
     const isLeadOrSoleKeeperOrAdmin = !!detail?.isLeadOrSoleKeeperOrAdmin;
@@ -607,7 +765,9 @@ export default function TreasuryDetailScreen() {
                     <Text style={styles.emptyNote}>Couldn't load this enterprise. Check your connection.</Text>
                 </View>
             ) : (
-                <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={64}>
+                <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+                    {/* No keyboardVerticalOffset: keyboard-controller measures this view's absolute frame, so the old
+                        64 was added on top and left ~64dp of blank space above the keyboard. */}
                     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         {/* Identity */}
                         <View style={styles.identityRow}>
@@ -621,6 +781,37 @@ export default function TreasuryDetailScreen() {
                                 <Text style={styles.subtitle}>{detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}</Text>
                             </View>
                         </View>
+
+                        {/* State banner every member sees (docs/the-commons.md §2.2) */}
+                        {banner && (() => {
+                            const tone = banner.kind === 'paused'
+                                ? { box: styles.bannerPaused, fg: colors.feedback.warning.fg, line: colors.feedback.warning.border }
+                                : banner.kind === 'winding_up'
+                                    ? { box: styles.bannerWindingUp, fg: colors.feedback.danger.fg, line: colors.feedback.danger.border }
+                                    : { box: styles.bannerCompleted, fg: colors.text.heading, line: colors.border.strong };
+                            const emoji = banner.kind === 'paused' ? '❄️' : banner.kind === 'winding_up' ? '⏳' : '🏁';
+                            return (
+                                <View
+                                    style={[styles.banner, tone.box]}
+                                    accessible
+                                    accessibilityRole="alert"
+                                    accessibilityLiveRegion="polite"
+                                >
+                                    <View style={styles.bannerLabelRow}>
+                                        <Text style={{ fontSize: 16 }} accessibilityElementsHidden importantForAccessibility="no">{emoji}</Text>
+                                        <Text style={[styles.bannerLabel, { color: tone.fg }]}>{banner.label}</Text>
+                                    </View>
+                                    <Text style={[styles.bannerHeadline, { color: tone.fg }]}>{banner.headline}</Text>
+                                    <Text style={[styles.bannerBody, { color: tone.fg }]}>{banner.body}</Text>
+                                    {banner.kind === 'paused' && !!banner.warning && (
+                                        <Text style={[styles.bannerWarning, { color: tone.fg, borderTopColor: tone.line }]}>⚠️ {banner.warning}</Text>
+                                    )}
+                                    {banner.kind === 'winding_up' && !!banner.graceEndedNote && (
+                                        <Text style={[styles.bannerWarning, { color: tone.fg, borderTopColor: tone.line }]}>{banner.graceEndedNote}</Text>
+                                    )}
+                                </View>
+                            );
+                        })()}
 
                         {/* Purpose Statement (docs/the-commons.md §2.1) */}
                         {!!detail?.purpose && (
@@ -708,8 +899,8 @@ export default function TreasuryDetailScreen() {
                                 {keeperRequests.map((req: any) => (
                                     <View key={req.id} style={styles.requestRow}>
                                         <View style={styles.requestInfo}>
-                                            <Text style={styles.requestCallsign}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
-                                            <Text style={styles.requestBacking}>
+                                            <Text style={styles.requestCallsign} numberOfLines={2}>{req.callsign || req.applicantCallsign || req.memberCallsign || 'Member'}</Text>
+                                            <Text style={styles.requestBacking} numberOfLines={1}>
                                                 Backing pledge: {req.pledgedBacking} 🫘
                                             </Text>
                                         </View>
@@ -724,7 +915,7 @@ export default function TreasuryDetailScreen() {
                                                 {processingRequestId === req.id ? (
                                                     <ActivityIndicator size="small" color={colors.text.inverse} />
                                                 ) : (
-                                                    <Text style={styles.approveBtnText}>Approve</Text>
+                                                    <Text style={styles.approveBtnText} numberOfLines={1}>Approve</Text>
                                                 )}
                                             </Pressable>
                                             <Pressable
@@ -734,7 +925,7 @@ export default function TreasuryDetailScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="Decline keeper request"
                                             >
-                                                <Text style={styles.declineBtnText}>Decline</Text>
+                                                <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -950,22 +1141,27 @@ export default function TreasuryDetailScreen() {
                                 </View>
                                 <View style={styles.opBtnRow}>
                                     <Pressable
-                                        style={styles.opBtn}
+                                        style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
                                         accessibilityRole="button"
+                                        disabled={!!postingBlocked}
+                                        accessibilityState={{ disabled: !!postingBlocked }}
                                         onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'offer', name } })}
                                     >
                                         <MaterialCommunityIcons name="tag-plus" size={16} color={colors.text.inverse} />
-                                        <Text style={styles.opBtnText}>Post Offer</Text>
+                                        <Text style={styles.opBtnText} numberOfLines={1}>Post Offer</Text>
                                     </Pressable>
                                     <Pressable
-                                        style={styles.opBtn}
+                                        style={[styles.opBtn, !!postingBlocked && styles.opBtnDisabled]}
                                         accessibilityRole="button"
+                                        disabled={!!postingBlocked}
+                                        accessibilityState={{ disabled: !!postingBlocked }}
                                         onPress={() => router.push({ pathname: '/treasury-post', params: { treasury: params.publicKey, mode: 'need', name } })}
                                     >
                                         <MaterialCommunityIcons name="hand-extended" size={16} color={colors.text.inverse} />
-                                        <Text style={styles.opBtnText}>Post Need</Text>
+                                        <Text style={styles.opBtnText} numberOfLines={1}>Post Need</Text>
                                     </Pressable>
                                 </View>
+                                {!!postingBlocked && <Text style={styles.opNotice}>{postingBlocked}</Text>}
                                 <View style={styles.sweepRow}>
                                     <TextInput
                                         style={styles.sweepInput}
@@ -981,11 +1177,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={sweeping || balance <= 0}
                                         onPress={handleSweep}
                                         accessibilityRole="button"
+                                        accessibilityLabel="Sweep to the Commons"
                                     >
                                         {sweeping ? <ActivityIndicator color={colors.brand.primary} /> : (
                                             <>
                                                 <MaterialCommunityIcons name="bank-transfer-out" size={16} color={colors.brand.primary} />
-                                                <Text style={styles.sweepBtnText}>To Commons</Text>
+                                                <Text style={styles.sweepBtnText} numberOfLines={1}>To Commons</Text>
                                             </>
                                         )}
                                     </Pressable>
@@ -1100,6 +1297,204 @@ export default function TreasuryDetailScreen() {
                             </View>
                         )}
 
+                        {/* Season & lifecycle controls — only what the server lets THIS member do (utils/enterprise-season.ts) */}
+                        {anySeasonControl(controls) && (() => {
+                            const danger = colors.feedback.danger;
+                            const warning = colors.feedback.warning;
+                            const success = colors.feedback.success;
+                            const deficit = windUpDeficitText(detail);
+                            // A confirmation stays open only while its action is still allowed — a reload can change that.
+                            const allowed: Record<LifecycleAction, boolean> = {
+                                pause: controls.pause, resume: controls.resume, windUp: controls.startWindUp,
+                                cancelWindUp: controls.cancelWindUp, finaliseWindUp: controls.finaliseWindUp,
+                            };
+                            const open = confirmingLifecycle && allowed[confirmingLifecycle] ? confirmingLifecycle : null;
+                            const confirmation = open === 'pause' ? {
+                                icon: '❄️', title: 'Confirm Pause for Season', text: pauseConfirmText(detail), tone: warning,
+                                confirm: 'Confirm Season Pause', busy: 'Pausing…', cancel: 'Cancel', blocked: null as string | null,
+                            } : open === 'resume' ? {
+                                icon: '▶️', title: 'Confirm Resume Enterprise', text: RESUME_CONFIRM_TEXT, tone: success,
+                                confirm: 'Confirm Resume', busy: 'Resuming…', cancel: 'Cancel', blocked: null,
+                            } : open === 'windUp' ? {
+                                icon: '⚠️', title: 'Start Enterprise Wind-Up', text: windUpConfirmText(detail, name), tone: danger,
+                                confirm: 'Confirm Start Wind-Up', busy: 'Starting Wind-Up…', cancel: 'Cancel', blocked: deficit,
+                            } : open === 'cancelWindUp' ? {
+                                icon: '🛑', title: 'Stop Enterprise Wind-Up', text: cancelWindUpConfirmText(name), tone: success,
+                                confirm: 'Confirm Stop Wind-Up', busy: 'Stopping Wind-Up…', cancel: 'Keep Winding Up', blocked: null,
+                            } : open === 'finaliseWindUp' ? {
+                                icon: '🏁', title: 'Finalise Enterprise Wind-Up', text: finaliseWindUpConfirmText(detail, name), tone: danger,
+                                confirm: 'Finalise Wind-Up', busy: 'Finalising…', cancel: 'Cancel', blocked: null,
+                            } : null;
+
+                            const actionButton = (action: LifecycleAction, icon: any, label: string, tone: { fg: string; bg: string; border: string }) => (
+                                <Pressable
+                                    key={action}
+                                    style={[styles.seasonBtn, { backgroundColor: tone.bg, borderColor: tone.border }]}
+                                    onPress={() => setConfirmingLifecycle(action)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={label}
+                                >
+                                    <MaterialCommunityIcons name={icon} size={18} color={tone.fg} />
+                                    <Text style={[styles.seasonBtnText, { color: tone.fg }]}>{label}</Text>
+                                </Pressable>
+                            );
+
+                            return (
+                                <View style={styles.seasonCard}>
+                                    <View style={styles.opTitleRow}>
+                                        <MaterialCommunityIcons name="sprout" size={16} color={colors.brand.primary} />
+                                        <Text style={styles.seasonTitle}>SEASON & LIFECYCLE CONTROLS</Text>
+                                    </View>
+
+                                    {confirmation ? (
+                                        <View style={[styles.confirmCard, { backgroundColor: confirmation.tone.bg, borderColor: confirmation.tone.solid }]}>
+                                            <Text style={[styles.confirmTitle, { color: confirmation.tone.fg }]}>{confirmation.icon} {confirmation.title}</Text>
+                                            <Text style={[styles.confirmText, { color: confirmation.tone.fg }]}>{confirmation.text}</Text>
+                                            {!!confirmation.blocked && (
+                                                <Text style={[styles.confirmText, { color: warning.fg }]}>⚠️ {confirmation.blocked}</Text>
+                                            )}
+                                            <Pressable
+                                                style={[styles.confirmBtn, { backgroundColor: confirmation.tone.solid }, (lifecycleBusy || !!confirmation.blocked) && { opacity: 0.5 }]}
+                                                disabled={lifecycleBusy || !!confirmation.blocked}
+                                                onPress={() => open && runLifecycleAction(open)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={confirmation.confirm}
+                                                accessibilityHint={confirmation.text}
+                                                accessibilityState={{ disabled: lifecycleBusy || !!confirmation.blocked, busy: lifecycleBusy }}
+                                            >
+                                                <Text style={styles.confirmBtnText}>{lifecycleBusy ? confirmation.busy : confirmation.confirm}</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={[styles.confirmCancelBtn, lifecycleBusy && { opacity: 0.5 }]}
+                                                disabled={lifecycleBusy}
+                                                onPress={() => setConfirmingLifecycle(null)}
+                                                accessibilityRole="button"
+                                            >
+                                                <Text style={styles.confirmCancelText}>{confirmation.cancel}</Text>
+                                            </Pressable>
+                                        </View>
+                                    ) : (
+                                        <View>
+                                            {controls.resume && actionButton('resume', 'play', 'Resume Enterprise', success)}
+                                            {controls.pause && actionButton('pause', 'snowflake', 'Pause for Season', warning)}
+                                            {controls.cancelWindUp && actionButton('cancelWindUp', 'stop-circle-outline', 'Stop Wind-Up', success)}
+                                            {controls.finaliseWindUp && actionButton('finaliseWindUp', 'flag-checkered', 'Finalise Wind-Up', danger)}
+                                            {controls.startWindUp && actionButton('windUp', 'alert-outline', 'Start Wind-Up', danger)}
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        })()}
+
+                        {/* Income & Spend (P&L) — transparent accounting, visible to every member */}
+                        <View style={styles.plCard}>
+                            <Text style={styles.plTitle}>📊 Income & Spend (P&L)</Text>
+                            <Text style={styles.plSubtitle}>Transparent accounting · visible to every member</Text>
+
+                            <View style={styles.periodStrip} accessibilityRole="tablist">
+                                {LEDGER_PERIODS.map((p) => {
+                                    const selected = ledgerPeriod === p.key;
+                                    return (
+                                        <Pressable
+                                            key={p.key}
+                                            style={[styles.periodTab, p.key === 'all' && { flex: 1.6 }, selected && styles.periodTabActive]}
+                                            onPress={() => setLedgerPeriod(p.key)}
+                                            accessibilityRole="tab"
+                                            accessibilityLabel={p.a11y}
+                                            accessibilityState={{ selected }}
+                                        >
+                                            <Text style={[styles.periodTabText, selected && styles.periodTabTextActive]} numberOfLines={1} maxFontSizeMultiplier={1.1}>
+                                                {p.label}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                })}
+                            </View>
+
+                            <View style={styles.plSummaryRow}>
+                                <View style={[styles.plBox, { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }]}>
+                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.success.fg }]} numberOfLines={1}>Came in</Text>
+                                    <Text style={[styles.plBoxValue, { color: colors.feedback.success.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                        +{(ledger?.summary?.totalIncome ?? 0).toFixed(2)} 🫘
+                                    </Text>
+                                </View>
+                                <View style={[styles.plBox, { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }]}>
+                                    <Text style={[styles.plBoxLabel, { color: colors.feedback.warning.fg }]} numberOfLines={1}>Went out</Text>
+                                    <Text style={[styles.plBoxValue, { color: colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                        -{(ledger?.summary?.totalSpend ?? 0).toFixed(2)} 🫘
+                                    </Text>
+                                </View>
+                            </View>
+                            {(() => {
+                                const net = ledger?.summary?.netChange ?? 0;
+                                return (
+                                    <View style={[styles.plBox, { flex: 0, marginBottom: 10, backgroundColor: colors.surface.app, borderColor: colors.border.default }]}>
+                                        <Text style={[styles.plBoxLabel, { color: colors.text.secondary }]} numberOfLines={1}>Net change</Text>
+                                        <Text style={[styles.plBoxValue, { color: net >= 0 ? colors.feedback.success.fg : colors.feedback.warning.fg }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                            {net >= 0 ? '+' : ''}{net.toFixed(2)} 🫘
+                                        </Text>
+                                    </View>
+                                );
+                            })()}
+
+                            {ledgerLoading ? (
+                                <Text style={styles.emptyNote}>Loading ledger records…</Text>
+                            ) : ledgerError ? (
+                                <View style={{ paddingVertical: 8 }}>
+                                    <Text style={{ fontSize: 13, color: colors.feedback.danger.fg, textAlign: 'center' }}>{ledgerError}</Text>
+                                    <Pressable style={styles.ledgerMoreBtn} onPress={() => loadLedger(ledgerPeriod)} accessibilityRole="button">
+                                        <Text style={styles.ledgerMoreText}>Try again</Text>
+                                    </Pressable>
+                                </View>
+                            ) : !ledger?.entries?.length ? (
+                                <Text style={styles.emptyNote}>No transactions recorded for this period.</Text>
+                            ) : (() => {
+                                // Newest first on a phone; the node sends them oldest first.
+                                const newestFirst = [...ledger.entries].reverse();
+                                const visible = newestFirst.slice(0, ledgerShown);
+                                const remaining = newestFirst.length - visible.length;
+                                return (
+                                    <View>
+                                        {visible.map((entry) => {
+                                            const labels = ledgerLineLabels(entry);
+                                            const income = entry.direction === 'income';
+                                            const amountColor = income ? colors.feedback.success.fg : colors.feedback.warning.fg;
+                                            const when = formatTime(entry.timestamp);
+                                            return (
+                                                <View
+                                                    key={entry.id}
+                                                    style={styles.ledgerRow}
+                                                    accessible
+                                                    accessibilityLabel={`${labels.flow}, ${signedBeans(entry.amount, entry.direction)}, ${labels.what}, with ${labels.with}, ${when}. Running balance ${entry.runningBalance.toFixed(2)} beans.`}
+                                                >
+                                                    <View style={styles.ledgerLine}>
+                                                        <Text style={styles.ledgerWhat} numberOfLines={2}>{labels.what}</Text>
+                                                        <Text style={[styles.ledgerAmount, { color: amountColor }]} numberOfLines={1}>{signedBeans(entry.amount, entry.direction)}</Text>
+                                                    </View>
+                                                    <Text style={styles.ledgerWith} numberOfLines={1}>
+                                                        <Text style={[styles.ledgerFlow, { color: amountColor }]}>{labels.flow}</Text> · with {labels.with}
+                                                    </Text>
+                                                    <View style={styles.ledgerLine}>
+                                                        <Text style={styles.ledgerWhen} numberOfLines={1}>{when}</Text>
+                                                        <Text style={styles.ledgerRunning} numberOfLines={1}>Balance {entry.runningBalance.toFixed(2)} 🫘</Text>
+                                                    </View>
+                                                </View>
+                                            );
+                                        })}
+                                        {remaining > 0 && (
+                                            <Pressable style={styles.ledgerMoreBtn} onPress={() => setLedgerShown((n) => n + LEDGER_PAGE)} accessibilityRole="button">
+                                                <Text style={styles.ledgerMoreText}>Show {Math.min(LEDGER_PAGE, remaining)} more ({remaining} older)</Text>
+                                            </Pressable>
+                                        )}
+                                        <View style={styles.ledgerFooter}>
+                                            <Text style={styles.ledgerFooterText}>Starting balance: <Text style={{ fontWeight: '800', color: colors.text.body }}>{ledger.summary.startingBalance.toFixed(2)} 🫘</Text></Text>
+                                            <Text style={styles.ledgerFooterText}>Ending balance: <Text style={{ fontWeight: '800', color: colors.text.body }}>{ledger.summary.endingBalance.toFixed(2)} 🫘</Text></Text>
+                                        </View>
+                                    </View>
+                                );
+                            })()}
+                        </View>
+
                         {/* Live listings */}
                         <Text style={styles.sectionLabel}>Listings</Text>
                         {posts.length === 0 ? (
@@ -1179,12 +1574,11 @@ export default function TreasuryDetailScreen() {
                                             <View style={styles.threadMsgContent}>
                                                 <View style={styles.threadMsgMeta}>
                                                     <Text style={styles.threadMsgAuthor} numberOfLines={1}>{authorName}</Text>
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                                        <Text style={styles.threadMsgTime}>{formatTime(m.timestamp)}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                                                        <Text style={styles.threadMsgTime} numberOfLines={1}>{formatTime(m.timestamp)}</Text>
                                                         {isKeeperOfThis && !isRemoved && (
                                                             <Pressable
                                                                 style={styles.threadRemoveBtn}
-                                                                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                                                 onPress={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 accessibilityRole="button"
@@ -1194,7 +1588,7 @@ export default function TreasuryDetailScreen() {
                                                                 {threadRemovingId === m.id ? (
                                                                     <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
                                                                 ) : (
-                                                                    <MaterialCommunityIcons name="trash-can-outline" size={14} color={colors.feedback.danger.solid} />
+                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.solid} />
                                                                 )}
                                                             </Pressable>
                                                         )}

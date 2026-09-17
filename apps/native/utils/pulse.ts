@@ -4,7 +4,8 @@
  * Implements Contract B read/mute consumer for React Native:
  * 1. GET /api/pulse/feed (public read, cursor pagination, category filtering)
  * 2. POST /api/member/pulse/items/:id/mute (signed owner mutation)
- * 3. Local fixture fallback for development, testing, and offline preview.
+ * 3. POST /api/reports with targetPulseItemId (signed report of someone else's item)
+ * 4. Local fixture fallback for development, testing, and offline preview.
  */
 
 import { type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
@@ -308,6 +309,51 @@ export async function mutePulseItem(
         success: Boolean(data.success),
         item: data.item,
     };
+}
+
+/** The same reasons the post-detail report form offers. */
+export const PULSE_REPORT_REASONS = ['Spam or scam', 'Offensive content', 'Misleading post', 'Other'] as const;
+
+/** A signed-in member can report an item that is not theirs. Fixture items are not on any node. */
+export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string | null): boolean {
+    return Boolean(currentPubkey && item.ownerPubkey && item.ownerPubkey !== currentPubkey && !item.id.startsWith('item_fix_'));
+}
+
+/**
+ * Report someone else's Pulse item to the node's operators.
+ *
+ * POST /api/reports with targetPulseItemId (signed). The node resolves the reported member from the
+ * item's owner, refuses your own item (400) and an item that is gone (404).
+ */
+export async function reportPulseItem(
+    item: PulseFeedItem,
+    reason: string,
+    identity?: BeanPoolIdentity | null,
+): Promise<{ success: boolean }> {
+    if (!identity) {
+        throw new Error('Identity required to report items.');
+    }
+    if (!item?.id || !reason?.trim()) {
+        throw new Error('An item and a reason are required.');
+    }
+
+    const url = await anchorUrl();
+    if (!url) {
+        throw new Error('Not connected to a node.');
+    }
+
+    const res = await signedPost(
+        url,
+        '/api/reports',
+        { reporterPubkey: identity.publicKey, targetPubkey: item.ownerPubkey, targetPulseItemId: item.id, reason: reason.trim() },
+        identity,
+    );
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data?.message || data?.error || `Failed to report item (${res.status})`);
+    }
+    return { success: Boolean(data.success) };
 }
 
 /**

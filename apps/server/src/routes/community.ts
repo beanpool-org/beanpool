@@ -17,7 +17,7 @@ import {
     getCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1303,19 +1303,41 @@ router.get('/api/ratings/:publicKey', async (ctx) => {
 // ===================== ABUSE REPORTS =====================
 
 router.post('/api/reports', async (ctx) => {
-    const { reporterPubkey, targetPubkey, reason, targetPostId } = (ctx as any).requestBody || {};
+    const { reporterPubkey, reason, targetPostId, targetPulseItemId } = (ctx as any).requestBody || {};
+    let { targetPubkey } = (ctx as any).requestBody || {};
     const activeReporter = ctx.state.actor as string | undefined;
     if (!activeReporter) {
         ctx.status = 401;
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    if (targetPulseItemId !== undefined && targetPulseItemId !== null) {
+        // A Pulse item report names the item; the reported member is always its owner, whatever
+        // targetPubkey the client sent.
+        if (typeof targetPulseItemId !== 'string' || !targetPulseItemId.trim()) {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPulseItemId must be a non-empty string' };
+            return;
+        }
+        const owner = getReportablePulseItemOwner(targetPulseItemId);
+        if (!owner) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'That Pulse item no longer exists.' };
+            return;
+        }
+        if (owner === activeReporter) {
+            ctx.status = 400;
+            ctx.body = { error: 'own_item', message: 'You cannot report your own item.' };
+            return;
+        }
+        targetPubkey = owner;
+    }
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'reporterPubkey, targetPubkey, and a non-empty string reason are required' };
         return;
     }
-    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId);
+    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };

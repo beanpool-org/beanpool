@@ -7,7 +7,7 @@ import { PostModerationPanel } from './PostModerationPanel';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem } from '../../lib/node-client';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -51,6 +51,22 @@ export function PeopleSafetySection({
     });
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
+    const [removingReportId, setRemovingReportId] = useState<string | null>(null);
+    const [pulseRemoveError, setPulseRemoveError] = useState<string | null>(null);
+
+    const handleRemovePulseItem = async (reportId: string) => {
+        if (!confirm('Remove this item from the Pulse? The member is not suspended.')) return;
+        setRemovingReportId(reportId);
+        setPulseRemoveError(null);
+        try {
+            await removeReportedPulseItem(activeNode.url, reportId, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            onRefresh();
+        } catch (e: any) {
+            setPulseRemoveError(e?.message || 'Failed to remove the item');
+        } finally {
+            setRemovingReportId(null);
+        }
+    };
 
     const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
@@ -237,6 +253,12 @@ export function PeopleSafetySection({
                             </button>
                         </div>
 
+                        {pulseRemoveError && (
+                            <div role="alert" className="text-xs font-semibold text-red-300 bg-red-950/40 border border-red-900/60 rounded-lg px-3 py-2">
+                                {pulseRemoveError}
+                            </div>
+                        )}
+
                         {reports.length === 0 ? (
                             <div className="py-8 text-center text-sm font-semibold text-emerald-400 bg-emerald-950/20 border border-emerald-900/40 rounded-xl">
                                 🟢 No pending reports. The community queue is all clear.
@@ -269,8 +291,38 @@ export function PeopleSafetySection({
                                             <p className="text-xs text-white m-0">
                                                 {report.reason || report.description || 'No reason provided'}
                                             </p>
+                                            {report.pulseItem && typeof report.pulseItem === 'object' && (
+                                                <div className="text-xs text-nature-300 flex flex-wrap items-center gap-2" data-testid="pulse-report-item">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-200 border border-nature-700">
+                                                        Pulse · {String(report.pulseItem.platform || 'unknown')}
+                                                    </span>
+                                                    {report.pulseItem.removed ? (
+                                                        <span className="text-nature-400 italic">Removed from the Pulse</span>
+                                                    ) : typeof report.pulseItem.url === 'string' && /^https?:\/\//i.test(report.pulseItem.url) ? (
+                                                        <a
+                                                            href={report.pulseItem.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-terra-300 underline break-all"
+                                                        >
+                                                            {report.pulseItem.title || report.pulseItem.url}
+                                                        </a>
+                                                    ) : (
+                                                        <span>{report.pulseItem.title || 'Untitled item'}</span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-2 self-end sm:self-auto">
+                                            {report.pulseItem && typeof report.pulseItem === 'object' && !report.pulseItem.removed && report.id && (
+                                                <button
+                                                    onClick={() => handleRemovePulseItem(String(report.id))}
+                                                    disabled={removingReportId === report.id}
+                                                    className="px-3 py-1.5 rounded-lg bg-red-900/80 hover:bg-red-800 border border-red-700 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                                >
+                                                    {removingReportId === report.id ? 'Removing...' : 'Remove from the Pulse'}
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => setSelectedThreat(report)}
                                                 className="px-3 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-sm"

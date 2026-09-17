@@ -341,6 +341,7 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     reporter_pubkey TEXT NOT NULL REFERENCES members(public_key),
     target_pubkey TEXT NOT NULL REFERENCES members(public_key),
     target_post_id TEXT,
+    target_pulse_item_id TEXT,
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

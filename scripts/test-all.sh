@@ -175,6 +175,7 @@ run_federation_suites() {
       test-oauth-ingest-bounds
       test-pulse-curated
       test-pulse-admin-channels
+      test-pulse-report-takedown
       test-pulse-thumbnail
       test-callsign-predicates
       test-recovery-shares

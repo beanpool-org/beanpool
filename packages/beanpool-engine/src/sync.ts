@@ -81,6 +81,7 @@ export interface SyncAbuseReport {
     reporterPubkey: string;
     targetPubkey: string;
     targetPostId: string | null;
+    targetPulseItemId?: string | null;
     reason: string;
     createdAt: string;
     status?: string;
@@ -476,6 +477,7 @@ export function exportSyncState(
         reporterPubkey: row.reporter_pubkey,
         targetPubkey: row.target_pubkey,
         targetPostId: row.target_post_id,
+        targetPulseItemId: row.target_pulse_item_id ?? null,
         reason: row.reason,
         createdAt: row.created_at,
         status: row.status || 'pending',

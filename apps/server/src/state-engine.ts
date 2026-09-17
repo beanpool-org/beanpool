@@ -349,12 +349,15 @@ export interface AbuseReport {
     reporterPubkey: string;
     targetPubkey: string;
     targetPostId?: string;
+    targetPulseItemId?: string;
     reason: string;
     createdAt: string;
     status?: string;
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
+    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -4429,13 +4432,22 @@ export function getFriends(pubkey: string): FriendEntry[] {
 
 // ===================== ABUSE REPORTS =====================
 
-export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string): AbuseReport | null {
+export function submitReport(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): AbuseReport | null {
     if (!getMember(reporterPubkey) || reporterPubkey === targetPubkey) return null;
     const safeReason = typeof reason === 'string' ? reason.slice(0, 500) : String(reason ?? '').slice(0, 500);
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
-    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, safeReason, createdAt);
-    return { id, reporterPubkey, targetPubkey, targetPostId, reason: safeReason, createdAt, status: 'pending' };
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, reporterPubkey, targetPubkey, targetPostId || null, targetPulseItemId || null, safeReason, createdAt);
+    return { id, reporterPubkey, targetPubkey, targetPostId, targetPulseItemId, reason: safeReason, createdAt, status: 'pending' };
+}
+
+/**
+ * The owner of a live Pulse item, for reporting it. Null when the item does not exist or is
+ * already tombstoned — there is nothing left on the feed to report.
+ */
+export function getReportablePulseItemOwner(itemId: string): string | null {
+    const row = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ? AND deleted_at IS NULL').get(itemId) as { owner_pubkey: string } | undefined;
+    return row?.owner_pubkey ?? null;
 }
 
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
@@ -4460,11 +4472,14 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         SELECT ar.*, 
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
-               p.title as post_title
+               p.title as post_title,
+               pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
+               pi.deleted_at as pulse_deleted_at
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
         LEFT JOIN posts p ON ar.target_post_id = p.id
+        LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         ${whereClause}
         ORDER BY ar.created_at DESC
     `;
@@ -4486,7 +4501,17 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         status: r.status || 'pending',
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        postTitle: r.post_title || null
+        postTitle: r.post_title || null,
+        targetPulseItemId: r.target_pulse_item_id || undefined,
+        pulseItem: r.target_pulse_item_id
+            ? {
+                title: r.pulse_title ?? null,
+                platform: r.pulse_platform ?? 'unknown',
+                url: r.pulse_url ?? null,
+                // A missing row (never replicated here) counts as removed: there is nothing to act on.
+                removed: !r.pulse_platform || r.pulse_deleted_at !== null,
+            }
+            : null,
     }));
 
     return { reports, total, pendingCount };
@@ -4552,7 +4577,7 @@ export function dismissReport(reportId: string): boolean {
     return res.changes > 0;
 }
 
-export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false): boolean {
+export function actionReport(reportId: string, deletePost: boolean = false, suspendUser: boolean = false, removePulseItem: boolean = false): boolean {
     return db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
@@ -4561,6 +4586,12 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
         
         if (deletePost && report.target_post_id) {
             adminDeletePost(report.target_post_id);
+        }
+
+        // Tombstoned exactly as the owner's own delete does. The member is not penalised unless
+        // suspendUser is also set. The caller evicts the cached thumbnail, as the owner route does.
+        if (removePulseItem && report.target_pulse_item_id) {
+            scrubPulseItems({ id: report.target_pulse_item_id });
         }
 
         if (suspendUser && report.target_pubkey) {

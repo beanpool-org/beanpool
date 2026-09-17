@@ -6,6 +6,7 @@
  * - External linking: Clicking opens post URL in a new tab via window.open, strictly validated via isWebUrl.
  * - Emphasizes community: "my neighbour made this" — author avatar, callsign, and verified status.
  * - Owner Mute: When item is owned by viewer, provides a mute action with confirmation.
+ * - Report: a signed-in viewer can report someone else's item to the node's operators.
  * - Responsive at 320dp and 1.3x font scale without horizontal overflow.
  */
 
@@ -19,6 +20,7 @@ import {
 import { type PulseFeedItem } from '../lib/api';
 import { formatRelativeTime, isOfficialSource, resolvePulseThumbnailUrl } from '../lib/pulse';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ReportModal } from './ReportModal';
 
 interface Props {
     item: PulseFeedItem;
@@ -32,12 +34,14 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const [imageFailed, setImageFailed] = useState(false);
     const [showMuteConfirm, setShowMuteConfirm] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showReport, setShowReport] = useState(false);
 
     useEffect(() => {
         setImageFailed(false);
     }, [item.id, item.thumbnailUrl]);
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
+    const canReport = Boolean(currentPubkey && item.ownerPubkey && !isOwner);
     const platMeta = platformMeta(item.platform);
     const catMeta = categoryMeta(item.category);
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
@@ -153,6 +157,21 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         <span>{catMeta.icon}</span>
                         <span className="hidden xs:inline">{catMeta.label}</span>
                     </span>
+
+                    {canReport && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowReport(true);
+                            }}
+                            className="min-h-[48px] min-w-[48px] flex items-center justify-center text-base rounded-lg bg-transparent text-nature-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-nature-100 dark:hover:bg-nature-800 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                            aria-label="Report this post"
+                            title="Report"
+                        >
+                            <span aria-hidden="true">⚑</span>
+                        </button>
+                    )}
 
                     {isOwner && (
                         <div className="flex items-center gap-1.5">
@@ -311,6 +330,16 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         </div>
                     </div>
                 </div>
+            )}
+            {canReport && currentPubkey && (
+                <ReportModal
+                    isOpen={showReport}
+                    onClose={() => setShowReport(false)}
+                    reporterPubkey={currentPubkey}
+                    targetPubkey={item.ownerPubkey}
+                    targetName={`${authorName}'s post`}
+                    targetPulseItemId={item.id}
+                />
             )}
         </article>
     );

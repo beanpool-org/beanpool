@@ -7,6 +7,7 @@ import { ledger } from './ledger.js';
 import { getMember, getProfile, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
+import { isAcceptableAvatarValue } from './avatar.js';
 
 /**
  * Record activity timestamp for a member.
@@ -309,6 +310,7 @@ export function updateProfile(
     if (!getMember(db, publicKey)) return null;
     recordActivity(publicKey);
 
+    if (update.avatar !== undefined && !isAcceptableAvatarValue(update.avatar)) throw new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     const avatar = update.avatar !== undefined ? update.avatar : existing.avatar_url;
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);

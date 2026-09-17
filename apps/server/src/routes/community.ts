@@ -53,6 +53,7 @@ import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
+import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
@@ -889,6 +890,11 @@ router.post('/api/profile/update', async (ctx) => {
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;
             ctx.body = { error: 'callsign_taken', message: 'That name is already taken on this community. Try another.' };
+            return;
+        }
+        if (e?.message === 'AVATAR_INVALID') {
+            ctx.status = 400;
+            ctx.body = { error: 'avatar_invalid', message: AVATAR_FORMAT_ERROR };
             return;
         }
         if (e?.message === 'CALLSIGN_TOO_SHORT') {

@@ -19,11 +19,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from './db/db.js';
-import { initStateEngine, createPost } from './state-engine.js';
+import { initStateEngine, createPost, createTreasury } from './state-engine.js';
 import { createAvatarRoutes } from './routes/avatar.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
-import { getAvatarService, AvatarService, AvatarCache } from './engine/avatar.js';
+import { getAvatarService, AvatarService, AvatarCache, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0, passed = 0;
@@ -362,6 +362,67 @@ async function main() {
     const traversalRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
     assert(traversalRes.status === 404, 'Bundled avatar path traversal is refused');
 
+    // Batch 8: the test node's Community Eggs enterprise stored a NON-base64 SVG data URL (from
+    // scripts/bootstrap-community-eggs.mjs). The data-URL regex required `;base64,`, so it fell through
+    // to the bare-base64 branch, which decoded the TEXT "data:image…" and served those bytes
+    // (75 ab 5a 8a 66 a0 …) as a 200 image/jpeg. Anything that is not a real raster image must 404.
+    const eggsSvgAvatar = 'data:image/svg+xml,' + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="40" fill="#fbbf24"/><text x="40" y="54" font-size="42" text-anchor="middle">🥚</text></svg>`
+    );
+    const notImages: Array<[string, string]> = [
+        [eggsSvgAvatar, 'non-base64 SVG data URL (Community Eggs)'],
+        ['data:image/jpeg;base64,' + Buffer.from('this is not a jpeg').toString('base64'), 'jpeg data URL whose bytes are not an image'],
+        [Buffer.from('plain text, no prefix').toString('base64'), 'bare base64 that is not an image'],
+        ['https://example.com/alice.jpg', 'a plain http URL'],
+    ];
+    for (const [value, label] of notImages) {
+        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(value, pkPhoto);
+        avatarService.cache.clear();
+        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        assert(res.status === 404, `${label} answers 404 so clients show the placeholder (got ${res.status})`);
+        assert(!Buffer.isBuffer(res.body), `${label} serves no image bytes`);
+    }
+
+    const smallJpeg = createTestJpegBuffer(2048);
+    const stillServed: Array<[string, string, string]> = [
+        [`data:image/jpg;base64,${smallJpeg.toString('base64')}`, 'image/jpeg', 'image/jpg data URL'],
+        [smallJpeg.toString('base64'), 'image/jpeg', 'legacy bare base64 JPEG'],
+        [`data:image/png;base64,iVBORw0KGgo=`, 'image/png', 'PNG data URL'],
+        [`data:image/jpeg;base64,${smallJpeg.toString('base64').replace(/(.{76})/g, '$1\n')}`, 'image/jpeg', 'line-wrapped base64 JPEG'],
+    ];
+    for (const [value, type, label] of stillServed) {
+        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(value, pkPhoto);
+        avatarService.cache.clear();
+        const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
+        assert(res.status === 200 && res.headers['content-type'] === type, `${label} is still served as ${type} (got ${res.status} ${res.headers['content-type']})`);
+    }
+
+    // Write side: the same bad value is refused by every path that sets an avatar.
+    const profileRes = await dispatchRoute(communityRouter, 'POST', '/api/profile/update', {
+        state: { actor: pkPhoto },
+        requestBody: { avatar: eggsSvgAvatar },
+    });
+    assert(profileRes.status === 400, `POST /api/profile/update refuses a non-base64 SVG data URL (got ${profileRes.status})`);
+    const storedAfter = db.prepare(`SELECT avatar_url FROM members WHERE public_key = ?`).get(pkPhoto) as { avatar_url: string };
+    assert(!storedAfter.avatar_url.startsWith('data:image/svg'), 'Refused profile avatar is not stored');
+    const goodProfileRes = await dispatchRoute(communityRouter, 'POST', '/api/profile/update', {
+        state: { actor: pkPhoto },
+        requestBody: { avatar: `data:image/jpeg;base64,${smallJpeg.toString('base64')}` },
+    });
+    assert(goodProfileRes.status === 200, `POST /api/profile/update still accepts a base64 JPEG (got ${goodProfileRes.status})`);
+
+    let treasuryError = '';
+    try {
+        createTreasury('Avatar Check Eggs', eggsSvgAvatar, 0);
+    } catch (e: any) { treasuryError = e.message; }
+    assert(treasuryError === AVATAR_FORMAT_ERROR, `createTreasury refuses a non-base64 SVG data URL (got "${treasuryError}")`);
+    assert(!db.prepare(`SELECT 1 FROM members WHERE callsign = 'Avatar Check Eggs'`).get(), 'No enterprise row is created for the refused avatar');
+    for (const ok of ['bundled://sunflower', `data:image/png;base64,iVBORw0KGgo=`]) {
+        let err = '';
+        try { createTreasury(`Avatar Ok ${ok.slice(0, 8)}`, ok, 0); } catch (e: any) { err = e.message; }
+        assert(err === '', `createTreasury accepts ${ok.slice(0, 22)}… (got "${err}")`);
+    }
+
     // Avatar update busts cache and changes ETag
     const newSampleBuffer = createTestJpegBuffer(35 * 1024);
     const newBase64 = `data:image/jpeg;base64,${newSampleBuffer.toString('base64')}`;
@@ -486,7 +547,8 @@ async function main() {
 }
 
 main().then(() => {
-    process.exit(0);
+    // Keep the exit code a failed assert() set; a bare exit(0) let this suite pass CI with failures.
+    process.exit(process.exitCode ?? 0);
 }).catch(err => {
     console.error('Test failed with unhandled error:', err);
     process.exit(1);

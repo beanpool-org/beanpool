@@ -26,6 +26,35 @@ import { db } from '../db/db.js';
  */
 const ALLOWED_AVATAR_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
+/**
+ * The raster type a buffer's magic bytes identify, or null when they are not a JPEG, PNG, GIF or WebP.
+ */
+export function sniffRasterImageType(buf: Buffer): string | null {
+    if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+    if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+    const head6 = buf.subarray(0, 6).toString('latin1');
+    if (head6 === 'GIF87a' || head6 === 'GIF89a') return 'image/gif';
+    if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+    return null;
+}
+
+export const AVATAR_FORMAT_ERROR = 'Avatar must be a JPEG, PNG, WebP or GIF image';
+
+/**
+ * Write-side check for a member/enterprise avatar value. Only `data:` values are judged: they must be
+ * a base64 JPEG/PNG/WebP/GIF whose bytes really are that image. Other strings (`bundled://…`, empty or
+ * null to clear) keep their existing handling — the serving route refuses anything it cannot turn into
+ * image bytes.
+ */
+export function isAcceptableAvatarValue(value: unknown): boolean {
+    if (typeof value !== 'string') return true;
+    const trimmed = value.trim();
+    if (!/^data:/i.test(trimmed)) return true;
+    const m = trimmed.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,([A-Za-z0-9+/=\s]+)$/i);
+    if (!m) return false;
+    return sniffRasterImageType(Buffer.from(m[2], 'base64')) !== null;
+}
+
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 export const DEFAULT_MAX_AVATAR_CACHE_TOTAL_BYTES = 10 * 1024 * 1024; // 10 MB RAM
 
@@ -212,7 +241,8 @@ export class AvatarService {
             }
         } else {
             // Match behaviour of /api/marketplace/posts/:id/photos/:orderNum
-            const dataMatch = rawUrl.match(/^data:([^;]+);base64,(.*)$/);
+            // `[\s\S]` rather than `.` so a base64 body wrapped across lines still matches.
+            const dataMatch = rawUrl.match(/^data:([^;,]+);base64,([\s\S]*)$/i);
             if (dataMatch) {
                 // Allowlist on the way OUT, not only on the way in. `members.avatar_url` is
                 // member-supplied and `POST /api/profile/update` does not validate its format
@@ -221,23 +251,27 @@ export class AvatarService {
                 // `image/svg+xml` would serve attacker script from the node's own origin —
                 // enough to read the Ed25519 identity out of localStorage. Raster types only.
                 const candidate = dataMatch[1].toLowerCase().trim();
-                if (!ALLOWED_AVATAR_MIMES.has(candidate)) {
+                if (!ALLOWED_AVATAR_MIMES.has(candidate) && candidate !== 'image/jpg') {
                     return { status: 400, error: 'Unsupported avatar MIME type' };
                 }
-                mimeType = candidate;
-                try {
-                    fullBuffer = Buffer.from(dataMatch[2], 'base64');
-                } catch {
-                    return { status: 400, error: 'Malformed base64 data URI' };
-                }
+                fullBuffer = Buffer.from(dataMatch[2], 'base64');
+            } else if (/^data:/i.test(rawUrl)) {
+                // A data URL that is not base64 (e.g. `data:image/svg+xml,%3Csvg…`, which
+                // scripts/bootstrap-community-eggs.mjs stored). It used to fall through to the
+                // bare-base64 branch below, which decoded the TEXT of the URL and served it as image/jpeg.
+                return { status: 404, error: 'Avatar not found' };
             } else {
-                try {
-                    fullBuffer = Buffer.from(rawUrl, 'base64');
-                    mimeType = 'image/jpeg';
-                } catch {
-                    return { status: 400, error: 'Unsupported avatar format' };
-                }
+                // Legacy: a bare base64 body with no data-URL prefix.
+                fullBuffer = Buffer.from(rawUrl, 'base64');
             }
+            // Buffer.from(…, 'base64') never throws — it skips characters outside the alphabet — so
+            // its output has to be checked. Serve only bytes that really are a raster image, under the
+            // type the bytes say they are; otherwise 404 so clients fall back to the placeholder.
+            const sniffed = sniffRasterImageType(fullBuffer);
+            if (!sniffed) {
+                return { status: 404, error: 'Avatar not found' };
+            }
+            mimeType = sniffed;
         }
 
         if (fullBuffer.length > MAX_AVATAR_BYTES) {

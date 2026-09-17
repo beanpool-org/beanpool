@@ -16,6 +16,7 @@ import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
+import { isAcceptableAvatarValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { pruneOldActivity } from './db/activity-feed-db.js';
 import { scrubChannelRows } from './engine/creator-channels.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
@@ -5145,6 +5146,7 @@ export function createTreasury(
     const trimmed = (name || '').trim();
     if (trimmed.length < 2) throw new Error('Treasury name must be at least 2 characters');
     if (!avatar && !opts.systemCreated) throw new Error('Treasury needs an avatar image');
+    if (!isAcceptableAvatarValue(avatar)) throw new Error(AVATAR_FORMAT_ERROR);
     // Same predicate as idx_members_callsign_unique (`status NOT IN ('migrated', 'pruned')`),
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while

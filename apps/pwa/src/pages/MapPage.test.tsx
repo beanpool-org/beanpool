@@ -70,6 +70,11 @@ vi.mock('../lib/geo', () => ({
     haversineDistance: vi.fn(() => 0),
 }));
 
+vi.mock('../lib/profile-status', () => ({
+    getProfileStatus: vi.fn(async () => ({ complete: true })),
+    describeMissing: vi.fn(() => ''),
+}));
+
 vi.mock('../lib/peer-prefs', () => ({
     loadEnabledPeers: vi.fn(() => new Set()),
 }));
@@ -272,5 +277,81 @@ describe('MapPage Enterprise Location Pins (Slice 6, docs/the-commons.md §2.2)'
             expect(html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
             expect(html).not.toContain('<img src=x');
         });
+    });
+});
+
+describe('MapPage: guest balance and the pages that open over the map', () => {
+    const post = {
+        id: 'post-eggs', type: 'offer', category: 'food', title: 'A dozen eggs', description: 'Fresh',
+        credits: 12, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true,
+        lat: -28.5495, lng: 153.5005,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([post] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it('never asks for the balance of a guest', async () => {
+        await act(async () => {
+            render(<MapPage identity={mockIdentity} isMember={false} />);
+        });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(api.getBalance).not.toHaveBeenCalled();
+    });
+
+    it('waits for the membership check, then asks once it says member', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} isMember={null} />);
+        });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
+        expect(api.getBalance).not.toHaveBeenCalled();
+
+        await act(async () => {
+            view!.rerender(<MapPage identity={mockIdentity} isMember={true} />);
+        });
+        await waitFor(() => expect(api.getBalance).toHaveBeenCalledTimes(1));
+        expect(api.getBalance).toHaveBeenCalledWith(mockIdentity.publicKey);
+    });
+
+    it('hides the preview card and New Post panel while an enterprise or profile page covers the map, and brings them back', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openNewPost />);
+        });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        const postMarker = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        act(() => { postMarker.listeners['click']?.(); });
+
+        const preview = await view!.findByTestId('map-preview-card');
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect(preview).toBeVisible();
+        expect(panel).toBeVisible();
+
+        // Both sit at z-[150] / z-[1000] in the root stacking context, above the z-[110] enterprise page.
+        await act(async () => {
+            view!.rerender(<MapPage identity={mockIdentity} openNewPost covered />);
+        });
+        expect(view!.getByTestId('map-preview-card')).not.toBeVisible();
+        expect(view!.getByTestId('map-new-post-panel')).not.toBeVisible();
+
+        // Back from the enterprise page: the same preview and the draft panel are still there.
+        await act(async () => {
+            view!.rerender(<MapPage identity={mockIdentity} openNewPost covered={false} />);
+        });
+        expect(view!.getByTestId('map-preview-card')).toBeVisible();
+        expect(view!.getByTestId('map-preview-card')).toHaveTextContent('A dozen eggs');
+        expect(view!.getByTestId('map-new-post-panel')).toBeVisible();
     });
 });

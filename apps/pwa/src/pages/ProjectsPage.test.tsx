@@ -5,7 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries } from '../lib/api';
+import { getTreasuries, getBalance } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -386,5 +386,35 @@ describe('ProjectsPage enterprise card avatar', () => {
         });
         // The same placeholder a card without an avatar shows — not the alt text spilling out.
         expect(box).toHaveTextContent('🌱');
+    });
+});
+
+describe('ProjectsPage: the viewer balance is a member-only request', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('never asks for the balance of a guest', async () => {
+        render(<ProjectsPage identity={backerIdentity} isMember={false} />);
+        await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
+        await screen.findByText('Community Garden Solar Irrigation');
+        expect(getBalance).not.toHaveBeenCalled();
+    });
+
+    it('waits while membership is unknown, then asks once for a member', async () => {
+        const view = render(<ProjectsPage identity={backerIdentity} isMember={null} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        expect(getBalance).not.toHaveBeenCalled();
+
+        view.rerender(<ProjectsPage identity={backerIdentity} isMember={true} />);
+        await waitFor(() => expect(getBalance).toHaveBeenCalledTimes(1));
+        expect(getBalance).toHaveBeenCalledWith(backerIdentity.publicKey);
+    });
+
+    it('asks once, not twice, for a member on mount', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await screen.findByText('Community Garden Solar Irrigation');
+        await waitFor(() => expect(getBalance).toHaveBeenCalled());
+        expect(getBalance).toHaveBeenCalledTimes(1);
     });
 });

@@ -225,10 +225,9 @@ router.post('/api/messages/edit', async (ctx) => {
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     // A2-3: this returns the subject's entire conversation graph + unread
-    // counts + read cursors. Under read-auth, only the subject may read their
-    // own — the verified signer must equal the :publicKey path param (which is
-    // otherwise an unchecked IDOR: any member could read anyone's social graph).
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    // counts + read cursors. Only the subject may read their own — the verified
+    // signer must equal the :publicKey path param.
+    if (!ctx.state.actor || ctx.state.actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own conversations' };
         return;
@@ -278,11 +277,9 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
-    // Under read-auth the signer is a verified member (ctx.state.actor); require
-    // it to be in this conversation. Without this, any member could read any
-    // thread by id (group/system messages are still plaintext-v1, and
-    // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
+    // Group/system messages are still plaintext-v1, and participants/reactions/
+    // post-linkage/read-cursors leak for every thread if an outsider can read it.
+    if (conv.type !== 'enterprise_thread' && conv.type !== 'event_thread' && (!ctx.state.actor || !conv.participants.includes(ctx.state.actor as string))) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;

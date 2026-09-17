@@ -53,8 +53,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 }
 
 async function main() {
-    console.log('Running messaging IDOR tests (A2-2/A2-3/A2-15, ENFORCE_READ_AUTH on)...\n');
-    if (process.env.ENFORCE_READ_AUTH !== 'true') throw new Error('Run with ENFORCE_READ_AUTH=true');
+    console.log('Running messaging IDOR tests (A2-2/A2-3/A2-15)...\n');
+    process.env.ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH || 'true';
     await initTls();
     initStateEngine();
     await startHttpsServer(PORT);

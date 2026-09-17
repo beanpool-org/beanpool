@@ -16,7 +16,7 @@
  * 5. Channel resolution and deduplication on (channel_id, external_id).
  * 6. Error tracking on creator_channels (fail_count, last_error, is_stale).
  * 7. Tombstone scrubbing (scrubPulseItems sets deleted_at and NULLs url, title, thumbnail_url).
- * 8. 30-day pruner (prunePulseItems tombstones items older than 30 days).
+ * 8. Retention pruner (prunePulseItems keeps the newest 20 non-curated items per channel and tombstones the rest).
  * 9. Sync round-trip (exportSyncState watermarking, importRemoteState last-write-wins, getStateHash).
  * 10. Contract B feed visibility (suspended members, muted items, de-syndicated channels, cursor pagination).
  * 11. Owner-scoped mute endpoint (403 for non-owners, 404 for missing items, strict boolean validation).

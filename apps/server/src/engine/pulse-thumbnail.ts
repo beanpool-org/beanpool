@@ -569,8 +569,9 @@ export class PulseThumbnailService {
         //
         // Caching the URL was harmless to get wrong; caching the bytes is not. Only
         // POST /api/member/pulse/items/:id/delete calls thumbnailService.delete — a member
-        // erasing their account (purgeMemberSelf), an inactivity prune, a channel
-        // disconnect and the 30-day retention cleaner all reach scrubPulseItems directly,
+        // erasing their account (purgeMemberSelf), an inactivity prune, removing a channel
+        // (deleteChannel — an OAuth disconnect leaves items alone) and the keep-newest-per-channel
+        // retention pruner all reach scrubPulseItems directly,
         // which stamps deleted_at and NULLs thumbnail_url but knows nothing about a disk
         // cache. Behind the old ordering their images kept answering 200 forever, and
         // because each hit refreshed lastAccessedAt they were never evicted either. A

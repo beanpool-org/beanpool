@@ -1157,7 +1157,8 @@ export async function startHttpsServer(port: number): Promise<void> {
     // Start auto-pricing background aggregator
     startPricingAggregatorWorker();
 
-    // The Pulse: poll syndicated creator feeds and prune items past 30 days.
+    // The Pulse: poll syndicated creator feeds and prune each channel to its newest
+    // PULSE_KEEP_PER_CHANNEL (20) items.
     // On by default — an unstarted scheduler means channels resolve never and the
     // feed stays permanently empty, which is exactly the built-but-unreachable
     // trap. PULSE_SCHEDULER=0 disables it per node for a quiet rollout.

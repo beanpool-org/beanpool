@@ -788,8 +788,8 @@ async function main(): Promise<void> {
     // Tombstones beat the cache: an erased item must stop being served
     // ──────────────────────────────────────────────────────────────────────────
     // Only the single-item delete route calls thumbnailService.delete. Erasing an account
-    // (purgeMemberSelf), an inactivity prune, a channel disconnect and the 30-day retention
-    // cleaner all go straight to scrubPulseItems, so the DB check has to come first or the
+    // (purgeMemberSelf), an inactivity prune, removing a channel and the keep-newest-per-channel
+    // retention pruner all go straight to scrubPulseItems, so the DB check has to come first or the
     // bytes outlive the deletion — and every request refreshed the entry's access time, so
     // they would never have been evicted either.
     const scrubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-test-disk-scrub-'));

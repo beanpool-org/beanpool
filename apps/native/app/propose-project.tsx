@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -53,6 +53,7 @@ export default function ProposeProjectModal() {
     const [photos, setPhotos] = useState<string[]>([]);
     const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
     const [validationToast, setValidationToast] = useState('');
+    const keyboardVisible = useKeyboardState(s => s.isVisible);
 
     const [maxExpiryDays, setMaxExpiryDays] = useState<number>(365);
     useEffect(() => {
@@ -68,6 +69,8 @@ export default function ProposeProjectModal() {
 
     const handleSubmit = async () => {
         if (submittingRef.current) return;
+        // An Alert opened over a raised keyboard leaves phantom keyboard-height padding behind.
+        await KeyboardController.dismiss();
 
         const errors = new Set<string>();
         if (!title.trim() || title.trim().length < 2) errors.add('title');
@@ -126,9 +129,12 @@ export default function ProposeProjectModal() {
                 <View style={{ width: 40 }} />
             </View>
 
+            {/* No keyboardVerticalOffset: this KeyboardAvoidingView measures its own frame against the
+                window, so the header above it is already accounted for. The old offset of 64 added 64dp of
+                dead padding above the keyboard. With the footer also showing, a 320dp phone at 1.2x font was
+                left with a ~25dp strip of form and the name field out of sight. */}
             <KeyboardAvoidingView
                 behavior="padding"
-                keyboardVerticalOffset={64}
                 style={{ flex: 1 }}
             >
                 <ScrollView contentContainerStyle={styles.scroll}>
@@ -310,22 +316,26 @@ export default function ProposeProjectModal() {
                     </View>
                 ) : null}
 
-                <View style={styles.footer}>
-                    <Pressable
-                        style={styles.submitBtn}
-                        onPress={handleSubmit}
-                        disabled={submitting}
-                        accessibilityRole="button"
-                        accessibilityLabel={submitting ? "Starting enterprise..." : "Start Enterprise"}
-                        accessibilityState={{ disabled: submitting, busy: submitting }}
-                    >
-                        {submitting ? (
-                            <ActivityIndicator color={colors.text.inverse} />
-                        ) : (
-                            <Text style={styles.submitBtnText}>START INITIATIVE 🌱</Text>
-                        )}
-                    </Pressable>
-                </View>
+                {/* Hidden while typing so the form, not the button, gets the space above the keyboard.
+                    Back, the keyboard's done key, or a tap elsewhere in the form closes it and brings the button back. */}
+                {!keyboardVisible && (
+                    <View style={styles.footer}>
+                        <Pressable
+                            style={styles.submitBtn}
+                            onPress={handleSubmit}
+                            disabled={submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? "Starting enterprise..." : "Start Enterprise"}
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator color={colors.text.inverse} />
+                            ) : (
+                                <Text style={styles.submitBtnText}>START INITIATIVE 🌱</Text>
+                            )}
+                        </Pressable>
+                    </View>
+                )}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

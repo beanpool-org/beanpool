@@ -22,6 +22,8 @@ export interface AuditSyncPayload {
     creatorChannels?: any[];
     pulseItems?: any[];
     eventRsvps?: any[];
+    groups?: any[];
+    groupMembers?: any[];
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -182,6 +184,10 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         ['creator_channels', payload.creatorChannels?.length ?? 0],
         ['pulse_items', payload.pulseItems?.length ?? 0],
         ['event_rsvps', payload.eventRsvps?.length ?? 0],
+        // Commons groups (#823). Membership rows include removed ones — a removal the replica lost would
+        // let the person back into an open group after failover.
+        ['groups', payload.groups?.length ?? 0],
+        ['group_members', payload.groupMembers?.length ?? 0],
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

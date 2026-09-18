@@ -160,7 +160,8 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
             "SELECT role, status FROM group_members WHERE group_id = ? AND member_pubkey = ?"
         ).get(row.id, viewerPubkey) as any;
         if (membership) {
-            viewerRole = membership.role as GroupRole;
+            // A removed row is a record, not a membership: no role, so no app lists it among "your groups".
+            viewerRole = membership.status === 'removed' ? undefined : membership.role as GroupRole;
             viewerStatus = membership.status as GroupMemberStatus;
         }
     }
@@ -206,7 +207,7 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
     // who asked. open and request_to_join stay listed for everyone — a request_to_join group nobody can see
     // is a group nobody can ask to join.
     if (viewerPubkey) {
-        query += " AND (g.join_policy != 'invite_only' OR EXISTS (SELECT 1 FROM group_members gmv WHERE gmv.group_id = g.id AND gmv.member_pubkey = ?))";
+        query += " AND (g.join_policy != 'invite_only' OR EXISTS (SELECT 1 FROM group_members gmv WHERE gmv.group_id = g.id AND gmv.member_pubkey = ? AND gmv.status != 'removed'))";
         params.push(viewerPubkey);
     } else {
         query += " AND g.join_policy != 'invite_only'";
@@ -239,14 +240,17 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
     if (rows.length === 0) return [];
 
     const groupIds = rows.map(r => r.id);
-    const viewerMap = new Map<string, { role: GroupRole; status: GroupMemberStatus }>();
+    const viewerMap = new Map<string, { role: GroupRole | undefined; status: GroupMemberStatus }>();
     if (viewerPubkey && groupIds.length > 0) {
         const placeholders = groupIds.map(() => '?').join(',');
         const memberships = db.prepare(
             `SELECT group_id, role, status FROM group_members WHERE member_pubkey = ? AND group_id IN (${placeholders})`
         ).all(viewerPubkey, ...groupIds) as any[];
         for (const m of memberships) {
-            viewerMap.set(m.group_id, { role: m.role as GroupRole, status: m.status as GroupMemberStatus });
+            viewerMap.set(m.group_id, {
+                role: m.status === 'removed' ? undefined : m.role as GroupRole,
+                status: m.status as GroupMemberStatus,
+            });
         }
     }
 
@@ -282,6 +286,10 @@ export function getGroupMembers(db: Db, groupId: string, filter?: { status?: Gro
     if (filter?.status) {
         query += " AND gm.status = ?";
         params.push(filter.status);
+    } else {
+        // Unfiltered means "everyone with a live relationship to the group": members, requests, invitations.
+        // Removed people are only listed when asked for by name.
+        query += " AND gm.status != 'removed'";
     }
 
     if (filter?.role) {
@@ -360,6 +368,30 @@ export function getMemberGroupIds(db: Db, memberPubkey: string): string[] {
     return rows.map(r => r.group_id);
 }
 
+/**
+ * The next timestamp strictly after everything already written for one membership row — its updated_at and
+ * any tombstone left when the member last left. Someone who leaves and rejoins inside one millisecond would
+ * otherwise leave a row and a tombstone stamped identically, and a replica importing both would drop the
+ * re-join. The same rule the event chat uses (apps/server/src/engine/event-thread.ts membershipWriteAt).
+ */
+function membershipWriteAt(db: Db, groupId: string, memberPubkey: string): string {
+    const nowIso = new Date().toISOString();
+    let prev: string | null = null;
+    try {
+        prev = (db.prepare(`
+            SELECT MAX(ts) AS ts FROM (
+                SELECT updated_at AS ts FROM group_members WHERE group_id = ? AND member_pubkey = ?
+                UNION ALL
+                SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'group_members' AND row_key = ?
+            )`).get(groupId, memberPubkey, `${groupId}|${memberPubkey}`) as { ts: string | null } | undefined)?.ts ?? null;
+    } catch {
+        // No tombstones table (engine-only fixtures): the row alone decides.
+        prev = (db.prepare('SELECT updated_at AS ts FROM group_members WHERE group_id = ? AND member_pubkey = ?')
+            .get(groupId, memberPubkey) as { ts: string | null } | undefined)?.ts ?? null;
+    }
+    return prev && prev >= nowIso ? new Date(Date.parse(prev) + 1).toISOString() : nowIso;
+}
+
 export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupMember {
     const group = db.prepare("SELECT id, join_policy FROM groups WHERE id = ?").get(groupId) as any;
     if (!group) throw new Error('Group not found');
@@ -369,7 +401,7 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
 
     const existing = db.prepare("SELECT * FROM group_members WHERE group_id = ? AND member_pubkey = ?").get(groupId, memberPubkey) as any;
 
-    const now = new Date().toISOString();
+    const now = membershipWriteAt(db, groupId, memberPubkey);
 
     if (existing) {
         if (existing.status === 'active') {
@@ -377,6 +409,9 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
         }
         if (existing.status === 'pending_approval') {
             throw new Error('Membership request already pending');
+        }
+        if (existing.status === 'removed') {
+            throw new Error('A convenor removed you from this group. Only a convenor can add you back.');
         }
         if (existing.status === 'invited') {
             // Accepting an invitation
@@ -417,7 +452,7 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
     }
 
     const target = getGroupMember(db, groupId, targetPubkey);
-    if (!target) {
+    if (!target || target.status === 'removed') {
         throw new Error('Target is not a member of this group');
     }
 
@@ -431,7 +466,7 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
         }
     }
 
-    const now = new Date().toISOString();
+    const now = membershipWriteAt(db, groupId, targetPubkey);
     db.prepare(
         "UPDATE group_members SET role = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(newRole, now, groupId, targetPubkey);
@@ -449,6 +484,8 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target) return false;
+    // Already removed: nothing to do — and "leaving" must not erase the record and reopen the door.
+    if (target.status === 'removed') return false;
 
     // Safety: Cannot remove the last active convenor if other active members exist
     if (target.role === 'convenor' && target.status === 'active') {
@@ -464,7 +501,30 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
         }
     }
 
-    const res = db.prepare("DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?").run(groupId, targetPubkey);
+    const now = membershipWriteAt(db, groupId, targetPubkey);
+
+    if (isSelf) {
+        // Leaving (or withdrawing a request, or declining an invitation) deletes the row, so someone who left can
+        // come back to an open group. The tombstone carries the delete to backups; a later re-join is stamped
+        // after it and wins.
+        let deleted = false;
+        db.transaction(() => {
+            const res = db.prepare("DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ?").run(groupId, targetPubkey);
+            if (res.changes === 0) return;
+            deleted = true;
+            db.prepare(
+                "INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('group_members', ?, ?)"
+            ).run(`${groupId}|${targetPubkey}`, now);
+        })();
+        return deleted;
+    }
+
+    // A convenor removing someone else keeps the row as 'removed', so the removal sticks: joinGroup refuses them
+    // and only a convenor can re-admit them (invite or approve). The role drops to member so re-admission never
+    // quietly restores convenor powers.
+    const res = db.prepare(
+        "UPDATE group_members SET status = 'removed', role = 'member', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+    ).run(now, groupId, targetPubkey);
     return res.changes > 0;
 }
 
@@ -555,7 +615,7 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
         return target;
     }
 
-    const now = new Date().toISOString();
+    const now = membershipWriteAt(db, groupId, targetPubkey);
     db.prepare(
         "UPDATE group_members SET status = 'active', updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
     ).run(now, groupId, targetPubkey);
@@ -575,7 +635,7 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
     if (!member || member.status === 'pruned') throw new Error('Invited member not found or pruned');
 
     const existing = getGroupMember(db, groupId, targetPubkey);
-    const now = new Date().toISOString();
+    const now = membershipWriteAt(db, groupId, targetPubkey);
 
     if (existing) {
         if (existing.status === 'active') {
@@ -590,6 +650,13 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
         }
         if (existing.status === 'invited') {
             return existing;
+        }
+        if (existing.status === 'removed') {
+            // Re-admission: an invitation they still have to accept, like any other.
+            db.prepare(
+                "UPDATE group_members SET status = 'invited', role = ?, invited_by = ?, joined_at = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?"
+            ).run(role, convenorPubkey, now, now, groupId, targetPubkey);
+            return getGroupMember(db, groupId, targetPubkey)!;
         }
     }
 

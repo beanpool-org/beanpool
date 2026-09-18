@@ -429,6 +429,38 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
     }
 
+    // group_members: the status CHECK gains 'removed', so a convenor's removal is kept as a record instead of a
+    // deleted row that an open group's Join button re-creates. A CHECK cannot be altered in place, so the table
+    // is rebuilt. BEFORE the schema.sql exec on purpose: dropping the table drops its touch trigger and indexes,
+    // and the exec below re-creates them against the new table.
+    try {
+        const gmSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='group_members'").get() as any;
+        if (gmSql?.sql && !gmSql.sql.includes("'removed'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS group_members_migration;
+                    CREATE TABLE group_members_migration (
+                        group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+                        member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                        role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('convenor', 'member', 'observer')),
+                        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited', 'removed')),
+                        joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        invited_by TEXT REFERENCES members(public_key),
+                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        PRIMARY KEY (group_id, member_pubkey)
+                    );
+                    INSERT INTO group_members_migration (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at)
+                        SELECT group_id, member_pubkey, role, status, joined_at, invited_by, updated_at FROM group_members;
+                    DROP TABLE group_members;
+                    ALTER TABLE group_members_migration RENAME TO group_members;
+                `);
+            })();
+            console.log("[DB] ✅ Migrated group_members CHECK constraint to allow 'removed'");
+        }
+    } catch (err: any) {
+        console.error("[DB] ❌ Failed to migrate group_members for the 'removed' status:", err?.message || err);
+    }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }

@@ -187,6 +187,13 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=? AND public_key=?`).run(conversationId, publicKey);
             return r.changes > 0;
         }
+        // A member leaving a group (or withdrawing a request, or declining an invitation) deletes their row.
+        case 'group_members': {
+            const [groupId, memberPubkey] = rowKey.split('|');
+            if (!groupId || !memberPubkey) return false;
+            const r = db.prepare(`DELETE FROM group_members WHERE group_id=? AND member_pubkey=?`).run(groupId, memberPubkey);
+            return r.changes > 0;
+        }
         case 'members': {
             const r = db.prepare(`DELETE FROM members WHERE public_key=? AND is_treasury=1`).run(rowKey);
             db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey=?`).run(rowKey);
@@ -234,6 +241,13 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const r = db.prepare(`SELECT updated_at AS ts FROM conversation_participants WHERE conversation_id=? AND public_key=?`).get(conversationId, publicKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
+        // A member who left and rejoined has a row stamped after their tombstone, and must not be deleted again.
+        case 'group_members': {
+            const [groupId, memberPubkey] = rowKey.split('|');
+            if (!groupId || !memberPubkey) return null;
+            const r = db.prepare(`SELECT updated_at AS ts FROM group_members WHERE group_id=? AND member_pubkey=?`).get(groupId, memberPubkey) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
         case 'members': {
             const r = db.prepare(`SELECT updated_at AS ts FROM members WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
             return r?.ts ?? null;
@@ -248,6 +262,21 @@ function parseLedgerTs(value: string | null | undefined): number {
     let s = String(value);
     if (s.length === 19 && s[10] === ' ') s = `${s.replace(' ', 'T')}Z`;
     return Date.parse(s);
+}
+
+const GROUP_ROLES = new Set(['convenor', 'member', 'observer']);
+const GROUP_MEMBER_STATUSES = new Set(['active', 'pending_approval', 'invited', 'removed']);
+
+/**
+ * Who may see a post, as columns: audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers.
+ * A payload without them (an older primary) gets the column defaults, which is no worse than before.
+ */
+function postScope(rp: any): [string, string | null, string | null, string | null, string, string | null] {
+    const scope = rp.audienceScope === 'group' || rp.audienceScope === 'direct' ? rp.audienceScope : 'public';
+    const reach = rp.reach === 'peers' || rp.reach === 'everywhere' ? rp.reach : 'local';
+    const peers = reach === 'peers' && Array.isArray(rp.reachPeers) && rp.reachPeers.length > 0
+        ? JSON.stringify(rp.reachPeers) : null;
+    return [scope, rp.targetGroupId ?? null, rp.targetPubkey ?? null, rp.assignedTo ?? null, reach, peers];
 }
 
 const ENFORCE_LEDGER_AUTH = process.env.ENFORCE_LEDGER_AUTH === 'true';
@@ -332,7 +361,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     const importCategories: (keyof SyncPayload)[] = [
         'members', 'posts', 'photos', 'projects', 'ratings', 'accounts', 'transactions',
         'marketplaceTransactions', 'friends', 'conversations', 'conversationParticipants',
-        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'tombstones',
+        'messages', 'abuseReports', 'creatorChannels', 'pulseItems', 'recoveryRequests', 'recoveryApprovals', 'recoveryShares', 'recoveryPins', 'settlements', 'pollVotes', 'eventRsvps', 'groups', 'groupMembers', 'tombstones',
     ];
     for (const cat of importCategories) {
         const arr = remote[cat];
@@ -345,6 +374,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     let updatedMembers = 0, updatedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
+    let groupChanges = 0;
 
     currentImportOrigin = remote.nodeId;
     db.pragma('foreign_keys = OFF');
@@ -415,8 +445,9 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, created_by,
-                                event_start_at, event_end_at, event_place_name, event_private_note, event_state)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                event_start_at, event_end_at, event_place_name, event_private_note, event_state,
+                                audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -444,7 +475,8 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.eventEndAt ?? null,
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
-                        rp.eventState ?? null
+                        rp.eventState ?? null,
+                        ...postScope(rp)
                     );
                     newPosts++;
                 } else {
@@ -474,6 +506,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         event_place_name = ?,
                         event_private_note = ?,
                         event_state = ?,
+                        audience_scope = ?,
+                        target_group_id = ?,
+                        target_pubkey = ?,
+                        assigned_to = ?,
+                        reach = ?,
+                        reach_peers = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.title,
@@ -499,6 +537,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
+                        ...postScope(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -959,6 +998,65 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
+            // Commons groups (#823): last-write-wins on updated_at, the primary's clock stored so a later
+            // tombstone or change compares against it. The DO UPDATE is guarded so an unchanged row is not
+            // rewritten — the touch triggers would otherwise restamp it with the replica's clock.
+            if (remote.groups) {
+                const importGroup = db.prepare(`INSERT INTO groups
+                    (id, name, slug, description, avatar_url, category, created_by, join_policy, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        slug = excluded.slug,
+                        description = excluded.description,
+                        avatar_url = excluded.avatar_url,
+                        category = excluded.category,
+                        join_policy = excluded.join_policy,
+                        updated_at = excluded.updated_at
+                    WHERE excluded.updated_at IS NOT NULL
+                      AND (groups.updated_at IS NULL OR excluded.updated_at > groups.updated_at)`);
+                for (const g of remote.groups) {
+                    if (!g?.id || !g.name || !g.slug || !g.createdBy) { conflictsSkipped++; continue; }
+                    const res = importGroup.run(
+                        g.id, g.name, g.slug, g.description ?? null, g.avatarUrl ?? null, g.category || 'general',
+                        g.createdBy, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
+                    );
+                    if (res.changes > 0) groupChanges++;
+                }
+            }
+
+            // Memberships, every status — a 'removed' row is what keeps a removal in force after failover. A row
+            // no newer than a local tombstone for the same key is a leave that already happened, and must not
+            // come back (a re-join is stamped after the tombstone and passes).
+            if (remote.groupMembers) {
+                const importGroupMember = db.prepare(`INSERT INTO group_members
+                    (group_id, member_pubkey, role, status, joined_at, invited_by, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(group_id, member_pubkey) DO UPDATE SET
+                        role = excluded.role,
+                        status = excluded.status,
+                        joined_at = excluded.joined_at,
+                        invited_by = excluded.invited_by,
+                        updated_at = excluded.updated_at
+                    WHERE excluded.updated_at IS NOT NULL
+                      AND (group_members.updated_at IS NULL OR excluded.updated_at > group_members.updated_at)`);
+                const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'group_members' AND row_key = ?`);
+                for (const gm of remote.groupMembers) {
+                    if (!gm?.groupId || !gm.memberPubkey) { conflictsSkipped++; continue; }
+                    if (!GROUP_ROLES.has(gm.role) || !GROUP_MEMBER_STATUSES.has(gm.status)) { conflictsSkipped++; continue; }
+                    const updatedAt = gm.updatedAt || new Date().toISOString();
+                    const ts = tombstoneAt.get(`${gm.groupId}|${gm.memberPubkey}`) as { deleted_at: string } | undefined;
+                    if (ts && ts.deleted_at >= updatedAt) {
+                        conflictsSkipped++;
+                        continue;
+                    }
+                    const res = importGroupMember.run(
+                        gm.groupId, gm.memberPubkey, gm.role, gm.status, gm.joinedAt ?? null, gm.invitedBy ?? null, updatedAt,
+                    );
+                    if (res.changes > 0) groupChanges++;
+                }
+            }
+
             if (remote.tombstones) {
                 for (const ts of remote.tombstones) {
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
@@ -970,6 +1068,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                     db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
                                 VALUES (?, ?, ?)`).run(ts.tableName, ts.rowKey, ts.deletedAt);
                     if (deleted) tombstonesApplied++;
+                    if (deleted && ts.tableName === 'group_members') groupChanges++;
                 }
             }
         })();
@@ -984,10 +1083,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
     // deletions, left both counters untouched, so every client on this node kept receiving 304
     // indefinitely and a removed listing stayed visible forever. A 304 never reads the database,
     // so nothing downstream would ever have noticed.
-    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0) {
+    // groupChanges too: the groups list answers conditional requests from its own version counter, which
+    // 'state_synced' bumps — an import that only changed groups would otherwise leave it serving 304s.
+    if (newMembers > 0 || newPosts > 0 || updatedMembers > 0 || updatedPosts > 0 || tombstonesApplied > 0 || groupChanges > 0) {
         cb.broadcast({
             type: 'state_synced',
-            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied,
+            newMembers, newPosts, updatedMembers, updatedPosts, tombstonesApplied, groupChanges,
             from: remote.nodeId,
         });
     }

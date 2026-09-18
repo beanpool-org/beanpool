@@ -116,6 +116,10 @@ async function main(): Promise<void> {
     assert(!memberRow(garden.id, carol), 'leaving deletes her row');
     const carolBack = attempt(() => joinGroup(garden.id, carol));
     assert(carolBack?.status === 'active', 'a member who left can rejoin an open group');
+    const leftAt = (db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'group_members' AND row_key = ?`)
+        .get(`${garden.id}|${carol}`) as any)?.deleted_at as string | undefined;
+    assert(!!leftAt && memberRow(garden.id, carol)?.updated_at > leftAt,
+        'leaving writes a tombstone, and a re-join straight after is stamped strictly later (same millisecond included)');
 
     const reinvited = attempt(() => inviteGroupMember(garden.id, alice, bob));
     assert(reinvited?.status === 'invited', 'a convenor can re-admit Bob by inviting him');

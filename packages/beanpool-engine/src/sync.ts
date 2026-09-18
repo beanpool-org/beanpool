@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
+import { parseReachPeers } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -256,6 +257,38 @@ export interface SyncEventRsvp {
     updatedAt: string;
 }
 
+/**
+ * A Commons group (#823). Replicated because a node restored from its mirror would otherwise come back with no
+ * groups at all — and every group-only post pointing at a group that no longer exists.
+ */
+export interface SyncGroup {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    avatarUrl: string | null;
+    category: string;
+    createdBy: string;
+    joinPolicy: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * One membership row, every status included: a 'removed' row is what keeps a removal in force, and a pending
+ * request or open invitation is state a restored node must not forget. Leaving deletes the row and travels as
+ * a `group_members` tombstone keyed `groupId|memberPubkey`.
+ */
+export interface SyncGroupMember {
+    groupId: string;
+    memberPubkey: string;
+    role: string;
+    status: string;
+    joinedAt: string | null;
+    invitedBy: string | null;
+    updatedAt: string;
+}
+
 export interface SyncPayload {
     stateHash?: string;
     cursor?: string;
@@ -282,6 +315,8 @@ export interface SyncPayload {
     settlements?: SyncSettlement[];
     pollVotes?: SyncPollVote[];
     eventRsvps?: SyncEventRsvp[];
+    groups?: SyncGroup[];
+    groupMembers?: SyncGroupMember[];
     tombstones?: { tableName: string; rowKey: string; deletedAt: string }[];
     nodeId: string;
     generatedAt?: string;
@@ -323,9 +358,22 @@ export function getStateHash(db: Db): string {
     } catch {
         // Table absent on older schema.
     }
+    // Groups and their memberships, with role and status — a removal or a promotion that never reached the
+    // replica is exactly the divergence this has to show. Added only when there are any, like RSVPs above.
+    let gIds: string[] = [];
+    let gmKeys: string[] = [];
+    try {
+        gIds = (db.prepare("SELECT id FROM groups ORDER BY id").all() as any[]).map(r => r.id);
+        gmKeys = (db.prepare("SELECT group_id || '|' || member_pubkey || '|' || role || '|' || status AS k FROM group_members ORDER BY group_id, member_pubkey")
+            .all() as any[]).map(r => r.k);
+    } catch {
+        // Tables absent on older schema.
+    }
     const data = JSON.stringify({
         m: pKeys.map(k => k.public_key), p: pIds.map(i => i.id), c: cIds, pi: piIds,
         ...(erKeys.length > 0 ? { er: erKeys } : {}),
+        ...(gIds.length > 0 ? { g: gIds } : {}),
+        ...(gmKeys.length > 0 ? { gm: gmKeys } : {}),
     });
 
     let hash = 0;
@@ -383,6 +431,14 @@ export function exportSyncState(
             ? (typeof row.poll_options === 'string' ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : row.poll_options)
             : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
+        // Who may see it. Without these a replica takes the column defaults — 'public' and 'local' — so a
+        // group-only or direct post would be shown to everyone on a restored node.
+        audienceScope: row.audience_scope || 'public',
+        targetGroupId: row.target_group_id || undefined,
+        targetPubkey: row.target_pubkey || undefined,
+        assignedTo: row.assigned_to || undefined,
+        reach: row.reach || 'local',
+        reachPeers: parseReachPeers(row.reach_peers),
         // Events. The private note replicates like every DM ciphertext does — a backup holds the whole
         // node — and never leaves through the listings pull, which reads its own columns.
         ...(row.type === 'event' ? {
@@ -640,6 +696,34 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
+    let groups: SyncGroup[] = [];
+    let groupMembers: SyncGroupMember[] = [];
+    try {
+        groups = sel('groups', 'updated_at').map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            slug: r.slug,
+            description: r.description ?? null,
+            avatarUrl: r.avatar_url ?? null,
+            category: r.category || 'general',
+            createdBy: r.created_by,
+            joinPolicy: r.join_policy,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at || r.created_at,
+        }));
+        groupMembers = sel('group_members', 'updated_at').map((r: any) => ({
+            groupId: r.group_id,
+            memberPubkey: r.member_pubkey,
+            role: r.role,
+            status: r.status,
+            joinedAt: r.joined_at ?? null,
+            invitedBy: r.invited_by ?? null,
+            updatedAt: r.updated_at || r.joined_at,
+        }));
+    } catch {
+        // Tables absent on older schema/fixtures
+    }
+
     const tombstoneRows = delta
         ? db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones WHERE deleted_at >= ?").all(since) as any[]
         : db.prepare("SELECT table_name, row_key, deleted_at FROM tombstones").all() as any[];
@@ -675,6 +759,8 @@ export function exportSyncState(
         settlements,
         pollVotes,
         eventRsvps,
+        groups,
+        groupMembers,
         tombstones,
     };
 }

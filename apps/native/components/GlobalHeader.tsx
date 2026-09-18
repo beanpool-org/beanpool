@@ -35,9 +35,23 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
     }
 };
 
-// Deliberately larger than the 32pt pill so the avatar spills past its edge. The pill's own
-// height and width are unchanged — only its clipping, which had to become visible.
-const AVATAR_PILL_SIZE = 43;
+// MOCK (mock/header-slim): the whole header is one 48dp row below the status bar.
+export const HEADER_ROW_HEIGHT = 48;
+const BEAN_SIZE = 38;
+const AVATAR_SIZE = 32;
+
+// Named after the tab labels, so the header and the tab's accessibilityLabel agree.
+function pageTitle(pathname: string): string {
+    if (pathname === '/' || pathname === '/market') return 'Market';
+    if (pathname === '/map') return 'Map';
+    if (pathname === '/chats') return 'Talk';
+    if (pathname === '/people') return 'People';
+    if (pathname === '/pulse') return 'Pulse';
+    if (pathname === '/projects') return 'Commons';
+    if (pathname === '/ledger') return 'Ledger';
+    if (pathname === '/settings') return 'Settings';
+    return 'BeanPool';
+}
 
 /**
  * `onMeasure` reports the header's real rendered height — including the update banner,
@@ -70,26 +84,23 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         headerContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
+            paddingLeft: 8,
+            paddingRight: 4,
         },
-        headerLeft: { flex: 1, alignItems: 'flex-start' },
-        headerCenter: { flex: 2, alignItems: 'center', justifyContent: 'center' },
-        headerRight: { flex: 1, alignItems: 'flex-end' },
+        beanBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+        statusBadge: { position: 'absolute', right: 5, bottom: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#ffffff' },
         headerTitle: {
+            flex: 1,
+            marginLeft: 4,
             color: '#ffffff',
-            fontSize: 22,
-            fontWeight: '900',
-            letterSpacing: 0.5,
+            fontSize: 20,
+            fontWeight: '800',
             textShadowColor: 'rgba(0,0,0,0.75)',
-            textShadowOffset: { width: 0, height: 2 },
-            textShadowRadius: 6,
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 4,
         },
-        headerLeftControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : 'rgba(16, 185, 129, 0.3)', height: 32, width: 80, overflow: 'hidden' },
-        headerLeftControlsGuest: { borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg },
-        headerLeftControlsDisconnected: { borderColor: colors.feedback.danger.border, backgroundColor: colors.feedback.danger.bg },
-        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'visible' },
-        controlPillBtn: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center' },
+        headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
+        iconBtn: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
         modalVersion: { fontSize: 14, fontWeight: '900', color: colors.text.muted, letterSpacing: 1, textAlign: 'right', marginBottom: 4 },
@@ -486,7 +497,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     // is `overflow: hidden`, so pinning it to this height clipped the update banner out of
     // existence — the banner rendered, on both platforms, and could never be seen. The
     // wrapper now sizes to its children (header row + banner, when there is one).
-    const headerHeight = Math.max(insets.top + 10, 40) + 56;
+    const headerHeight = insets.top + HEADER_ROW_HEIGHT;
     const isMapScreen = pathname === '/map';
 
     return (
@@ -505,12 +516,34 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
             </View>
 
-            <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 10, 40), height: headerHeight }]} pointerEvents="box-none">
-                <View style={styles.headerLeft}>
+            {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
+                old centre chevron opened, and wears the connection dot as a badge. The page name
+                sits beside it; invite, settings and avatar are plain icons on the right. */}
+            <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Switch community, ${isOffline ? 'offline' : isGuestOnActive ? 'guest' : 'connected'}`}
+                    style={styles.beanBtn}
+                    activeOpacity={0.7}
+                    onPress={openDropdown}
+                >
+                    <Image
+                        source={require('../assets/images/header-bean.png')}
+                        style={{ width: BEAN_SIZE, height: BEAN_SIZE }}
+                        resizeMode="contain"
+                    />
+                    <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
+                </TouchableOpacity>
+
+                <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                    {pageTitle(pathname)}
+                </Text>
+
+                <View style={styles.headerRightIcons}>
                     <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel={!hasAnchorUrl ? 'Connect to community' : isGuestOnActive ? 'Join community' : 'Invite friends'}
-                        style={[styles.headerLeftControls, !hasAnchorUrl ? styles.headerLeftControlsDisconnected : isGuestOnActive ? styles.headerLeftControlsGuest : undefined]}
+                        style={styles.iconBtn}
                         onPress={() => {
                             if (!hasAnchorUrl) {
                                 router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
@@ -520,97 +553,42 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                             }
                         }}
                     >
-                        <MaterialCommunityIcons 
-                            name={!hasAnchorUrl ? 'link-off' : isGuestOnActive ? 'account-alert-outline' : 'account-plus-outline'} 
-                            size={16} 
-                            color={!hasAnchorUrl ? colors.feedback.danger.fg : isGuestOnActive ? colors.feedback.warning.fg : colors.feedback.success.fg} 
+                        <MaterialCommunityIcons
+                            name={!hasAnchorUrl ? 'link-off' : isGuestOnActive ? 'account-alert-outline' : 'account-plus-outline'}
+                            size={24}
+                            color={!hasAnchorUrl ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : '#ffffff'}
                         />
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: !hasAnchorUrl ? colors.feedback.danger.fg : isGuestOnActive ? colors.feedback.warning.fg : colors.feedback.success.fg, marginLeft: 4 }}>
-                            {!hasAnchorUrl ? 'Connect' : isGuestOnActive ? 'Join' : 'Invite'}
-                        </Text>
                     </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Switch community"
-                    style={[styles.headerCenter, { zIndex: 10 }]}
-                    activeOpacity={0.7}
-                    onPress={openDropdown}
-                >
-                    <View style={{ flexDirection: 'column', alignItems: 'center', position: 'relative', transform: [{ translateX: isMapScreen ? -12 : -6 }, { translateY: isMapScreen ? -12 : 0 }] }}>
-                        {isMapScreen ? (
-                            <View style={{ position: 'relative' }}>
-                                <Image 
-                                    source={require('../assets/images/logo.png')} 
-                                    style={{ width: 280, height: 76, marginTop: -8, marginBottom: -12 }} 
-                                    resizeMode="contain" 
-                                />
-                                <View style={{ position: 'absolute', bottom: -10, right: 90, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />
-                                    <MaterialCommunityIcons 
-                                        name="chevron-down" 
-                                        size={20} 
-                                        color="#ffffff" 
-                                        style={{ opacity: 0.9 }} 
-                                    />
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text 
-                                    style={[styles.headerTitle, { fontSize: 20, marginBottom: 0 }]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                >
-                                    {pathname === '/' || pathname === '/market' ? 'Marketplace' :
-                                     pathname === '/projects' ? 'Projects' :
-                                     pathname === '/chats' ? 'Talk' :
-                                     pathname === '/people' ? 'People' :
-                                     pathname === '/ledger' ? 'Ledger' :
-                                     pathname === '/pulse' ? 'The Pulse' :
-                                     pathname === '/settings' ? 'Settings' : 'BeanPool'}
-                                </Text>
-                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />
-                                <MaterialCommunityIcons name="chevron-down" size={20} color="#ffffff" style={{ opacity: 0.8, marginTop: 2 }} />
-                            </View>
-                        )}
-                    </View>
-                </TouchableOpacity>
- 
-                <View style={styles.headerRight}>
-                    <View style={styles.headerRightControls}>
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Settings"
-                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
-                            onPress={() => {
-                                if (pathname === '/settings') {
-                                    if (router.canGoBack()) {
-                                        router.back();
-                                    } else {
-                                        router.replace('/(tabs)/');
-                                    }
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Settings"
+                        style={styles.iconBtn}
+                        onPress={() => {
+                            if (pathname === '/settings') {
+                                if (router.canGoBack()) {
+                                    router.back();
                                 } else {
-                                    router.push('/(tabs)/settings');
+                                    router.replace('/(tabs)/');
                                 }
-                            }}
-                        >
-                            <MaterialCommunityIcons name="tune" size={17} color={pathname === '/settings' ? colors.accent.primary : colors.text.secondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Open profile"
-                            style={styles.controlPillBtn}
-                            onPress={() => {
-                                if (identity?.publicKey) {
-                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
-                                }
-                            }}
-                        >
-                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_PILL_SIZE} />
-                        </TouchableOpacity>
-                    </View>
+                            } else {
+                                router.push('/(tabs)/settings');
+                            }
+                        }}
+                    >
+                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.accent.primary : '#ffffff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Open profile"
+                        style={styles.iconBtn}
+                        onPress={() => {
+                            if (identity?.publicKey) {
+                                router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
+                            }
+                        }}
+                    >
+                        <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_SIZE} />
+                    </TouchableOpacity>
                 </View>
             </View>
 

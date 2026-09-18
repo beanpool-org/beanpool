@@ -18,6 +18,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
+import { signedGet } from '../utils/db';
 
 export interface ActivityFeedItem {
     id: number;
@@ -50,9 +51,13 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
     const isDark = theme === 'dark';
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
+    // The node serves this feed to its members only (it names who traded with whom, and for how
+    // many Beans). A guest browsing a community they have not joined gets 401/403.
+    const [membersOnly, setMembersOnly] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
+        let refused = false;
 
         async function loadFeed() {
             try {
@@ -61,8 +66,14 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                     if (isMounted) setLoading(false);
                     return;
                 }
-                const cleanUrl = anchorUrl.replace(/\/$/, '');
-                const res = await fetch(`${cleanUrl}/api/activity/feed?limit=25`);
+                const res = await signedGet('/api/activity/feed?limit=25');
+                if (res.status === 401 || res.status === 403) {
+                    // Not a member here: stop polling for an answer that will not change while this screen is up.
+                    refused = true;
+                    stopPolling();
+                    if (isMounted) setMembersOnly(true);
+                    return;
+                }
                 if (res.ok && isMounted) {
                     const data = await res.json();
                     if (Array.isArray(data?.feed)) {
@@ -83,7 +94,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         let interval: ReturnType<typeof setInterval> | null = null;
 
         const startPolling = () => {
-            if (!interval) {
+            if (!interval && !refused) {
                 loadFeed();
                 interval = setInterval(loadFeed, withJitter(30_000));
             }
@@ -116,6 +127,18 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
             sub.remove();
         };
     }, []);
+
+    if (membersOnly) {
+        return (
+            <View style={[styles.emptyCard, { backgroundColor: isDark ? '#18181b' : '#f4f4f5', borderColor: colors.border.default }]}>
+                <Text style={styles.bigEmoji}>🌱</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text.body }]}>Community activity is for members</Text>
+                <Text style={[styles.emptySubtitle, { color: colors.text.secondary }]}>
+                    Join this community to see who is trading and who is new.
+                </Text>
+            </View>
+        );
+    }
 
     if (loading && feed.length === 0) {
         return (

@@ -2545,7 +2545,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {filtered.length > 0 && (
-                            <ActivityWaterfall isFullView={false} />
+                            <ActivityWaterfall isFullView={false} isMember={isMember} />
                         )}
 
                         {filtered.length === 0 ? (
@@ -2562,7 +2562,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </p>
                                 </div>
                             ) : (
-                                <ActivityWaterfall isFullView={true} />
+                                <ActivityWaterfall isFullView={true} isMember={isMember} />
                             )
                         ) : (() => {
                             if (viewMode === 'grid') {

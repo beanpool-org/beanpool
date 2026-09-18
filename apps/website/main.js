@@ -204,6 +204,15 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     });
 });
 
+// ======================== PHONE MENU ========================
+// The menu is a plain <details>; close it once a link is chosen so it doesn't cover the section.
+document.querySelectorAll('.nav-menu a').forEach(a => {
+    a.addEventListener('click', () => {
+        const menu = a.closest('details');
+        if (menu) menu.open = false;
+    });
+});
+
 // ======================== NAV SCROLL EFFECT ========================
 window.addEventListener('scroll', () => {
     const nav = document.getElementById('navbar');
@@ -212,122 +221,6 @@ window.addEventListener('scroll', () => {
     } else {
         nav.style.background = 'rgba(5, 10, 20, 0.85)';
     }
-});
-
-// ======================== STEP DEEP DIVE MODAL ========================
-const STEP_DETAILS = [
-    {
-        number: '01',
-        icon: '🏡',
-        tag: 'Infrastructure & Self-Hosting',
-        title: 'Bootstrap a Sovereign Node',
-        subtitle: 'Deploy an independent community exchange gateway for your town or valley with zero corporate intermediaries.',
-        points: [
-            { title: 'Single Docker Deployment', text: 'Run the entire stack (Node engine, SQLite database, P2P syncer, and Web gateway) in seconds with Docker Compose.' },
-            { title: 'Community Data Ownership', text: 'All transaction history, profiles, and trust graphs are stored locally on your node. No subscriptions or third-party cloud lock-in.' },
-            { title: 'Autonomous Fleet Telemetry', text: 'Node runners have access to the built-in Fleet Manager (/manager) with encrypted harvester backups and peer health checks.' }
-        ],
-        primaryAction: { label: 'Start Your Node (Docker) →', href: '#get-started' },
-        secondaryAction: { label: '▶ Watch Setup Tutorial on YouTube', href: 'https://www.youtube.com/@beanpool' }
-    },
-    {
-        number: '02',
-        icon: '🔑',
-        tag: 'Cryptographic Identity',
-        title: 'Sovereign Identity & Dual-Custody',
-        subtitle: 'Own your keys and your trust reputation, with hardware-backed custody and a 12-word phrase that restores your account anywhere.',
-        points: [
-            { title: 'Ed25519 Cryptographic Keys', text: 'Your unique cryptographic identity is generated directly on your mobile device, signed and anchored in the community web of trust.' },
-            { title: 'Dual-Custody Protection', text: 'On the phone apps your key sits in the operating system\'s secure storage, with an optional biometric lock on the app itself; in the browser app it sits in that browser\'s own storage. Your 12-word phrase is the backup that depends on nobody.' },
-            { title: 'Sign-In Recovery', text: 'On the phone app, optionally link an Apple, Google, Facebook or GitHub account so your community node can help you back onto a new device. That path is custodial — your node\'s operator can use it. Your 12 words remain the way back that depends on nobody.' }
-        ],
-        primaryAction: { label: 'Read Identity Guide (§3) →', href: 'getting-started.html#3' },
-        secondaryAction: { label: '▶ Watch Mobile Pairing Walkthrough', href: 'https://www.youtube.com/@beanpool' }
-    },
-    {
-        number: '03',
-        icon: '⚖️',
-        tag: 'Zero-Sum Mutual Credit',
-        title: 'Earned Reciprocal Credit & Staking',
-        subtitle: 'Value flows directly from community service to service — no debt, no interest, and no banks.',
-        points: [
-            { title: 'Start at Zero (Zero-Sum)', text: 'No fiat money is ever injected. Every transaction is balanced: one member is debited, another is credited symmetrically.' },
-            { title: 'The Offer Covenant (−200 Beans)', text: 'Your credit line is earned by trading, and live offers meter how much of it you can use — one live offer unlocks −200 Beans, up to −2000 at five.' },
-            { title: 'Escrow Protection & Reputation', text: 'Trades are secured in cryptographic escrow until the buyer confirms completion. Successful trades unlock deeper credit lines down to −2,000 Beans.' }
-        ],
-        primaryAction: { label: 'View Credit Rules (§4) →', href: 'rules.html#4' },
-        secondaryAction: { label: '▶ Watch Mutual Credit Video', href: 'https://www.youtube.com/@beanpool' }
-    },
-    {
-        number: '04',
-        icon: '🌐',
-        tag: 'Federation & Civic Commons',
-        title: 'Keynesian Clearing & Democratic Commons',
-        subtitle: 'Trade between towns without fiat currency, while circulation fees fund democratic local projects.',
-        points: [
-            { title: 'Keynesian Trade Connectors', text: 'Inspired by John Maynard Keynes\' Bancor, autonomous community nodes clear trades in pairs — beans never leave home, and each side caps its own exposure.' },
-            { title: 'Progressive Demurrage', text: 'A gentle progressive circulation incentive on idle surplus balances encourages active spending and prevents speculative hoarding.' },
-            { title: 'Community Commons Pool', text: '100% of circulation and trade charges flow into a shared Commons — funding projects members vote for, and absorbing bad debt so the ledger always balances.' }
-        ],
-        primaryAction: { label: 'View Federation Rules (§10) →', href: 'rules.html#10' },
-        secondaryAction: { label: '▶ Watch Keynesian Clearing Video', href: 'https://www.youtube.com/@beanpool' }
-    }
-];
-
-function openStepModal(index) {
-    const data = STEP_DETAILS[index];
-    if (!data) return;
-
-    const modal = document.getElementById('step-modal');
-    const content = document.getElementById('step-modal-content');
-
-    const pointsHtml = data.points.map(p => `
-        <div class="modal-point-card">
-            <strong>${p.title}</strong>
-            <p>${p.text}</p>
-        </div>
-    `).join('');
-
-    content.innerHTML = `
-        <div class="modal-step-header">
-            <div class="modal-step-icon">${data.icon}</div>
-            <div>
-                <span class="modal-step-tag">Step ${data.number} &middot; ${data.tag}</span>
-                <h2>${data.title}</h2>
-            </div>
-        </div>
-        <p class="modal-step-subtitle">${data.subtitle}</p>
-        <div class="modal-points-grid">
-            ${pointsHtml}
-        </div>
-        <div class="modal-actions-row">
-            <a href="${data.primaryAction.href}" class="btn btn-primary" onclick="closeStepModal()">${data.primaryAction.label}</a>
-            <a href="${data.secondaryAction.href}" target="_blank" rel="noopener" class="btn btn-ghost" style="border-color: rgba(255, 0, 0, 0.4); color: #ff6666;">${data.secondaryAction.label}</a>
-        </div>
-    `;
-
-    modal.classList.add('active');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeStepModal() {
-    const modal = document.getElementById('step-modal');
-    if (!modal) return;
-    modal.classList.remove('active');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-}
-
-// Close modal on backdrop click or ESC key
-const stepModal = document.getElementById('step-modal');
-if (stepModal) {
-    stepModal.addEventListener('click', (e) => {
-        if (e.target === stepModal) closeStepModal();
-    });
-}
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeStepModal();
 });
 
 // ======================== INIT ========================

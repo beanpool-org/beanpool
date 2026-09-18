@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BeanPool — Decentralized Mutual Credit & Federated Community Exchange</title>
-    <meta name="description" content="BeanPool is a decentralized mutual credit protocol and native mobile app that lets communities trade services, federate inter-town clearing, and fund local projects — peer-to-peer, no middlemen.">
+    <title>BeanPool — Trade with your neighbours, in Beans</title>
+    <meta name="description" content="BeanPool is a free app your community uses to trade help, goods and skills with each other, in Beans instead of money. Join by invitation from someone in your community. iPhone, Android and web.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,19 +12,18 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="style.css?v=2.3">
+    <link rel="stylesheet" href="style.css?v=2.4">
 </head>
 <body>
     <!-- Navigation Bar -->
     <nav id="navbar">
-        <div class="nav-inner">
+        <div class="nav-inner has-menu">
             <a href="#" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
                 <a href="#how-it-works">How It Works</a>
+                <a href="#features">What You Can Do</a>
                 <a href="rules.html">The Rules</a>
-                <a href="#features">Features</a>
-                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials</a>
-                <a href="#live-nodes">Live Nodes</a>
+                <a href="#run-a-node">Run a Community</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
@@ -38,6 +37,20 @@
                 </div>
                 <a href="getting-started.html" class="nav-cta">Get Started</a>
             </div>
+            <!-- Phone menu: below 768px the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Open menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Get Started</a>
+                    <a href="#how-it-works">How It Works</a>
+                    <a href="#features">What You Can Do</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="#run-a-node">Run a Community</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Videos on YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool on Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source on GitHub</a>
+                </div>
+            </details>
         </div>
     </nav>
 
@@ -45,71 +58,59 @@
     <section id="hero">
         <div class="hero-bg"></div>
         <div class="container hero-container">
-            <!-- Top: Centered Hero Header (Badge, Title, Subtitle) -->
             <div class="hero-header">
-                <div class="hero-badge">📱 Native iOS & Android · Federated Mutual Credit · Community-Owned</div>
-                <h1>Exchange for <span class="gradient-text">Communities</span>,<br>Not Commercial Banks</h1>
-                <p class="hero-subtitle">BeanPool is a decentralized mutual credit protocol and native mobile app that lets neighborhoods trade goods and services, federate inter-community trade without fiat money, and build resilient local wealth.</p>
-                <p class="hero-manifesto">The value a community creates should stay in that community. That principle has a name, and it shapes every rule in the protocol — <a href="post-extraction.html">read what a post-extraction economy means <span aria-hidden="true">&rarr;</span></a></p>
+                <div class="hero-badge">Free on phone and web</div>
+                <h1>Trade with your neighbours, in <span class="gradient-text">Beans</span></h1>
+                <p class="hero-subtitle">BeanPool is a free app your community uses to trade help, goods and skills with each other. Instead of money, you use Beans: help someone and Beans come to you; get help and they go the other way. Zero is the goal &mdash; give about as much as you take.</p>
             </div>
 
-            <!-- Bottom: 2-Column Row (What BeanPool Isn't on Left, CTAs/Store Badges on Right) -->
             <div class="hero-lower-grid">
-                <!-- Left: Compact What BeanPool Isn't Card -->
-                <div class="not-card glass-panel">
+                <!-- Left: one trade, start to finish -->
+                <div class="not-card hero-example glass-panel">
                     <div class="not-card-header">
-                        <span class="not-card-tag">🚫 Anti-Extraction Manifesto</span>
-                        <h3>What BeanPool <span class="text-rose">Isn't</span></h3>
+                        <span class="not-card-tag">How Beans move</span>
+                        <h3>Three neighbours, one week</h3>
                     </div>
                     <div class="not-card-list">
                         <div class="not-card-item">
-                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-icon">1</div>
                             <div class="not-item-content">
-                                <strong>Not an Ad-Delivery Machine</strong>
-                                <p>No lookalike tracking, data harvesting, or get-rich guru algorithms.</p>
+                                <strong>Sam fixes Ana's bike &mdash; 30 Beans</strong>
+                                <p>Sam goes up to +30. Ana goes down to −30.</p>
                             </div>
                         </div>
                         <div class="not-card-item">
-                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-icon">2</div>
                             <div class="not-item-content">
-                                <strong>Not a Speculative Crypto Token</strong>
-                                <p>Beans are mutual credit for real trade — never pumped on exchanges.</p>
+                                <strong>Ana bakes bread for Lee &mdash; 30 Beans</strong>
+                                <p>Ana is back to 0. Lee is now at −30.</p>
                             </div>
                         </div>
                         <div class="not-card-item">
-                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-icon">3</div>
                             <div class="not-item-content">
-                                <strong>Not an Attention Slot Machine</strong>
-                                <p>No dopamine-loop doomscrolling — only real local offerings and neighbors.</p>
-                            </div>
-                        </div>
-                        <div class="not-card-item">
-                            <div class="not-item-icon">✕</div>
-                            <div class="not-item-content">
-                                <strong>Not Corporate Debt or Extraction</strong>
-                                <p>No interest, no banks, and no middlemen. 100% of circulation funds your Commons.</p>
+                                <strong>Lee minds Sam's dog &mdash; 30 Beans</strong>
+                                <p>Everyone is back near zero, and three jobs got done without anyone spending money.</p>
                             </div>
                         </div>
                     </div>
+                    <p class="hero-example-note">The seller keeps 98.5% of each price; the other 1.5% goes to the community's Commons pool, so the real numbers land a little under these.</p>
                 </div>
 
-                <!-- Right: CTAs and App Badges Card -->
+                <!-- Right: how to join -->
                 <div class="hero-cta-card glass-panel">
                     <div class="hero-cta-header">
-                        <span class="hero-cta-tag">⚡ Get Started</span>
-                        <h3>Join the Sovereign Exchange</h3>
-                        <p>Bootstrap your community node with Docker or install the native mobile app.</p>
+                        <span class="hero-cta-tag">Got an invite?</span>
+                        <h3>Join your community</h3>
+                        <p>You join BeanPool through someone who is already in your community. Install the app, then open the invite link or scan the QR code they gave you. Invites work once and last 30 days.</p>
                     </div>
 
-                    <!-- Primary Actions Grid (50/50) -->
                     <div class="hero-actions-grid">
-                        <a href="#get-started" class="btn btn-primary font-header">Start Your Node →</a>
-                        <a href="#how-it-works" class="btn btn-ghost">Learn How It Works</a>
+                        <a href="getting-started.html" class="btn btn-primary font-header">How to join →</a>
+                        <a href="#run-a-node" class="btn btn-ghost">Start a community</a>
                     </div>
 
-                    <!-- Logos & Badges Group (App Stores & Community Badges) -->
                     <div class="hero-logos-group">
-                        <!-- App Store Badges with White Ring -->
                         <div class="hero-store-grid">
                             <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Download on the App Store">
                                 <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
@@ -139,22 +140,7 @@
                                 </svg>
                             </a>
                         </div>
-
-                        <!-- Social & Source Hub (33/33/33) -->
-                        <div class="hero-social-grid">
-                            <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
-                                <svg class="social-icon" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                                <span>YouTube</span>
-                            </a>
-                            <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" title="Join Reddit Community (r/beanpool)">
-                                <svg class="social-icon" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
-                                <span>Reddit</span>
-                            </a>
-                            <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" title="View Source on GitHub">
-                                <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                                <span>GitHub</span>
-                            </a>
-                        </div>
+                        <p class="hero-web-note">No app store? Open your community's web address in your phone's browser and add it to your home screen.</p>
                     </div>
                 </div>
             </div>
@@ -180,177 +166,190 @@
     <section id="how-it-works">
         <div class="container">
             <div class="section-header">
-                <h2>How BeanPool Works</h2>
-                <p>A zero-sum community exchange where value flows directly from real services between real people — click any step to explore how it works.</p>
+                <h2>How It Works</h2>
+                <p>From an invite to your first trade.</p>
             </div>
             <div class="steps-grid">
-                <div class="step-card glass-panel" onclick="openStepModal(0)" role="button" tabindex="0" aria-label="Step 1: Bootstrap a Node">
-                    <div class="step-icon">🏡</div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
                     <div class="step-number">01</div>
                     <div>
-                        <h3>1. Bootstrap a Node</h3>
-                        <p>Deploy a lightweight sovereign node with Docker on any server or Raspberry Pi. Your community owns its data, ledger, and rules.</p>
+                        <h3>1. Get an invite</h3>
+                        <p>Someone already in your community sends you an invite link or a QR code. Open it in the app and pick your callsign &mdash; the name people will know you by.</p>
                     </div>
-                    <span class="step-card-tap">Explore Deep Dive →</span>
                 </div>
-                <div class="step-card glass-panel" onclick="openStepModal(1)" role="button" tabindex="0" aria-label="Step 2: Sovereign Identity">
+                <div class="step-card glass-panel">
                     <div class="step-icon">🔑</div>
                     <div class="step-number">02</div>
                     <div>
-                        <h3>2. Sovereign Identity</h3>
-                        <p>Cryptographic Ed25519 keys generated on your device. Your 12-word phrase restores your account anywhere. On the phone app you can also link a sign-in account, so your community node can help you back onto a new device.</p>
+                        <h3>2. Keep your 12 words</h3>
+                        <p>The app makes your account on your phone and shows you 12 words. Write them down and keep them safe: they bring your account back if you lose or change your phone.</p>
                     </div>
-                    <span class="step-card-tap">Explore Deep Dive →</span>
                 </div>
-                <div class="step-card glass-panel" onclick="openStepModal(2)" role="button" tabindex="0" aria-label="Step 3: Earned Reciprocal Credit">
-                    <div class="step-icon">⚖️</div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
                     <div class="step-number">03</div>
                     <div>
-                        <h3>3. Earned Reciprocal Credit</h3>
-                        <p>Start at zero. Earn your credit floor through completed trades with diverse members, unlocked by keeping active community offers live.</p>
+                        <h3>3. Post an offer</h3>
+                        <p>Put up something you can do or share: a lift to town, eggs, fixing a bike, an hour of gardening. You need at least one offer up before you can post a need or buy.</p>
                     </div>
-                    <span class="step-card-tap">Explore Deep Dive →</span>
                 </div>
-                <div class="step-card glass-panel" onclick="openStepModal(3)" role="button" tabindex="0" aria-label="Step 4: Federated Clearing & Commons">
-                    <div class="step-icon">🌐</div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
                     <div class="step-number">04</div>
                     <div>
-                        <h3>4. Federated Clearing & Commons</h3>
-                        <p>Trade with neighbouring towns via Keynesian bilateral clearing connectors, while progressive circulation fees fund democratic local projects.</p>
+                        <h3>4. Trade</h3>
+                        <p>Agree a price in Beans. The Beans are held safely until the job is done, then they go to the seller. You rate each other afterwards.</p>
                     </div>
-                    <span class="step-card-tap">Explore Deep Dive →</span>
                 </div>
             </div>
+            <p class="section-more"><a href="getting-started.html">Read the full Getting Started guide →</a></p>
         </div>
     </section>
 
-    <!-- App Preview Section -->
-    <section id="app-preview">
-        <div class="container">
-            <div class="section-header">
-                <h2>Native Mobile Experience</h2>
-                <p>A beautifully designed, sovereign native application for iOS and Android that maps your local neighborhood.</p>
-                <div class="section-app-badges">
-                    <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="store-badge" title="Download on the App Store">
-                        <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="135" height="40" rx="7" fill="#000"/>
-                            <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
-                            <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
-                            <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
-                            <g transform="translate(10, 6) scale(0.58)">
-                                <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
-                                <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
-                            </g>
-                        </svg>
-                    </a>
-                    <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="store-badge" title="Get it on Google Play">
-                        <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
-                            <rect width="135" height="40" rx="7" fill="#000"/>
-                            <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
-                            <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
-                            <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
-                            <g transform="translate(10, 7)">
-                                <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
-                                <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
-                                <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
-                                <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
-                                <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
-                            </g>
-                        </svg>
-                    </a>
-                </div>
-            </div>
-            <img src="assets/screenshots/mockup_composite.png" alt="BeanPool native mobile app — Map, Marketplace, P2P Offers, and Mutual Credit Ledger views" class="mockup-img" width="2000" height="960" loading="lazy" decoding="async">
-        </div>
-    </section>
-
-    <!-- Features Section -->
+    <!-- What you can do: one card per part of the app, in the app's own words -->
     <section id="features">
         <div class="container">
             <div class="section-header">
-                <h2>Engineered for Economic Resilience</h2>
-                <p>Not a speculative token. Not a corporate startup. A complete protocol for community sovereignty.</p>
+                <h2>What You Can Do</h2>
+                <p>The phone app has six tabs: Market, Map, Talk, Pulse, Commons and Ledger, where you see your balance and your trades.</p>
             </div>
             <div class="features-grid">
-                <!-- Highlight: Keynesian Trade Connectors -->
-                <div class="feature-card feature-highlight glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <div class="feature-content">
-                        <h3>Federated Trade Connectors (Keynesian Bilateral Clearing)</h3>
-                        <p>Trade between towns and nodes without fiat currency. Inspired by John Maynard Keynes’ Bancor and his clearing union, BeanPool Connectors let autonomous community nodes trade peer-to-peer. Beans never cross the border: each pair of nodes keeps a bridge ledger of what they owe each other in work, capped independently by each side, so neither community’s local circulation is drained. Opt-in per node.</p>
-                    </div>
-                </div>
-
-                <!-- Dual-Custody Key Management -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔑</div>
-                    <h3>Dual-Custody Key Architecture</h3>
-                    <p>On the phone apps your key is held in the operating system's secure storage, and you can put an optional biometric lock on the app itself. In the browser app it is held in that browser's own storage on your device. Either way it never leaves your device, and your offline 12-word phrase is the backup that depends on nobody. On the phone app you can also link an Apple, Google, Facebook or GitHub sign-in so your community node can help you back onto a new device &mdash; that path is custodial, and your node's operator could use it.</p>
+                    <div class="feature-icon">🧺</div>
+                    <h3>Market</h3>
+                    <p>What people in your community are offering and what they need, with polls and events in the same feed. Search it, filter by category, and tap to trade.</p>
                 </div>
 
-                <!-- Reciprocal Credit & Staking -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚖️</div>
-                    <h3>Earned Credit & Active Offer Staking</h3>
-                    <p>Credit lines are earned through verified multi-party trades — never bought or granted arbitrarily. Carrying a debit balance requires maintaining live active offers, ensuring all credit is backed by ongoing community commitment.</p>
+                    <div class="feature-icon">🗺️</div>
+                    <h3>Map</h3>
+                    <p>See what is on offer near you. You place every pin yourself: use your location once, at the moment you post, or drop the pin by hand. BeanPool never tracks where you are. Enterprise and event pins can be set to Approximate, which rounds the spot to about 100&nbsp;m. Pins are public: anyone who opens your community's map can see them.</p>
                 </div>
 
-                <!-- Location: you place every pin -->
                 <div class="feature-card glass-panel">
-                    <div class="feature-icon">🛡️</div>
-                    <h3>You Place Every Pin</h3>
-                    <p>BeanPool never tracks where you are, in the background or otherwise. You decide where each post, enterprise and event sits on the map &mdash; use your location once, at the moment you place it, or drop the pin by hand. Enterprise and event pins can be marked Approximate, which rounds the spot to roughly 100&nbsp;m. Pins are public: anyone who opens your community's map can see them.</p>
+                    <div class="feature-icon">📅</div>
+                    <h3>Events <span class="new-pill">New</span></h3>
+                    <p>Post a working bee, a repair café or a skill-share with a time and a place. People tap Going or Interested. Everyone going gets the event chat and the host's private note &mdash; the gate code, what to bring &mdash; and hears about it if the time or place changes or it is cancelled. Events are free; no Beans change hands. Find them on the map under Today, This weekend or Next 7 days, and use Copy to a new date to run one again.</p>
                 </div>
 
-                <!-- Demurrage & Commons -->
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🏛️</div>
-                    <h3>Progressive Commons & Circulation</h3>
-                    <p>A modest progressive circulation incentive (demurrage) on idle surplus balances encourages active local exchange and continuously feeds a Community Commons pool for member-voted civic projects.</p>
-                </div>
-
-                <!-- Autonomous Fleet Manager -->
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🚀</div>
-                    <h3>Autonomous Fleet Management</h3>
-                    <p>A dedicated operator control plane for multi-node networks: live telemetry, automated encrypted snapshot backups (harvester), tamper-resistant audit logs, and peer health monitoring.</p>
-                </div>
-
-                <!-- Encrypted Messaging -->
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">💬</div>
-                    <h3>Encrypted Messaging & Deals</h3>
-                    <p>Direct messages between two members are end-to-end encrypted: your community's node carries them but cannot read them. Enterprise discussion threads and event chats are readable by that community's node by design, so the people running the community can moderate them &mdash; the app says so on every one of those threads.</p>
+                    <h3>Talk</h3>
+                    <p>Message anyone in your community. Direct messages between two members are end-to-end encrypted: your community's node carries them but cannot read them. Enterprise discussions and event chats can be read by the people who run your community's node, so they can be moderated &mdash; the app says so on each of those chats.</p>
                 </div>
 
-                <!-- Video Guides & Tutorials (YouTube Brand Tile) -->
-                <div class="feature-card feature-card-brand brand-youtube glass-panel">
-                    <div class="brand-card-top">
-                        <div class="brand-icon-wrapper youtube-bg">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                        </div>
-                        <span class="brand-badge youtube-badge">▶ Official Channel</span>
-                    </div>
-                    <div>
-                        <h3>Video Guides & Tutorials</h3>
-                        <p>Watch step-by-step explainer videos on mutual credit economics, Keynesian trade connectors, node deployment tutorials, and mobile app pairing.</p>
-                    </div>
-                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube">Watch on YouTube →</a>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>The Commons: enterprises <span class="new-pill">New</span></h3>
+                    <p>An enterprise is something your community runs together: an egg flock, a tool library, a firewood depot, or a project with a goal and an end date. Keepers run it and a lead keeper leads it; members can ask to join as keepers. It has its own Beans, posts offers and needs in the Market like anyone else, shows its income and spending, and can pause for the season. No keeper can approve a payment to themselves: another keeper has to.</p>
                 </div>
 
-                <!-- Community Forum (Reddit Brand Tile) -->
-                <div class="feature-card feature-card-brand brand-reddit glass-panel">
-                    <div class="brand-card-top">
-                        <div class="brand-icon-wrapper reddit-bg">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>Polls and Decisions <span class="new-pill">New</span></h3>
+                    <p>Anyone can ask the community a question with a poll in the Market. Bigger choices are Decisions, in the Commons tab: a grant from the Commons pool to an enterprise, a hardship grant, replacing a lead keeper. A Decision is open for 7 days and carries itself out if it passes. Once you have completed a trade, you can propose one.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Groups <span class="new-pill">New</span></h3>
+                    <p>Start a group for your street, your garden club or your band, and you become its convenor. Post to the group only, and choose whether it is open, people ask to join, or it is invite only.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>The Pulse</h3>
+                    <p>See what local people are making. Members can connect their own channels &mdash; TikTok, Instagram, YouTube, SoundCloud or a blog feed &mdash; and their public posts show up in your community's Pulse. Connecting is up to each member. Anything that shouldn't be there can be reported, and your community's node can take it down.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>Credit You Earn, Not Borrow</h2>
+                <p>Nobody buys Beans, and nobody pays interest.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>Everyone starts at zero</h3>
+                    <p>A new account has 0 Beans. When you sell, your balance goes up; when you buy, it goes down. Across the whole community the balances always add up to zero.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>Your first trade opens a credit line</h3>
+                    <p>Once you have completed a trade, you can go below zero to get help before you have given it back. Your credit line grows as you trade with more people. The offers you keep up set how much of it you can use: one offer lets you use up to 200 Beans of it, five offers up to 2000.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>Badges, not gates</h3>
+                    <p>Over time you earn badges: Newcomer, Resident, Steward, Elder. They show your history in the community. They don't unlock anything.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">Read The Rules for every number →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">Where the fees go</span>
+                    <h3>The value stays in your community</h3>
+                </div>
+                <p class="stays-local-lead">A 1.5% fee on completed trades, and a small monthly fee on the part of a balance above 200 Beans, go to your community's Commons pool &mdash; not to us or anyone else. Your community decides what the pool pays for, through Decisions.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>No ads and no tracking</strong>
                         </div>
-                        <span class="brand-badge reddit-badge">💬 r/beanpool</span>
                     </div>
-                    <div>
-                        <h3>Community Forum & Debates</h3>
-                        <p>Join decentralized community discussions, share marketplace listings, debate economic parameters, propose local projects, and connect with node operators.</p>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>No token to buy or sell &mdash; Beans are only for trading</strong>
+                        </div>
                     </div>
-                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit">Join r/beanpool →</a>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>No interest and no banks</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">Why we built it this way: a post-extraction economy →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>Your Account and Your Safety</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Your key stays on your phone</h3>
+                    <p>On the phone app your key is held in the phone's secure storage, and you can add a fingerprint or face lock. In the web app it is held in that browser's own storage. Either way it never leaves your device, and your 12 words are the backup that depends on nobody. On the phone app you can also link an Apple, Google, Facebook or GitHub sign-in so your community's node can help you back onto a new phone &mdash; the people who run the node could use that path too.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>Report anything</h3>
+                    <p>You can report a post, a member, an event or a Pulse item, and block anyone. Reports go to the people who run your community's node &mdash; its owner and admins &mdash; who can remove content and accounts. Members can also vote on a Decision to suspend or remove someone.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>The fine print</h3>
+                    <p>What is stored, who can see it, and how to delete your account.</p>
+                    <p class="card-links"><a href="privacy.html">Privacy Policy</a> · <a href="safety.html">Child Safety</a> · <a href="terms.html">Terms</a> · <a href="data-deletion.html">Deleting your data</a></p>
                 </div>
             </div>
         </div>
@@ -380,13 +379,42 @@
         </div>
     </section>
 
-    <!-- Get Started Section -->
-    <section id="get-started">
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
         <div class="container">
-            <div class="cta-card">
-                <h2>Start Your Community Node</h2>
+            <div class="section-header">
+                <span class="audience-tag">For community organisers</span>
+                <h2>Run BeanPool for Your Community</h2>
+                <p>Every community runs on its own node: a small server that holds that community's members, posts and ledger. Someone local runs it. If your town or valley doesn't have one yet, it could be you.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>What you look after</h3>
+                    <p>You and the admins you appoint are your community's moderators: reports come to you. Your members' data lives on your machine, so you keep it backed up. You can read enterprise discussions and event chats; you can't read direct messages. You invite the first members, and they invite the rest.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>The settings app</h3>
+                    <p>Your node comes with its own settings app in the browser. From it you name your community, appoint an owner and admins who sign in with their own keys, print QR invites, watch disk health, choose a public web address or a tunnel, and help a member who has lost both their phone and their 12 words back onto a new account.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Private from the first boot <span class="new-pill">New</span></h3>
+                    <p>Since v1.2.21 a node keeps its members' messages and balances to signed-in members from the moment it starts &mdash; there is nothing to switch on. The Market, the map, enterprises, Decisions and the community's activity feed stay open, so a neighbour can see what is happening before they join &mdash; that feed names the members in a completed trade and the Beans involved.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Linking with a neighbouring community</h3>
+                    <p>Two communities can agree to link so their members can trade with each other. Beans never leave home: each pair keeps a running tally of what one community owes the other, and each side sets its own limit. Linking is off until both operators switch it on.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>Start a node</h2>
                 <p>BeanPool is published as a Docker image for Intel/AMD and ARM64, so a node runs on a small server, a Mini PC, a NAS or a Raspberry Pi. These four commands fetch the compose file, create the network the node uses, pull the published image and start it. You name your community and set its contact details afterwards, in the node's own settings app &mdash; there is nothing to configure before it boots.</p>
-                
+
                 <!-- macOS Style Terminal Window -->
                 <div class="terminal-window">
                     <div class="terminal-header">
@@ -443,11 +471,11 @@
             <div class="newsletter-card glass-panel">
                 <div class="newsletter-content">
                     <h3><img src="bean.png" alt="Icon" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Stay in the Loop</h3>
-                    <p>Get notified about new releases, federation updates, and network milestones.</p>
+                    <p>Get an email when there is a new release or a new community.</p>
                 </div>
                 <div class="newsletter-form-container">
                     <form id="newsletter-form" class="newsletter-form">
-                        <input type="email" id="newsletter-email" placeholder="you@example.com" required>
+                        <input type="email" id="newsletter-email" placeholder="you@example.com" aria-label="Email address" required>
                         <button type="submit" class="btn btn-primary btn-subscribe">Subscribe</button>
                     </form>
                     <div id="newsletter-status" class="newsletter-status"></div>
@@ -462,19 +490,19 @@
             <div class="footer-inner">
                 <div class="footer-brand">
                     <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
-                    <p>Decentralized mutual credit & federated community exchange.</p>
+                    <p>A free app for trading with your neighbours, in Beans.</p>
                 </div>
                 <div class="footer-links">
-                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
-                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
-                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
-                    <a href="#how-it-works">How It Works</a>
                     <a href="getting-started.html">Getting Started</a>
                     <a href="rules.html">The Rules</a>
                     <a href="post-extraction.html">Post-Extraction</a>
-                    <a href="#features">Features</a>
+                    <a href="#run-a-node">Run a Community</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
                     <a href="privacy.html">Privacy Policy</a>
                     <a href="terms.html">Terms of Service</a>
+                    <a href="safety.html">Child Safety</a>
                 </div>
             </div>
             <div class="footer-bottom">
@@ -483,14 +511,6 @@
         </div>
     </footer>
 
-    <!-- Step Deep Dive Modal -->
-    <div id="step-modal" class="modal-backdrop" aria-hidden="true">
-        <div class="modal-dialog glass-panel" role="dialog" aria-modal="true">
-            <button class="modal-close" onclick="closeStepModal()" aria-label="Close modal">&times;</button>
-            <div id="step-modal-content"></div>
-        </div>
-    </div>
-
-    <script src="main.js?v=1.5"></script>
+    <script src="main.js?v=1.6"></script>
 </body>
 </html>

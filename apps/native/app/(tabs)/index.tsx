@@ -451,6 +451,7 @@ export default function MarketScreen() {
         },
         filterRow: { marginBottom: 4, borderWidth: 1, borderColor: colors.border.default, borderRadius: 26, overflow: 'hidden' },
         filterGrow: { flexGrow: 1 },
+        typePill: { paddingHorizontal: 8 },
     }));
 
     const [trustFilter, setTrustFilter] = useState<string>('all');
@@ -934,6 +935,8 @@ export default function MarketScreen() {
                     activeColor={typeColors[filter]}
                     fill
                     wrap
+                    // 8dp sides, not 12: the six pills fit one line on a normal phone (~338dp of 379).
+                    chipStyle={styles.typePill}
                     style={styles.filterRow}
                     accessibilityLabel="Show"
                 />

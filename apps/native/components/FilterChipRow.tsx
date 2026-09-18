@@ -106,6 +106,8 @@ interface FilterChipRowProps<Id extends string> {
     wrap?: boolean;
     /** Fade the right edge while chips sit past it (FilterChipBar). */
     moreHint?: boolean;
+    /** Extra style for every chip, e.g. narrower side padding so a row of short labels fits one line. */
+    chipStyle?: StyleProp<ViewStyle>;
     accessibilityLabel?: string;
 }
 
@@ -117,7 +119,7 @@ interface FilterChipRowProps<Id extends string> {
  * When it scrolls, on mount it brings the selected chip into view, so a choice remembered across a switch
  * (say Next 7 days, far to the right) is on screen when the row comes back.
  */
-export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, style, fill, wrap, moreHint, accessibilityLabel }: FilterChipRowProps<Id>) {
+export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, style, fill, wrap, moreHint, chipStyle, accessibilityLabel }: FilterChipRowProps<Id>) {
     const scrollRef = useRef<ScrollView>(null);
     const scrolledOnce = useRef(false);
 
@@ -134,7 +136,7 @@ export function FilterChipRow<Id extends string>({ chips, selected, onSelect, ac
                         active={on}
                         selected={on}
                         activeColor={activeColor}
-                        style={fill ? { flexGrow: 1 } : undefined}
+                        style={[fill && { flexGrow: 1 }, chipStyle]}
                         onPress={() => onSelect(c.id)}
                         onLayout={on && !wrap ? (e) => {
                             if (scrolledOnce.current) return;

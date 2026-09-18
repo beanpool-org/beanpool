@@ -434,10 +434,12 @@ export function canOpenEventChat(post: any): boolean {
     return (post.myRsvp ?? null) === 'going';
 }
 
-/** "Open event chat (7)" — the going count when the node has given us one. */
-export function eventChatEntryLabel(post: any): string {
-    const going = Number(post?.goingCount ?? post?.event_going_count);
-    return Number.isFinite(going) ? `Open event chat (${going})` : 'Open event chat';
+/**
+ * The chat button's label. No number: "Open event chat (1)" showed the going count, which read as one unread
+ * message in a chat that had none (events round 2, B3).
+ */
+export function eventChatEntryLabel(_post?: any): string {
+    return 'Open event chat';
 }
 
 /**
@@ -449,4 +451,145 @@ export function eventChatReadOnlyReason(post: any, nowMs: number = Date.now()): 
     if (eventStateOf(post) === 'cancelled') return 'This event was cancelled. The chat is read-only.';
     if (isEventEnded(post, nowMs)) return 'This event has ended. The chat is read-only.';
     return null;
+}
+
+// ===================== THE HOST, AND EDITING (events round 2, decision 29) =====================
+
+/**
+ * Whether the node treats this viewer as a host: it sends the RSVP list to the author, a keeper of an
+ * enterprise author and an active convenor of the group, and to nobody else — the same set it lets edit.
+ */
+export function isEventHostView(post: any): boolean {
+    return Array.isArray(post?.eventRsvps);
+}
+
+/**
+ * The feed card has only the cached row, which carries no RSVP list, so there the host is the author. A
+ * keeper or convenor who did not post it still sees the buttons on the card; the event page asks the node.
+ */
+export function isOwnEvent(post: any, viewerPubkey?: string | null): boolean {
+    if (!viewerPubkey || post?.type !== 'event') return false;
+    return (post.author_pubkey ?? post.authorPublicKey) === viewerPubkey;
+}
+
+/** Why the host cannot edit this event, for the screen; null while it can be. The node refuses both. */
+export function eventEditBlockedReason(post: any, nowMs: number = Date.now()): string | null {
+    if (eventStateOf(post) === 'cancelled') return 'This event was cancelled, so it can no longer be edited.';
+    if (isEventEnded(post, nowMs)) return 'This event has ended, so it can no longer be edited.';
+    return null;
+}
+
+/** What NewEventModal holds in edit mode. */
+export interface EventEditValues {
+    title: string;
+    description: string;
+    start: Date | null;
+    end: Date | null;
+    placeName: string;
+    lat: number | null;
+    lng: number | null;
+    privateNote: string;
+    /** The node's photo URL, a new data URL, or null for none. */
+    photo: string | null;
+}
+
+/** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
+export function eventEditValues(post: any): EventEditValues {
+    const date = (v: any) => { const d = v ? new Date(v) : null; return d && !isNaN(d.getTime()) ? d : null; };
+    const num = (v: any) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+    let photos: any = post?.photos;
+    if (typeof photos === 'string') { try { photos = JSON.parse(photos); } catch { photos = []; } }
+    return {
+        title: post?.title || '',
+        description: post?.description || '',
+        start: date(post?.eventStartAt ?? post?.event_start_at),
+        end: date(post?.eventEndAt ?? post?.event_end_at),
+        placeName: post?.eventPlaceName ?? post?.event_place_name ?? '',
+        lat: num(post?.lat),
+        lng: num(post?.lng),
+        privateNote: post?.eventPrivateNote ?? '',
+        photo: Array.isArray(photos) && typeof photos[0] === 'string' && photos[0] ? photos[0] : null,
+    };
+}
+
+export interface EventEditPatch {
+    title?: string;
+    description?: string;
+    eventStartAt?: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    eventPrivateNote?: string;
+    lat?: number;
+    lng?: number;
+    photos?: string[];
+}
+
+/**
+ * Check an edit the way the node will and build the update: ONLY the fields that changed. A title, description,
+ * note or photo edit is silent; a change of time or place marks the event UPDATED and tells everyone going
+ * (decision 29), and `notifies` says so before the host saves. A start the host did not touch is not
+ * re-checked against the clock, so the note of an event already under way can still be fixed.
+ */
+export function buildEventEditPatch(before: EventEditValues, after: EventEditValues, now: Date = new Date()):
+    { ok: true; patch: EventEditPatch; notifies: boolean } | { ok: false; error: string } {
+    const title = after.title.trim();
+    if (!title) return { ok: false, error: 'Give the event a title.' };
+    if (title.length > EVENT_TITLE_MAX) return { ok: false, error: `Keep the title under ${EVENT_TITLE_MAX} characters.` };
+    if (!after.start) return { ok: false, error: 'Pick when the event starts.' };
+    const startMoved = !before.start || after.start.getTime() !== before.start.getTime();
+    if (startMoved && after.start.getTime() <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
+    const end = after.end ?? defaultEventEnd(after.start);
+    if (end.getTime() <= after.start.getTime()) return { ok: false, error: 'The end time must be after the start.' };
+    if (after.lat == null || after.lng == null || !Number.isFinite(after.lat) || !Number.isFinite(after.lng)) {
+        return { ok: false, error: 'Put a pin on the map so people can find it.' };
+    }
+    const placeName = after.placeName.trim();
+    if (!placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
+    if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
+    const note = after.privateNote.trim();
+    if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
+    const description = after.description.trim();
+    if (description.length > EVENT_DESCRIPTION_MAX) return { ok: false, error: `Keep the description under ${EVENT_DESCRIPTION_MAX} characters.` };
+
+    const patch: EventEditPatch = {};
+    if (title !== before.title.trim()) patch.title = title;
+    if (description !== before.description.trim()) patch.description = description;
+    if (startMoved) patch.eventStartAt = after.start.toISOString();
+    const endBefore = before.end?.getTime() ?? null;
+    const endAfter = after.end?.getTime() ?? null;
+    // A cleared end goes as '', which the node turns into start + 2 hours.
+    if (endAfter !== endBefore) patch.eventEndAt = after.end ? after.end.toISOString() : '';
+    if (placeName !== before.placeName.trim()) patch.eventPlaceName = placeName;
+    if (note !== before.privateNote.trim()) patch.eventPrivateNote = note;
+    if (after.lat !== before.lat || after.lng !== before.lng) { patch.lat = after.lat; patch.lng = after.lng; }
+    if (after.photo !== before.photo) patch.photos = after.photo ? [after.photo] : [];
+    const notifies = patch.eventStartAt !== undefined || patch.eventEndAt !== undefined || patch.eventPlaceName !== undefined
+        || patch.lat !== undefined;
+    return { ok: true, patch, notifies };
+}
+
+// ===================== THE MAP'S PIN CARD (events round 2, B1) =====================
+
+/**
+ * What the map shows when an event pin is tapped. An event is not a listing: no category, no bean amount.
+ * Date and time first, then the title, the place and how many are going (decision 19's card order).
+ */
+export interface EventPinCard {
+    when: string;
+    badge: 'CANCELLED' | 'UPDATED' | null;
+    title: string;
+    place: string | null;
+    going: string;
+}
+
+export function eventPinCard(post: any): EventPinCard {
+    const going = Number(post?.goingCount ?? post?.event_going_count ?? 0) || 0;
+    const place = (post?.eventPlaceName ?? post?.event_place_name ?? '').trim();
+    return {
+        when: formatEventWhen(post?.eventStartAt ?? post?.event_start_at, post?.eventEndAt ?? post?.event_end_at),
+        badge: eventBadge(post),
+        title: post?.title || 'Event',
+        place: place || null,
+        going: `${going} going`,
+    };
 }

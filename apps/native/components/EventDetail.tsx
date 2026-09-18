@@ -8,14 +8,15 @@
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
  * lives in component state and is never written to the phone's cache.
  *
- * The event chat (slice 4) is one tap from here, for the host and anyone Going. A host can also cancel, or
- * copy the event to a new date (slice 5) — that opens NewEventModal filled from this event with the dates
- * blank. "Show on map" opens the phone's maps app, because the in-app map layer for events is the
- * protected-files slice 7.
+ * The event chat (slice 4) is one tap from here, for the host and anyone Going. A host can also edit the event
+ * (round 2: NewEventModal in edit mode, every field filled), cancel it, or copy it to a new date (slice 5) —
+ * that opens NewEventModal filled from this event with the dates blank. A host has no Going / Interested:
+ * they are running it. After cancelling, the host stays here and sees it CANCELLED. "Show on map" opens the
+ * phone's maps app, because the in-app map layer for events is the protected-files slice 7.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -27,8 +28,8 @@ import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
-    canOpenEventChat, eventChatEntryLabel, buildEventCopy,
-    type EventRsvpStatus, type RsvpCounts, type EventCopy,
+    canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, eventEditBlockedReason, eventEditValues,
+    type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
 interface EventDetailProps {
@@ -58,6 +59,8 @@ export function EventDetail({ post }: EventDetailProps) {
     // Non-null while the copy form is open; holding the draft rather than a boolean means NewEventModal
     // applies it once, on the opening it was built for.
     const [copyDraft, setCopyDraft] = useState<EventCopy | null>(null);
+    // Non-null while the edit form is open; one object per opening, which NewEventModal applies once.
+    const [editOf, setEditOf] = useState<{ id: string; values: EventEditValues; audienceLabel: string } | null>(null);
 
     const load = useCallback(async () => {
         try {
@@ -66,8 +69,10 @@ export function EventDetail({ post }: EventDetailProps) {
                 setView(v);
                 setCounts(countsOf(v));
             }
+            return v;
         } catch {
             // Offline: the cached row still shows the event; RSVP will say it cannot reach the node.
+            return null;
         }
     }, [post.id]);
 
@@ -82,7 +87,8 @@ export function EventDetail({ post }: EventDetailProps) {
     const placeName = p.eventPlaceName ?? p.event_place_name ?? '';
     const note: string | undefined = view?.eventPrivateNote;
     const rsvps: any[] | undefined = view?.eventRsvps; // present only when the node says this viewer is a host
-    const isHost = Array.isArray(rsvps);
+    const isHost = isEventHostView(view);
+    const editBlocked = eventEditBlockedReason(p);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
     const isGroupOnly = (p.audienceScope || p.audience_scope) === 'group';
@@ -133,7 +139,11 @@ export function EventDetail({ post }: EventDetailProps) {
                     setCancelling(true);
                     try {
                         await deletePost(post.id);
-                        Alert.alert('Event cancelled', 'The event has been cancelled.', [{ text: 'OK', onPress: goBack }]);
+                        // Stay on the page: the node still serves a cancelled event to its host by id, so the
+                        // host sees it marked CANCELLED instead of losing it (events round 2, A4).
+                        const after = await load();
+                        if (!after) setView((v: any) => ({ ...(v ?? {}), status: 'cancelled', eventState: 'cancelled' }));
+                        Alert.alert('Event cancelled', 'It now shows CANCELLED, and everyone going has been told.');
                     } catch (e: any) {
                         Alert.alert('Not cancelled', e?.message || 'Could not reach the node.');
                     } finally {
@@ -204,12 +214,14 @@ export function EventDetail({ post }: EventDetailProps) {
                         <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]}>{badge}</Text>
                     </View>
                 )}
-                <Text style={[styles.when, cancelled && styles.whenCancelled]}>📅 {when}</Text>
+                <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
                 <Text style={styles.title}>{p.title}</Text>
                 {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
                 <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
-                {!closed && (
+                {isHost ? (
+                    <Text style={styles.hostingLine} accessibilityRole="text">You're hosting this event</Text>
+                ) : !closed && (
                     <View style={styles.rsvpRow}>
                         {rsvpButton('going', 'Going')}
                         {rsvpButton('interested', 'Interested')}
@@ -273,13 +285,30 @@ export function EventDetail({ post }: EventDetailProps) {
                                     <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>
                                 </View>
                             )))}
+                        {editBlocked ? (
+                            <Text style={styles.editBlocked}>{editBlocked}</Text>
+                        ) : (
+                            <Pressable
+                                onPress={() => setEditOf({
+                                    id: post.id,
+                                    // The cached row's photo paths are already resolved against the node.
+                                    values: eventEditValues({ ...p, photos }),
+                                    audienceLabel: isGroupOnly && groupName ? `🔒 Only ${groupName} can see this.` : 'This community.',
+                                })}
+                                style={styles.editBtn}
+                                accessibilityRole="button"
+                                accessibilityLabel="Edit event"
+                            >
+                                <Text style={styles.editText} numberOfLines={1}>Edit event</Text>
+                            </Pressable>
+                        )}
                         <Pressable
                             onPress={() => setCopyDraft(buildEventCopy(p, identity?.publicKey))}
                             style={styles.copyBtn}
                             accessibilityRole="button"
                             accessibilityLabel="Copy to a new date"
                         >
-                            <Text style={styles.copyText} numberOfLines={1}>📅 Copy to a new date</Text>
+                            <Text style={styles.copyText} numberOfLines={1}>Copy to a new date</Text>
                         </Pressable>
                         {!closed && (
                             <Pressable
@@ -308,6 +337,12 @@ export function EventDetail({ post }: EventDetailProps) {
                 prefill={copyDraft}
                 onClose={() => setCopyDraft(null)}
                 onSuccess={() => { setCopyDraft(null); goBack(); }}
+            />
+            <NewEventModal
+                visible={!!editOf}
+                editOf={editOf}
+                onClose={() => setEditOf(null)}
+                onSaved={() => { load(); DeviceEventEmitter.emit('sync_data_updated'); }}
             />
         </View>
     );
@@ -372,6 +407,13 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpListRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border.default },
         rsvpName: { flex: 1, fontSize: 14, color: colors.text.body },
         rsvpStatus: { fontSize: 13, fontWeight: '700', color: EVENT_ACCENT, flexShrink: 0 },
+        hostingLine: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT, marginBottom: 14 },
+        editBtn: {
+            minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: EVENT_ACCENT,
+            marginTop: 4, marginBottom: 4, paddingHorizontal: 12,
+        },
+        editText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+        editBlocked: { fontSize: 14, color: colors.text.secondary, paddingVertical: 10 },
         copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         copyText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         cancelBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },

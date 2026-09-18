@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadIdentity } from './identity';
 import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
-import { eventCacheColumns, rsvpSignedMessage, type EventRsvpStatus } from './events';
+import { eventCacheColumns, rsvpSignedMessage, type EventEditPatch, type EventRsvpStatus } from './events';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -1857,6 +1857,35 @@ export async function fetchEventDetail(postId: string): Promise<any | null> {
     if (!post || post.type !== 'event') return null;
     const identity = await loadIdentity();
     if (identity?.publicKey) await persistEventView(post, identity.publicKey);
+    return post;
+}
+
+/**
+ * Save a host's edit to an event (events round 2, decision 29). Only the changed fields travel, signed with
+ * the member's OWN key: the node checks it against the host set (author, keeper, convenor), so a keeper or a
+ * convenor who did not post the event can edit it too. The node decides UPDATED and who is told.
+ *
+ * The cached row is refreshed from the node's answer so the feed shows the edit at once; the private note is
+ * never written to the cache.
+ */
+export async function updateEvent(postId: string, patch: EventEditPatch): Promise<any> {
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const json = await _signedRequest('/api/marketplace/posts/update', { id: postId, authorPublicKey: identity.publicKey, ...patch });
+    const post = json?.post;
+    if (post?.id) {
+        try {
+            const database = await waitForInit();
+            const photos = Array.isArray(post.photos) ? JSON.stringify(post.photos.filter((u: string) => !u.startsWith('file://'))) : null;
+            await database.runAsync(
+                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos) WHERE id = ?`,
+                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, post.id]
+            );
+        } catch (dbErr) {
+            console.warn('[SQLite] Failed to cache the edited event:', dbErr);
+        }
+        await persistEventView(post, identity.publicKey);
+    }
     return post;
 }
 

@@ -15,7 +15,7 @@ import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import {
     formatEventWhen, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
-    formatDistance, distanceKm, type EventRsvpStatus, type RsvpCounts,
+    formatDistance, distanceKm, isOwnEvent, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
 export const EVENT_ACCENT = '#7c3aed';
@@ -113,12 +113,15 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                         <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge}</Text>
                     </View>
                 )}
-                <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>📅 {when}</Text>
+                <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
             </View>
             <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
             {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
             <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
-            {!closed && (
+            {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
+            {isOwnEvent(post, currentPubkey) ? (
+                <Text style={styles.hosting} numberOfLines={1}>You're hosting this event</Text>
+            ) : !closed && (
                 <View style={styles.rsvpRow}>
                     {rsvpButton('going', 'Going')}
                     {rsvpButton('interested', 'Interested')}
@@ -152,6 +155,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontWeight: '800',
             color: colors.text.heading,
         },
+        hosting: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT, marginTop: 8 },
         whenCancelled: {
             textDecorationLine: 'line-through',
             color: colors.text.secondary,

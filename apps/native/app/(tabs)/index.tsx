@@ -31,6 +31,7 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
+import { feedSections, localDaysAgo } from '../../utils/feed-sections';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
@@ -843,11 +844,11 @@ export default function MarketScreen() {
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
 
+    // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
     const freshTodayCount = posts.filter(post => {
-        if (post.status !== 'active') return false;
+        if (post.status !== 'active' || post.type === 'event') return false;
         const postTime = new Date(post.created_at || post.createdAt).getTime();
-        const diffDays = Math.floor((Date.now() - postTime) / (24 * 60 * 60 * 1000));
-        return diffDays === 0;
+        return Number.isFinite(postTime) && localDaysAgo(postTime, Date.now()) === 0;
     }).length;
 
     // Display banner only if fresh postings count is greater than the dismissed count and scroll visibility is active
@@ -1156,47 +1157,16 @@ export default function MarketScreen() {
     if (viewMode === 'grid') {
         listData = filteredPosts;
     } else {
-        const today: any[] = [];
-        const yesterday: any[] = [];
-        const thisWeek: any[] = [];
-        const older: any[] = [];
-
-        const now = Date.now();
-        filteredPosts.forEach(post => {
-            const postTime = new Date(post.created_at || post.createdAt).getTime();
-            const diffDays = Math.floor((now - postTime) / (24 * 60 * 60 * 1000));
-            if (diffDays === 0) {
-                today.push(post);
-            } else if (diffDays === 1) {
-                yesterday.push(post);
-            } else if (diffDays < 7) {
-                thisWeek.push(post);
-            } else {
-                older.push(post);
-            }
-        });
-
         if (filter === 'for-you') {
             if (filteredPosts.length > 0) {
                 listData.push({ isHeader: true, title: '★ For You Feed', id: 'header-for-you' });
                 listData.push(...filteredPosts);
             }
         } else {
-            if (today.length > 0) {
-                listData.push({ isHeader: true, title: 'Today', id: 'header-today' });
-                listData.push(...today);
-            }
-            if (yesterday.length > 0) {
-                listData.push({ isHeader: true, title: 'Yesterday', id: 'header-yesterday' });
-                listData.push(...yesterday);
-            }
-            if (thisWeek.length > 0) {
-                listData.push({ isHeader: true, title: 'This Week', id: 'header-thisweek' });
-                listData.push(...thisWeek);
-            }
-            if (older.length > 0) {
-                listData.push({ isHeader: true, title: 'Older Listings', id: 'header-older' });
-                listData.push(...older);
+            // Events under their own heading, soonest first; listings by the local day they were posted.
+            for (const section of feedSections(filteredPosts)) {
+                listData.push({ isHeader: true, title: section.title, id: section.id });
+                listData.push(...section.posts);
             }
         }
     }

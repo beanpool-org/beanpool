@@ -1025,6 +1025,7 @@ export function MembersModule({
                         setSelectedMember(null);
                         onRefresh?.();
                     }}
+                    onSuspensionChanged={() => onRefresh?.()}
                     onPrune={(pk) => handlePruneMember(pk)}
                     onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}

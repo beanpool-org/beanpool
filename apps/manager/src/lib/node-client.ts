@@ -1713,6 +1713,75 @@ export async function resolveEscrowDisputeApi(
     return res.json();
 }
 
+// ===================== COMMUNITY DECISIONS & EMERGENCY SUSPENSION =====================
+
+export interface AdminDecisionItem {
+    id: string;
+    title: string;
+    description: string;
+    effect: string;
+    touches: 'member' | 'pool';
+    status: string;
+    subject: string | null;
+    subjectName: string | null;
+    params: Record<string, unknown> | null;
+    opensAt: string;
+    closesAt: string;
+    gracePeriodEndsAt: string | null;
+    /** Totals only — the node never serves who voted how. */
+    tally: {
+        totalVoters: number;
+        electorate: number;
+        quorumRequired: number;
+        quorumMet: boolean;
+        yesWeight: number;
+        noWeight: number;
+        supportRatio: number;
+        thresholdRequired: number;
+    };
+}
+
+async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, unknown>, adminPassword?: string, tfaToken?: string): Promise<T> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, path), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...body, password: adminPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return data as T;
+}
+
+/** Open Decisions and removals in their grace window: the ones an admin can still halt. */
+export async function fetchAdminDecisions(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AdminDecisionItem[]> {
+    const data = await postAdmin<{ decisions?: AdminDecisionItem[] }>(nodeUrl, '/api/local/admin/decisions', {}, adminPassword, tfaToken);
+    return Array.isArray(data?.decisions) ? data.decisions : [];
+}
+
+/** The admin brake. The written reason (10+ characters) is public on the Decision. */
+export async function haltDecision(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/halt`, { reason }, adminPassword, tfaToken);
+}
+
+/**
+ * Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" Decision. If members
+ * don't keep it, it lifts by itself. The reason (10+ characters) is shown to members on that Decision.
+ */
+export async function emergencySuspendMember(
+    nodeUrl: string,
+    pubkey: string,
+    reason: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ success: boolean; decision?: { id: string; closesAt: string } }> {
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason }, adminPassword, tfaToken);
+}
+
+/** Lift a suspension by hand; an open "Keep this suspension?" vote about it closes with it. */
+export async function liftMemberSuspension(nodeUrl: string, pubkey: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/status`, { status: 'active' }, adminPassword, tfaToken);
+}
+
 // ===================== MEMBER WIZARDS (docs/settings-ia.md §5 items 1 & 4, Item 9b) =====================
 
 export interface RekeyStatusResponse {

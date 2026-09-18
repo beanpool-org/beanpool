@@ -248,4 +248,54 @@ describe('MemberDetailModal', () => {
 
         expect(screen.getByText('Offboard Member')).toBeInTheDocument();
     });
+
+    it('emergency suspension needs a reason members will see, then says the community decides', async () => {
+        const suspend = vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
+            success: true,
+            decision: { id: 'dec-1', closesAt: '2026-09-26T00:00:00.000Z' },
+        });
+        const onChanged = vi.fn();
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, status: 'active' }}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
+                adminPassword="pw"
+                onSuspensionChanged={onChanged}
+            />
+        );
+
+        await userEvent.click(screen.getByText('⏸️ Suspend'));
+        const confirm = screen.getByRole('button', { name: 'Suspend now' });
+        expect(confirm).toBeDisabled();
+        await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'short');
+        expect(confirm).toBeDisabled();
+        await userEvent.type(screen.getByLabelText('Reason (members will see this)'), ' but now long enough');
+        expect(confirm).not.toBeDisabled();
+        await userEvent.click(confirm);
+
+        expect(suspend).toHaveBeenCalledWith('https://test-node.local', 'pubkey-1234567890-abcdef', 'short but now long enough', 'pw', undefined);
+        expect(await screen.findByText(/Members now vote on keeping it until/)).toBeInTheDocument();
+        expect(screen.getByText('Lift suspension')).toBeInTheDocument();
+        expect(onChanged).toHaveBeenCalled();
+    });
+
+    it('a suspended member can have the suspension lifted', async () => {
+        const lift = vi.spyOn(nodeClient, 'liftMemberSuspension').mockResolvedValue({ success: true });
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, status: 'disabled' }}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
+                adminPassword="pw"
+            />
+        );
+        await userEvent.click(screen.getByText('Lift suspension'));
+        expect(lift).toHaveBeenCalledWith('https://test-node.local', 'pubkey-1234567890-abcdef', 'pw', undefined);
+        expect(await screen.findByText(/Suspension lifted/)).toBeInTheDocument();
+    });
 });

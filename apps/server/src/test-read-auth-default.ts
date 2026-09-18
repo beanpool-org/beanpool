@@ -129,7 +129,8 @@ async function main() {
         '/api/commons/projects',
         '/api/commons/decisions',
         '/api/crowdfund/projects',
-        '/api/activity/feed',
+        // Not /api/activity/feed: it names the members in every trade and the Beans, so it is members-only
+        // (test-activity-feed-members-only). It was listed here while the feed was public.
         '/api/pulse/feed',
         '/api/pricing-guide',
         '/api/federation/links',

@@ -2,7 +2,9 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
@@ -18,9 +20,12 @@ const PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
 const PRICE_TYPE_LABEL: Record<string, string> = { fixed: 'Total', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' };
 
 export default function TreasuryPostScreen() {
-    const params = useLocalSearchParams<{ treasury?: string; mode?: string; name?: string }>();
-    const isNeed = params.mode === 'need';
-    const treasuryName = params.name || 'this enterprise';
+    const params = useLocalSearchParams<{ treasury?: string | string[]; mode?: string | string[]; name?: string | string[] }>();
+    const treasuryKey = Array.isArray(params.treasury) ? params.treasury[0] : params.treasury;
+    const modeStr = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+    const nameStr = Array.isArray(params.name) ? params.name[0] : params.name;
+    const isNeed = modeStr === 'need';
+    const treasuryName = nameStr || 'this enterprise';
     const { theme, colors } = useTheme();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -93,7 +98,7 @@ export default function TreasuryPostScreen() {
 
         submittingRef.current = true;
         setSubmitting(true);
-        if (!params.treasury) {
+        if (!treasuryKey) {
             Alert.alert('Error', 'Missing treasury public key');
             submittingRef.current = false;
             setSubmitting(false);
@@ -109,9 +114,9 @@ export default function TreasuryPostScreen() {
         };
         try {
             if (isNeed) {
-                await treasuryPostNeed(params.treasury, body);
+                await treasuryPostNeed(treasuryKey, body);
             } else {
-                await treasuryPostOffer(params.treasury, body);
+                await treasuryPostOffer(treasuryKey, body);
             }
             Alert.alert(
                 isNeed ? 'Need posted' : 'Offer posted',

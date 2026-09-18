@@ -1270,13 +1270,24 @@ router.post('/api/members/holiday', async (ctx) => {
 
 router.post('/api/ratings', async (ctx) => {
     try {
-    const { raterPubkey, targetPubkey, stars, comment, transactionId } = (ctx as any).requestBody || {};
-    if (!raterPubkey || !targetPubkey || !stars || !transactionId) {
-        ctx.status = 400;
-        ctx.body = { error: 'raterPubkey, targetPubkey, stars, and transactionId are required' };
+    const activeActor = ctx.state.actor as string | undefined;
+    if (!activeActor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const rating = addRating(raterPubkey, targetPubkey, Number(stars), comment || '', transactionId);
+    const { raterPubkey, targetPubkey, stars, comment, transactionId } = (ctx as any).requestBody || {};
+    if (!targetPubkey || !stars || !transactionId) {
+        ctx.status = 400;
+        ctx.body = { error: 'targetPubkey, stars, and transactionId are required' };
+        return;
+    }
+    if (raterPubkey && raterPubkey !== activeActor) {
+        ctx.status = 403;
+        ctx.body = { error: 'raterPubkey must match authenticated signer' };
+        return;
+    }
+    const rating = addRating(activeActor, targetPubkey, Number(stars), comment || '', transactionId);
     if (!rating) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — transaction must be completed, both users must be participants' };

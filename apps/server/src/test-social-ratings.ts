@@ -7,6 +7,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend } from './state-engine.js';
 import { db } from './db/db.js';
+import { createCommunityRoutes } from './routes/community.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -83,6 +84,49 @@ async function main() {
 
     const tombstone = db.prepare("SELECT * FROM tombstones WHERE table_name='friends' AND row_key=?").get(`${alice}|${bob}`) as { table_name: string; row_key: string } | undefined;
     assert(tombstone !== undefined, 'removeFriend writes tombstone for deleted connection');
+
+    // 3. HTTP route authorization tests for POST /api/ratings
+    const router = createCommunityRoutes({
+        checkAdminAuth: async () => true,
+        rateLimit: () => true,
+        clampLimit: (n: any) => Number(n) || 50,
+        clampOffset: (n: any) => Number(n) || 0,
+        activeConnections: new Map(),
+        calculateAnalytics: () => ({}),
+        enforceReadAuth: false,
+    });
+
+    const dispatch = async (method: string, path: string, ctx: any) => {
+        ctx.method = method;
+        ctx.path = path;
+        ctx.url = path;
+        ctx.request = ctx.request || {};
+        ctx.state = ctx.state || {};
+        const middleware = router.routes();
+        await middleware(ctx, async () => {});
+        return ctx;
+    };
+
+    // Unsigned request returns 401
+    const unauthCtx: any = { requestBody: { targetPubkey: alice, stars: 5, transactionId: txIdOffer } };
+    await dispatch('POST', '/api/ratings', unauthCtx);
+    assert(unauthCtx.status === 401, 'POST /api/ratings without ctx.state.actor returns 401');
+
+    // Mismatched raterPubkey returns 403
+    const spoofCtx: any = {
+        state: { actor: bob },
+        requestBody: { raterPubkey: charlie, targetPubkey: alice, stars: 5, transactionId: txIdOffer }
+    };
+    await dispatch('POST', '/api/ratings', spoofCtx);
+    assert(spoofCtx.status === 403, 'POST /api/ratings with mismatched raterPubkey returns 403');
+
+    // Signed request with active actor succeeds
+    const validCtx: any = {
+        state: { actor: bob },
+        requestBody: { raterPubkey: bob, targetPubkey: alice, stars: 5, comment: 'Route test', transactionId: txIdOffer }
+    };
+    await dispatch('POST', '/api/ratings', validCtx);
+    assert(validCtx.body?.success === true, 'POST /api/ratings with valid actor succeeds');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

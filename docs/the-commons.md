@@ -698,8 +698,8 @@ Two consequences worth naming:
 - **"Fund the shade house" and "give Sarah a hardship grant" are the same kind of decision** pointed
   at different subjects. An off-grid community will likely use the second more than the first, and
   the current design has no path for it at all.
-- **Restoring is easier than removing.** Removals need 60%; reinstating someone, unfreezing credit,
-  needs a simple majority. Asymmetry is deliberate: an error that
+- **Restoring is easier than removing.** Removals need 60%; reinstating someone or unfreezing
+  credit needs a simple majority. Asymmetry is deliberate: an error that
   excludes someone should be cheaper to correct than it was to make.
 
 Every one of these is a power a node admin holds unilaterally today — `adminSetUserStatus`,

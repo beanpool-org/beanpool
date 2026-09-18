@@ -109,11 +109,11 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel location picker" style={styles.headerBtn}>
-                        <Text style={styles.cancelText}>Cancel</Text>
+                        <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                     </Pressable>
-                    <Text style={styles.title}>📍 Location & Radius</Text>
+                    <Text style={styles.title} numberOfLines={1}>📍 Location & Radius</Text>
                     <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel="Reset location and radius" style={styles.headerBtn}>
-                        <Text style={styles.resetText}>Reset</Text>
+                        <Text style={styles.resetText} numberOfLines={1}>Reset</Text>
                     </Pressable>
                 </View>
 
@@ -215,14 +215,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: colors.surface.card,
-        paddingHorizontal: 28,
+        paddingHorizontal: 16,
         paddingTop: HEADER_PAD_TOP,
         paddingBottom: 14,
+        gap: 8,
         borderBottomWidth: 1,
         borderBottomColor: colors.border.default,
     },
     headerBtn: {
         padding: 8,
+        minHeight: 48,
+        minWidth: 48,
+        justifyContent: 'center',
+        flexShrink: 0,
     },
     cancelText: {
         color: colors.text.secondary,
@@ -234,7 +239,10 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
+    // At 320 wide and 1.3x text the title pushed Reset off the right edge; it now shrinks instead.
     title: {
+        flex: 1,
+        textAlign: 'center',
         color: colors.text.heading,
         fontSize: 15,
         fontWeight: '800',

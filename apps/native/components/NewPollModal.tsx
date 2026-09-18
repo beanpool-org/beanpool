@@ -157,9 +157,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             accessibilityRole="button"
                             accessibilityLabel="Cancel"
                         >
-                            <Text style={styles.cancelText}>Cancel</Text>
+                            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle}>New Community Poll</Text>
+                        <Text style={styles.headerTitle} numberOfLines={1}>New Community Poll</Text>
                         <Pressable
                             onPress={handleCreatePoll}
                             disabled={submitting}
@@ -173,7 +173,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             {submitting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={styles.postText}>Create</Text>
+                                <Text style={styles.postText} numberOfLines={1}>Create</Text>
                             )}
                         </Pressable>
                     </View>
@@ -305,10 +305,14 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             paddingHorizontal: 16,
             paddingTop: HEADER_PAD_TOP,
             paddingBottom: 14,
+            gap: 8,
             borderBottomWidth: 1,
             borderBottomColor: theme === 'dark' ? '#374151' : '#e5e7eb',
         },
+        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead.
         headerTitle: {
+            flex: 1,
+            textAlign: 'center',
             fontSize: 16,
             fontWeight: '800',
             color: colors.text.body,
@@ -316,8 +320,9 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         cancelBtn: {
             paddingHorizontal: 10,
             paddingVertical: 10,
-            minHeight: 44,
-            minWidth: 44,
+            minHeight: 48,
+            minWidth: 48,
+            flexShrink: 0,
             justifyContent: 'center',
             alignItems: 'center',
         },
@@ -328,8 +333,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         postBtn: {
             backgroundColor: '#7c3aed',
             paddingHorizontal: 16,
-            paddingVertical: 7,
-            borderRadius: 18,
+            minHeight: 40,
+            borderRadius: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            flexShrink: 0,
         },
         postText: {
             fontSize: 14,

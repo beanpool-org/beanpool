@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
-import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, TextInput, Pressable, Switch, Dimensions, Image as RNImage, Keyboard, Linking, DeviceEventEmitter, Animated, Modal, FlatList } from 'react-native';
+import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, TextInput, Pressable, Switch, Dimensions, Image as RNImage, Keyboard, Linking, DeviceEventEmitter, Animated, Modal, FlatList, PixelRatio } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,8 +27,11 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { EVENT_ACCENT } from '../../components/EventCard';
-import { type EventWindow } from '../../utils/events';
-import { mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, categoryChipLabel, categoryPanelReducer, type MapTypeFilter } from '../../utils/map-filters';
+import { eventPinCard, type EventWindow } from '../../utils/events';
+import {
+    mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, categoryChipLabel, categoryPanelReducer,
+    eventFitCoordinates, eventFitPadding, type MapTypeFilter,
+} from '../../utils/map-filters';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType } from '../../utils/compose-options';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
@@ -215,15 +218,38 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
 });
 
 /**
+ * The event pin's glyph: a calendar drawn from Views, with no date on it. The 📅 emoji it replaces is drawn by
+ * Android with a date printed on the page ("JUL 17"), which read as the event's date (events round 2, B7). Plain
+ * Views rather than an icon font, because the marker is rasterised once (tracksViewChanges={false}) and a font
+ * glyph that had not loaded yet would come out blank.
+ */
+const EventPinGlyph = () => (
+    <View style={{ width: 18, height: 18, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: 10, height: 4, zIndex: 1 }}>
+            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
+            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
+        </View>
+        <View style={{ width: 17, height: 14, marginTop: -2, borderRadius: 3, borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' }}>
+            <View style={{ height: 3.5, backgroundColor: '#ffffff' }} />
+        </View>
+    </View>
+);
+
+/**
  * An event's pin, in the deep violet the event card and the web map's pin already use. Drawn here rather
  * than through UnifiedMapPin, which knows only Offer (green) and Need (orange) and is off-limits — an event
  * routed through it came out as a Need.
+ *
+ * Rendered with `cluster={false}` (on this element: react-native-map-clustering reads the prop off the map's
+ * direct children): an event is never folded into a bubble of listings, where nobody looking for events would
+ * find it (events round 2, B2). There are few — five upcoming per host.
  */
 const EventMapMarker = React.memo(({ coordinate, post, isSelected, onPress }: any) => (
     <Marker
         coordinate={coordinate}
         tracksViewChanges={false}
         anchor={PIN_ANCHOR}
+        zIndex={10}
         onPress={(e) => { e.stopPropagation(); onPress(post); }}
     >
         <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, alignItems: 'center', justifyContent: 'flex-start' }}>
@@ -232,7 +258,7 @@ const EventMapMarker = React.memo(({ coordinate, post, isSelected, onPress }: an
                 borderWidth: isSelected ? 3.5 : 2.5, borderColor: '#ffffff',
                 alignItems: 'center', justifyContent: 'center',
             }}>
-                <Text allowFontScaling={false} style={{ fontSize: 17, lineHeight: 21 }}>📅</Text>
+                <EventPinGlyph />
             </View>
             {/* The stem, so an event pin points at its spot the way every other pin does. */}
             <View style={{
@@ -293,6 +319,12 @@ export default function MapScreen() {
         // Map Preview Card
         previewCardWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 150, justifyContent: 'flex-end' },
         previewCardOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
+        eventPreviewCard: { borderLeftWidth: 4, borderLeftColor: EVENT_ACCENT },
+        eventPreviewBody: { flex: 1, padding: 16, paddingRight: 48 },
+        eventPreviewWhenRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+        eventPreviewWhen: { flexShrink: 1, fontSize: 17, fontWeight: '800', color: EVENT_ACCENT },
+        eventPreviewBadge: { fontSize: 11, fontWeight: '800', color: EVENT_ACCENT, borderWidth: 1, borderColor: EVENT_ACCENT, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+        eventPreviewMeta: { fontSize: 14, color: colors.text.secondary, marginTop: 2 },
         previewCard: { backgroundColor: colors.surface.card, margin: 16, borderRadius: 24, padding: 0, flexDirection: 'row', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 20, overflow: 'hidden' },
         previewThumb: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, backgroundColor: colors.surface.subtle },
         previewThumbPlaceholder: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, justifyContent: 'center', alignItems: 'center' },
@@ -591,7 +623,25 @@ export default function MapScreen() {
     const selectMapType = (t: MapTypeFilter) => {
         setMapTypeFilter(t);
         // Events takes the second row for its date chips, so an open category panel goes with it.
-        if (t === 'events') closeCategoryPanel();
+        if (t === 'events') {
+            closeCategoryPanel();
+            fitEventPins(eventWindow);
+        }
+    };
+    /**
+     * Picking Events or a date chip brings the matching events into view BELOW the filter rows, so a member who
+     * asks for events always sees one — at 320dp with 1.3x text a pin fitted to the top edge sat under the
+     * date chips (events round 2, B2). Android takes edge padding in pixels, iOS in points.
+     */
+    const fitEventPins = (window: EventWindow) => {
+        const coords = eventFitCoordinates(visibleEventPins(posts, { type: 'events', category: mapCategoryFilter, eventWindow: window }));
+        if (coords.length === 0 || !mapRef.current) return;
+        const scale = Platform.OS === 'android' ? PixelRatio.get() : 1;
+        const pad = eventFitPadding(filterBottom);
+        mapRef.current.fitToCoordinates(coords, {
+            edgePadding: { top: pad.top * scale, right: pad.right * scale, bottom: pad.bottom * scale, left: pad.left * scale },
+            animated: true,
+        });
     };
     // The filter bar hides behind a pin preview or the new-post form; the panel does not come back with it.
     useEffect(() => {
@@ -1116,6 +1166,7 @@ export default function MapScreen() {
                     {visibleEventPins(posts, mapFilterState).map(post => (
                         <EventMapMarker
                             key={`event-${post.id}-${selectedPostPreview?.id === post.id}`}
+                            cluster={false}
                             coordinate={{ latitude: Number(post.lat), longitude: Number(post.lng) }}
                             post={{ ...post, lat: Number(post.lat), lng: Number(post.lng) }}
                             isSelected={selectedPostPreview?.id === post.id}
@@ -1203,7 +1254,7 @@ export default function MapScreen() {
                             key="eventWindows"
                             chips={secondRow.chips}
                             selected={eventWindow}
-                            onSelect={setEventWindow}
+                            onSelect={(w) => { setEventWindow(w); fitEventPins(w); }}
                             activeColor={EVENT_ACCENT}
                             style={styles.filterSecondRow}
                             accessibilityLabel="Filter events by date"
@@ -1233,8 +1284,43 @@ export default function MapScreen() {
                 </View>
             )}
 
+            {/* An event's pin card: date and time first, the place and how many are going. An event is not a
+                listing — no category and no bean amount (events round 2, B1). */}
+            {selectedPostPreview && !showNewPost && selectedPostPreview.type === 'event' && (() => {
+                const card = eventPinCard(selectedPostPreview);
+                return (
+                    <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
+                        <Pressable accessibilityRole="button" accessibilityLabel="Close preview" style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
+                        <Animated.View style={[styles.previewCard, styles.eventPreviewCard]}>
+                            <View style={styles.eventPreviewBody}>
+                                <View style={styles.eventPreviewWhenRow}>
+                                    <Text style={styles.eventPreviewWhen} numberOfLines={2}>{card.when}</Text>
+                                    {card.badge && <Text style={styles.eventPreviewBadge} numberOfLines={1}>{card.badge}</Text>}
+                                </View>
+                                <Text style={styles.previewTitle} numberOfLines={2}>{card.title}</Text>
+                                {card.place && <Text style={styles.eventPreviewMeta} numberOfLines={1}>📍 {card.place}</Text>}
+                                <Text style={styles.eventPreviewMeta} numberOfLines={1}>👥 {card.going}</Text>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={[styles.previewActionBtn, { backgroundColor: EVENT_ACCENT, marginTop: 10 }]}
+                                    onPress={() => {
+                                        setSelectedPostPreview(null);
+                                        router.push(`/post/${selectedPostPreview.id}`);
+                                    }}
+                                >
+                                    <Text style={styles.previewActionText}>View event</Text>
+                                </Pressable>
+                            </View>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
+                                <Text style={styles.previewCloseText}>✕</Text>
+                            </Pressable>
+                        </Animated.View>
+                    </SafeAreaView>
+                );
+            })()}
+
             {/* Map Preview Card (Bottom Sheet style) */}
-            {selectedPostPreview && !showNewPost && (
+            {selectedPostPreview && !showNewPost && selectedPostPreview.type !== 'event' && (
                 <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
                     <Pressable accessibilityRole="button" accessibilityLabel="Close preview" style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
                     <Animated.View style={styles.previewCard}>

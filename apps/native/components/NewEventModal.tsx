@@ -8,6 +8,9 @@
  *
  * Reach is always local in v1 (§2.4), so there is no linked-communities option. Keyboard avoidance comes from
  * react-native-keyboard-controller's root provider; this Modal must not add its own.
+ *
+ * With `editOf` it is the host's Edit Event screen (events round 2, decision 29): every field filled from the
+ * event, dates and photo included; Save sends only what changed. Audience and host are fixed once posted.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -26,13 +29,13 @@ import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { createPost, fetchGroups, getBalance, getTreasuries } from '../utils/db';
+import { createPost, fetchGroups, getBalance, getTreasuries, updateEvent } from '../utils/db';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
-    buildEventDraft, approximatePin, defaultEventEnd, formatPickerValue,
+    buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    type EventCopy,
+    type EventCopy, type EventEditValues,
 } from '../utils/events';
 import { EVENT_ACCENT } from './EventCard';
 
@@ -59,9 +62,16 @@ interface NewEventModalProps {
      * event that starts with its location known.
      */
     initialPin?: { lat: number; lng: number } | null;
+    /**
+     * Edit an existing event: its id, the form as it stands on the node, and who can see it (for one read-only
+     * line). The same object must be passed for the whole opening — it is applied once, like `prefill`.
+     */
+    editOf?: { id: string; values: EventEditValues; audienceLabel: string } | null;
+    /** After a save, with the event as the node now has it. */
+    onSaved?: (post: any) => void;
 }
 
-export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin }: NewEventModalProps) {
+export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin, editOf, onSaved }: NewEventModalProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -177,12 +187,37 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
     }, [visible, prefill, identity?.publicKey]);
 
+    // Edit: fill every field from the event, once per opening, so typing is never written over by a re-render.
+    const appliedEdit = useRef<NewEventModalProps['editOf']>(null);
+    useEffect(() => {
+        if (!visible) { appliedEdit.current = null; return; }
+        if (!editOf || appliedEdit.current === editOf) return;
+        appliedEdit.current = editOf;
+        const v = editOf.values;
+        setIsCopy(false);
+        setTitle(v.title);
+        setDescription(v.description);
+        setStart(v.start);
+        setEnd(v.end);
+        setPlaceName(v.placeName);
+        setNote(v.privateNote);
+        setPhoto(v.photo);
+        setPicker(null);
+        setApproximate(false);
+        if (v.lat != null && v.lng != null) {
+            setPin({ lat: v.lat, lng: v.lng });
+            centreMap(v.lat, v.lng);
+        } else {
+            setPin(null);
+        }
+    }, [visible, editOf]);
+
     // A pin the member dropped on the map before tapping + carries in as the place, once per opening so a
     // later move of the pin is not written over by a re-render. A copy brings its own pin, so it wins.
     const appliedInitialPin = useRef(false);
     useEffect(() => {
         if (!visible) { appliedInitialPin.current = false; return; }
-        if (prefill || appliedInitialPin.current || !initialPin) return;
+        if (prefill || editOf || appliedInitialPin.current || !initialPin) return;
         appliedInitialPin.current = true;
         setPin({ lat: initialPin.lat, lng: initialPin.lng });
         centreMap(initialPin.lat, initialPin.lng);
@@ -266,6 +301,38 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             if (out.base64) setPhoto(`data:image/jpeg;base64,${out.base64}`);
         } catch (e: any) {
             Alert.alert('Photo not added', e?.message || 'Could not open your photos.');
+        }
+    };
+
+    const editValues = (): EventEditValues => ({
+        title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+    });
+    const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
+
+    const handleSave = async () => {
+        Keyboard.dismiss();
+        if (!editOf || !editCheck) return;
+        if (!editCheck.ok) {
+            Alert.alert('Almost there', editCheck.error);
+            return;
+        }
+        if (Object.keys(editCheck.patch).length === 0) {
+            onClose();
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const saved = await updateEvent(editOf.id, editCheck.patch);
+            reset();
+            Alert.alert('Event saved', editCheck.notifies
+                ? 'It now shows UPDATED, and everyone going has been told.'
+                : 'Your changes are saved.');
+            onSaved?.(saved);
+            onClose();
+        } catch (err: any) {
+            Alert.alert('Event not saved', err?.message || 'The node did not accept the change.');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -374,16 +441,16 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
                             <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle} numberOfLines={1}>{isCopy ? 'Copy Event' : 'New Event'}</Text>
+                        <Text style={styles.headerTitle} numberOfLines={1}>{editOf ? 'Edit Event' : isCopy ? 'Copy Event' : 'New Event'}</Text>
                         <Pressable
-                            onPress={handleCreate}
+                            onPress={editOf ? handleSave : handleCreate}
                             disabled={submitting}
                             style={[styles.postBtn, submitting && { opacity: 0.5 }]}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? 'Creating event' : 'Create event'}
+                            accessibilityLabel={editOf ? (submitting ? 'Saving event' : 'Save changes') : (submitting ? 'Creating event' : 'Create event')}
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
-                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1}>Create</Text>}
+                            {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.postText} numberOfLines={1}>{editOf ? 'Save' : 'Create'}</Text>}
                         </Pressable>
                     </View>
 
@@ -514,6 +581,19 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <Text style={styles.helper}>Only people who tap Going see this.</Text>
                         </View>
 
+                        {editOf && editCheck?.ok && editCheck.notifies && (
+                            <View style={styles.warningBox} accessibilityLiveRegion="polite">
+                                <Text style={styles.warningTitle}>You changed the time or place.</Text>
+                                <Text style={styles.warningBody}>The event will show UPDATED and everyone going will be told.</Text>
+                            </View>
+                        )}
+
+                        {editOf ? (
+                            <View style={styles.field}>
+                                <Text style={styles.label}>WHO CAN SEE IT</Text>
+                                <Text style={styles.helper}>{editOf.audienceLabel} Who can see it and who hosts it stay as they are.</Text>
+                            </View>
+                        ) : (<>
                         {hostOptions.length > 1 && (
                             <View style={styles.field}>
                                 <Text style={styles.label}>POST AS</Text>
@@ -534,6 +614,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 </View>
                             )}
                         </View>
+                        </>)}
                     </ScrollView>
                 </View>
             </KeyboardAvoidingView>

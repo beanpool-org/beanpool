@@ -120,3 +120,37 @@ export function categoryPanelReducer(s: CategoryPanelState, a: CategoryPanelActi
 export function mapFiltersActive(state: MapFilterState): boolean {
     return state.type !== 'all' || state.category !== 'all';
 }
+
+// ===================== BRINGING EVENTS INTO VIEW (events round 2, B2) =====================
+
+/** Height of an event pin above its point, in dp (map.tsx EventMapMarker: 34 head + 8 stem, with margin). */
+export const EVENT_PIN_HEIGHT_DP = 48;
+/** Half the span shown around a lone event (~450 m each way), so fitting one pin does not zoom to the street. */
+const LONE_EVENT_HALF_SPAN_DEG = 0.004;
+
+/**
+ * The coordinates to fit when the member picks Events or a date chip: every visible event pin, or for a lone
+ * one a small box around it — fitting a single point would zoom the map in as far as it goes.
+ */
+export function eventFitCoordinates(pins: any[]): Array<{ latitude: number; longitude: number }> {
+    const coords = pins
+        .map(p => ({ latitude: Number(p.lat), longitude: Number(p.lng) }))
+        .filter(c => Number.isFinite(c.latitude) && Number.isFinite(c.longitude));
+    if (coords.length !== 1) return coords;
+    const [c] = coords;
+    return [
+        { latitude: c.latitude - LONE_EVENT_HALF_SPAN_DEG, longitude: c.longitude - LONE_EVENT_HALF_SPAN_DEG },
+        { latitude: c.latitude + LONE_EVENT_HALF_SPAN_DEG, longitude: c.longitude + LONE_EVENT_HALF_SPAN_DEG },
+    ];
+}
+
+/**
+ * The edge padding, in dp, that keeps every fitted pin clear of the filter rows: at 320dp with 1.3x text the
+ * two rows are tall, and a pin fitted to the top edge sat under the date chips. `filterBottom` is the rows'
+ * measured bottom edge; the pin is drawn above its point, so clear it by the pin's height too. The bottom
+ * keeps the pins above the tab bar and the zoom pill.
+ */
+export function eventFitPadding(filterBottom: number): { top: number; right: number; bottom: number; left: number } {
+    const rows = filterBottom > 0 ? filterBottom : 120;
+    return { top: Math.round(rows + EVENT_PIN_HEIGHT_DP + 16), right: 48, bottom: 140, left: 48 };
+}

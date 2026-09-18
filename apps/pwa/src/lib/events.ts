@@ -174,3 +174,123 @@ export function buildEventCopy(post: MarketplacePost, viewerPubkey?: string | nu
         groupId,
     };
 }
+
+// ===================== EDIT (docs/events-on-the-map.md §2.2, decision 29; events round 2) =====================
+
+/**
+ * Who is a host is the node's call: it sends the RSVP list (`eventRsvps`) to the author, a keeper of an
+ * enterprise author and an active convenor of the group, and to nobody else — the same set it lets edit.
+ */
+export function isEventHostView(post: Pick<MarketplacePost, 'eventRsvps'>): boolean {
+    return Array.isArray(post.eventRsvps);
+}
+
+/**
+ * Why the host cannot edit this event, in words for the screen, or null while it can be edited. The node
+ * refuses an edit to a cancelled or ended event; the page says so rather than offering a button that fails.
+ */
+export function eventEditBlockedReason(post: MarketplacePost, now = Date.now()): string | null {
+    if (post.eventState === 'cancelled' || post.status === 'cancelled') return 'This event was cancelled, so it can no longer be edited.';
+    const end = eventEndMs(post);
+    if (Number.isFinite(end) && end <= now) return 'This event has ended, so it can no longer be edited.';
+    return null;
+}
+
+/** The label on the chat button. No number: the going count next to "chat" read as unread messages. */
+export const EVENT_CHAT_ENTRY_LABEL = 'Open event chat';
+
+/** ISO UTC → a `<input type="datetime-local">` value in the viewer's local time ("2026-09-27T09:00"). */
+export function isoToLocalInput(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** What the edit form holds. Dates are datetime-local values; photos are the node's URLs or new data URLs. */
+export interface EventEditForm {
+    title: string;
+    description: string;
+    start: string;
+    end: string;
+    placeName: string;
+    lat: number | null;
+    lng: number | null;
+    privateNote: string;
+    photos: string[];
+}
+
+/** The form, filled from the event as it is now — every field the create form has. */
+export function eventEditForm(post: MarketplacePost): EventEditForm {
+    return {
+        title: post.title || '',
+        description: post.description || '',
+        start: isoToLocalInput(post.eventStartAt),
+        end: isoToLocalInput(post.eventEndAt),
+        placeName: post.eventPlaceName || '',
+        lat: post.lat ?? null,
+        lng: post.lng ?? null,
+        privateNote: post.eventPrivateNote || '',
+        photos: Array.isArray(post.photos) ? post.photos : [],
+    };
+}
+
+export interface EventEditPayload {
+    title?: string;
+    description?: string;
+    eventStartAt?: string;
+    eventEndAt?: string;
+    eventPlaceName?: string;
+    eventPrivateNote?: string;
+    lat?: number;
+    lng?: number;
+    photos?: string[];
+}
+
+/**
+ * Only what the host changed. A time or place change marks the event UPDATED and tells everyone going; other
+ * edits are silent (decision 29). Sending only the changed fields means a title fix can never look like a
+ * move: a datetime-local value drops seconds, so re-sending an unchanged start could differ from the stored
+ * one and notify people about nothing.
+ */
+export function eventEditPayload(before: EventEditForm, after: EventEditForm): EventEditPayload {
+    const out: EventEditPayload = {};
+    if (after.title.trim() !== before.title.trim()) out.title = after.title.trim();
+    if (after.description.trim() !== before.description.trim()) out.description = after.description.trim();
+    if (after.start !== before.start) {
+        const iso = localInputToIso(after.start);
+        if (iso) out.eventStartAt = iso;
+    }
+    // A cleared end is sent as an empty string, which the node turns into start + 2 hours. When the start
+    // moves, the end the form shows goes with it: the node keeps the old LENGTH when no end is named, so
+    // moving 9:00–11:00 to 10:00 would otherwise save 10:00–12:00 while the form said 11:00.
+    if (after.end !== before.end || (out.eventStartAt && after.end)) out.eventEndAt = localInputToIso(after.end) ?? '';
+    if (after.placeName.trim() !== before.placeName.trim()) out.eventPlaceName = after.placeName.trim();
+    if (after.privateNote.trim() !== before.privateNote.trim()) out.eventPrivateNote = after.privateNote.trim();
+    if (after.lat != null && after.lng != null && (after.lat !== before.lat || after.lng !== before.lng)) {
+        out.lat = after.lat;
+        out.lng = after.lng;
+    }
+    if (after.photos.length !== before.photos.length || after.photos.some((p, i) => p !== before.photos[i])) out.photos = after.photos;
+    return out;
+}
+
+/** True when a save would move the event in time or place, so the form can say who will be told. */
+export function eventEditNotifies(payload: EventEditPayload): boolean {
+    return payload.eventStartAt !== undefined || payload.eventEndAt !== undefined || payload.eventPlaceName !== undefined
+        || payload.lat !== undefined || payload.lng !== undefined;
+}
+
+// ===================== THE FEED'S EVENTS FILTER (same behaviour as the phone, #895) =====================
+
+/**
+ * Under the Events pill the feed shows events only, soonest first, filtered by the map's date chips, and
+ * nothing else filters it: category, distance, beans-only and new members are off screen there, and a filter
+ * the member cannot see never hides a post (the phone's rule, apps/native/utils/market-filters.ts).
+ */
+export function eventsFeedFilter(posts: MarketplacePost[], window: EventWindow, now = Date.now()): MarketplacePost[] {
+    return posts
+        .filter(p => p.type === 'event' && !(p as any)._remoteNode && eventInWindow(p, window, now))
+        .sort((a, b) => Date.parse(a.eventStartAt || '') - Date.parse(b.eventStartAt || ''));
+}

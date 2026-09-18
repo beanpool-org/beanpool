@@ -121,6 +121,9 @@ export function App() {
     // travels there and MapPage fetches it signed (which is what carries the private note to its host).
     const [copyEventPostId, setCopyEventPostId] = useState<string | null>(null);
     const clearCopyEventPost = useCallback(() => setCopyEventPostId(null), []);
+    // "Edit event" from an event's host panel: the map's event form opens in edit mode, filled from it.
+    const [editEventPostId, setEditEventPostId] = useState<string | null>(null);
+    const clearEditEventPost = useCallback(() => setEditEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
@@ -200,6 +203,11 @@ export function App() {
         if (tab === 'map-copy-event') {
             setActiveTab('map');
             if (contextId) setCopyEventPostId(contextId);
+            return;
+        }
+        if (tab === 'map-edit-event') {
+            setActiveTab('map');
+            if (contextId) setEditEventPostId(contextId);
             return;
         }
         if (tab === 'map') {
@@ -729,6 +737,8 @@ export function App() {
                                         onFocusPostHandled={clearFocusMapPost}
                                         copyEventPostId={copyEventPostId}
                                         onCopyEventHandled={clearCopyEventPost}
+                                        editEventPostId={editEventPostId}
+                                        onEditEventHandled={clearEditEventPost}
                                     />
                                 </Suspense>
                             )}

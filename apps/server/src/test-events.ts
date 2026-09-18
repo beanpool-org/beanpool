@@ -334,6 +334,47 @@ async function main(): Promise<void> {
     assertThrows(() => rsvpEvent(capture, ev.id, maybe, 'going'), /cancelled/, 'a cancelled event cannot be RSVPd');
     assert(removePost(capture, groupEvents[2].id, convenor) === true, 'an active convenor can cancel a group event');
 
+    // A cancelled event leaves the feed but its page still opens by id for the host and the people going,
+    // marked cancelled, so a host is never left with only the chat (events round 2, A4).
+    const openById = async (id: string, actor?: string) =>
+        JSON.parse((await dispatch(router, 'GET', '/api/marketplace/posts', listCtx({ id, types: 'offer,need,poll,event' }, actor))).body) as any[];
+    const hostView = (await openById(ev.id, host))[0];
+    assert(hostView?.id === ev.id && hostView.eventState === 'cancelled' && hostView.status === 'cancelled',
+        'the host can still open a cancelled event by id, and it reads as cancelled');
+    assert(Array.isArray(hostView?.eventRsvps), "the host's view of a cancelled event still carries who was going");
+    assert(!(await listIds(router, { types: 'offer,need,poll,event' }, host)).includes(ev.id), 'a cancelled event is not in the feed, even for its host');
+    db.prepare(`INSERT OR REPLACE INTO event_rsvps (post_id, member_pubkey, status, signature) VALUES (?, ?, 'going', '')`).run(ev.id, goer);
+    db.prepare(`INSERT OR REPLACE INTO event_rsvps (post_id, member_pubkey, status, signature) VALUES (?, ?, 'interested', '')`).run(ev.id, maybe);
+    assert((await openById(ev.id, goer)).length === 1, 'a member marked Going can open the cancelled event');
+    assert((await openById(ev.id, maybe)).length === 0, 'a member marked Interested cannot');
+    assert((await openById(ev.id, stranger)).length === 0, 'a member with no RSVP cannot');
+    assert((await openById(ev.id)).length === 0, 'a guest cannot');
+    assert((await openById(groupEvents[2].id, convenor)).length === 1, 'a convenor can open the group event they cancelled');
+
+    // The edit screen saves through the signed update route with the host's OWN key as authorPublicKey — a
+    // convenor or keeper who did not post the event included — and only a host gets through.
+    const updateVia = async (actor: string, body: Record<string, unknown>) => {
+        const ctx: any = { state: { actor }, params: {}, requestBody: { authorPublicKey: actor, ...body }, get: () => '', set: () => { }, headers: {} };
+        await dispatch(router, 'POST', '/api/marketplace/posts/update', ctx);
+        return ctx;
+    };
+    const routeEvent = newEvent(groupie, { audienceScope: 'group', targetGroupId: groupEvents[0].targetGroupId });
+    const viaConvenor = await updateVia(convenor, { id: routeEvent.id, title: 'Renamed by the convenor' });
+    assert(viaConvenor.status === undefined && viaConvenor.body?.post?.title === 'Renamed by the convenor',
+        `a convenor who did not post the event can save an edit through the route (got ${viaConvenor.status}: ${viaConvenor.body?.error ?? 'ok'})`);
+    assert(viaConvenor.body?.post?.eventState === 'scheduled', 'a title-only save through the route is silent');
+    const viaGoer = await updateVia(goer, { id: routeEvent.id, title: 'Hijack' });
+    assert(viaGoer.status === 404, `a member who is not a host is refused by the route (got ${viaGoer.status})`);
+    // A save that re-sends the time and place unchanged must not mark the event UPDATED or push to Going.
+    const unchanged = newEvent(stranger);
+    const resaved = updatePost(capture, unchanged.id, stranger, {
+        title: 'Same time, new name', eventStartAt: unchanged.eventStartAt, eventEndAt: unchanged.eventEndAt,
+        eventPlaceName: unchanged.eventPlaceName, lat: unchanged.lat, lng: unchanged.lng,
+    } as any)!;
+    assert(resaved.title === 'Same time, new name' && resaved.eventState === 'scheduled', 're-sending an unchanged time and place is silent');
+    const cancelledEdit = await updateVia(host, { id: ev.id, title: 'Back on' });
+    assert(cancelledEdit.status === 400 && /cancelled event/.test(cancelledEdit.body?.error || ''), 'the route refuses an edit to a cancelled event with a plain reason');
+
     // ── 11. Sync round-trip ──────────────────────────────────────────────────────────────────
     console.log('\n--- 11. Sync round-trip ---');
     const syncEvent = newEvent(stranger, { eventPrivateNote: 'Back gate' });

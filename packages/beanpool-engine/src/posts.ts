@@ -370,7 +370,10 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
     } else if (filter?.updatedAfter || filter?.sync) {
         // Include completed/cancelled/deleted states for sync
     } else if (!filter?.includeInactive) {
-        query += " AND p.active = 1";
+        // By id, a cancelled event stays readable (to its host and the people going, checked below) until the
+        // 30-day scrub marks it completed: the host has to be able to open the page and see it CANCELLED,
+        // not just its chat (events §1, "host and attendees can still see it for 30 days").
+        query += " AND (p.active = 1 OR (p.type = 'event' AND p.status = 'cancelled' AND p.event_state = 'cancelled'))";
     }
 
     if (filter?.id) { query += " AND p.id = ?"; params.push(filter.id); }
@@ -539,10 +542,13 @@ export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
             const going = mine?.status === 'going';
             // An ended event is readable by id to its host and Going only, and to nobody once the 30-day
             // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
+            // A cancelled event read by id follows the same rule: host and Going only.
             const endMs = r.event_end_at ? Date.parse(r.event_end_at) : NaN;
-            if (filter?.id && !filter.includeAllScopes && !filter.sync && !filter.updatedAfter && endMs <= nowMs) {
+            const readerView = filter?.id && !filter.includeAllScopes && !filter.sync && !filter.updatedAfter;
+            if (readerView && endMs <= nowMs) {
                 if ((!host && !going) || nowMs - endMs > EVENT_READABLE_AFTER_END_MS) continue;
             }
+            if (readerView && !r.active && !host && !going) continue;
             post.goingCount = rsvps.filter(v => v.status === 'going').length;
             post.interestedCount = rsvps.filter(v => v.status === 'interested').length;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;

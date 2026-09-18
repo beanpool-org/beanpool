@@ -13,12 +13,16 @@
  */
 
 import { useEffect, useState } from 'react';
-import { rsvpEvent, removeMarketplacePost, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
+import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { eventWhenParts, formatDistance, formatEventWhen, isEventOpen } from '../lib/events';
+import {
+    CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
+    isEventHostView, isEventOpen,
+} from '../lib/events';
 
 interface RsvpState {
     livePost: MarketplacePost;
+    setLivePost: (post: MarketplacePost) => void;
     busy: EventRsvpStatus | 'none' | null;
     error: string | null;
     canRsvp: boolean;
@@ -56,7 +60,7 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
         }
     };
 
-    return { livePost, busy, error, canRsvp, tap };
+    return { livePost, setLivePost, busy, error, canRsvp, tap };
 }
 
 function StateBadge({ post }: { post: MarketplacePost }) {
@@ -75,8 +79,19 @@ function StateBadge({ post }: { post: MarketplacePost }) {
     );
 }
 
+/**
+ * Going / Interested — for everyone except a host. A host is running the event, so the buttons would only
+ * add the host to their own guest list; the host sees a plain line in their place.
+ */
 function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
     const { livePost, busy, canRsvp, tap } = rsvp;
+    if (isEventHostView(livePost)) {
+        return (
+            <p data-testid="event-hosting" className="m-0 text-sm font-bold text-violet-800 dark:text-violet-200">
+                You're hosting this event
+            </p>
+        );
+    }
     const btn = (status: EventRsvpStatus, label: string) => {
         const mine = livePost.myRsvp === status;
         return (
@@ -180,7 +195,13 @@ interface EventDetailProps {
     onShowOnMap?: (post: MarketplacePost) => void;
     onOpenProfile?: (pubkey: string) => void;
     onChange?: (post: MarketplacePost) => void;
-    onCancelled?: () => void;
+    /** After a cancel, with the event as it reads now (CANCELLED), or null when it could not be re-read. */
+    onCancelled?: (post: MarketplacePost | null) => void;
+    /**
+     * Host only: open the create form in edit mode, filled from this event (events round 2, decision 29).
+     * The node refuses edits to an ended or cancelled event, so the page says why instead of offering it.
+     */
+    onEdit?: (post: MarketplacePost) => void;
     /** Opens the event's chat — the host and everyone Going (docs/events-on-the-map.md §3). */
     onOpenChat?: (post: MarketplacePost) => void;
     /**
@@ -190,13 +211,14 @@ interface EventDetailProps {
     onCopyToNewDate?: (post: MarketplacePost) => void;
 }
 
-export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onOpenChat, onCopyToNewDate }: EventDetailProps) {
+export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenProfile, onChange, onCancelled, onEdit, onOpenChat, onCopyToNewDate }: EventDetailProps) {
     const rsvp = useEventRsvp(post, identity, onChange);
     const p = rsvp.livePost;
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState<string | null>(null);
-    const isHost = Array.isArray(p.eventRsvps);
+    const isHost = isEventHostView(p);
     const open = isEventOpen(p);
+    const editBlocked = eventEditBlockedReason(p);
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
@@ -207,7 +229,15 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
         setCancelError(null);
         try {
             await removeMarketplacePost(p.id, p.authorPublicKey);
-            onCancelled?.();
+            // Stay on the page: the host re-reads the event (the node still serves a cancelled one to its host
+            // by id) and sees it marked CANCELLED, rather than being dropped back on a feed it has left.
+            let after: MarketplacePost | null = null;
+            try {
+                after = (await getMarketplacePosts({ id: p.id, types: CLIENT_POST_TYPES }))[0] ?? null;
+            } catch { /* offline: fall back to marking it locally */ }
+            const next = after ?? { ...p, status: 'cancelled', eventState: 'cancelled' as const };
+            rsvp.setLivePost(next);
+            onCancelled?.(after);
         } catch (e: any) {
             setCancelError(e?.message || 'Could not cancel the event.');
         } finally {
@@ -270,7 +300,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         onClick={() => onOpenChat(p)}
                         className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left"
                     >
-                        💬 Open event chat{typeof p.goingCount === 'number' ? ` (${p.goingCount})` : ''}
+                        💬 {EVENT_CHAT_ENTRY_LABEL}
                     </button>
                 )}
 
@@ -304,6 +334,19 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 ))}
                             </ul>
                         )}
+                        {onEdit && !editBlocked && (
+                            <button
+                                type="button"
+                                data-testid="event-edit"
+                                onClick={() => onEdit(p)}
+                                className="min-h-[48px] px-3 rounded-xl border border-violet-700 dark:border-violet-400 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600"
+                            >
+                                Edit event
+                            </button>
+                        )}
+                        {onEdit && editBlocked && (
+                            <p data-testid="event-edit-blocked" className="m-0 text-sm text-nature-600 dark:text-nature-400">{editBlocked}</p>
+                        )}
                         {onCopyToNewDate && (
                             <button
                                 type="button"
@@ -311,7 +354,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 onClick={() => onCopyToNewDate(p)}
                                 className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent"
                             >
-                                📅 Copy to a new date
+                                Copy to a new date
                             </button>
                         )}
                         {open && (

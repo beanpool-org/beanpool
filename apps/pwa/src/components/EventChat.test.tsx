@@ -172,11 +172,12 @@ describe('EventDetail chat entry (docs/events-on-the-map.md §3)', () => {
         eventState: 'scheduled', goingCount: 7, interestedCount: 3, myRsvp: 'going',
     };
 
-    it('offers the chat with the going count to someone going', () => {
+    it('offers the chat to someone going, labelled plainly — no number that reads as unread messages (B3)', () => {
         const onOpenChat = vi.fn();
         render(<EventDetail post={baseEvent} identity={identity} onOpenChat={onOpenChat} />);
         const btn = screen.getByTestId('event-open-chat');
-        expect(btn.textContent).toBe('💬 Open event chat (7)');
+        expect(btn.textContent).toBe('💬 Open event chat');
+        expect(btn.textContent).not.toMatch(/\d/);
         fireEvent.click(btn);
         expect(onOpenChat).toHaveBeenCalledWith(baseEvent);
     });
@@ -192,5 +193,21 @@ describe('EventDetail chat entry (docs/events-on-the-map.md §3)', () => {
         unmount();
         render(<EventDetail post={{ ...baseEvent, myRsvp: null }} identity={identity} onOpenChat={vi.fn()} />);
         expect(screen.queryByTestId('event-open-chat')).toBeNull();
+    });
+});
+
+describe('EventChat: the way back to the event (A4)', () => {
+    it('carries a View event button in the header, so a cancelled or ended event can still be opened', async () => {
+        vi.mocked(api.getEventChat).mockResolvedValue(view({
+            readOnly: true, canPost: false, eventState: 'cancelled',
+            readOnlyReason: 'This event was cancelled. The chat is read-only.',
+        }));
+        const onOpenEvent = vi.fn();
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} onOpenEvent={onOpenEvent} />);
+        const btn = await screen.findByTestId('event-chat-open-event');
+        expect(btn.textContent).toBe('View event');
+        expect(btn.className).toMatch(/min-h-\[48px\]/);
+        fireEvent.click(btn);
+        expect(onOpenEvent).toHaveBeenCalledTimes(1);
     });
 });

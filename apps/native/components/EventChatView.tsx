@@ -112,7 +112,16 @@ export function EventChatView({ eventId }: Props) {
                 <Text style={styles.headerTitle} numberOfLines={1}>{view?.title || 'Event chat'}</Text>
                 <Text style={styles.headerSub} numberOfLines={1}>Event chat</Text>
             </View>
-            <View style={{ width: 44 }} />
+            {/* The way back to the event itself. After it ends or is cancelled it has left the feed, and this
+                chat is often the only way in (events round 2, A4). */}
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View event"
+                onPress={() => router.push(`/post/${eventId}`)}
+                style={styles.viewEventBtn}
+            >
+                <Text style={styles.viewEventText} numberOfLines={1}>View event</Text>
+            </Pressable>
         </View>
     );
 
@@ -240,6 +249,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         headerTitleWrap: { flex: 1, minWidth: 0 },
         headerTitle: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
         headerSub: { fontSize: 11, fontWeight: '700', color: EVENT_ACCENT },
+        viewEventBtn: {
+            minHeight: 48, justifyContent: 'center', paddingHorizontal: 10, marginLeft: 6, flexShrink: 0,
+            borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
+        },
+        viewEventText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
         noteBox: {
             marginHorizontal: 12, marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1,
             backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.15)' : '#f5f3ff',

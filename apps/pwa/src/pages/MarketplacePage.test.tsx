@@ -126,6 +126,54 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(screen.getByText('Bicycle Repair')).toBeInTheDocument();
     });
 
+    it('has an Events pill that shows events only, with the map\'s date chips in place of the listing filters (B5)', async () => {
+        vi.mocked(api.getMarketplacePosts).mockResolvedValue([
+            ...posts,
+            event('ev-open', 'Working bee'),
+            event('ev-far', 'Spring fair', { eventStartAt: inHours(24 * 30) }),
+            event('ev-ended', 'Last week', { eventStartAt: inHours(-30), eventEndAt: inHours(-28) }),
+        ] as any);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Working bee');
+        const pills = screen.getByTestId('feed-type-filter');
+        expect(Array.from(pills.querySelectorAll('button')).map(b => b.textContent)).toEqual(
+            ['All', '★ For You', '🟢 Offers', '🟠 Needs', 'Events', '🗳️ Polls']);
+        expect(screen.queryByTestId('feed-event-window-chips')).toBeNull();
+
+        await act(async () => { screen.getByRole('button', { name: 'Events' }).click(); });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalledWith(expect.objectContaining({ type: 'event' })));
+        expect(screen.getByRole('button', { name: 'Events' }).getAttribute('aria-pressed')).toBe('true');
+        await waitFor(() => expect(screen.queryByText('Bicycle Repair')).not.toBeInTheDocument());
+        // Soonest first, and never an ended one.
+        expect(screen.getAllByTestId('event-card').map(c => c.textContent?.includes('Working bee') ? 'open' : 'far')).toEqual(['open', 'far']);
+        expect(screen.queryByText('Last week')).not.toBeInTheDocument();
+
+        // The date chips replace Category / Distance / Beans only, as on the phone.
+        const chips = screen.getByTestId('feed-event-window-chips');
+        expect(Array.from(chips.querySelectorAll('button')).map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', 'All']);
+        expect(Array.from(chips.querySelectorAll('button')).every(b => /min-h-\[48px\]/.test(b.className))).toBe(true);
+        expect(screen.queryByText(/Beans only/)).toBeNull();
+        expect(screen.queryByText('Category')).toBeNull();
+        expect(screen.queryByText('Distance')).toBeNull();
+
+        await act(async () => { screen.getByRole('button', { name: 'Next 7 days' }).click(); });
+        expect(screen.getByText('Working bee')).toBeInTheDocument();
+        expect(screen.queryByText('Spring fair')).not.toBeInTheDocument();
+    });
+
+    it('opens an event that has left the feed when a link names it (the chat\'s View event), asking the node by id (A4)', async () => {
+        const cancelled = event('ev-cancelled', 'Cancelled working bee', { status: 'cancelled', eventState: 'cancelled', active: false, eventRsvps: [] });
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (filter?: any) =>
+            (filter?.id === 'ev-cancelled' ? [cancelled] : [...posts]) as any);
+        const onPostOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openPostId="ev-cancelled" onPostOpened={onPostOpened} />);
+        const detail = await screen.findByTestId('event-detail');
+        expect(detail).toHaveTextContent('Cancelled working bee');
+        expect(detail).toHaveTextContent('CANCELLED');
+        expect(api.getMarketplacePosts).toHaveBeenCalledWith({ id: 'ev-cancelled', types: 'offer,need,poll,event' });
+        expect(onPostOpened).toHaveBeenCalled();
+    });
+
     it('opens the event detail from the card, with the host line', async () => {
         render(<MarketplacePage identity={identity} />);
         const open = await screen.findByRole('button', { name: 'Open event: Working bee' });

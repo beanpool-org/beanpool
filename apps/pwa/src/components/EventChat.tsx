@@ -44,11 +44,16 @@ interface Props {
     postId: string;
     identity: BeanPoolIdentity | null;
     onBack?: () => void;
+    /**
+     * Opens the event's own page. The chat is often the only way back to an event that has left the feed —
+     * after it ends, or after the host cancels it — so the header always carries the way to it.
+     */
+    onOpenEvent?: () => void;
     /** Poll interval while the chat is open; 0 turns it off (tests). */
     refreshMs?: number;
 }
 
-export function EventChat({ postId, identity, onBack, refreshMs = 12000 }: Props) {
+export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 12000 }: Props) {
     const [view, setView] = useState<EventThreadView | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
@@ -115,7 +120,7 @@ export function EventChat({ postId, identity, onBack, refreshMs = 12000 }: Props
     if (loadError && !view) {
         return (
             <div data-testid="event-chat" className="h-full w-full flex flex-col">
-                <ChatHeader title="Event chat" onBack={onBack} />
+                <ChatHeader title="Event chat" onBack={onBack} onOpenEvent={onOpenEvent} />
                 <p role="alert" data-testid="event-chat-error" className="m-4 text-sm text-nature-700 dark:text-nature-300">
                     {loadError}
                 </p>
@@ -126,7 +131,7 @@ export function EventChat({ postId, identity, onBack, refreshMs = 12000 }: Props
     if (!view) {
         return (
             <div data-testid="event-chat" className="h-full w-full flex flex-col">
-                <ChatHeader title="Event chat" onBack={onBack} />
+                <ChatHeader title="Event chat" onBack={onBack} onOpenEvent={onOpenEvent} />
                 <p className="m-4 text-sm text-nature-500 dark:text-nature-400">Opening the chat…</p>
             </div>
         );
@@ -136,7 +141,7 @@ export function EventChat({ postId, identity, onBack, refreshMs = 12000 }: Props
 
     return (
         <div data-testid="event-chat" className="h-full max-w-4xl mx-auto w-full flex flex-col min-w-0">
-            <ChatHeader title={view.title} onBack={onBack} />
+            <ChatHeader title={view.title} onBack={onBack} onOpenEvent={onOpenEvent} />
 
             {view.privateNote && (
                 <div
@@ -241,7 +246,7 @@ export function EventChat({ postId, identity, onBack, refreshMs = 12000 }: Props
     );
 }
 
-function ChatHeader({ title, onBack }: { title: string; onBack?: () => void }) {
+function ChatHeader({ title, onBack, onOpenEvent }: { title: string; onBack?: () => void; onOpenEvent?: () => void }) {
     return (
         <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-nature-200 dark:border-nature-800 min-w-0">
             {onBack && (
@@ -258,6 +263,16 @@ function ChatHeader({ title, onBack }: { title: string; onBack?: () => void }) {
                 <p className="m-0 truncate text-base font-extrabold text-nature-950 dark:text-white">{title}</p>
                 <p className="m-0 text-[11px] font-semibold text-violet-700 dark:text-violet-300">Event chat</p>
             </div>
+            {onOpenEvent && (
+                <button
+                    type="button"
+                    data-testid="event-chat-open-event"
+                    onClick={onOpenEvent}
+                    className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 bg-transparent text-sm font-bold text-violet-800 dark:text-violet-200 cursor-pointer"
+                >
+                    View event
+                </button>
+            )}
         </div>
     );
 }

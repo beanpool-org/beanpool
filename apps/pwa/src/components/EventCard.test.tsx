@@ -5,7 +5,7 @@ import * as api from '../lib/api';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
-    return { ...actual, rsvpEvent: vi.fn(), removeMarketplacePost: vi.fn() };
+    return { ...actual, rsvpEvent: vi.fn(), removeMarketplacePost: vi.fn(), getMarketplacePosts: vi.fn(async () => []) };
 });
 
 const HOUR = 60 * 60 * 1000;
@@ -197,5 +197,92 @@ describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
         renderAt320(<EventDetail post={hosted} identity={identity} onCopyToNewDate={vi.fn()} />);
         const btn = screen.getByTestId('event-copy-to-new-date');
         expect(btn.className).toMatch(/min-h-\[48px\]/);
+    });
+});
+
+describe('Events round 2: the host (A1, A3, A4, B4)', () => {
+    const hosted: any = {
+        ...baseEvent, myRsvp: null, eventPrivateNote: 'Gate code 1234',
+        eventRsvps: [{ memberPubkey: 'b', memberCallsign: 'Bo', status: 'going', updatedAt: '' }],
+    };
+    beforeEach(() => {
+        vi.mocked(api.removeMarketplacePost).mockReset();
+        vi.mocked(api.getMarketplacePosts).mockReset();
+        vi.mocked(api.getMarketplacePosts).mockResolvedValue([]);
+    });
+
+    it('does not show Going / Interested to the host on the card or the page (B4)', () => {
+        const { unmount } = render(<EventCard post={hosted} identity={identity} />);
+        expect(screen.queryByRole('button', { name: 'Going' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Interested' })).toBeNull();
+        expect(screen.getByTestId('event-hosting')).toHaveTextContent("You're hosting this event");
+        unmount();
+        render(<EventDetail post={hosted} identity={identity} />);
+        expect(screen.queryByRole('button', { name: 'Going' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Interested' })).toBeNull();
+        expect(screen.getByTestId('event-hosting')).toBeInTheDocument();
+    });
+
+    it('still shows Going / Interested to everyone else', () => {
+        render(<EventCard post={baseEvent} identity={identity} />);
+        expect(screen.getByRole('button', { name: /Going/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Interested/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('event-hosting')).toBeNull();
+    });
+
+    it('offers Edit event to the host of an open event, as a 48px target (A1)', () => {
+        const onEdit = vi.fn();
+        renderAt320(<EventDetail post={hosted} identity={identity} onEdit={onEdit} />);
+        const btn = within(screen.getByTestId('event-host-panel')).getByRole('button', { name: 'Edit event' });
+        expect(btn.className).toMatch(/min-h-\[48px\]/);
+        fireEvent.click(btn);
+        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'ev-1' }));
+    });
+
+    it('does not offer Edit to anyone but the host', () => {
+        render(<EventDetail post={baseEvent} identity={identity} onEdit={vi.fn()} />);
+        expect(screen.queryByRole('button', { name: 'Edit event' })).toBeNull();
+        expect(screen.queryByTestId('event-edit-blocked')).toBeNull();
+    });
+
+    it('says plainly that an ended event cannot be edited, instead of a button that would fail (A3)', () => {
+        const ended = { ...hosted, eventStartAt: new Date(2020, 0, 1, 9).toISOString(), eventEndAt: new Date(2020, 0, 1, 11).toISOString() };
+        render(<EventDetail post={ended} identity={identity} onEdit={vi.fn()} />);
+        expect(screen.queryByRole('button', { name: 'Edit event' })).toBeNull();
+        expect(screen.getByTestId('event-edit-blocked')).toHaveTextContent('This event has ended, so it can no longer be edited.');
+    });
+
+    it('says plainly that a cancelled event cannot be edited (A3)', () => {
+        const cancelled = { ...hosted, status: 'cancelled', eventState: 'cancelled', active: false };
+        render(<EventDetail post={cancelled} identity={identity} onEdit={vi.fn()} />);
+        expect(screen.queryByRole('button', { name: 'Edit event' })).toBeNull();
+        expect(screen.getByTestId('event-edit-blocked')).toHaveTextContent('This event was cancelled, so it can no longer be edited.');
+    });
+
+    it('after cancelling, the host stays on the event page and sees it CANCELLED (A4)', async () => {
+        const nowCancelled = { ...hosted, status: 'cancelled', eventState: 'cancelled', active: false };
+        vi.mocked(api.removeMarketplacePost).mockResolvedValueOnce({ success: true });
+        vi.mocked(api.getMarketplacePosts).mockResolvedValueOnce([nowCancelled]);
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const onCancelled = vi.fn();
+        render(<EventDetail post={hosted} identity={identity} onCancelled={onCancelled} onEdit={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel event' }));
+        await waitFor(() => expect(onCancelled).toHaveBeenCalledWith(nowCancelled));
+        expect(api.getMarketplacePosts).toHaveBeenCalledWith({ id: 'ev-1', types: 'offer,need,poll,event' });
+        expect(screen.getByTestId('event-detail')).toBeInTheDocument();
+        expect(screen.getAllByTestId('event-state-badge')[0]).toHaveTextContent('CANCELLED');
+        expect(screen.queryByRole('button', { name: 'Cancel event' })).toBeNull();
+        expect(screen.getByTestId('event-edit-blocked')).toBeInTheDocument();
+        confirm.mockRestore();
+    });
+
+    it('marks it CANCELLED on the page even when the re-read fails (offline)', async () => {
+        vi.mocked(api.removeMarketplacePost).mockResolvedValueOnce({ success: true });
+        vi.mocked(api.getMarketplacePosts).mockRejectedValueOnce(new Error('offline'));
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<EventDetail post={hosted} identity={identity} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel event' }));
+        await waitFor(() => expect(screen.getAllByTestId('event-state-badge')[0]).toHaveTextContent('CANCELLED'));
+        confirm.mockRestore();
     });
 });

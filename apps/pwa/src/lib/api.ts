@@ -1123,6 +1123,11 @@ export async function updateMarketplacePost(
         lng?: number;
         repeatable?: boolean;
         photos?: string[];
+        // Events (docs/events-on-the-map.md §2.2). A cleared end is '' — the node sets start + 2 hours.
+        eventStartAt?: string;
+        eventEndAt?: string;
+        eventPlaceName?: string;
+        eventPrivateNote?: string;
     },
 ): Promise<{ success: boolean; post: MarketplacePost }> {
     return request('POST', '/api/marketplace/posts/update', { id, authorPublicKey, ...updates });

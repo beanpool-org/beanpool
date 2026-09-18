@@ -49,7 +49,8 @@ export const NEW_POST_TYPES: readonly ComposeOption[] = [
     },
     {
         id: 'event',
-        emoji: '📅',
+        // Not 📅: Android draws that emoji with a date printed on it ("JUL 17"), which reads as the event's.
+        emoji: '👥',
         title: 'Event',
         description: 'A gathering with a time and a place',
     },

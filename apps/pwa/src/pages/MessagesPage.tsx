@@ -813,6 +813,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             <EventChat
                 postId={activeConv.id}
                 identity={identity}
+                onOpenEvent={() => onNavigate?.('marketplace', activeConv.id)}
                 onBack={() => {
                     setActiveConv(null);
                     loadConversations();

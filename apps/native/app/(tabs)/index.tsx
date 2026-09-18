@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, Pressable, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,7 +9,6 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
-import { CategoryPickerSheet } from '../../components/CategoryPickerSheet';
 import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
 import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
@@ -20,11 +19,18 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
-import { EventCard } from '../../components/EventCard';
+import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { composeTargetFor } from '../../utils/compose-options';
-import { isEventInFeed, EVENT_TYPES_QUERY } from '../../utils/events';
+import { EVENT_TYPES_QUERY, type EventWindow } from '../../utils/events';
+import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
+import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
+import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
+import {
+    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, distanceChipLabel, trustChipLabel, beansChipLabel,
+    type MarketTypeFilter, type MarketFilterState,
+} from '../../utils/market-filters';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
@@ -89,20 +95,8 @@ export const MARKETPLACE_CATEGORIES = [
 // ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
 export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
 
-function deg2rad(deg: number) {
-    return deg * (Math.PI / 180);
-}
-
-function getDistanceInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-    const R = 6371;
-    const dLat = deg2rad(lat2 - lat1);
-    const dLon = deg2rad(lon2 - lon1); 
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-    return R * c;
-}
+const HEADER_PAD_TOP = 8;
+const MIN_FEED_UNDER_PANEL = 48;
 
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
@@ -134,7 +128,7 @@ export default function MarketScreen() {
         setShowFirstOfferQuest(false);
         AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
     };
-    const [filter, setFilter] = useState<'all' | 'needs' | 'offers' | 'for-you' | 'polls'>('all');
+    const [filter, setFilter] = useState<MarketTypeFilter>('all');
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -455,84 +449,9 @@ export default function MarketScreen() {
             fontWeight: '900',
             color: colors.accent.primary,
         },
-        typeSegmentContainer: {
-            flexDirection: 'row',
-            width: '100%',
-            backgroundColor: colors.surface.subtle,
-            borderRadius: 12,
-            padding: 3,
-            marginTop: 0,
-            marginBottom: 3,
-        },
-        segmentBtn: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 5,
-            borderRadius: 10,
-            backgroundColor: 'transparent',
-        },
-        segmentText: {
-            fontSize: 12,
-            fontWeight: '700',
-            color: colors.text.secondary,
-        },
-        segmentTextActive: {
-            color: colors.text.inverse,
-            fontWeight: '800',
-        },
-        segmentBtnAllActive: { backgroundColor: theme === 'dark' ? colors.surface.card : palette.gray800 },
-        segmentBtnFavActive: { backgroundColor: colors.accent.primary },
-        segmentBtnOfferActive: { backgroundColor: colors.brand.primary },
-        segmentBtnNeedActive: { backgroundColor: colors.action.fab },
-        segmentBtnPollActive: { backgroundColor: '#7c3aed' },
-
-        dropdownsRow: {
-            flexDirection: 'row',
-            width: '100%',
-            justifyContent: 'space-between',
-            gap: 8,
-            marginTop: 2,
-            marginBottom: 2,
-        },
-        dropdownBtn: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: colors.surface.card,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            borderRadius: 12,
-            paddingVertical: 5,
-            paddingHorizontal: 12,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.03,
-            shadowRadius: 2,
-            elevation: 1,
-        },
-        dropdownBtnCategoryActive: {
-            backgroundColor: colors.feedback.info.bg,
-            borderColor: colors.feedback.info.border,
-        },
-        dropdownBtnDistanceActive: {
-            backgroundColor: colors.feedback.warning.bg,
-            borderColor: colors.feedback.warning.border,
-        },
-        dropdownBtnNewMembersActive: {
-            backgroundColor: colors.feedback.success.bg,
-            borderColor: colors.feedback.success.border,
-        },
-        dropdownText: {
-            fontSize: 12,
-            fontWeight: '700',
-            color: colors.text.secondary,
-        },
-        dropdownTextActive: {
-            color: theme === 'dark' ? colors.text.heading : colors.text.inverse,
-            fontWeight: '800',
-        }
+        filterRow: { marginBottom: 4, borderWidth: 1, borderColor: colors.border.default, borderRadius: 26, overflow: 'hidden' },
+        filterGrow: { flexGrow: 1 },
+        typePill: { paddingHorizontal: 8 },
     }));
 
     const [trustFilter, setTrustFilter] = useState<string>('all');
@@ -588,10 +507,34 @@ export default function MarketScreen() {
     const [searchResults, setSearchResults] = useState<any[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [categoryFilter, setCategoryFilter] = useState('all');
+    /**
+     * The category chip and its panel of tiles — the map's (utils/map-filters.ts), so picking a tile applies
+     * it and closes the panel in one step. The panel opens under the filter bar and pushes the list down.
+     */
+    const [categoryPanel, dispatchCategoryPanel] = useReducer(categoryPanelReducer, { category: 'all', open: false });
+    const categoryFilter = categoryPanel.category;
+    const closeCategoryPanel = () => dispatchCategoryPanel({ kind: 'dismiss' });
+    // Leaving the tab closes it, so coming back to the Market shows the feed, not the panel.
+    useFocusEffect(useCallback(() => () => dispatchCategoryPanel({ kind: 'dismiss' }), []));
+    const [eventWindow, setEventWindow] = useState<EventWindow>('all');
+    const selectType = (t: MarketTypeFilter) => {
+        setFilter(t);
+        // Polls and Events have no category chip, so an open panel goes with it.
+        const row = marketSecondRow(t);
+        if (row.kind !== 'filters' || !row.category) closeCategoryPanel();
+    };
+    /**
+     * The open panel pushes the list down. It may grow until MIN_FEED_UNDER_PANEL of the list is left under
+     * it — one touch-height strip to tap to close, and a sight of the feed they will return to; past that its
+     * tiles scroll inside it.
+     */
+    const [screenH, setScreenH] = useState(0);
+    const [filterBlockY, setFilterBlockY] = useState(0);
+    const [filterRowsBottom, setFilterRowsBottom] = useState(0);
+    const rowsBottom = HEADER_PAD_TOP + filterBlockY + filterRowsBottom;
+    const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
-    const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [radiusKm, setRadiusKm] = useState<number | null>(null);
     const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
     const [showRadiusPicker, setShowRadiusPicker] = useState(false);
@@ -739,9 +682,11 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                // Events are opt-in on the list route; only the All view shows them.
-                const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : '&type=offer';
-                const cat = categoryFilter !== 'all' ? `&category=${categoryFilter}` : '';
+                // Events are opt-in on the list route; All and Events ask for them.
+                const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : filter === 'events' ? '&type=event' : '&type=offer';
+                // Only while the category chip is on screen (not under Polls or Events).
+                const row = marketSecondRow(filter);
+                const cat = categoryFilter !== 'all' && row.kind === 'filters' && row.category ? `&category=${categoryFilter}` : '';
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
                 const expandedQ = expandSearchTerms(q).join(' ');
@@ -792,7 +737,7 @@ export default function MarketScreen() {
     const loadPosts = async (): Promise<boolean> => {
         const queryFilter: any = { includeEvents: true };
         if (filter !== 'all' && filter !== 'for-you') {
-            queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : 'poll';
+            queryFilter.type = filter === 'needs' ? 'need' : filter === 'offers' ? 'offer' : filter === 'events' ? 'event' : 'poll';
         }
         if (groupFilter !== 'all') {
             queryFilter.targetGroupId = groupFilter;
@@ -837,46 +782,26 @@ export default function MarketScreen() {
     // Use server search results when available, otherwise filter locally
     const basePosts = searchResults !== null ? searchResults : posts;
 
-    let filteredPosts = basePosts.filter(p => {
-        if (p.type === 'poll') {
-            if (p.status !== 'active' && p.status !== 'completed') return false;
-        } else if (p.type === 'event') {
-            // Ended and cancelled events leave the feed (the sync pull still carries them)
-            if (!isEventInFeed(p)) return false;
-            if (filter !== 'all') return false;
-        } else {
-            if (p.status !== 'active') return false;
-        }
-        if (blockedUsers.includes(p.author_pubkey)) return false;
-        // Group filter (Item 10)
-        if (groupFilter !== 'all') {
-            const postGroupId = p.target_group_id || p.targetGroupId;
-            if (postGroupId !== groupFilter) return false;
-        }
-        // Category filter: polls are civic governance posts and bypass goods category filters
-        if (categoryFilter !== 'all' && p.category !== categoryFilter && filter !== 'polls') return false;
-        // #108: beans-only browse excludes polls
-        if (beansOnly && (p.type === 'poll' || p.type === 'event' || p.cash_also_needed === 1)) return false;
-        
-        // Type / For You filters
-        if (filter === 'offers' && p.type !== 'offer') return false;
-        if (filter === 'needs' && p.type !== 'need') return false;
-        if (filter === 'polls' && p.type !== 'poll') return false;
-        if (filter === 'for-you' && (p.type === 'poll' || !favCategories.includes(p.category))) return false;
-        
-        // Trust Level filters
-        if (trustFilter === 'founding' && (p.type === 'poll' || p.type === 'event' || !p.authorFoundingNeeded)) return false;
-        if (trustFilter === 'new' && (p.author_energy_cycled ?? 0) >= 120) return false;
-        if (trustFilter === 'resident' && (p.author_energy_cycled ?? 0) < 120) return false;
-        if (trustFilter === 'steward' && (p.author_energy_cycled ?? 0) < 520) return false;
-        if (trustFilter === 'elder' && (p.author_energy_cycled ?? 0) < 1320) return false;
+    const filterState: MarketFilterState = {
+        type: filter, category: categoryFilter, eventWindow, trust: trustFilter, beansOnly, radiusKm, center: locationCenter, groupId: groupFilter,
+    };
+    const secondRow = marketSecondRow(filter);
+    // The second row's chips fill with the type's colour, as the map's category chip does.
+    // Fill for the selected type pill, each carrying white text; the map's colours for Offers / Needs / Events.
+    const typeColors: Record<MarketTypeFilter, string> = {
+        all: theme === 'dark' ? palette.gray600 : palette.gray800,
+        'for-you': colors.accent.primary,
+        offers: '#10b981',
+        needs: '#ea580c',
+        events: EVENT_ACCENT,
+        polls: '#7c3aed',
+    };
+    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.dark;
+    const filterCtx = { blockedUsers, favCategories };
 
-        if (radiusKm && p.lat && p.lng) {
-            const centerLat = locationCenter ? locationCenter.lat : -28.5523;
-            const centerLng = locationCenter ? locationCenter.lng : 153.4991;
-            const dist = getDistanceInKm(centerLat, centerLng, p.lat, p.lng);
-            if (dist > radiusKm) return false;
-        }
+    let filteredPosts = basePosts.filter(p => {
+        // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
+        if (!feedPostVisible(p, filterState, filterCtx)) return false;
 
         // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
         if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
@@ -915,9 +840,8 @@ export default function MarketScreen() {
         return 0;
     });
 
-    const selectedCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = categoryFilter !== 'all' || radiusKm !== null || filter !== 'all' || trustFilter !== 'all' || beansOnly || searchQuery.trim().length > 0 || groupFilter !== 'all';
+    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
 
     const freshTodayCount = posts.filter(post => {
         if (post.status !== 'active') return false;
@@ -999,148 +923,103 @@ export default function MarketScreen() {
                 </Pressable>
             </View>
 
-            {/* Elegant 3-Row Layout: Row 2 (Type Segmented Control) + Row 3 (Symmetrical Filter Dropdowns) */}
-            <View style={{ paddingHorizontal: 16, marginTop: 0 }}>
-                {/* Row 2: Full-Width Type Segmented Control */}
-                <View style={styles.typeSegmentContainer}>
-                    <Pressable
-                        onPress={() => setFilter('all')}
-                        style={[styles.segmentBtn, filter === 'all' && styles.segmentBtnAllActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: filter === 'all' }}
-                    >
-                        <Text style={[styles.segmentText, filter === 'all' && styles.segmentTextActive]}>All</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setFilter(filter === 'for-you' ? 'all' : 'for-you')}
-                        style={[styles.segmentBtn, filter === 'for-you' && styles.segmentBtnFavActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: filter === 'for-you' }}
-                    >
-                        <Text style={[styles.segmentText, filter === 'for-you' && styles.segmentTextActive]}>★ For You</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setFilter(filter === 'offers' ? 'all' : 'offers')}
-                        style={[styles.segmentBtn, filter === 'offers' && styles.segmentBtnOfferActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: filter === 'offers' }}
-                    >
-                        <Text style={[styles.segmentText, filter === 'offers' && styles.segmentTextActive]}>🟢 Offers</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setFilter(filter === 'needs' ? 'all' : 'needs')}
-                        style={[styles.segmentBtn, filter === 'needs' && styles.segmentBtnNeedActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: filter === 'needs' }}
-                    >
-                        <Text style={[styles.segmentText, filter === 'needs' && styles.segmentTextActive]}>🟠 Needs</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setFilter(filter === 'polls' ? 'all' : 'polls')}
-                        style={[styles.segmentBtn, filter === 'polls' && styles.segmentBtnPollActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: filter === 'polls' }}
-                    >
-                        <Text style={[styles.segmentText, filter === 'polls' && styles.segmentTextActive]}>🗳️ Polls</Text>
-                    </Pressable>
+            {/* The map's filter shape (utils/market-filters.ts): the type row, and under it one row that stays in
+                the same place and changes with the type — the category chip and the feed's own filters, or the
+                event date chips under Events. The category panel opens under it, full width. */}
+            <View style={{ paddingHorizontal: 16, marginTop: 0 }} onLayout={e => setFilterBlockY(e.nativeEvent.layout.y)}>
+                <View onLayout={e => setFilterRowsBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+                <FilterChipRow
+                    chips={MARKET_TYPE_PILLS}
+                    selected={filter}
+                    onSelect={selectType}
+                    activeColor={typeColors[filter]}
+                    fill
+                    wrap
+                    // 8dp sides, not 12: the six pills fit one line on a normal phone (~338dp of 379).
+                    chipStyle={styles.typePill}
+                    style={styles.filterRow}
+                    accessibilityLabel="Show"
+                />
+
+                {secondRow.kind === 'eventWindows' ? (
+                    <FilterChipRow
+                        key="eventWindows"
+                        chips={secondRow.chips}
+                        selected={eventWindow}
+                        onSelect={setEventWindow}
+                        activeColor={EVENT_ACCENT}
+                        fill
+                        moreHint
+                        style={styles.filterRow}
+                        accessibilityLabel="Filter events by date"
+                    />
+                ) : (
+                    <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel="Filters">
+                        {secondRow.category && (
+                            <FilterChipButton
+                                variant="flat"
+                                label={categoryChipLabel(categoryFilter, categoryPanel.open)}
+                                active={categoryFilter !== 'all'}
+                                activeColor={filterColor}
+                                expanded={categoryPanel.open}
+                                onPress={() => dispatchCategoryPanel({ kind: 'toggle' })}
+                                accessibilityLabel="Filter by category"
+                                style={styles.filterGrow}
+                            />
+                        )}
+                        {secondRow.extras.includes('distance') && (
+                            <FilterChipButton
+                                variant="flat"
+                                label={distanceChipLabel(radiusKm)}
+                                active={radiusKm !== null}
+                                activeColor={filterColor}
+                                onPress={() => { closeCategoryPanel(); setShowRadiusPicker(true); }}
+                                accessibilityLabel="Filter by distance"
+                                style={styles.filterGrow}
+                            />
+                        )}
+                        {secondRow.extras.includes('trust') && (
+                            <FilterChipButton
+                                variant="flat"
+                                label={trustChipLabel(selectedTrustFilter)}
+                                active={trustFilter !== 'all'}
+                                activeColor={filterColor}
+                                onPress={() => { closeCategoryPanel(); setShowTrustPicker(true); }}
+                                accessibilityLabel="Filter by trust level"
+                                style={styles.filterGrow}
+                            />
+                        )}
+                        {/* #108 Beans-only filter — a toggle, not a picker, so it needs no sheet. */}
+                        {secondRow.extras.includes('beans') && (
+                            <FilterChipButton
+                                variant="flat"
+                                label={beansChipLabel(beansOnly)}
+                                active={beansOnly}
+                                selected={beansOnly}
+                                activeColor={filterColor}
+                                onPress={() => { closeCategoryPanel(); setBeansOnly(!beansOnly); }}
+                                accessibilityLabel="Show only listings that need no cash"
+                                style={styles.filterGrow}
+                            />
+                        )}
+                    </FilterChipBar>
+                )}
                 </View>
 
-                {/* Row 3: Symmetrical Filter Dropdowns (Category, Distance, New Members) */}
-                <View style={styles.dropdownsRow}>
-                    {/* Category Dropdown */}
-                    <Pressable
-                        onPress={() => setShowCategoryPicker(true)}
-                        style={[styles.dropdownBtn, categoryFilter !== 'all' && styles.dropdownBtnCategoryActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: categoryFilter !== 'all' }}
-                    >
-                        <Text style={[styles.dropdownText, categoryFilter !== 'all' && styles.dropdownTextActive]} numberOfLines={1}>
-                            {selectedCategory?.emoji || '🏷️'} {categoryFilter !== 'all' ? selectedCategory?.label : 'Category'}
-                        </Text>
-                        {categoryFilter !== 'all' ? (
-                            <Pressable
-                                onPress={(e) => { e.stopPropagation(); setCategoryFilter('all'); }}
-                                hitSlop={8}
-                                style={{ marginLeft: 6, backgroundColor: colors.overlay.lightFill, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1 }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Clear category filter"
-                            >
-                                <Text style={{ fontSize: 9, color: colors.text.inverse, fontWeight: 'bold' }}>✕</Text>
-                            </Pressable>
-                        ) : (
-                            <Text style={{ fontSize: 8, color: colors.text.muted, marginLeft: 4 }}>▼</Text>
-                        )}
-                    </Pressable>
-
-                    {/* Distance Dropdown */}
-                    <Pressable
-                        onPress={() => setShowRadiusPicker(true)}
-                        style={[styles.dropdownBtn, radiusKm !== null && styles.dropdownBtnDistanceActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: radiusKm !== null }}
-                    >
-                        <Text style={[styles.dropdownText, radiusKm !== null && styles.dropdownTextActive]} numberOfLines={1}>
-                            📍 {radiusKm ? (radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m` : `${radiusKm}km`) : 'Distance'}
-                        </Text>
-                        {radiusKm !== null ? (
-                            <Pressable
-                                onPress={(e) => { e.stopPropagation(); setRadiusKm(null); setLocationCenter(null); }}
-                                hitSlop={8}
-                                style={{ marginLeft: 6, backgroundColor: colors.overlay.lightFill, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1 }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Clear distance filter"
-                            >
-                                <Text style={{ fontSize: 9, color: colors.text.inverse, fontWeight: 'bold' }}>✕</Text>
-                            </Pressable>
-                        ) : (
-                            <Text style={{ fontSize: 8, color: colors.text.muted, marginLeft: 4 }}>▼</Text>
-                        )}
-                    </Pressable>
-
-                    {/* Trust Filter */}
-                    <Pressable
-                        onPress={() => setShowTrustPicker(true)}
-                        style={[styles.dropdownBtn, trustFilter !== 'all' && styles.dropdownBtnNewMembersActive]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: trustFilter !== 'all' }}
-                    >
-                        <Text style={[styles.dropdownText, trustFilter !== 'all' && styles.dropdownTextActive]} numberOfLines={1}>
-                            {selectedTrustFilter?.emoji || '🤝'} {trustFilter !== 'all' ? selectedTrustFilter?.label : 'Trust'}
-                        </Text>
-                        {trustFilter !== 'all' ? (
-                            <Pressable
-                                onPress={(e) => { e.stopPropagation(); setTrustFilter('all'); }}
-                                hitSlop={8}
-                                style={{ marginLeft: 6, backgroundColor: colors.overlay.lightFill, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1 }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Clear trust filter"
-                            >
-                                <Text style={{ fontSize: 9, color: colors.text.inverse, fontWeight: 'bold' }}>✕</Text>
-                            </Pressable>
-                        ) : (
-                            <Text style={{ fontSize: 8, color: colors.text.muted, marginLeft: 4 }}>▼</Text>
-                        )}
-                    </Pressable>
-
-                    {/* #108 Beans-only filter — a toggle, not a picker, so it needs no sheet. */}
-                    <Pressable
-                        onPress={() => setBeansOnly(!beansOnly)}
-                        style={[styles.dropdownBtn, beansOnly && styles.dropdownBtnNewMembersActive]}
-                        accessibilityRole="button"
-                        accessibilityLabel="Show only listings that need no cash"
-                        accessibilityState={{ selected: beansOnly }}
-                    >
-                        <Text style={[styles.dropdownText, beansOnly && styles.dropdownTextActive]} numberOfLines={1}>
-                            🫘 Beans only
-                        </Text>
-                        {beansOnly && (
-                            <Text style={{ fontSize: 9, color: colors.text.inverse, fontWeight: 'bold', marginLeft: 6 }}>✓</Text>
-                        )}
-                    </Pressable>
-                </View>
+                {categoryPanel.open && secondRow.kind === 'filters' && secondRow.category && (
+                    <FilterChipPanel
+                        chips={CATEGORY_FILTER_CHIPS}
+                        selected={categoryFilter}
+                        onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
+                        activeColor={filterColor}
+                        panelMaxHeight={panelMaxHeight}
+                        // The map's 8dp gutter, not the feed's 16: four tiles a row at 320dp + 1.3x, not three.
+                        style={{ marginHorizontal: -8 }}
+                    />
+                )}
 
                 {/* Row 4: Group Filter Chips (Item 10) */}
-                {userGroups.length > 0 && (
+                {userGroups.length > 0 && !categoryPanel.open && (
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -1180,7 +1059,7 @@ export default function MarketScreen() {
             </View>
 
             {/* Interests Tag Cloud when in For You mode */}
-            {filter === 'for-you' && (
+            {filter === 'for-you' && !categoryPanel.open && (
                 isCustomizerExpanded ? (
                     <View style={styles.favPanel}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -1245,7 +1124,7 @@ export default function MarketScreen() {
             )}
 
             {/* Freshness Social Proof Banner */}
-            {shouldShowFreshBanner && (
+            {shouldShowFreshBanner && !categoryPanel.open && (
                 <Pressable
                     onPress={dismissFreshBanner}
                     style={({ pressed }) => [
@@ -1604,11 +1483,11 @@ export default function MarketScreen() {
     };
 
     return (
-        <View style={styles.safeArea}>
-            <View style={{ paddingTop: 8, paddingBottom: 0 }}>
+        <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
+            <View style={{ paddingTop: HEADER_PAD_TOP, paddingBottom: 0 }}>
                 {HeaderComponent}
             </View>
-            {showFirstOfferQuest && (
+            {showFirstOfferQuest && !categoryPanel.open && (
                 <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
                         <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
@@ -1630,6 +1509,7 @@ export default function MarketScreen() {
                     </Pressable>
                 </View>
             )}
+            <View style={{ flex: 1 }}>
             <FlatList
                 key={viewMode}
                 numColumns={viewMode === 'grid' ? 2 : 1}
@@ -1693,7 +1573,7 @@ export default function MarketScreen() {
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
-                            onPress={() => { setFilter('all'); setCategoryFilter('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); }}
+                            onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
                         >
                             <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
                         </Pressable>
@@ -1708,12 +1588,26 @@ export default function MarketScreen() {
                     )
                 }
             />
+            {/* While the category panel is open, a tap on the list closes it (and opens nothing), as a tap on
+                the map does. */}
+            {categoryPanel.open && (
+                <Pressable
+                    style={StyleSheet.absoluteFill}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close categories"
+                    onPress={closeCategoryPanel}
+                />
+            )}
+            </View>
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
+            {!categoryPanel.open && (
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
                     <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
                 </View>
             </Pressable>
+            )}
 
             <RadiusPickerModal
                 visible={showRadiusPicker}
@@ -1731,13 +1625,6 @@ export default function MarketScreen() {
                     setShowRadiusPicker(false);
                 }}
                 onCancel={() => setShowRadiusPicker(false)}
-            />
-
-            <CategoryPickerSheet
-                visible={showCategoryPicker}
-                selected={categoryFilter}
-                onSelect={setCategoryFilter}
-                onClose={() => setShowCategoryPicker(false)}
             />
 
             <TrustPickerSheet

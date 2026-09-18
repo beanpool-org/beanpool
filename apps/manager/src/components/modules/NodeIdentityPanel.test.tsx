@@ -246,6 +246,47 @@ describe('NodeIdentityPanel Component', () => {
         expect((document.getElementById('cfg-lng') as HTMLInputElement).value).toBe('153.612');
     });
 
+    it('sends the same Nominatim request it always has (now through the shared @beanpool/core lookup)', async () => {
+        await act(async () => {
+            render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.change(screen.getByPlaceholderText(/Search for a location.../i), { target: { value: 'Byron Bay' } });
+        });
+        await act(async () => {
+            await new Promise((r) => setTimeout(r, 1100));
+        });
+        const calls = (global.fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('nominatim'));
+        expect(calls).toHaveLength(1);
+        expect(calls[0][0]).toBe('https://nominatim.openstreetmap.org/search?format=json&q=Byron%20Bay&limit=5');
+        expect(calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('a failed search stops the spinner and shows no list, as before', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('nominatim.openstreetmap.org')) return Promise.reject(new TypeError('offline'));
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+        }));
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            const searchInput = screen.getByPlaceholderText(/Search for a location.../i);
+            await act(async () => {
+                fireEvent.change(searchInput, { target: { value: 'Byron Bay' } });
+            });
+            expect(screen.getByText('🔄')).toBeInTheDocument();
+            await act(async () => {
+                await new Promise((r) => setTimeout(r, 1100));
+            });
+            expect(screen.queryByText('🔄')).not.toBeInTheDocument();
+            expect(searchInput).toHaveAttribute('aria-expanded', 'false');
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
+
     it('clears searching spinner when query characters are deleted below threshold', async () => {
         await act(async () => {
             render(

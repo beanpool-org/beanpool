@@ -679,10 +679,19 @@ So Decisions are typed by **what the effect touches**, and that also settles whi
 
 | Touches | Effects | Franchise | Threshold |
 |---|---|---|---|
-| **a member** | suspend · remove · **reinstate** · freeze or unfreeze credit · appoint or remove a voucher · grant or revoke a tier badge · grant or revoke elder · remove a lead keeper | one member, one vote | 60% (removals), simple majority (restorations) |
-| **the pool** | grant to an enterprise · **hardship grant or debt forgiveness for a person** · write off a defaulted deficit · set a levy | quadratic on earned trade | 60% |
-| **a rule** | fee rate · demurrage rate · vouch gift sizes · offer-band depths · invite expiry · open vs invite-only · peer with another node · which Pulse channels we carry | one member, one vote | 60% |
-| **nothing** | every Poll | one member, one vote | simple majority, no quorum |
+| **a member** | suspend · remove · **reinstate** · freeze or unfreeze credit · appoint or remove a voucher · remove a lead keeper | one member, one vote | 60% (removals), simple majority (restorations) |
+| **the pool** | grant to an enterprise · **hardship grant or debt forgiveness for a person** · write off a defaulted deficit · set a levy *(not built)* | quadratic on earned trade | 60% |
+| **a rule** *(not built)* | fee rate · demurrage rate · vouch gift sizes · offer-band depths · invite expiry · open vs invite-only · peer with another node · which Pulse channels we carry | one member, one vote | 60% |
+| **nothing** | every Poll — a Poll is a post in the feed, not a Decision | one member, one vote | simple majority, no quorum |
+
+**What is live (2026-09-19).** The member and pool rows are built, except the levy. Nothing that
+changes a rule is built yet, so the server refuses to open a `set_rule`, `set_levy` or `poll`
+Decision ("This kind of decision is not available yet") rather than let one pass and change nothing.
+Tier badges and elder standing were once in the member row as `grant_tier` / `revoke_tier` /
+`grant_elder` / `revoke_elder`; they are **removed** — the server refuses them and neither app offers
+them — because a tier is earned by trading and a vote on it is exactly the vote the "never a vote"
+list below forbids. The effect names stay in the type so old stored rows still load; a stored one no
+longer changes anyone's earned credit.
 
 Two consequences worth naming:
 
@@ -690,7 +699,7 @@ Two consequences worth naming:
   at different subjects. An off-grid community will likely use the second more than the first, and
   the current design has no path for it at all.
 - **Restoring is easier than removing.** Removals need 60%; reinstating someone, unfreezing credit,
-  or returning a revoked badge needs a simple majority. Asymmetry is deliberate: an error that
+  needs a simple majority. Asymmetry is deliberate: an error that
   excludes someone should be cheaper to correct than it was to make.
 
 Every one of these is a power a node admin holds unilaterally today — `adminSetUserStatus`,

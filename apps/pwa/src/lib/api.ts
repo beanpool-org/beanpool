@@ -10,6 +10,7 @@ import {
     type ChannelPlatform,
     type ChannelCategory,
 } from '@beanpool/core';
+import type { OwnDecisionVote } from './decision-own-vote';
 
 export type { PublicCreatorChannel, ChannelPlatform, ChannelCategory };
 
@@ -1508,13 +1509,15 @@ export interface DecisionTally {
 
 export interface DecisionWithTally extends Decision {
     tally: DecisionTally;
+    /** The signed caller's own vote on this Decision; null when they haven't voted. Never anyone else's. */
+    myVote?: OwnDecisionVote | null;
 }
 
 export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }
 
-export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[] }> {
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[]; myVote?: OwnDecisionVote | null }> {
     return request('GET', `/api/commons/decisions/${encodeURIComponent(id)}`);
 }
 

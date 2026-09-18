@@ -30,7 +30,6 @@
  */
 
 import crypto from 'node:crypto';
-import { grantedCreditForTier, type TierName } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -208,6 +207,22 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
 };
 
 /**
+ * Effects that can no longer be proposed. The values stay in DecisionEffect so rows already stored
+ * still load, but createDecision refuses new ones:
+ * - set_rule / set_levy / poll: passing them changed nothing (no executor was ever built).
+ * - grant/revoke tier and elder: tiers are merit badges earned through trade, never granted by vote.
+ */
+export const UNAVAILABLE_EFFECTS: ReadonlyMap<DecisionEffect, string> = new Map<DecisionEffect, string>([
+    ['set_rule', 'This kind of decision is not available yet'],
+    ['set_levy', 'This kind of decision is not available yet'],
+    ['poll', 'This kind of decision is not available yet. To ask the community a question, post a Poll'],
+    ['grant_tier', 'Tiers are earned through trade and cannot be granted or removed by a vote'],
+    ['revoke_tier', 'Tiers are earned through trade and cannot be granted or removed by a vote'],
+    ['grant_elder', 'Elder standing is earned through trade and cannot be granted or removed by a vote'],
+    ['revoke_elder', 'Elder standing is earned through trade and cannot be granted or removed by a vote'],
+]);
+
+/**
  * Returns required pass threshold per §3.4:
  * - remove_member: 66% (0.66)
  * - restorations (unsuspend_member, unfreeze_credit, reinstate_member): simple majority (> 0.50)
@@ -377,6 +392,11 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(check.error || 'Cannot propose decision');
     }
 
+    const unavailable = UNAVAILABLE_EFFECTS.get(opts.effect);
+    if (unavailable) {
+        throw new Error(unavailable);
+    }
+
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
     }
@@ -524,6 +544,36 @@ export function castDecisionVote(
     });
 
     return { success: true, creditsUsed: creditCost };
+}
+
+export interface OwnDecisionVote {
+    support: boolean;
+    /** Votes cast: always 1 for one-member-one-vote; the chosen count on a quadratic pool Decision. */
+    voteCount: number;
+    creditsUsed: number;
+    updatedAt: string;
+}
+
+/**
+ * One voter's own votes, keyed by decision id. Callers pass the authenticated actor only —
+ * this is how a member sees their own vote without the list exposing anyone else's.
+ */
+export function getOwnDecisionVotes(voterPubkey: string, decisionIds?: string[]): Map<string, OwnDecisionVote> {
+    const rows = db.prepare(
+        'SELECT decision_id, support, weight, credits_used, updated_at FROM decision_votes WHERE voter_pubkey = ?'
+    ).all(voterPubkey) as any[];
+    const wanted = decisionIds ? new Set(decisionIds) : null;
+    const out = new Map<string, OwnDecisionVote>();
+    for (const r of rows) {
+        if (wanted && !wanted.has(r.decision_id)) continue;
+        out.set(r.decision_id, {
+            support: r.support === 1,
+            voteCount: r.weight,
+            creditsUsed: r.credits_used,
+            updatedAt: r.updated_at,
+        });
+    }
+    return out;
 }
 
 export function getDecisionVotes(decisionId: string): DecisionVote[] {
@@ -802,29 +852,6 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     db.prepare('UPDATE members SET can_vouch = 0 WHERE public_key = ?').run(decision.subject!);
                     break;
                 }
-                case 'grant_tier': {
-                    const validTiers: TierName[] = ['Newcomer', 'Resident', 'Steward', 'Elder'];
-                    const tier: TierName = decision.params?.tier;
-                    if (!tier || !validTiers.includes(tier)) {
-                        throw new Error(`Invalid tier badge: ${tier}`);
-                    }
-                    const granted = grantedCreditForTier(tier);
-                    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, decision.subject!);
-                    break;
-                }
-                case 'revoke_tier': {
-                    db.prepare('UPDATE members SET earned_credit = 0 WHERE public_key = ?').run(decision.subject!);
-                    break;
-                }
-                case 'grant_elder': {
-                    const granted = grantedCreditForTier('Elder');
-                    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, decision.subject!);
-                    break;
-                }
-                case 'revoke_elder': {
-                    db.prepare('UPDATE members SET earned_credit = 0 WHERE public_key = ?').run(decision.subject!);
-                    break;
-                }
                 case 'remove_lead_keeper': {
                     let entPubkey = decision.params?.enterprisePubkey;
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
@@ -925,6 +952,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'set_levy':
                     // Rule updates or parameter updates
                     break;
+                // grant/revoke tier and elder were removed (tiers are earned, never voted): a row stored
+                // before that lands here and blocks, rather than overwriting the member's earned credit.
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }

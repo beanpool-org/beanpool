@@ -11,6 +11,7 @@ import { parseArchetype } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
+import type { OwnDecisionVote } from './decision-own-vote';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -2351,15 +2352,16 @@ export interface DecisionTally {
 
 export interface DecisionWithTally extends Decision {
     tally: DecisionTally;
+    /** The signed caller's own vote on this Decision; null when they haven't voted. Never anyone else's. */
+    myVote?: OwnDecisionVote | null;
 }
 
 export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
     const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!rawUrl) return { decisions: [], activeMembers30d: 0 };
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const url = `${anchorUrl}/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`;
-        const res = await fetch(url);
+        // Signed, so the node can return this member's own vote on each card (and so a read-auth node answers).
+        const res = await signedGet(`/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
         if (!res.ok) return { decisions: [], activeMembers30d: 0 };
         const data = await res.json();
         return {
@@ -2371,12 +2373,11 @@ export async function getDecisions(status?: string): Promise<{ decisions: Decisi
     }
 }
 
-export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[] } | null> {
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[]; myVote?: OwnDecisionVote | null } | null> {
     const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!rawUrl) return null;
-    const anchorUrl = rawUrl.replace(/\/$/, '');
     try {
-        const res = await fetch(`${anchorUrl}/api/commons/decisions/${encodeURIComponent(id)}`);
+        const res = await signedGet(`/api/commons/decisions/${encodeURIComponent(id)}`);
         if (!res.ok) return null;
         return await res.json();
     } catch {

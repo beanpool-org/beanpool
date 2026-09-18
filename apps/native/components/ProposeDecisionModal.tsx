@@ -47,10 +47,6 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'unfreeze_credit', label: 'Unfreeze Credit', desc: 'Restore credit floor (simple majority)' },
         { id: 'grant_voucher', label: 'Grant Voucher', desc: 'Authorise member to vouch for newcomers' },
         { id: 'revoke_voucher', label: 'Revoke Voucher', desc: 'Remove vouching privileges' },
-        { id: 'grant_tier', label: 'Grant Tier Badge', desc: 'Assign Newcomer / Resident / Steward / Elder' },
-        { id: 'revoke_tier', label: 'Revoke Tier Badge', desc: 'Reset member tier badge' },
-        { id: 'grant_elder', label: 'Grant Elder', desc: 'Grant community Elder standing' },
-        { id: 'revoke_elder', label: 'Revoke Elder', desc: 'Revoke community Elder standing' },
         { id: 'remove_lead_keeper', label: 'Remove Lead Keeper', desc: 'Replace rogue enterprise lead keeper' },
     ],
     pool: [
@@ -59,9 +55,7 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'write_off_deficit', label: 'Write Off Deficit', desc: 'Absorb bad debt of a defaulted enterprise' },
     ],
     rule: [],
-    nothing: [
-        { id: 'poll', label: 'Poll', desc: 'Everyday question' },
-    ],
+    nothing: [],
 };
 
 export function ProposeDecisionModal({
@@ -81,9 +75,6 @@ export function ProposeDecisionModal({
     const [subject, setSubject] = useState('');
     const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
-    const [tier, setTier] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
-    const [ruleKey, setRuleKey] = useState('');
-    const [ruleValue, setRuleValue] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     // Reset effect when touch changes
@@ -344,8 +335,6 @@ export function ProposeDecisionModal({
                 return;
             }
             params = { amount };
-        } else if (effect === 'grant_tier') {
-            params = { tier };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
                 Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
@@ -361,8 +350,6 @@ export function ProposeDecisionModal({
                 Alert.alert('Missing Enterprise', 'Please select or enter the enterprise public key.');
                 return;
             }
-        } else if (effect === 'set_rule') {
-            params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
             params = {
                 memberName: targetName,
@@ -571,24 +558,6 @@ export function ProposeDecisionModal({
                                     onChangeText={setGrantAmount}
                                     keyboardType="numeric"
                                 />
-                            </>
-                        )}
-
-                        {effect === 'grant_tier' && (
-                            <>
-                                <Text style={styles.sectionLabel}>Select Tier Badge</Text>
-                                <View style={styles.segmentRow}>
-                                    {(['Newcomer', 'Resident', 'Steward', 'Elder'] as const).map(t => (
-                                        <Pressable
-                                            key={t}
-                                            accessibilityRole="button"
-                                            style={[styles.segmentBtn, tier === t && styles.segmentBtnActive]}
-                                            onPress={() => setTier(t)}
-                                        >
-                                            <Text style={[styles.segmentText, tier === t && styles.segmentTextActive]}>{t}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
                             </>
                         )}
 

@@ -200,8 +200,9 @@ async function runSuite() {
         body: {
             title: 'Unauthenticated proposal',
             description: 'Should fail with 401',
-            touches: 'nothing',
-            effect: 'poll',
+            touches: 'member',
+            effect: 'grant_voucher',
+            subject: charlie,
         },
     });
     assert(resNoAuth.status === 401, 'Propose without actor fails with 401');
@@ -213,8 +214,9 @@ async function runSuite() {
             authorPubkey: daveZeroStanding,
             title: 'Dave decision',
             description: 'Should fail due to zero earnedCredit',
-            touches: 'nothing',
-            effect: 'poll',
+            touches: 'member',
+            effect: 'grant_voucher',
+            subject: charlie,
         },
     });
     assert(resDave.status === 400, 'Propose by member with earnedCredit=0 fails with 400');
@@ -227,8 +229,9 @@ async function runSuite() {
             authorPubkey: eveFrozen,
             title: 'Eve decision',
             description: 'Should fail due to credit_frozen',
-            touches: 'nothing',
-            effect: 'poll',
+            touches: 'member',
+            effect: 'grant_voucher',
+            subject: charlie,
         },
     });
     assert(resEve.status === 400, 'Propose by credit-frozen member fails with 400');
@@ -240,8 +243,9 @@ async function runSuite() {
             authorPubkey: enterprise,
             title: 'Enterprise decision',
             description: 'Should fail because enterprise cannot propose',
-            touches: 'nothing',
-            effect: 'poll',
+            touches: 'member',
+            effect: 'grant_voucher',
+            subject: charlie,
         },
     });
     assert(resEnt.status === 400, 'Propose by enterprise fails with 400');
@@ -290,9 +294,9 @@ async function runSuite() {
             authorPubkey: alice,
             title: 'Second proposal by Alice',
             description: 'Should fail due to 1 open decision limit',
-            touches: 'rule',
-            effect: 'set_rule',
-            params: { key: 'trade_fee', value: '0.01' },
+            touches: 'member',
+            effect: 'grant_voucher',
+            subject: charlie,
         },
     });
     assert(resAliceSecond.status === 400, 'Alice cannot propose a second decision while first is open');
@@ -317,12 +321,11 @@ async function runSuite() {
         actor: bob,
         body: {
             authorPubkey: bob,
-            title: 'Appoint Charlie as Steward',
-            description: 'Charlie has completed 50 trades and deserves Steward tier',
+            title: 'Let Charlie vouch for newcomers',
+            description: 'Charlie has completed 50 trades and knows the newcomers well',
             touches: 'member',
-            effect: 'grant_tier',
+            effect: 'grant_voucher',
             subject: charlie,
-            params: { tier: 'Steward' },
         },
     });
     assert(resBobMember.status === 200, 'Bob proposes member decision');
@@ -359,6 +362,74 @@ async function runSuite() {
         },
     });
     assert(voteQ.status === 200 && voteQ.body.creditsUsed === 9, 'Quadratic vote of 3 uses 3² = 9 voice credits');
+
+    console.log('\n--- 3b. Each member sees their own vote, and only their own ---');
+
+    const ownVoteIn = (body: any, id: string) => body.decisions.find((d: any) => d.id === id)?.myVote;
+
+    const listBob = await callRouter(commonsRouter, 'GET', '/api/commons/decisions', { actor: bob });
+    const bobOnMember = ownVoteIn(listBob.body, decisionMember.id);
+    assert(bobOnMember?.support === true && bobOnMember?.voteCount === 1, `Bob's list shows his own Yes on the member decision (got ${JSON.stringify(bobOnMember)})`);
+    assert(ownVoteIn(listBob.body, decisionPool.id) === null, "Bob's list shows no vote on the pool decision (he hasn't voted; Charlie has)");
+    const bobPoolCard = JSON.stringify(listBob.body.decisions.find((d: any) => d.id === decisionPool.id));
+    assert(!bobPoolCard.includes(charlie), "Bob's copy of the pool decision carries nothing identifying Charlie's vote");
+
+    const listCharlie = await callRouter(commonsRouter, 'GET', '/api/commons/decisions', { actor: charlie });
+    const charlieOnPool = ownVoteIn(listCharlie.body, decisionPool.id);
+    assert(charlieOnPool?.support === true && charlieOnPool?.voteCount === 3 && charlieOnPool?.creditsUsed === 9,
+        `Charlie's list shows his own Yes with 3 votes on the pool decision (got ${JSON.stringify(charlieOnPool)})`);
+    assert(ownVoteIn(listCharlie.body, decisionMember.id) === null, "Charlie's list does not show Bob's vote on the member decision");
+
+    const listAnon = await callRouter(commonsRouter, 'GET', '/api/commons/decisions');
+    assert(listAnon.body.decisions.every((d: any) => d.myVote === null), 'An unsigned list carries no own vote on any decision');
+
+    const detailCharlie = await callRouter(commonsRouter, 'GET', `/api/commons/decisions/${decisionPool.id}`, { actor: charlie, params: { id: decisionPool.id } });
+    assert(detailCharlie.body.myVote?.voteCount === 3, `Decision detail returns the caller's own vote (got ${JSON.stringify(detailCharlie.body.myVote)})`);
+
+    // Re-voting replaces the earlier vote, and the list must say so.
+    const revote = await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionPool.id}/vote`, {
+        actor: charlie,
+        body: { voterPubkey: charlie, support: false, voteCount: 2 },
+    });
+    assert(revote.status === 200, 'Charlie changes his pool vote to No with 2 votes');
+    const listCharlie2 = await callRouter(commonsRouter, 'GET', '/api/commons/decisions', { actor: charlie });
+    const charlieOnPool2 = ownVoteIn(listCharlie2.body, decisionPool.id);
+    assert(charlieOnPool2?.support === false && charlieOnPool2?.voteCount === 2 && charlieOnPool2?.creditsUsed === 4,
+        `After re-voting, Charlie's list shows No with 2 votes (got ${JSON.stringify(charlieOnPool2)})`);
+    // Put Charlie's vote back so the execution section below runs as before.
+    await callRouter(commonsRouter, 'POST', `/api/commons/decisions/${decisionPool.id}/vote`, {
+        actor: charlie,
+        body: { voterPubkey: charlie, support: true, voteCount: 3 },
+    });
+
+    console.log('\n--- 3c. Decisions that would do nothing, or vote on tiers, are refused ---');
+
+    // A fresh proposer per effect, so each refusal stands on its own (not the one-open-decision limit).
+    const refusedProposers: string[] = [];
+    for (const [effect, touches] of [
+        ['set_rule', 'rule'], ['set_levy', 'rule'], ['poll', 'nothing'],
+        ['grant_tier', 'member'], ['revoke_tier', 'member'], ['grant_elder', 'member'], ['revoke_elder', 'member'],
+    ] as const) {
+        const proposer = makeMember(`Proposer_${effect}`, { balance: 100, earnedCredit: 50 });
+        refusedProposers.push(proposer);
+        const res = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+            actor: proposer,
+            body: {
+                title: `Try ${effect}`,
+                description: 'This kind of decision should be refused',
+                touches,
+                effect,
+                subject: charlie,
+                params: { tier: 'Elder', key: 'trade_fee', value: '0.01' },
+            },
+        });
+        assert(res.status === 400 && /not available|earned through trade/.test(res.body?.error || ''),
+            `Proposing ${effect} is refused with 400 (got ${res.status}: ${res.body?.error})`);
+    }
+    const refusedRows = db.prepare(
+        `SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey IN (${refusedProposers.map(() => '?').join(',')})`
+    ).get(...refusedProposers) as any;
+    assert(refusedRows.c === 0, 'No refused decision was stored');
 
     console.log('\n--- 4. §3.8 Mandatory Debt Disclosure Verbatim Check ---');
 

@@ -6,6 +6,7 @@ import {
     type BalanceInfo,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
+import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 
 interface Props {
     decisions: DecisionWithTally[];
@@ -84,7 +85,7 @@ export function DecideSection({
             return;
         }
 
-        const count = selectedVoteCount[decision.id] || 1;
+        const count = startingVoteCount(selectedVoteCount[decision.id], decision.myVote);
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
             let available = voiceCredits?.availableCredits ?? 0;
@@ -225,7 +226,10 @@ export function DecideSection({
                                 const quorumPct = Math.min(100, Math.round((tally.totalVoters / Math.max(1, tally.quorumRequired)) * 100));
                                 const supportPct = Math.round(tally.supportRatio * 100);
                                 const thresholdPct = Math.round(tally.thresholdRequired * 100);
-                                const currentCount = selectedVoteCount[item.id] || 1;
+                                const currentCount = startingVoteCount(selectedVoteCount[item.id], item.myVote);
+                                const isQuadratic = item.franchise === 'quadratic_trade';
+                                const myVoteLine = ownVoteSummary(item.myVote, isQuadratic);
+                                const buttons = voteButtonStates(item.myVote, isQuadratic, currentCount);
 
                                 // §3.8 Removal ballot debt line
                                 const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
@@ -350,7 +354,7 @@ export function DecideSection({
                                                             type="button"
                                                             onClick={() => setSelectedVoteCount(prev => ({
                                                                 ...prev,
-                                                                [item.id]: Math.max(1, (prev[item.id] || 1) - 1),
+                                                                [item.id]: Math.max(1, startingVoteCount(prev[item.id], item.myVote) - 1),
                                                             }))}
                                                             className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Decrease votes"
@@ -361,7 +365,7 @@ export function DecideSection({
                                                             type="button"
                                                             onClick={() => setSelectedVoteCount(prev => ({
                                                                 ...prev,
-                                                                [item.id]: (prev[item.id] || 1) + 1,
+                                                                [item.id]: startingVoteCount(prev[item.id], item.myVote) + 1,
                                                             }))}
                                                             className="w-11 h-11 rounded-xl text-base bg-nature-700 text-white font-bold hover:bg-nature-600 flex items-center justify-center transition-colors"
                                                             aria-label="Increase votes"
@@ -372,23 +376,30 @@ export function DecideSection({
                                                 </div>
                                             )}
 
+                                            {myVoteLine && (
+                                                <p className="text-sm font-bold text-emerald-300 flex items-center gap-1.5">
+                                                    <span aria-hidden="true">✓</span>
+                                                    <span>{myVoteLine}</span>
+                                                </p>
+                                            )}
+
                                             <div className="flex gap-3">
                                                 <button
                                                     onClick={() => handleVote(item, true)}
-                                                    disabled={votingId === item.id}
+                                                    disabled={votingId === item.id || buttons.yes.disabled}
                                                     className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
                                                 >
                                                     <span>👍</span>
-                                                    <span>{votingId === item.id ? 'Recording...' : 'Vote YES'}</span>
+                                                    <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>
                                                 </button>
 
                                                 <button
                                                     onClick={() => handleVote(item, false)}
-                                                    disabled={votingId === item.id}
+                                                    disabled={votingId === item.id || buttons.no.disabled}
                                                     className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
                                                 >
                                                     <span>👎</span>
-                                                    <span>{votingId === item.id ? 'Recording...' : 'Vote NO'}</span>
+                                                    <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
                                                 </button>
                                             </div>
                                         </div>

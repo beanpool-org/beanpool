@@ -32,10 +32,6 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'unfreeze_credit', label: 'Unfreeze Credit', desc: 'Restore credit floor (simple majority)' },
         { id: 'grant_voucher', label: 'Grant Voucher', desc: 'Authorise member to vouch for newcomers' },
         { id: 'revoke_voucher', label: 'Revoke Voucher', desc: 'Remove vouching privileges' },
-        { id: 'grant_tier', label: 'Grant Tier Badge', desc: 'Assign Newcomer / Resident / Steward / Elder' },
-        { id: 'revoke_tier', label: 'Revoke Tier Badge', desc: 'Reset member tier badge' },
-        { id: 'grant_elder', label: 'Grant Elder', desc: 'Grant community Elder standing' },
-        { id: 'revoke_elder', label: 'Revoke Elder', desc: 'Revoke community Elder standing' },
         { id: 'remove_lead_keeper', label: 'Remove Lead Keeper', desc: 'Replace rogue enterprise lead keeper' },
     ],
     pool: [
@@ -44,9 +40,7 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'write_off_deficit', label: 'Write Off Deficit', desc: 'Absorb bad debt of a defaulted enterprise' },
     ],
     rule: [],
-    nothing: [
-        { id: 'poll', label: 'Poll', desc: 'Everyday question' },
-    ],
+    nothing: [],
 };
 
 export function ProposeDecisionModal({
@@ -65,9 +59,6 @@ export function ProposeDecisionModal({
     const [subject, setSubject] = useState('');
     const [enterprisePubkey, setEnterprisePubkey] = useState('');
     const [grantAmount, setGrantAmount] = useState('');
-    const [tier, setTier] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
-    const [ruleKey, setRuleKey] = useState('');
-    const [ruleValue, setRuleValue] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -175,8 +166,6 @@ export function ProposeDecisionModal({
                 return;
             }
             params = { amount };
-        } else if (effect === 'grant_tier') {
-            params = { tier };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
                 setError('Please select or enter the enterprise public key.');
@@ -192,8 +181,6 @@ export function ProposeDecisionModal({
                 setError('Please select or enter the enterprise public key.');
                 return;
             }
-        } else if (effect === 'set_rule') {
-            params = { key: ruleKey, value: ruleValue };
         } else if (effect === 'remove_member') {
             params = {
                 memberName: targetName,
@@ -450,30 +437,6 @@ export function ProposeDecisionModal({
                                 placeholder="e.g. 100"
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
-                        </div>
-                    )}
-
-                    {effect === 'grant_tier' && (
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Select Tier Badge
-                            </label>
-                            <div className="grid grid-cols-4 gap-2">
-                                {(['Newcomer', 'Resident', 'Steward', 'Elder'] as const).map(t => (
-                                    <button
-                                        key={t}
-                                        type="button"
-                                        onClick={() => setTier(t)}
-                                        className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all ${
-                                            tier === t
-                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                                                : 'bg-nature-800/60 border-nature-700 text-nature-400'
-                                        }`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
                         </div>
                     )}
 

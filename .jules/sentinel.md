@@ -32,6 +32,13 @@ The batch size limit (e.g. 200 items maximum) is **STILL WANTED**. Sentinel may 
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #109)
 
+### 2026-09-19 — POST /api/ratings "raterPubkey spoofing" (#909) — LANDED as defence in depth; CLAIM WAS FALSE.
+Over HTTP the spoof was never reachable: `requireSignature` (https-server.ts) already demands a signature on every
+mutating /api/ route, and its generic spoof check refuses any `*pubkey` body field that is not the signer
+(`raterpubkey` is not in `OTHER_ENTITY_IDENTITY_FIELD`). Same as #800. Before filing any "field X can be spoofed"
+finding, show the request getting past `requireSignature` — a route-only test that skips the middleware proves nothing.
+
+
 ### 2026-08-25 — Harvester tar path-traversal hardening LANDED in #361. Raised three times.
 #378 and #400 were **byte-identical** to #361 and were closed. Check open PRs for the file before
 starting — see POLICY.md §3.

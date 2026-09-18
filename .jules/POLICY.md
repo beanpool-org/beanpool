@@ -406,3 +406,16 @@ intentional; do not open PRs or issues attempting to alter them:
   sends `X-Admin-2FA-Session`. What the diff really does is drop the legacy `x-admin-secret` header, the
   same cleanup registered for #834 on 2026-09-17. Merged on that basis, not the headline.
 - **Still open:** three more sites send the legacy header (apps/manager/src/lib/node-client.ts ~1417, ~1453, ~1488).
+
+### 2026-09-19 — Vault: don't persist the AI API key (#908) — CLOSED, WOULD BREAK THE FEATURE
+- **Category:** REGRESSION DRESSED AS HARDENING
+- **Claim:** the manager stores the AI provider key in localStorage.
+- **Verified:** true, and intended. The settings screen reloads its config from storage, so dropping the key makes it
+  vanish on every reload: Save still reports success, the key field comes back empty, and OpenRouter calls return a 401
+  error that never says the key was discarded. It is the operator's own bring-your-own key in their own browser.
+- **Standing rule:** a "don't store X" change must say how X survives a reload and what the user sees.
+
+### 2026-09-19 — Sentinel: rating author bound to signer (#909) — LANDED, CLAIM WAS FALSE
+- **Category:** PHANTOM CLAIM, HARMLESS DEFENCE IN DEPTH (third after #800, #836)
+- **Verified:** `requireSignature` already refuses unsigned writes and any `*pubkey` body field that isn't the signer.
+  The route-level check duplicates it. Show the request passing the middleware before calling anything spoofable.

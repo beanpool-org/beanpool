@@ -96,7 +96,7 @@ export const MARKETPLACE_CATEGORIES = [
 export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
 
 const HEADER_PAD_TOP = 8;
-const MIN_FEED_UNDER_PANEL = 64;
+const MIN_FEED_UNDER_PANEL = 48;
 
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
@@ -524,7 +524,8 @@ export default function MarketScreen() {
     };
     /**
      * The open panel pushes the list down. It may grow until MIN_FEED_UNDER_PANEL of the list is left under
-     * it, so the member still sees the feed they will return to; past that its tiles scroll inside it.
+     * it — one touch-height strip to tap to close, and a sight of the feed they will return to; past that its
+     * tiles scroll inside it.
      */
     const [screenH, setScreenH] = useState(0);
     const [filterBlockY, setFilterBlockY] = useState(0);
@@ -945,6 +946,7 @@ export default function MarketScreen() {
                         onSelect={setEventWindow}
                         activeColor={EVENT_ACCENT}
                         fill
+                        moreHint
                         style={styles.filterRow}
                         accessibilityLabel="Filter events by date"
                     />
@@ -1008,6 +1010,8 @@ export default function MarketScreen() {
                         onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
                         activeColor={filterColor}
                         panelMaxHeight={panelMaxHeight}
+                        // The map's 8dp gutter, not the feed's 16: four tiles a row at 320dp + 1.3x, not three.
+                        style={{ marginHorizontal: -8 }}
                     />
                 )}
 
@@ -1592,12 +1596,15 @@ export default function MarketScreen() {
                 />
             )}
             </View>
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
+            {!categoryPanel.open && (
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
                     <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
                 </View>
             </Pressable>
+            )}
 
             <RadiusPickerModal
                 visible={showRadiusPicker}

@@ -104,6 +104,8 @@ interface FilterChipRowProps<Id extends string> {
     fill?: boolean;
     /** Wrap onto more lines instead of scrolling (FilterChipBar). */
     wrap?: boolean;
+    /** Fade the right edge while chips sit past it (FilterChipBar). */
+    moreHint?: boolean;
     accessibilityLabel?: string;
 }
 
@@ -115,12 +117,12 @@ interface FilterChipRowProps<Id extends string> {
  * When it scrolls, on mount it brings the selected chip into view, so a choice remembered across a switch
  * (say Next 7 days, far to the right) is on screen when the row comes back.
  */
-export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, style, fill, wrap, accessibilityLabel }: FilterChipRowProps<Id>) {
+export function FilterChipRow<Id extends string>({ chips, selected, onSelect, activeColor, style, fill, wrap, moreHint, accessibilityLabel }: FilterChipRowProps<Id>) {
     const scrollRef = useRef<ScrollView>(null);
     const scrolledOnce = useRef(false);
 
     return (
-        <FilterChipBar scrollRef={scrollRef} style={style} fill={fill} wrap={wrap} accessibilityLabel={accessibilityLabel}>
+        <FilterChipBar scrollRef={scrollRef} style={style} fill={fill} wrap={wrap} moreHint={moreHint} accessibilityLabel={accessibilityLabel}>
             {chips.map(c => {
                 const on = c.id === selected;
                 return (

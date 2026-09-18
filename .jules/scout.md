@@ -28,6 +28,11 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+### 2026-09-19 — Backup identity-bundle suite LANDED in #904. Do not re-file.
+`test-backup-identity-bundle.ts` covers 401 / 503 / 200-with-password / 200-with-token. **Wanted follow-up (not a
+duplicate):** a WRONG `x-replication-token` with no password must get 401 — a mutant that accepts any token passes the
+current suite, and this route hands out `community.key`. Tarball contents are also unchecked.
+
 ### 2026-09-09 — Marketplace post pause/resume integration test suite LANDED in #678.
 Added `apps/server/src/test-post-pause-resume.ts` covering validation, authorization, and feed visibility filtering for `POST /api/marketplace/posts/pause` and `/resume`. Registered in `scripts/test-all.sh`. Do not re-file.
 When creating new API integration test suites, cover validation errors, non-author authorization rejection, and feed visibility state mutations, and always register the suite in `scripts/test-all.sh`.

@@ -121,7 +121,7 @@ async function main() {
         ['limit=2.5&offset=0.5', 2],
     ];
     for (const [qs, expected] of pagingCases) {
-        const res = await publicGet(`/api/enterprises/${paged}/thread?${qs}`);
+        const res = await signedFetch('GET', `/api/enterprises/${paged}/thread?${qs}`, member);
         assert(res.status === 200, `GET thread?${qs} is 200, not a 500 (got ${res.status}${res.body?.error ? `: ${res.body.error}` : ''})`);
         assert(Array.isArray(res.body?.messages) && res.body.messages.length === expected,
             `GET thread?${qs} returns ${expected} messages (got ${res.body?.messages?.length})`);
@@ -170,8 +170,12 @@ async function main() {
         assert(detail.status === 404, `A ${state} enterprise's detail is hidden (got ${detail.status})`);
         const get = await signedFetch('GET', `/api/enterprises/${ent}/thread`, member);
         assert(get.status === 404, `GET thread of a ${state} enterprise is 404 like its detail (got ${get.status})`);
+        // Read auth is on by default: an unsigned read is refused outright, and a signed one through the
+        // legacy /api/treasury alias still finds nothing.
         const anon = await publicGet(`/api/treasury/${ent}/thread`);
-        assert(anon.status === 404, `Unsigned GET thread of a ${state} enterprise is 404 (got ${anon.status})`);
+        assert(anon.status === 401, `Unsigned GET thread of a ${state} enterprise is refused (got ${anon.status})`);
+        const viaAlias = await signedFetch('GET', `/api/treasury/${ent}/thread`, member);
+        assert(viaAlias.status === 404, `Signed GET thread of a ${state} enterprise via /api/treasury is 404 (got ${viaAlias.status})`);
         const post = await signedFetch('POST', `/api/enterprises/${ent}/thread/message`, member, { text: 'after removal' });
         assert(post.status === 404, `POST to a ${state} enterprise thread is 404 (got ${post.status})`);
         let engineThrew = false;
@@ -219,7 +223,7 @@ async function main() {
         assert(asAdmin.has(byState.suspended) && asAdmin.has(byState.disabled), `${listPath} signed by a node admin lists suspended/disabled enterprises`);
     }
     // The lightweight statuses read keeps suspended/disabled rows: clients use it to mark enterprises inactive.
-    const statuses = await publicGet('/api/enterprises/statuses');
+    const statuses = await signedFetch('GET', '/api/enterprises/statuses', member); // member-only read
     const statusRow = (statuses.body.enterprises as any[]).find(e => e.publicKey === byState.suspended);
     assert(statusRow?.status === 'suspended', 'GET /api/enterprises/statuses still reports a suspended enterprise as suspended');
 

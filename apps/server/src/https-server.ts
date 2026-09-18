@@ -172,10 +172,11 @@ function consumeNonce(nonce: string, now: number): boolean {
 // full ledger export, the member directory, the social graph, etc. to anyone.
 // When ENFORCE_READ_AUTH is on, gated GETs require a fresh, replay-proof,
 // member-signed request (same scheme as writes) and the signer must be a known
-// member. Enforcement is OFF by default so the server change can land ahead of
-// the client read-signing work (PWA lib/api.ts + native) — flip it on only once
-// both clients sign their reads, or every read from an un-updated client 401s.
-const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH === 'true';
+// member. ON by default, so a freshly downloaded node refuses private reads to
+// strangers with no configuration; an operator opts out only with the exact
+// value ENFORCE_READ_AUTH=false (unset, empty or anything else means ON). Apps
+// that predate signed reads get 401 on gated reads until they update.
+const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 
 // SRV-4 (WebSocket feed): the /ws live-state feed was unauthenticated — anyone
 // reaching it could stream every state change. When ENFORCE_WS_AUTH is on, the
@@ -257,6 +258,8 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
+    '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
+    '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't

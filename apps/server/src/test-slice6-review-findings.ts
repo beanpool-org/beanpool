@@ -107,7 +107,7 @@ async function main() {
         setUserStatusRow(kept.pub, 'disabled'); // the suspend_member Decision's exact write
         assert(!keeperOf(kept.pub).includes(ent), 'a Decision-suspended keeper no longer lists the enterprise in keeperOf');
         assert(!getBalance(kept.pub).keeperOf.includes(ent), 'getBalance().keeperOf leaves it out too');
-        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined);
+        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined, other); // member-only read
         assert(bal.status === 200 && Array.isArray(bal.json?.keeperOf) && !bal.json.keeperOf.includes(ent),
             `GET /api/ledger/balance keeperOf leaves it out (got ${bal.status} ${JSON.stringify(bal.json?.keeperOf)})`);
         assert(keeperOf(other.pub).includes(ent), 'the unsuspended keeper still lists the enterprise');
@@ -258,7 +258,9 @@ async function main() {
         addFriend(subject.pub, friend.pub);
 
         const spoofed = await send('GET', `/api/profile/${subject.pub}?requester=${friend.pub}`, undefined);
-        assert(spoofed.status === 200 && !spoofed.json?.contact, `unsigned ?requester=<friend> does not reveal friends-only contact (got ${JSON.stringify(spoofed.json?.contact)})`);
+        // Read auth is on by default, so the unsigned read is refused before the handler; the signed-stranger
+        // case below is what proves the handler itself ignores ?requester=.
+        assert(spoofed.status === 401 && !spoofed.json?.contact, `unsigned ?requester=<friend> is refused and reveals no contact (got ${spoofed.status} ${JSON.stringify(spoofed.json?.contact)})`);
         const spoofedSigned = await send('GET', `/api/profile/${subject.pub}?requester=${friend.pub}`, undefined, stranger);
         assert(spoofedSigned.status === 200 && !spoofedSigned.json?.contact, 'a signed stranger naming a friend in ?requester= sees no contact');
         const realFriend = await send('GET', `/api/profile/${subject.pub}`, undefined, friend);

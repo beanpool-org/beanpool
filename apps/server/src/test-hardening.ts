@@ -60,10 +60,19 @@ async function main() {
     // A2-22 — seed >200 transactions, then ?limit=-1 must NOT return them all.
     const ins = db.prepare(`INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`);
     db.transaction(() => { for (let i = 0; i < 250; i++) ins.run('tx' + i, 'A', 'B', 1, 'm', new Date(Date.now() - i * 1000).toISOString()); })();
-    const r = await fetch(`${BASE}/api/ledger/transactions?limit=-1`);
+    // The ledger read is member-only (read auth is on by default), so sign it as a seeded member —
+    // this check is about the clamp, and an unsigned read would stop at the 401 before reaching it.
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, 'hardening-reader', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pubHex);
+    const signedGet = (p: string) => {
+        const t = Date.now(), n = crypto.randomBytes(16).toString('hex');
+        const s = crypto.sign(null, Buffer.from(`GET\n${p.split('?')[0]}\n${t}\n${n}\n`), privateKey).toString('base64');
+        return fetch(`${BASE}${p}`, { headers: { 'X-Public-Key': pubHex, 'X-Signature': s, 'X-Timestamp': String(t), 'X-Nonce': n } });
+    };
+    const r = await signedGet('/api/ledger/transactions?limit=-1');
     const rows = await r.json();
     assert(Array.isArray(rows) && rows.length <= 200, `A2-22: ?limit=-1 is clamped to ≤200 (got ${Array.isArray(rows) ? rows.length : 'non-array'})`);
-    const r2 = await fetch(`${BASE}/api/ledger/transactions?limit=999999`);
+    const r2 = await signedGet('/api/ledger/transactions?limit=999999');
     const rows2 = await r2.json();
     assert(Array.isArray(rows2) && rows2.length <= 200, `A2-22: huge ?limit is clamped to ≤200 (got ${Array.isArray(rows2) ? rows2.length : 'non-array'})`);
 

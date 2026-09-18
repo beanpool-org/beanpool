@@ -9,7 +9,7 @@
  *      ENFORCE_READ_AUTH is on?
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-http.ts
- *   ENFORCE_READ_AUTH=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-http.ts
+ *   ENFORCE_READ_AUTH=false BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-keeper-http.ts   # operator opt-out
  */
 
 // Self-signed cert in LAN mode → relax TLS verification for the test client only.
@@ -24,7 +24,7 @@ import { startHttpsServer } from './https-server.js';
 
 const PORT = 8555;
 const BASE = `https://localhost:${PORT}`;
-const ENFORCED = process.env.ENFORCE_READ_AUTH === 'true';
+const ENFORCED = process.env.ENFORCE_READ_AUTH !== 'false'; // same rule as https-server.ts: unset means ON
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
         assert(gated.status === 401 || gated.status === 403,
             `...and enforcement really is on — a gated read is refused unauthenticated (got ${gated.status})`);
     } else {
-        console.log('  (the allowlist assertion runs in the ENFORCE_READ_AUTH=true pass)');
+        console.log('  (the allowlist assertion runs in the default pass, where read auth is on)');
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

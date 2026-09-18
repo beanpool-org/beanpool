@@ -138,7 +138,7 @@ async function main(): Promise<void> {
     // Test that when ENFORCE_READ_AUTH is active via signedFetch, querying another member's preferences or invites returns 403.
     const otherMemberPref = await signedFetch('GET', `/api/members/preferences?publicKey=${victimPubHex}`);
     const otherMemberInvites = await signedFetch('GET', `/api/invite/mine/${victimPubHex}`);
-    if (process.env.ENFORCE_READ_AUTH === 'true') {
+    if (process.env.ENFORCE_READ_AUTH !== 'false') { // same rule as https-server.ts: unset means ON
         assert(otherMemberPref.status === 403, 'GET /api/members/preferences for another user returns 403 under ENFORCE_READ_AUTH');
         assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403 under ENFORCE_READ_AUTH');
     }

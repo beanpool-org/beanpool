@@ -263,7 +263,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      * bytes to a device holding no key at all, under a collect session.
      *
      * POST, not GET, for the reason given on `/api/recovery/shares/status`: `ctx.state.actor` is
-     * only populated for GETs when ENFORCE_READ_AUTH is on, and it is off by default.
+     * only populated for GETs when ENFORCE_READ_AUTH is on, and an operator can turn it off.
      */
     router.post('/api/recovery/shares/hub-fragment', async (ctx) => {
         const owner = activeSigner(ctx);
@@ -461,8 +461,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      * Whether the caller could drop one keeper and still be recoverable.
      *
      * Signed POST rather than a GET because `ctx.state.actor` is only populated for GETs when
-     * ENFORCE_READ_AUTH is on, and that is off by default — a GET here would silently have no
-     * caller to answer about on most nodes, which is the kind of auth hole that reads as working.
+     * ENFORCE_READ_AUTH is on, and an operator can turn that off — a GET here would silently have no
+     * caller to answer about on such a node, which is the kind of auth hole that reads as working.
      * The owner's full keeper list needs a signed read that does not depend on that flag, and is
      * deferred with the rest of the keeper status UI rather than half-built here.
      */

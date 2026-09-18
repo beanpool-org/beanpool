@@ -245,6 +245,7 @@ run_federation_suites() {
       test-onboarding-funnel
       test-request-auth
       test-api-path-auth
+      test-read-auth-default
       test-sync-signature
       test-trust-value-curve
       test-voting-round-grant
@@ -342,17 +343,16 @@ run_federation_suites() {
       rm -rf "$TMP_DIR"
     done
 
-    # The keeper HTTP reachability suite again with read enforcement ON. Same const-at-import problem as
-    # above: ENFORCE_READ_AUTH is read once per process, and an import cannot be preceded by an assignment
-    # because imports hoist. The pass that matters is this one — with the flag off every GET is reachable
-    # regardless, so a missing public-read allowlist entry would go unnoticed until a node turned enforcement
-    # on, and the person it broke would be someone who had just lost their phone.
-    echo "━━━ test-keeper-http (read auth ON) ━━━"
+    # The keeper HTTP reachability suite again with read enforcement switched OFF by the operator opt-out.
+    # Read auth is ON by default, so the loop above already runs the pass that matters (the public-read
+    # allowlist under enforcement); this covers a node whose operator set ENFORCE_READ_AUTH=false. Same
+    # const-at-import problem as above: the flag is read once per process, and imports hoist.
+    echo "━━━ test-keeper-http (read auth opted out) ━━━"
     TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
       $SUITE_TIMEOUT pnpm exec tsx src/test-keeper-http.ts
     RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth)"; fi
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-keeper-http(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-keeper-http(readauth-off)"; fi
     rm -rf "$TMP_DIR"
 
     # Messaging IDOR (A2-2/A2-3/A2-15) — asserts one member cannot read another members conversations.
@@ -367,17 +367,15 @@ run_federation_suites() {
     rm -rf "$TMP_DIR"
 
     # Member-read IDOR (A2-16 family) - asserts one member cannot read another members invites
-    # or notification preferences. Runs the suite a SECOND time with enforcement on, because its
-    # 403 assertions sit behind an ENFORCE_READ_AUTH check in the suite itself: in the default
-    # pass above they are skipped and it reports green having never tested what it is named for.
-    # The flag-off pass still earns its place (push-token and preference round-trips), so this is
-    # a second run rather than a move.
-    echo "━━━ test-push-preferences (read auth ON) ━━━"
+    # or notification preferences. Read auth is ON by default, so the loop above runs those 403
+    # assertions; this SECOND run covers the operator opt-out (ENFORCE_READ_AUTH=false), where they
+    # are skipped and the push-token and preference round-trips must still work.
+    echo "━━━ test-push-preferences (read auth opted out) ━━━"
     TMP_DIR=$(mktemp -d)
-    ENFORCE_READ_AUTH=true ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+    ENFORCE_READ_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
       $SUITE_TIMEOUT pnpm exec tsx src/test-push-preferences.ts
     RC=$?
-    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth)"; fi
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-push-preferences(readauth-off,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-push-preferences(readauth-off)"; fi
     rm -rf "$TMP_DIR"
 
     # Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM,

@@ -10,7 +10,9 @@
  *   1. unsigned reads of a conversation, a conversation list, a member's transactions and a balance → 401
  *   2. a signed member reading their own of each → 200
  *   3. a signed member reading someone else's conversation / conversation list → 403
- *   4. every public read the guest path needs → 200 unsigned
+ *   4. every public read the guest path needs → 200, both unsigned (the Welcome screen, before any
+ *      identity exists) and signed by a key that is NOT a member here (the PWA guest of #849/#850,
+ *      which holds a keypair and signs every read); that guest is still refused private reads (403)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-read-auth-default.ts
  */
@@ -131,14 +133,24 @@ async function main() {
         '/api/pulse/feed',
         '/api/pricing-guide',
         '/api/federation/links',
+        '/api/federation/reachable-peers',
+        `/api/commons/my-credits/${alice.pubKeyHex}`,
         `/api/enterprise/${enterprise}`,
         `/api/treasury/${enterprise}`,
         `/api/community/membership/${alice.pubKeyHex}`,
         '/api/members/callsign-available/somebody-new',
     ];
+    const { publicKey: gPub, privateKey: gPriv } = crypto.generateKeyPairSync('ed25519');
+    const guest: Id = { pubKeyHex: gPub.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey: gPriv };
     for (const path of guestReads) {
         const r = await get(path);
-        assert(r.status === 200, `guest GET ${path.split('?')[0]} is 200 (got ${r.status} ${r.error ?? ''})`);
+        assert(r.status === 200, `unsigned GET ${path.split('?')[0]} is 200 (got ${r.status} ${r.error ?? ''})`);
+        const g = await get(path, guest);
+        assert(g.status === 200, `non-member guest, signed, GET ${path.split('?')[0]} is 200 (got ${g.status} ${g.error ?? ''})`);
+    }
+    for (const [what, path] of privateReads) {
+        const g = await get(path, guest);
+        assert(g.status === 403, `non-member guest, signed, is refused ${what} (got ${g.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

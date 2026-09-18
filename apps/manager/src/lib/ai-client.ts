@@ -25,7 +25,8 @@ export function loadAiConfig(): AiConfig {
 
 export function saveAiConfig(config: AiConfig): void {
     try {
-        localStorage.setItem('bp_fleet_ai_config', JSON.stringify(config));
+        const { apiKey: _apiKey, ...safeConfig } = config;
+        localStorage.setItem('bp_fleet_ai_config', JSON.stringify(safeConfig));
     } catch {}
 }
 

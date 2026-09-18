@@ -39,6 +39,21 @@ describe('ai-client', () => {
             saveAiConfig(customConfig);
             expect(localStorage.getItem('bp_fleet_ai_config')).toBe(JSON.stringify(customConfig));
         });
+
+        it('omits apiKey when saving config to local storage', () => {
+            const customConfig: AiConfig = {
+                provider: 'openrouter',
+                baseUrl: 'https://openrouter.ai/api/v1',
+                apiKey: 'secret-key-123',
+                model: 'gpt-4',
+            };
+            saveAiConfig(customConfig);
+            const stored = JSON.parse(localStorage.getItem('bp_fleet_ai_config') || '{}');
+            expect(stored.apiKey).toBeUndefined();
+            expect(stored.provider).toBe('openrouter');
+            expect(stored.baseUrl).toBe('https://openrouter.ai/api/v1');
+            expect(stored.model).toBe('gpt-4');
+        });
     });
 
     describe('askAiCopilot', () => {

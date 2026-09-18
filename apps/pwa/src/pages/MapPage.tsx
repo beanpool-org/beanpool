@@ -1098,7 +1098,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (!pinsLoaded) return;
         centredRef.current = true;
         if (ownPinPoints.length > 0) {
-            mapRef.current.fitBounds(ownPinPoints, { padding: [40, 40], maxZoom: FIT_MAX_ZOOM });
+            // Extra room at the top: on a phone the header sits over the map.
+            mapRef.current.fitBounds(ownPinPoints, { paddingTopLeft: [40, 110], paddingBottomRight: [40, 60], maxZoom: FIT_MAX_ZOOM });
         }
     }, [nodeLocation, pinsLoaded, ownPinPoints]);
 

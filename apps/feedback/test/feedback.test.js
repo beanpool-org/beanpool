@@ -251,6 +251,8 @@ test('senderKey: IPv4 as is; IPv6 folded to its /64 however it is written', () =
     assert.equal(senderKey('2001:0db8:abcd:0012:ffff:0:0:9'), '2001:db8:abcd:12::/64');
     assert.equal(senderKey('2001:db8::1'), '2001:db8:0:0::/64');
     assert.equal(senderKey(''), 'unknown');
+    assert.equal(senderKey('::ffff:203.0.113.77'), '203.0.113.77');
+    assert.notEqual(senderKey('::ffff:203.0.113.77'), senderKey('::ffff:198.51.100.9'));
 });
 
 test('rate limit: a global daily cap holds even when every sender is different', async () => {

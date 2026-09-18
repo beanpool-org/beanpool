@@ -55,6 +55,9 @@ const INCREMENT =
 export function senderKey(ip) {
     const raw = String(ip || '').trim();
     if (!raw.includes(':')) return raw || 'unknown';
+    // An IPv4 address written as IPv6 (::ffff:1.2.3.4) is that IPv4 sender, not the shared ::/64.
+    const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(raw);
+    if (mapped) return mapped[1];
     const [head, tail = ''] = raw.toLowerCase().split('::');
     const left = head ? head.split(':') : [];
     const right = raw.includes('::') && tail ? tail.split(':') : [];

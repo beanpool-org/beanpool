@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { DecideSection } from './DecideSection';
+import { castDecisionVote } from '../lib/api';
 
+// Only castDecisionVote: the card looks up no separate credits figure; the node checks the cost.
 vi.mock('../lib/api', () => ({
-    castDecisionVote: vi.fn(),
-    getGovernanceCredits: vi.fn(async () => ({ totalCredits: 0, usedCredits: 0, availableCredits: 0 })),
+    castDecisionVote: vi.fn(async () => ({ success: true, creditsUsed: 9 })),
 }));
 
 const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote: any): any => ({
@@ -42,7 +43,6 @@ const renderDecide = (canPropose: boolean, decisions: any[] = []) => render(
         decisions={decisions}
         activeMembers30d={0}
         identity={{ publicKey: 'viewer', privateKey: 'k', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' }}
-        balanceInfo={null}
         commonsBalance={0}
         onRefresh={async () => {}}
         onOpenPropose={() => {}}
@@ -86,5 +86,35 @@ describe('DecideSection own vote', () => {
         expect(screen.queryByText(/You voted/)).toBeNull();
         expect(screen.getByRole('button', { name: /Vote YES/ })).toBeEnabled();
         expect(screen.getByRole('button', { name: /Vote NO/ })).toBeEnabled();
+    });
+});
+
+describe('DecideSection quadratic cost', () => {
+    beforeEach(() => vi.mocked(castDecisionVote).mockClear());
+
+    it('shows the cost of the votes being cast, and no Available figure', () => {
+        const { container } = renderDecide(true, [
+            decisionCard('p', 'quadratic_trade', { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '2026-09-18T01:00:00.000Z' }),
+        ]);
+        expect(container.textContent).toMatch(/Vote Count: 3 \(Cost: 9 credits\)/);
+        expect(container.textContent).not.toMatch(/Available/);
+    });
+
+    it('starts a re-vote at your existing count and leaves the cost check to the node', async () => {
+        renderDecide(true, [
+            decisionCard('p', 'quadratic_trade', { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '2026-09-18T01:00:00.000Z' }),
+        ]);
+        fireEvent.click(screen.getByRole('button', { name: /Change to Yes/ }));
+        await waitFor(() => expect(castDecisionVote).toHaveBeenCalledWith('p', { voterPubkey: 'viewer', support: true, voteCount: 3 }));
+        expect(screen.queryByText(/but you have/)).toBeNull();
+    });
+
+    it('shows the node refusing a vote that costs more than your credits', async () => {
+        vi.mocked(castDecisionVote).mockRejectedValueOnce(new Error('Insufficient voice credits: 3 votes costs 9 credits, but you have 4'));
+        renderDecide(true, [
+            decisionCard('p', 'quadratic_trade', { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '2026-09-18T01:00:00.000Z' }),
+        ]);
+        fireEvent.click(screen.getByRole('button', { name: /Change to Yes/ }));
+        expect(await screen.findByText(/Insufficient voice credits: 3 votes costs 9 credits/)).toBeInTheDocument();
     });
 });

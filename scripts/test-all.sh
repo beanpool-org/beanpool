@@ -297,6 +297,7 @@ run_federation_suites() {
       test-commons-projects-update-delete
       test-decisions-engine
       test-decisions-client-api
+      test-decisions-voting-answers
       test-rip-out-legacy-voting
       test-escrow-disputes
       test-shutdown-recovery

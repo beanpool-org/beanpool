@@ -9,8 +9,8 @@ import {
     getCommonsBalance,
     adminRejectProject,
     createDecision, getDecision, getAllDecisions, getOpenDecisions,
-    castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
-    getActiveMembersCount30d, getDecisionVoiceCredits, getOwnDecisionVotes,
+    castDecisionVote, tallyDecision, tickDecisions,
+    getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -105,10 +105,21 @@ router.post('/api/commons/projects/delete', async (ctx) => {
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
 
+// Ballots are secret (answer I): every response carries totals and the SIGNER's own vote only. Who voted
+// how is never served — not in the list, the detail, or the decision_vote_cast broadcast.
+
+/**
+ * The signer's standing for pool (quadratic) votes: the number the server checks a vote's cost against
+ * (qualifiedTradeValue), and whether they have ever completed a trade. Null for an unsigned caller.
+ */
+function myPoolVoting(actor: string | undefined): { voiceCredits: number; hasCompletedTrade: boolean } | null {
+    if (!actor) return null;
+    return { voiceCredits: getVoiceCredits(actor), hasCompletedTrade: hasCompletedTrade(actor) };
+}
+
 router.get('/api/commons/decisions', async (ctx) => {
     const status = ctx.query.status as any;
     const decisions = getAllDecisions(status);
-    const activeMembers30d = getActiveMembersCount30d();
     // Each card carries the signer's own vote (null if they haven't voted) — taken from authentication
     // only, never from a parameter, so the list never reveals how anyone else voted.
     const actor = (ctx.state as any)?.actor as string | undefined;
@@ -116,10 +127,10 @@ router.get('/api/commons/decisions', async (ctx) => {
     ctx.body = {
         decisions: decisions.map(d => ({
             ...d,
-            tally: tallyDecision(d.id, undefined, activeMembers30d),
+            tally: tallyDecision(d.id),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
-        activeMembers30d,
+        myPoolVoting: myPoolVoting(actor),
     };
 });
 
@@ -127,12 +138,11 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     const decision = getDecision(ctx.params.id);
     if (!decision) return ctx.throw(404, 'Decision not found');
     const tally = tallyDecision(decision.id);
-    const votes = getDecisionVotes(decision.id);
     // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
-    ctx.body = { decision, tally, votes, voiceCredits, myVote };
+    ctx.body = { decision, tally, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {

@@ -11,7 +11,7 @@ import {
     getAllMembers, getAllProfiles, getMember,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetUserStatus, adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier,
+    adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
@@ -22,6 +22,8 @@ import {
     getNodeConfig, updateNodeConfig,
     adminRejectProject,
     adminHaltDecision, adminAccelerateDecision,
+    adminEmergencySuspend, adminLiftSuspension,
+    getAllDecisions, tallyDecision,
     getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
@@ -855,15 +857,64 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     }
 });
 
+/**
+ * The admin acting on a Decision or a suspension. A key session carries its member's pubkey, which must
+ * still hold an admin or owner node role; a password session is owner-level ('owner:password' — only owners
+ * hold the password). Never read from the request body.
+ */
+function resolveAdminActor(ctx: any): string | null {
+    const signedActor = (ctx.state as any)?.actor as string | undefined;
+    if (signedActor) {
+        if (!isNodeAdmin(signedActor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Explicit authenticated node admin required' };
+            return null;
+        }
+        return signedActor;
+    }
+    return 'owner:password';
+}
+
+// Emergency suspension (§3.8, answer L): suspends at once and opens a 7-day "Keep this suspension?"
+// Decision in the same transaction. The reason is shown to members on that Decision.
+router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
+    if (!result.success) {
+        ctx.status = result.status || 400;
+        ctx.body = { error: result.error };
+        return;
+    }
+    logger.info('ADMIN', `Emergency-suspended ${ctx.params.pubkey.substring(0, 12)}; ratifying Decision ${result.decision!.id}`);
+    ctx.body = { success: true, decision: result.decision };
+});
+
+// Status: 'active' lifts a suspension (and closes an open "Keep this suspension?" vote about it). Suspending
+// is only ever the emergency route above — an admin cannot suspend someone with no community review.
 router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { status } = (ctx as any).requestBody || {};
-    if (status !== 'active' && status !== 'disabled') {
+    if (status === 'disabled') {
         ctx.status = 400;
-        ctx.body = { error: 'status must be "active" or "disabled"' };
+        ctx.body = { error: 'Suspend with POST /api/local/admin/users/:pubkey/suspend and a reason; it opens a community vote' };
         return;
     }
-    adminSetUserStatus(ctx.params.pubkey, status);
+    if (status !== 'active') {
+        ctx.status = 400;
+        ctx.body = { error: 'status must be "active"' };
+        return;
+    }
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const result = adminLiftSuspension(ctx.params.pubkey, actor);
+    if (!result.success) {
+        ctx.status = result.status || 400;
+        ctx.body = { error: result.error };
+        return;
+    }
     ctx.body = { success: true };
 });
 
@@ -1114,21 +1165,25 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
     }
 });
 
-// Admin: halt a community decision (§3.7)
+// Admin: the Decisions an admin can still act on — open votes and removals in their grace window — with
+// totals only. Like every other Decision response, never who voted how.
+router.post('/api/local/admin/decisions', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
+    ctx.body = {
+        decisions: actionable.map(d => {
+            const subject = d.subject ? getMember(d.subject) : null;
+            return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
+        }),
+    };
+});
+
+// Admin: halt a community decision (§3.7). The written reason is public on the Decision.
 router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { reason } = (ctx as any).requestBody || {};
-    const signedActor = (ctx.state as any)?.actor as string | undefined;
-    if (!signedActor) {
-        ctx.status = 401;
-        ctx.body = { error: 'Explicit authenticated node admin required' };
-        return;
-    }
-    if (!isNodeAdmin(signedActor)) {
-        ctx.status = 403;
-        ctx.body = { error: 'Explicit authenticated node admin required' };
-        return;
-    }
+    const signedActor = resolveAdminActor(ctx);
+    if (!signedActor) return;
     if (!reason) {
         ctx.status = 400;
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
@@ -1146,17 +1201,8 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
 // Admin: accelerate a pending grace removal decision (§3.7)
 router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const signedActor = (ctx.state as any)?.actor as string | undefined;
-    if (!signedActor) {
-        ctx.status = 401;
-        ctx.body = { error: 'Explicit authenticated node admin required' };
-        return;
-    }
-    if (!isNodeAdmin(signedActor)) {
-        ctx.status = 403;
-        ctx.body = { error: 'Explicit authenticated node admin required' };
-        return;
-    }
+    const signedActor = resolveAdminActor(ctx);
+    if (!signedActor) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = 400;

@@ -754,12 +754,14 @@ export function initSchema() {
     // (protocol-rules §7) — two different meanings for one word. Renamed to 'keeper'. Cheap and
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
-    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
     try {
         ripOutLegacyVoting(db);
     } catch (err) {
         console.error('[DB] ⚠️ Could not remove retired voting data:', err);
     }
+    // One open Decision per member author; the node's own "Keep this suspension?" votes (author SYSTEM) are exempt.
+    try { db.exec(`DROP INDEX IF EXISTS idx_decisions_author_open;`); } catch { }
+    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';`); } catch { }
     try {
         db.exec(`
             DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;

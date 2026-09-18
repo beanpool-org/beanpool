@@ -308,11 +308,13 @@ async function runSuite() {
     const resList = await callRouter(commonsRouter, 'GET', '/api/commons/decisions');
     assert(resList.status === 200, 'GET /api/commons/decisions returns 200');
     assert(Array.isArray(resList.body.decisions), 'Returns array of decisions');
-    assert(resList.body.activeMembers30d >= 3, `activeMembers30d is tracked (got ${resList.body.activeMembers30d})`);
 
     const openFound = resList.body.decisions.find((d: any) => d.id === decisionPool.id);
     assert(!!openFound, 'Alice decision present in open decisions');
     assert(openFound.tally !== undefined, 'Decision includes live tally object');
+    // The turnout base now lives on each Decision's tally (its own electorate), replacing the node-wide
+    // activeMembers30d figure the list used to carry.
+    assert(openFound.tally.electorate >= 3, `the Decision's electorate is tracked on its tally (got ${openFound.tally.electorate})`);
     assert(openFound.tally.quorumRequired >= 3, `Quorum required calculated (${openFound.tally.quorumRequired})`);
 
     console.log('\n--- 3. Voting Mechanics (1m1v vs Quadratic) ---');

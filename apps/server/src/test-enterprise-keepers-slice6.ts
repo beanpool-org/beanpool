@@ -34,7 +34,7 @@ import {
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     cancelActiveSuccessionIfLeadActive, adminSetOperator, canOperateTreasury, createProject,
 } from './state-engine.js';
-import { createDecision, castDecisionVote, tickDecisions, getDecision, getQuorumRequired } from './decisions-engine.js';
+import { createDecision, castDecisionVote, tickDecisions, getDecision, tallyDecision } from './decisions-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, initSchema, createCrowdfundProject, raiseCreatorOperatorSwitch } from './db/db.js';
 import { recordActivity } from './engine/members.js';
@@ -402,12 +402,16 @@ async function main() {
             effect: 'suspend_member',
             subject: leadPubkey,
         });
-        const quorum = getQuorumRequired({ effect: 'suspend_member', touches: 'member' });
-        for (let i = 0; i < quorum; i++) {
+        // Voters must have joined before the Decision opened (answer J), and each active voter also joins the
+        // turnout base (answer K), so add members who joined an hour earlier until the vote reaches quorum.
+        const joinedEarlier = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        for (let i = 0; !tallyDecision(decision.id).quorumMet && i < 500; i++) {
             const voter = makeIdentity(`B1Voter${i}`);
+            db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(joinedEarlier, voter.pubKeyHex);
             const vote = castDecisionVote(decision.id, voter.pubKeyHex, true);
             assert(vote.success, `B1 Decision: voter ${i} vote accepted`);
         }
+        assert(tallyDecision(decision.id).quorumMet, 'B1 Decision: the vote reached quorum');
         db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(decision.id);
         tickDecisions();
         assert(getDecision(decision.id)!.status === 'executed', 'B1 Decision: suspend_member Decision executed');

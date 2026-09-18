@@ -12,13 +12,16 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import {
     type DecisionWithTally,
+    type MyPoolVoting,
     castDecisionVote,
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
+import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
 
 interface Props {
     decisions: DecisionWithTally[];
-    activeMembers30d: number;
+    /** The signer's voice credits for money votes; null for a guest or before it loads. */
+    myPoolVoting?: MyPoolVoting | null;
     identity: any;
     balanceState: { earnedCredit: number; commons: number };
     onRefresh: () => Promise<void>;
@@ -31,7 +34,7 @@ interface Props {
 
 export function DecideSection({
     decisions,
-    activeMembers30d,
+    myPoolVoting = null,
     identity,
     balanceState,
     onRefresh,
@@ -68,6 +71,7 @@ export function DecideSection({
     };
 
     const formatEffectLabel = (effect: string) => {
+        if (effect === 'keep_suspension') return 'Keep Suspension?';
         return effect
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -323,6 +327,7 @@ export function DecideSection({
             marginBottom: 4,
         },
         metricLabel: {
+            flexShrink: 1,
             fontSize: 12,
             color: colors.text.secondary,
             fontWeight: '600',
@@ -331,6 +336,46 @@ export function DecideSection({
             fontSize: 12,
             color: colors.text.heading,
             fontWeight: '700',
+        },
+        electorateText: {
+            fontSize: 11,
+            color: colors.text.muted,
+            marginTop: 4,
+        },
+        keepBox: {
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber100,
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? colors.border.default : palette.amber300,
+            gap: 4,
+        },
+        keepHeadline: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: theme === 'dark' ? colors.feedback.warning.solid : palette.amber800,
+        },
+        keepBody: {
+            fontSize: 13,
+            color: colors.text.heading,
+            lineHeight: 18,
+        },
+        blockerText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.feedback.warning.solid,
+            marginBottom: 6,
+        },
+        creditsText: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginBottom: 6,
+        },
+        secretNote: {
+            fontSize: 11,
+            color: colors.text.muted,
+            marginTop: 8,
         },
         barBg: {
             height: 6,
@@ -607,6 +652,10 @@ export function DecideSection({
                             const isQuadratic = item.franchise === 'quadratic_trade';
                             const myVoteLine = ownVoteSummary(item.myVote, isQuadratic);
                             const buttons = voteButtonStates(item.myVote, isQuadratic, currentCount);
+                            const blocker = isQuadratic ? poolVoteBlocker(myPoolVoting) : null;
+                            const creditsLine = isQuadratic ? voiceCreditsLine(myPoolVoting) : null;
+                            const yesDisabled = votingId === item.id || buttons.yes.disabled || !!blocker;
+                            const noDisabled = votingId === item.id || buttons.no.disabled || !!blocker;
 
                             // §3.8 Removal ballot text
                             const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
@@ -641,6 +690,21 @@ export function DecideSection({
                                     <Text style={styles.decisionTitle}>{item.title}</Text>
                                     <Text style={styles.decisionDesc}>{item.description}</Text>
 
+                                    {/* Emergency suspension: the node opened this vote when an admin suspended someone (answer L) */}
+                                    {item.effect === 'keep_suspension' && (
+                                        <View style={styles.keepBox} testID="keep-suspension-box">
+                                            <Text style={styles.keepHeadline}>
+                                                {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
+                                            </Text>
+                                            {!!item.params?.reason && (
+                                                <Text style={styles.keepBody}>Reason given: {item.params.reason}</Text>
+                                            )}
+                                            <Text style={styles.keepBody}>
+                                                Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
+                                            </Text>
+                                        </View>
+                                    )}
+
                                     {/* §3.8 Removal Ballot debt-write-off line */}
                                     {item.effect === 'remove_member' && (
                                         <View style={styles.debtWarningBox} testID="removal-debt-write-off-box">
@@ -657,7 +721,7 @@ export function DecideSection({
                                         <View>
                                             <View style={styles.metricRow}>
                                                 <Text style={styles.metricLabel}>
-                                                    Quorum Progress: {tally.totalVoters} / {tally.quorumRequired} voters ({quorumPct}%)
+                                                    Turnout: {turnoutLine(tally)}
                                                 </Text>
                                                 <Text style={[styles.metricValue, { color: tally.quorumMet ? palette.green600 : colors.text.secondary }]}>
                                                     {tally.quorumMet ? 'Met ✅' : 'Pending'}
@@ -676,6 +740,7 @@ export function DecideSection({
                                                     ]}
                                                 />
                                             </View>
+                                            <Text style={styles.electorateText}>{electorateLine(tally)}</Text>
                                         </View>
 
                                         {/* Tally */}
@@ -748,6 +813,9 @@ export function DecideSection({
                                             </View>
                                         )}
 
+                                        {!!blocker && <Text style={styles.blockerText} testID="pool-vote-blocker">{blocker}</Text>}
+                                        {!blocker && !!creditsLine && <Text style={styles.creditsText}>{creditsLine}</Text>}
+
                                         {myVoteLine && (
                                             <View style={styles.myVoteRow}>
                                                 <MaterialCommunityIcons name="check-circle" size={16} color={colors.brand.primary} />
@@ -759,9 +827,9 @@ export function DecideSection({
                                             <Pressable
                                                 accessibilityRole="button"
                                                 accessibilityLabel={buttons.yes.label}
-                                                accessibilityState={{ disabled: votingId === item.id || buttons.yes.disabled }}
-                                                style={[styles.voteBtn, styles.voteBtnYes, buttons.yes.disabled && styles.voteBtnCurrent]}
-                                                disabled={votingId === item.id || buttons.yes.disabled}
+                                                accessibilityState={{ disabled: yesDisabled }}
+                                                style={[styles.voteBtn, styles.voteBtnYes, (buttons.yes.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                                disabled={yesDisabled}
                                                 onPress={() => handleVote(item, true)}
                                             >
                                                 {votingId === item.id ? (
@@ -777,9 +845,9 @@ export function DecideSection({
                                             <Pressable
                                                 accessibilityRole="button"
                                                 accessibilityLabel={buttons.no.label}
-                                                accessibilityState={{ disabled: votingId === item.id || buttons.no.disabled }}
-                                                style={[styles.voteBtn, styles.voteBtnNo, buttons.no.disabled && styles.voteBtnCurrent]}
-                                                disabled={votingId === item.id || buttons.no.disabled}
+                                                accessibilityState={{ disabled: noDisabled }}
+                                                style={[styles.voteBtn, styles.voteBtnNo, (buttons.no.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                                disabled={noDisabled}
                                                 onPress={() => handleVote(item, false)}
                                             >
                                                 {votingId === item.id ? (
@@ -792,6 +860,9 @@ export function DecideSection({
                                                 )}
                                             </Pressable>
                                         </View>
+                                        <Text style={styles.secretNote} testID="secret-ballot-note">
+                                            🔒 Secret ballot: members see the totals, never who voted how.
+                                        </Text>
                                     </View>
                                 </View>
                             );
@@ -868,7 +939,7 @@ export function DecideSection({
                                     <View style={styles.metricsContainer}>
                                         <View style={styles.metricRow}>
                                             <Text style={styles.metricLabel}>
-                                                Quorum: {tally.totalVoters} / {tally.quorumRequired} voters ({tally.quorumMet ? 'Met' : 'Unmet'})
+                                                Turnout: {turnoutLine(tally)} ({tally.quorumMet ? 'Met' : 'Unmet'})
                                             </Text>
                                             <Text style={styles.metricValue}>
                                                 Yes: {tally.yesWeight} ({supportPct}%) · No: {tally.noWeight}
@@ -891,7 +962,7 @@ export function DecideSection({
                                         )}
                                         {item.status === 'admin_halted' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                Halted by Admin: {item.adminHaltedBy} — Reason: {item.adminHaltReason}
+                                                Halted by an admin — Reason: {item.adminHaltReason}
                                             </Text>
                                         )}
                                         {item.status === 'execution_pending_grace' && (

@@ -263,7 +263,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             <div style={{ marginTop: 16 }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>How Credits Are Earned</div>
                                 <p style={{ fontSize: 13, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    Your governance credits are earned through <strong style={{ color: '#fff' }}>community participation</strong> — the total beans you've transacted (energy cycled).
+                                    Voice credits come from your <strong style={{ color: '#fff' }}>completed trades</strong> — the beans you have traded with other members, counted up to a cap per trading partner. You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.
                                     The more you trade and contribute, the more voice you earn in shaping community projects.
                                 </p>
                             </div>

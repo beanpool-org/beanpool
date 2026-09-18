@@ -2,7 +2,7 @@
  * Plain-language lines for a Decision card. Kept apart from the component so the wording is tested once.
  */
 
-import type { DecisionTally, MyPoolVoting } from './api';
+import type { DecisionTally, MyPoolVoting } from './db';
 
 /** Word for word what the node answers; the card shows it before the member tries. */
 export const NO_TRADE_POOL_VOTE_MESSAGE = 'Voting on community money opens after your first completed trade.';

@@ -383,18 +383,19 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                     <View style={styles.creditsInfoSection}>
                         <Text style={styles.creditsInfoLabel}>HOW CREDITS ARE EARNED</Text>
                         <Text style={styles.descriptionText}>
-                            Your governance credits are earned through <Text style={styles.boldWhiteText}>community participation</Text> — the total beans you've transacted (energy cycled).
-                            The more you trade and contribute, the more voice you earn in shaping community projects.
+                            Voice credits come from your <Text style={styles.boldWhiteText}>completed trades</Text> — the beans you have traded with other members, counted up to a cap per trading partner.
+                            You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.
                         </Text>
                     </View>
 
                     <View style={styles.processContainer}>
                         <Text style={styles.processLabel}>PROCESS</Text>
                         <Text style={styles.processText}>
-                            1. Any active trader can open a binding Decision{'\n'}
-                            2. 7-day voting window with a 48h discussion period{'\n'}
-                            3. Members vote using earned trade standing (voice credits){'\n'}
-                            4. At close, passed Decisions execute automatically — the node transfers approved funds to the enterprise account.
+                            1. Any member with a completed trade can open a binding Decision{'\n'}
+                            2. Voting opens at once and runs for 7 days; members who joined before it opened can vote{'\n'}
+                            3. Ballots are secret — everyone sees the totals and their own vote{'\n'}
+                            4. Votes on community money cost voice credits; other Decisions are one member, one vote{'\n'}
+                            5. At close, passed Decisions execute automatically — the node transfers approved funds to the enterprise account.
                         </Text>
                     </View>
                 </View>

@@ -696,9 +696,6 @@ export function DecideSection({
                                             <Text style={styles.keepHeadline}>
                                                 {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
                                             </Text>
-                                            {!!item.params?.reason && (
-                                                <Text style={styles.keepBody}>Reason given: {item.params.reason}</Text>
-                                            )}
                                             <Text style={styles.keepBody}>
                                                 Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
                                             </Text>

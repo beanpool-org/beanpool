@@ -166,7 +166,6 @@ describe('DecideSection voting answers', () => {
         renderDecide(true, [card]);
         const box = screen.getByTestId('keep-suspension-box');
         expect(box.textContent).toContain(`An admin suspended Dave on ${new Date('2026-09-19T10:00:00.000Z').toLocaleDateString()}. Keep the suspension?`);
-        expect(box.textContent).toContain('Reason given: Threats in the market chat');
         expect(box.textContent).toContain("If this vote doesn't pass, the suspension lifts by itself.");
     });
 });

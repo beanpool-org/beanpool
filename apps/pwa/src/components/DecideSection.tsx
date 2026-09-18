@@ -252,9 +252,6 @@ export function DecideSection({
                                                 <div className="text-sm font-bold text-amber-200">
                                                     {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
                                                 </div>
-                                                {item.params?.reason && (
-                                                    <div className="text-xs text-amber-100/90">Reason given: {item.params.reason}</div>
-                                                )}
                                                 <div className="text-xs text-nature-300">
                                                     Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
                                                 </div>

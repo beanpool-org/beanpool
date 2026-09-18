@@ -113,7 +113,7 @@ vi.mock('../lib/api', () => ({
     treasuryPostOffer: vi.fn(async () => ({ success: true })),
     treasuryPostNeed: vi.fn(async () => ({ success: true })),
     deleteCrowdfundProject: vi.fn(async () => ({ success: true })),
-    getDecisions: vi.fn(async () => ({ decisions: [], activeMembers30d: 5 })),
+    getDecisions: vi.fn(async () => ({ decisions: [], myPoolVoting: { voiceCredits: 9.6, hasCompletedTrade: true } })),
     getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
@@ -312,9 +312,18 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         expect(within(tabs).getByText('Enterprises')).toBeInTheDocument();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['The Commons', 'Commons Pool', 'My Governance Credits', 'All Enterprises', 'Bounded Projects']) {
+        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', 'All Enterprises', 'Bounded Projects']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
+    });
+
+    it('the voice-credits card shows the number the node checks for money votes, not earned credit', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        const card = await screen.findByTestId('voice-credits-card');
+        // qualifiedTradeValue 9.6 from the Decisions list, floored; earnedCredit (12) is a different number.
+        await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
+        expect(within(card).queryByText('12')).toBeNull();
+        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
     });
 
     it('fits the section tabs in a 320px row and never lets the page scroll sideways', async () => {

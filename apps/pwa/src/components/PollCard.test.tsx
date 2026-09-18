@@ -58,6 +58,11 @@ describe('PollCard (PWA)', () => {
         expect(screen.getByText(/5 votes cast/)).toBeInTheDocument();
     });
 
+    it('says the ballot is open before anyone votes', () => {
+        render(<PollCard post={mockPost} identity={mockIdentity} />);
+        expect(screen.getByTestId('poll-open-ballot-note').textContent).toContain('Your vote is visible to members');
+    });
+
     it('submits a vote when an option is tapped', async () => {
         const onVoteSuccess = vi.fn();
         const updatedPost = {

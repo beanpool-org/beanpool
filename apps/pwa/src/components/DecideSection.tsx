@@ -2,13 +2,16 @@ import { useState } from 'react';
 import {
     castDecisionVote,
     type DecisionWithTally,
+    type MyPoolVoting,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
+import { electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../lib/decision-card';
 
 interface Props {
     decisions: DecisionWithTally[];
-    activeMembers30d: number;
+    /** The signer's voice credits for money votes; null for a guest or before it loads. */
+    myPoolVoting?: MyPoolVoting | null;
     identity: BeanPoolIdentity | null;
     commonsBalance: number;
     onRefresh: () => Promise<void>;
@@ -21,7 +24,7 @@ interface Props {
 
 export function DecideSection({
     decisions,
-    activeMembers30d,
+    myPoolVoting = null,
     identity,
     commonsBalance,
     onRefresh,
@@ -58,6 +61,7 @@ export function DecideSection({
     };
 
     const formatEffectLabel = (effect: string) => {
+        if (effect === 'keep_suspension') return 'Keep Suspension?';
         return effect
             .split('_')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -199,6 +203,8 @@ export function DecideSection({
                                 const isQuadratic = item.franchise === 'quadratic_trade';
                                 const myVoteLine = ownVoteSummary(item.myVote, isQuadratic);
                                 const buttons = voteButtonStates(item.myVote, isQuadratic, currentCount);
+                                const blocker = isQuadratic ? poolVoteBlocker(myPoolVoting) : null;
+                                const creditsLine = isQuadratic ? voiceCreditsLine(myPoolVoting) : null;
 
                                 // §3.8 Removal ballot debt line
                                 const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
@@ -240,6 +246,21 @@ export function DecideSection({
                                             </p>
                                         </div>
 
+                                        {/* Emergency suspension: the node opened this vote when an admin suspended someone (answer L) */}
+                                        {item.effect === 'keep_suspension' && (
+                                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 my-2 space-y-1" data-testid="keep-suspension-box">
+                                                <div className="text-sm font-bold text-amber-200">
+                                                    {keepSuspensionHeadline(item.params, item.subject?.slice(0, 8) || 'a member')}
+                                                </div>
+                                                {item.params?.reason && (
+                                                    <div className="text-xs text-amber-100/90">Reason given: {item.params.reason}</div>
+                                                )}
+                                                <div className="text-xs text-nature-300">
+                                                    Vote Yes to keep it. If this vote doesn't pass, the suspension lifts by itself.
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* §3.8 Removal Ballot Debt Write-Off Warning Box */}
                                         {item.effect === 'remove_member' && (
                                             <div
@@ -264,7 +285,7 @@ export function DecideSection({
                                             <div>
                                                 <div className="flex justify-between text-xs font-semibold mb-1">
                                                     <span className="text-nature-400">
-                                                        Quorum Progress: {tally.totalVoters} / {tally.quorumRequired} voters ({quorumPct}%)
+                                                        Turnout: {turnoutLine(tally)}
                                                     </span>
                                                     <span className={tally.quorumMet ? 'text-emerald-400' : 'text-nature-400'}>
                                                         {tally.quorumMet ? 'Quorum Met ✅' : 'Pending Quorum'}
@@ -283,6 +304,7 @@ export function DecideSection({
                                                         style={{ width: `${quorumPct}%` }}
                                                     />
                                                 </div>
+                                                <div className="text-[11px] text-nature-500 mt-1">{electorateLine(tally)}</div>
                                             </div>
 
                                             {/* Tally & Support */}
@@ -345,6 +367,13 @@ export function DecideSection({
                                                 </div>
                                             )}
 
+                                            {blocker && (
+                                                <p className="text-sm font-semibold text-amber-300" data-testid="pool-vote-blocker">{blocker}</p>
+                                            )}
+                                            {!blocker && creditsLine && (
+                                                <p className="text-xs text-nature-400">{creditsLine}</p>
+                                            )}
+
                                             {myVoteLine && (
                                                 <p className="text-sm font-bold text-emerald-300 flex items-center gap-1.5">
                                                     <span aria-hidden="true">✓</span>
@@ -355,7 +384,7 @@ export function DecideSection({
                                             <div className="flex gap-3">
                                                 <button
                                                     onClick={() => handleVote(item, true)}
-                                                    disabled={votingId === item.id || buttons.yes.disabled}
+                                                    disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
                                                     className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
                                                 >
                                                     <span>👍</span>
@@ -364,13 +393,16 @@ export function DecideSection({
 
                                                 <button
                                                     onClick={() => handleVote(item, false)}
-                                                    disabled={votingId === item.id || buttons.no.disabled}
+                                                    disabled={votingId === item.id || buttons.no.disabled || !!blocker}
                                                     className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
                                                 >
                                                     <span>👎</span>
                                                     <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
                                                 </button>
                                             </div>
+                                            <p className="text-[11px] text-nature-500" data-testid="secret-ballot-note">
+                                                🔒 Secret ballot: members see the totals, never who voted how.
+                                            </p>
                                         </div>
                                     </div>
                                 );
@@ -454,7 +486,7 @@ export function DecideSection({
                                         {/* Final Tally */}
                                         <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3 text-xs text-nature-300 flex justify-between items-center">
                                             <span>
-                                                Quorum: {tally.totalVoters} / {tally.quorumRequired} ({tally.quorumMet ? 'Met ✅' : 'Unmet ❌'})
+                                                Turnout: {turnoutLine(tally)} ({tally.quorumMet ? 'Met ✅' : 'Unmet ❌'})
                                             </span>
                                             <span className="font-semibold">
                                                 Yes: {tally.yesWeight} ({supportPct}%) · No: {tally.noWeight}
@@ -478,7 +510,7 @@ export function DecideSection({
                                             )}
                                             {item.status === 'admin_halted' && (
                                                 <div className="text-amber-300 font-semibold">
-                                                    Halted by Admin: {item.adminHaltedBy} — Reason: {item.adminHaltReason}
+                                                    Halted by an admin — Reason: {item.adminHaltReason}
                                                 </div>
                                             )}
                                             {item.status === 'execution_pending_grace' && (

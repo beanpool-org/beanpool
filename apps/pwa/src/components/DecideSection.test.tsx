@@ -32,16 +32,16 @@ const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote:
     adminHaltReason: null,
     updatedAt: '2026-09-18T00:00:00.000Z',
     tally: {
-        decisionId: id, status: 'open', totalVoters: 1, quorumRequired: 3, quorumMet: false,
+        decisionId: id, status: 'open', totalVoters: 1, electorate: 20, quorumRatio: 0.3, quorumRequired: 6, quorumMet: false,
         yesWeight: 1, noWeight: 0, totalWeight: 1, supportRatio: 1, thresholdRequired: 0.6, passed: false,
     },
     myVote,
 });
 
-const renderDecide = (canPropose: boolean, decisions: any[] = []) => render(
+const renderDecide = (canPropose: boolean, decisions: any[] = [], myPoolVoting: any = null) => render(
     <DecideSection
         decisions={decisions}
-        activeMembers30d={0}
+        myPoolVoting={myPoolVoting}
         identity={{ publicKey: 'viewer', privateKey: 'k', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' }}
         commonsBalance={0}
         onRefresh={async () => {}}
@@ -116,5 +116,57 @@ describe('DecideSection quadratic cost', () => {
         ]);
         fireEvent.click(screen.getByRole('button', { name: /Change to Yes/ }));
         expect(await screen.findByText(/Insufficient voice credits: 3 votes costs 9 credits/)).toBeInTheDocument();
+    });
+});
+
+describe('DecideSection voting answers', () => {
+    beforeEach(() => vi.mocked(castDecisionVote).mockClear());
+
+    it('tells a member with no completed trade, before they try, and does not send the vote (H)', () => {
+        renderDecide(true, [decisionCard('p', 'quadratic_trade', null)], { voiceCredits: 0, hasCompletedTrade: false });
+        expect(screen.getByTestId('pool-vote-blocker').textContent).toBe('Voting on community money opens after your first completed trade.');
+        expect(screen.getByRole('button', { name: /Vote YES/ })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Vote NO/ })).toBeDisabled();
+    });
+
+    it('shows the voice credits the node checks and what they buy (H)', () => {
+        renderDecide(true, [decisionCard('p', 'quadratic_trade', null)], { voiceCredits: 16.4, hasCompletedTrade: true });
+        expect(screen.getByText('You have 16 voice credits: up to 4 votes on this Decision.')).toBeInTheDocument();
+        expect(screen.queryByTestId('pool-vote-blocker')).toBeNull();
+    });
+
+    it('the no-trade note never blocks a one-member-one-vote Decision', () => {
+        renderDecide(true, [decisionCard('m', '1m1v', null)], { voiceCredits: 0, hasCompletedTrade: false });
+        expect(screen.queryByTestId('pool-vote-blocker')).toBeNull();
+        expect(screen.getByRole('button', { name: /Vote YES/ })).toBeEnabled();
+    });
+
+    it('turnout reads against the members active in the last 30 days (K)', () => {
+        renderDecide(true, [decisionCard('m', '1m1v', null)]);
+        expect(screen.getByText('Turnout: 1 of 6 votes needed')).toBeInTheDocument();
+        expect(screen.getByText('30% of 20 members active in the last 30 days')).toBeInTheDocument();
+    });
+
+    it('says the floor of 3 when it applies', () => {
+        const card = decisionCard('m', '1m1v', null);
+        card.tally = { ...card.tally, electorate: 4, quorumRequired: 3 };
+        renderDecide(true, [card]);
+        expect(screen.getByText('30% of 4 members active in the last 30 days (at least 3)')).toBeInTheDocument();
+    });
+
+    it('says the ballot is secret (I)', () => {
+        renderDecide(true, [decisionCard('m', '1m1v', null)]);
+        expect(screen.getByTestId('secret-ballot-note').textContent).toMatch(/Secret ballot/);
+    });
+
+    it('explains an emergency suspension vote (L)', () => {
+        const card = decisionCard('k', '1m1v', null);
+        card.effect = 'keep_suspension';
+        card.params = { memberName: 'Dave', suspendedAt: '2026-09-19T10:00:00.000Z', reason: 'Threats in the market chat' };
+        renderDecide(true, [card]);
+        const box = screen.getByTestId('keep-suspension-box');
+        expect(box.textContent).toContain(`An admin suspended Dave on ${new Date('2026-09-19T10:00:00.000Z').toLocaleDateString()}. Keep the suspension?`);
+        expect(box.textContent).toContain('Reason given: Threats in the market chat');
+        expect(box.textContent).toContain("If this vote doesn't pass, the suspension lifts by itself.");
     });
 });

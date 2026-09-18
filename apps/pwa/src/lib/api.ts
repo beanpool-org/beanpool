@@ -1428,6 +1428,8 @@ export type DecisionEffect =
     | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
+    /** Opened by the node when an admin suspends someone: "Keep this suspension?" Never proposed by a member. */
+    | 'keep_suspension'
     | 'remove_member'
     | 'grant_enterprise'
     | 'grant_hardship'
@@ -1457,21 +1459,14 @@ export interface Decision {
     updatedAt: string;
 }
 
-export interface DecisionVote {
-    decisionId: string;
-    voterPubkey: string;
-    support: number; // 1 = yes, 0 = no
-    weight: number;
-    creditsUsed: number;
-    signature?: string;
-    createdAt: string;
-    updatedAt: string;
-}
-
 export interface DecisionTally {
     decisionId: string;
     status: DecisionStatus;
     totalVoters: number;
+    /** Members who could vote on this Decision and were active in the last 30 days: the turnout base. */
+    electorate: number;
+    /** Share of the electorate that must vote: 0.30, or 0.25 to remove a member. */
+    quorumRatio: number;
     quorumRequired: number;
     quorumMet: boolean;
     yesWeight: number;
@@ -1488,11 +1483,21 @@ export interface DecisionWithTally extends Decision {
     myVote?: OwnDecisionVote | null;
 }
 
-export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; activeMembers30d: number }> {
+/**
+ * The signer's standing for votes on community money: voice credits = the number the node checks a vote's
+ * cost against (qualified value of completed trades). A fresh allowance on each pool Decision.
+ */
+export interface MyPoolVoting {
+    voiceCredits: number;
+    hasCompletedTrade: boolean;
+}
+
+export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }
 
-export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; votes: DecisionVote[]; myVote?: OwnDecisionVote | null }> {
+/** Totals and the signer's own vote only: ballots are secret, the node never says who voted how. */
+export async function getDecision(id: string): Promise<{ decision: Decision; tally: DecisionTally; myVote?: OwnDecisionVote | null }> {
     return request('GET', `/api/commons/decisions/${encodeURIComponent(id)}`);
 }
 

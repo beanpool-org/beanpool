@@ -1,0 +1,18 @@
+{
+  "name": "@beanpool/feedback",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker that receives \"Suggest a change to BeanPool\" from every app and node, for the weekly digest.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "node -e \"console.log('feedback build ok')\"",
+    "test": "node --test test/feedback.test.js",
+    "db:create": "wrangler d1 create beanpool-feedback",
+    "db:init": "wrangler d1 execute beanpool-feedback --remote --file schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3"
+  }
+}

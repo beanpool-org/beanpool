@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
+import { SuggestChangePanel } from './SuggestChangePanel';
 
 interface HomeScreenProps {
     communityName: string;
@@ -458,6 +459,8 @@ export function HomeScreen({
                     </div>
                 )}
             </div>
+
+            <SuggestChangePanel appVersion={version} />
         </div>
     );
 }

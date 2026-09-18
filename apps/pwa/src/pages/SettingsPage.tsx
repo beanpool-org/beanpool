@@ -16,6 +16,7 @@ import { ProfilePage } from './ProfilePage';
 import { type Theme } from '../lib/useTheme';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
+import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
@@ -26,7 +27,7 @@ interface Props {
     onBack: () => void;
     theme: Theme;
     onToggleTheme: () => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest';
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
@@ -74,7 +75,7 @@ function ToggleSwitch({
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onToggleTheme, initialMode, onReRunSetup, nodeVersion }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users'>(initialMode || 'menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest'>(initialMode || 'menu');
 
     useEffect(() => {
         if (initialMode) {
@@ -727,6 +728,25 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             </div>
                         </div>
 
+                        {/* ─── BEANPOOL PROJECT (goes to beanpool.org, not to this community's node) ─── */}
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                                BEANPOOL PROJECT
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setMode('suggest')}
+                                className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                            >
+                                <span className="text-xl" aria-hidden="true">💬</span>
+                                <div className="flex-1">
+                                    <div className="text-[15px] font-bold">Suggest a change to BeanPool</div>
+                                    <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the project team</div>
+                                </div>
+                                <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                            </button>
+                        </div>
+
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
@@ -1183,6 +1203,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, theme, onTog
                             ← Back to Settings
                         </button>
                     </div>
+                )}
+
+                {/* ─── MODE: SUGGEST A CHANGE TO BEANPOOL ─── */}
+                {mode === 'suggest' && (
+                    <SuggestChangeForm appVersion={__APP_VERSION__} onDone={() => setMode('menu')} />
                 )}
 
                 {/* ─── MODE: BLOCKED MEMBERS ─── */}

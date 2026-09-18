@@ -1,0 +1,42 @@
+# BeanPool feedback — Cloudflare Worker ("Suggest a change to BeanPool").
+# Deploy: `wrangler deploy`. First-time D1 setup: `wrangler d1 create beanpool-feedback`, paste the
+# returned database_id below, then `wrangler d1 execute beanpool-feedback --remote --file schema.sql`.
+# Full steps and the privacy statement: README.md.
+
+name = "beanpool-feedback"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+# Daily, just after UTC midnight: delete yesterday's rate-limit salt and counters.
+# (They are also purged the moment the first request of a new day creates today's salt.)
+[triggers]
+crons = ["5 0 * * *"]
+
+# Public, non-secret config.
+[vars]
+RATE_PER_HOUR = "5"    # submissions per sender (salted IP hash) per hour
+RATE_PER_DAY = "20"    # … and per UTC day
+CORS_ORIGINS = "*"     # public POST only. "*" because every community's PWA and Settings app runs on
+                       # its own domain; the endpoint takes no credentials. Comma list to narrow.
+
+# No request logging. Workers Logs would record URLs and headers (incl. the sender IP) — keep it off.
+[observability]
+enabled = false
+
+# D1 binding — set database_id after `wrangler d1 create beanpool-feedback`.
+[[d1_databases]]
+binding = "DB"
+database_name = "beanpool-feedback"
+database_id = "00000000-0000-0000-0000-000000000000"   # PLACEHOLDER — replace with the id `wrangler d1 create` prints
+
+# Route on the beanpool.org zone. The Worker intercepts these paths; the Pages static site keeps
+# serving everything else. Uncomment at deploy time.
+# No slash before the * on purpose: `beanpool.org/api/feedback/*` would not match the public
+# endpoint itself (`POST /api/feedback`), only the admin paths below it.
+# [[routes]]
+# pattern = "beanpool.org/api/feedback*"
+# zone_name = "beanpool.org"
+
+# Secrets (NOT here — set with `wrangler secret put <NAME>`):
+#   FEEDBACK_ADMIN_TOKEN   bearer token for /api/feedback/admin/* (the weekly digest reads it from
+#                          the macOS keychain item `beanpool-feedback-admin`)

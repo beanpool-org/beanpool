@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Weekly BeanPool feedback digest — Monday 08:00 local time. EXAMPLE ONLY: not installed.
+
+  To install (once the feedback Worker is deployed and the keychain item exists — apps/feedback/README.md):
+    cp scripts/launchd/com.marty.beanpool-feedback-digest.plist.example \
+       ~/Library/LaunchAgents/com.marty.beanpool-feedback-digest.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.marty.beanpool-feedback-digest.plist
+  Run it now to test:  launchctl kickstart gui/$(id -u)/com.marty.beanpool-feedback-digest
+  Remove:              launchctl bootout gui/$(id -u)/com.marty.beanpool-feedback-digest
+
+  A LaunchAgent (not a daemon) so it runs in the login session and can read the login keychain.
+  The first run may ask to let `security` read the `beanpool-feedback-admin` item: choose Always Allow.
+  If the Mac is asleep at 08:00 Monday, launchd runs it at the next wake.
+  Paths assume the main checkout at ~/projects/beanpool; adjust if it moves.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.marty.beanpool-feedback-digest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/marty/projects/beanpool/scripts/feedback-digest.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/marty/projects/beanpool</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/marty/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/marty/Library/Logs/beanpool-feedback-digest.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/marty/Library/Logs/beanpool-feedback-digest.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

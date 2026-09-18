@@ -3,6 +3,9 @@ import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, typ
 import { useStyles } from '../app/ThemeContext';
 import { tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
 
+/** Adds 7dp above and below a ~34dp pill, so the finger target is 48dp. */
+export const CHIP_HIT_SLOP = { top: 7, bottom: 7 } as const;
+
 interface FilterChipButtonProps {
     label: string;
     /** Filled with `activeColor` and white text while its filter is doing something. */
@@ -23,17 +26,21 @@ interface FilterChipButtonProps {
     onLayout?: (e: LayoutChangeEvent) => void;
 }
 
-/** One filter chip, at least 48dp tall, its label on one line. The map's rows and the Market feed's share it. */
+/**
+ * One filter chip, its label on one line. The map's rows and the Market feed's share it. It looks as slim as the
+ * pills always did (8dp above and below the label); `hitSlop` stretches the tap area to 48dp without making
+ * the pill taller — a 48dp minimum height here drew every pill as a tall lozenge.
+ */
 export function FilterChipButton({
     label, active, activeColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
 }: FilterChipButtonProps) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         floating: {
-            minHeight: 48, paddingHorizontal: 16, borderRadius: 24, justifyContent: 'center', alignItems: 'center',
+            paddingVertical: 8, paddingHorizontal: 16, borderRadius: 24, justifyContent: 'center', alignItems: 'center',
             backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.95)' : 'rgba(255,255,255,0.95)',
             shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 6,
         },
-        flat: { minHeight: 48, paddingHorizontal: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+        flat: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
         floatingText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         flatText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         textActive: { color: '#ffffff', fontWeight: '800' },
@@ -46,6 +53,7 @@ export function FilterChipButton({
             accessibilityLabel={accessibilityLabel}
             style={[flat ? styles.flat : styles.floating, active && { backgroundColor: activeColor }, style]}
             onPress={onPress}
+            hitSlop={CHIP_HIT_SLOP}
             onLayout={onLayout}
         >
             <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive]} numberOfLines={1}>{label}</Text>

@@ -35,6 +35,7 @@ community:
    `🎟️ 2 invites unclaimed`, `💾 Storage 82%`
 3. **Four cards** — Members · Commons pool · Shared enterprises · Circulation this week
 4. **Quick actions** — Invite a member · Create an enterprise · Run ledger audit · Download backup
+5. **Suggest a change to BeanPool** — goes to the project team at beanpool.org, not to this node; the same form is in the member app and PWA Settings. What is stored and how it is triaged: [apps/feedback/README.md](../apps/feedback/README.md).
 
 ## 3. Navigation — four plain-English sections, not twelve technical tabs
 

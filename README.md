@@ -355,12 +355,11 @@ All endpoints are served on port 8443 (HTTPS):
 | `/api/admin/thresholds` | POST | Update protocol thresholds (admin auth) |
 | `/api/admin/thresholds/get` | POST | Read current thresholds (admin auth) |
 | `/api/commons/balance` | GET | Get the current Commons pool balance |
-| `/api/commons/projects` | GET/POST | List or create governance voting projects |
-| `/api/commons/projects/update` | POST | Edit a voting project |
-| `/api/commons/projects/delete` | POST | Delete a voting project |
-| `/api/commons/my-credits/:pubkey` | GET | Get available Quadratic Voting credits |
-| `/api/commons/vote` | POST | Cast votes for a project (Quadratic Voting) |
-| `/api/commons/rounds` | GET | List voting rounds |
+| `/api/commons/projects` | GET/POST | List or propose Commons projects |
+| `/api/commons/projects/update` | POST | Edit a proposed project |
+| `/api/commons/projects/delete` | POST | Delete a proposed project |
+| `/api/commons/decisions` | GET/POST | List or propose Community Decisions |
+| `/api/commons/decisions/:id/vote` | POST | Vote on an open Decision |
 | `/ws` | WebSocket | Real-time state feed |
 
 ---

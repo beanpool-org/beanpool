@@ -22,6 +22,10 @@
 Read this section first. Most of the confusion about voting comes from the fact that there are two
 project systems, and the one the app shows you is not the one with the voting in it.
 
+> **This section is the 2026-09-14 snapshot that the design below answers.** Since then Community
+> Decisions (§3) and Polls have been built, and the old voting rounds described in §0.2 were deleted
+> outright on 2026-09-19.
+
 ### 0.1 Enterprises — half-built, and the half that is missing is the important half
 
 An enterprise is a row in `members` with `is_treasury = 1`. It is a real account: it holds a
@@ -78,37 +82,17 @@ becomes safe — that is the hinge this whole document turns on.
 is a real brake, but it is a brake on *use*, not on *issuance* — the capacity still exists and
 unlocks the moment one offer is posted.)
 
-### 0.2 Voting — it does not work, and here is exactly how it fails
+### 0.2 Voting — the old rounds, removed 2026-09-19
 
-There is a complete quadratic-voting engine on the server. It is unreachable from every client.
-
-- **The engine.** Proposals and rounds are stored as **JSON blobs in `node_config`** under
-  `commons_projects` and `voting_rounds`. There is no SQL table. Voting power = `qualifiedTradeValue`
-  (completed escrow trades, counterparty-capped — gifts grant nothing, and liquid beans cannot buy
-  votes, which is correct and worth keeping). Cost = votes².
-- **`packages/beanpool-core/src/governance.ts` is dead code.** It is exported from the package index
-  and **nothing imports it**. The real implementation lives in `state-engine.ts`. Anyone reading the
-  repo to understand governance reads the wrong file first.
-- **Only an admin can open or close a round**, via `admin.ts` — and there is no fleet-manager UI for
-  it either, so in practice it is a curl command. Only one round can be open at a time.
-- **The PWA never calls it.** `getCommonsProjects`, `voteForProject`, `getGovernanceCredits` all
-  exist in `api.ts`; zero components import them. `ProjectsPage` talks only to `/api/crowdfund/*`.
-- **Native calls a route that does not exist.** `voteForProjectApi` posts to
-  `/api/crowdfund/projects/vote` → **404**. It is masked because `getProjects()` hardcodes
-  `type: 'community'` while the vote UI only renders when `type === 'commons'`, so the button is
-  permanently invisible. A 404 hidden behind a dead conditional.
-
-And even if it were wired, the mechanism itself is not a decision procedure:
-
-- **You can only back one thing.** `voteForProject` deletes all your existing votes in the round
-  before recording the new one. So you cannot spread votes across proposals — which is the entire
-  point of quadratic voting. It is a one-pick funding contest wearing QV's clothes.
-- **There is no way to vote against anything.** Support only.
-- **There is no pass rule.** Highest weight wins, full stop. No quorum, no majority, no minimum
-  support. One person voting once decides a round.
-- **The winner's money lands in their personal wallet.** `closeVotingRound` debits `COMMONS_POOL`
-  and credits `winner.proposerPubkey`'s personal balance, with no escrow, no milestones and no
-  obligation to do the thing they proposed.
+The original engine was a funding contest: an admin opened a "round" of Commons proposals, members
+spread quadratic credits across them, and when the admin closed it the proposal with the most weight
+was paid its full request from the pool. It had no pass rule and no way to vote against, you could
+back only one proposal, the winner was paid into a personal wallet, and no member app could vote in
+it. It was deleted on 2026-09-19 — engine, routes, the Manager's round buttons, the phone's round
+banner and the `voting_rounds` blob — without carrying any data forward. Voting is now Community
+Decisions (§3.6) and Polls in the feed. What survives from it is the franchise: voice on pool money is
+`qualifiedTradeValue` (completed escrow trades, counterparty-capped — gifts grant nothing, and liquid
+beans cannot buy votes), and N votes cost N².
 
 ### 0.3 Two project systems, and the wrong one is switched on
 
@@ -116,7 +100,7 @@ And even if it were wired, the mechanism itself is not a decision procedure:
 |---|---|---|
 | Storage | JSON in `node_config` | SQL `projects` table |
 | Funded by | `COMMONS_POOL` | direct member pledges |
-| Mechanism | quadratic voting | escrow, releases at goal |
+| Mechanism | voting rounds *(removed 2026-09-19; grants are now a pool Decision, §3.6)* | escrow, releases at goal |
 | Works? | **No — unreachable** | **Yes, both clients** |
 | Governance? | yes (broken) | **none at all** |
 
@@ -539,8 +523,8 @@ itself — no admin presses a button — and if it passed, **the thing happens a
 move, the role changes, the setting changes. If it was just a question, the result is recorded and
 visible, and that is the point of it.
 
-That is all voting is. The current build has the counting engine and none of the rest: no list, no
-clock, no automatic close, no automatic effect, and no way for a member to open one.
+That is all voting is. Community Decisions (§3.6) now do all of it: a list, a clock, an automatic
+close, an automatic effect, and any member with trade standing can open one.
 
 ### 3.2 Two weights of thing — and this is the change that matters
 
@@ -617,8 +601,8 @@ that is federation's problem, not this document's. Say it plainly rather than pr
 
 ### 3.4 The pass rule
 
-Today: highest weight wins, no quorum, no majority, admin closes the round by hand. That is not a
-pass rule, it is a leaderboard.
+The old voting rounds (removed 2026-09-19) had highest weight wins, no quorum, no majority, and an
+admin closing the round by hand. That is not a pass rule, it is a leaderboard.
 
 **Quorum is counted against *active* members, never total registrations.** Counting against everyone
 who ever installed the app means dormant accounts permanently brick the denominator and every
@@ -642,7 +626,7 @@ quorum = max( K_min, ceil(0.30 × activeMembers_30d) )
 - **Polls** — simple majority of votes cast; no quorum at all (a poll's only job is to show a tally)
 - **Pool decisions** (grants, hardship, write-offs) — 60% of voting weight in support, judged **per
   proposal**, pass or fail on its own merits. Not a contest where the top vote-getter takes the money.
-- **Member and rule decisions** — 60% supermajority
+- **Member decisions** — 60% supermajority
 - **Restorations** (reinstate, unfreeze, return a badge) — simple majority, deliberately lower than
   the act they reverse
 - **Removing a member** — 66% on a 25% quorum, the highest bar in the system (§3.8)
@@ -651,13 +635,12 @@ quorum = max( K_min, ceil(0.30 × activeMembers_30d) )
 burned for community apathy.
 
 **Nothing needs an admin.** A Decision closes itself on the first state-engine tick after its
-deadline. The current design — where a human must both open and close every round — is why zero
-rounds have ever run.
+deadline. The old rounds, where a human had to both open and close every round, never ran once.
 
 ### 3.5 Where the money goes when a Decision passes
 
-Today the winner's requested amount is credited to the **proposer's personal balance**, with no
-escrow, no milestones and no obligation to do the thing. That has to go.
+The old rounds credited the winner's requested amount to the **proposer's personal balance**, with no
+escrow, no milestones and no obligation to do the thing. That is gone.
 
 **A Commons grant is paid to an enterprise. Never to a person.** This falls out of §2.1 for free: if
 a project *is* an enterprise, then "fund a project" means "credit an enterprise account" — an account
@@ -680,18 +663,15 @@ So Decisions are typed by **what the effect touches**, and that also settles whi
 | Touches | Effects | Franchise | Threshold |
 |---|---|---|---|
 | **a member** | suspend · remove · **reinstate** · freeze or unfreeze credit · appoint or remove a voucher · remove a lead keeper | one member, one vote | 60% (removals), simple majority (restorations) |
-| **the pool** | grant to an enterprise · **hardship grant or debt forgiveness for a person** · write off a defaulted deficit · set a levy *(not built)* | quadratic on earned trade | 60% |
-| **a rule** *(not built)* | fee rate · demurrage rate · vouch gift sizes · offer-band depths · invite expiry · open vs invite-only · peer with another node · which Pulse channels we carry | one member, one vote | 60% |
-| **nothing** | every Poll — a Poll is a post in the feed, not a Decision | one member, one vote | simple majority, no quorum |
+| **the pool** | grant to an enterprise · **hardship grant or debt forgiveness for a person** · write off a defaulted deficit | quadratic on earned trade | 60% |
 
-**What is live (2026-09-19).** The member and pool rows are built, except the levy. Nothing that
-changes a rule is built yet, so the server refuses to open a `set_rule`, `set_levy` or `poll`
-Decision ("This kind of decision is not available yet") rather than let one pass and change nothing.
-Tier badges and elder standing were once in the member row as `grant_tier` / `revoke_tier` /
-`grant_elder` / `revoke_elder`; they are **removed** — the server refuses them and neither app offers
-them — because a tier is earned by trading and a vote on it is exactly the vote the "never a vote"
-list below forbids. The effect names stay in the type so old stored rows still load; a stored one no
-longer changes anyone's earned credit.
+A question that changes nothing is a **Poll** — a post in the feed, not a Decision: one member, one
+vote, simple majority, no quorum.
+
+**Rules and levies by vote were removed on 2026-09-19, pending a design decision.** They could pass
+and change nothing, so they were deleted rather than left as theatre. Tier badges and elder standing
+by vote were removed the same day: a tier is earned by trading, and a vote on it is exactly the vote
+the "never a vote" list below forbids.
 
 Two consequences worth naming:
 
@@ -703,7 +683,7 @@ Two consequences worth naming:
   excludes someone should be cheaper to correct than it was to make.
 
 Every one of these is a power a node admin holds unilaterally today — `adminSetUserStatus`,
-`adminSetCreditFrozen`, `adminSetTier`, `adminSetVoucher`, `adminSetElder`, `adminPruneUser`,
+`adminSetCreditFrozen`, `adminSetVoucher`, `adminPruneUser`,
 `adminPruneBranch`, `actionReport`. **This section is mostly a list of admin powers being handed to
 the community**, which is a fair description of what "community governance" has to mean if it means
 anything.
@@ -718,7 +698,7 @@ anything.
 - **Anything urgent.** Safety needs a fast unilateral path with ratification afterwards (§3.8), not
   a quorum.
 - **Anything that would recur weekly.** If it comes up repeatedly it is not a decision, it is a
-  rule — set it once in the "touches a rule" row and stop voting on it.
+  rule — set it once and stop voting on it.
 
 ### 3.7 How a Decision actually takes effect
 
@@ -741,8 +721,8 @@ route calls, with no refactor of either.
 1. A `decisions` row holds `effect`, `subject`, `params`, `opens_at`, `closes_at`, `status`.
 2. A tick evaluates decisions past their close time. `state-engine.ts` already runs periodic ticks
    (5-minute persistence, daily conservation audit); this joins them. **No admin presses anything**,
-   which is the single biggest difference from today, where a human must open *and* close every
-   round and consequently zero rounds have ever run.
+   which is the single biggest difference from the old rounds, where a human had to open *and* close
+   every round and consequently none ever ran.
 3. Quorum and majority are evaluated (§3.4). Pass → `executeDecision()` dispatches on `effect`.
 4. **A pre-flight assertion runs immediately before applying anything**: does the subject still
    exist, are the invariants intact, is the pool solvent for this? A failed assertion halts at
@@ -758,7 +738,7 @@ route calls, with no refactor of either.
 
 | | Examples | On close |
 |---|---|---|
-| **Reversible state flips** | suspend, freeze, appoint, revoke, set a parameter, pause | **execute immediately.** Undo is another Decision, and it is cheap |
+| **Reversible state flips** | suspend, freeze, appoint, revoke, pause | **execute immediately.** Undo is another Decision, and it is cheap |
 | **Money movements** | grant, hardship, write-off | **execute immediately.** The ledger is already the audit trail and the destination is an account, not a deletion |
 | **Destructive** | prune a member, prune an invite branch, archive an enterprise and release its name | **never on close.** Set a pending state with a **7-day grace window** |
 
@@ -949,7 +929,8 @@ Smallest first. Each slice is independently useful — nothing here is a big-ban
 - Enterprises gain `purpose`, `goal_amount`, `deadline_at`, `lifecycle`, `status`, `paused`.
 - Migrate the `projects` table into enterprise rows; pledges land in the enterprise account, not the
   creator's personal balance.
-- Retire the `commons_projects` / `voting_rounds` JSON blobs from `node_config`.
+- Retire the `commons_projects` / `voting_rounds` JSON blobs from `node_config`. *(`voting_rounds`
+  deleted 2026-09-19 with the rounds; `commons_projects` is still read by the propose-project flow.)*
 - One list, one detail screen, in the Commons tab.
 
 **Slice 4 — the derived floor ⚠️ the one slice that can break a live community**
@@ -972,7 +953,7 @@ Smallest first. Each slice is independently useful — nothing here is a big-ban
   transaction, `auth_signer = 'system:decision:<id>'` on every mutation, the reversible /
   money / destructive split, the funding queue. It calls the same `admin*` state-engine functions
   the admin routes already call — the execution surface exists, it just has one caller today.
-- Start with **reversible member effects** (suspend, freeze, appoint a voucher, grant a tier, remove
+- Start with **reversible member effects** (suspend, freeze, appoint a voucher, grant a tier *(removed 2026-09-19)*, remove
   a lead keeper) — they exercise the whole pipeline with nothing destructive at the end of it.
 - Then **pool effects**: the Commons → enterprise grant that has never existed, and the hardship
   grant, which an off-grid community will probably use more.
@@ -1019,7 +1000,7 @@ Each has a recommendation. These are the ones where reasonable people differ, so
    90 days, publicly visible. The alternative is to fail it outright and make the proposer re-propose
    against real numbers. **Recommendation: keep the queue** — the community already decided and
    making them decide again over a timing accident is the kind of friction that stops people voting.
-10. **Is the levy worth having?** "Set a levy" appears in the pool row of §3.6 and would be the
+10. **Is the levy worth having?** "Set a levy" was in the pool row of §3.6 until 2026-09-19 and would be the
    community's one lever to grow the Commons deliberately. It is also the easiest way to make people
    resent the app. **Recommendation: design it, ship it last**, after a community has actually run
    out of pool money and asked for it.
@@ -1133,7 +1114,7 @@ Four concepts, four words, no overlap.
   `invited_by`. It gates the in-protocol override in about eight places (`canOperate`,
   `canOperateTreasury`, `keeperOf`, offer bands).
 
-They do not agree with each other: `createVotingRound` accepts **any** genesis member, while
+They do not agree with each other: `createVotingRound` (deleted 2026-09-19) accepted **any** genesis member, while
 `canOperateTreasury` accepts only whichever row `LIMIT 1` returns.
 
 > **⚠️ Likely live bug — verify before designing around it.** `initStateEngine` inserts

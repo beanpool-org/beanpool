@@ -20,7 +20,7 @@ import type { RouteDeps } from './types.js';
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset } = deps;
 
 // ===================== MESSAGING API (PUBLIC) =====================
 
@@ -225,10 +225,17 @@ router.post('/api/messages/edit', async (ctx) => {
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     // A2-3: this returns the subject's entire conversation graph + unread
-    // counts + read cursors. Under read-auth, only the subject may read their
-    // own — the verified signer must equal the :publicKey path param (which is
-    // otherwise an unchecked IDOR: any member could read anyone's social graph).
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    // counts + read cursors. Only the subject may read their own — the verified
+    // signer must equal the :publicKey path param (otherwise an unchecked IDOR:
+    // anyone could read anyone's social graph). Checked here whether or not
+    // ENFORCE_READ_AUTH is on; both clients sign their reads, so the signer is known.
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own conversations' };
         return;
@@ -277,15 +284,26 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
-    // A2-2: only a participant may read a conversation's messages + metadata.
-    // Under read-auth the signer is a verified member (ctx.state.actor); require
-    // it to be in this conversation. Without this, any member could read any
+    // A2-2: only a participant may read a conversation's messages + metadata —
+    // whether or not ENFORCE_READ_AUTH is on. The reader is the verified signer
+    // (ctx.state.actor) and nothing else. Without this, anyone could read any
     // thread by id (group/system messages are still plaintext-v1, and
     // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
-        ctx.status = 403;
-        ctx.body = { error: 'You are not a participant in this conversation' };
-        return;
+    // An enterprise thread is the exception: it stays readable as it always has
+    // (the enterprise thread route serves it to anyone), a product decision.
+    // An event chat has its own rule, below.
+    if (conv.type !== 'enterprise_thread' && conv.type !== 'event_thread') {
+        const actor = ctx.state.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'A signed request is required' };
+            return;
+        }
+        if (!conv.participants.includes(actor)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not a participant in this conversation' };
+            return;
+        }
     }
     // An event chat is the host plus everyone Going, re-checked against the RSVP rather than the
     // participants mirror, and private whether or not this node enforces read auth

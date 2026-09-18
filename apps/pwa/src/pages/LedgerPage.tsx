@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
-    getBalance, getTransactions, sendTransfer, getMembers,
+    getBalance, getTransactions, sendTransfer, getMembers, getLedgerExport,
     type BalanceInfo, type TierInfo, type Transaction, type Member
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -732,8 +732,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <button
                             onClick={async () => {
                                 try {
-                                    const res = await fetch('/api/ledger/export');
-                                    const data = await res.json();
+                                    const data = await getLedgerExport();
                                     
                                     const balBlob = new Blob([data.balancesCsv], { type: 'text/csv' });
                                     const balUrl = window.URL.createObjectURL(balBlob);

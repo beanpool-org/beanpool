@@ -24,7 +24,7 @@ import type { RouteDeps } from './types.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH, rateLimit } = deps;
+    const { clampLimit, clampOffset, rateLimit } = deps;
 
     const isTreasury = (pk: string): boolean =>
         !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
@@ -775,23 +775,23 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.body = { error: 'publicKey query parameter is required' };
         return;
     }
-    if (ENFORCE_READ_AUTH) {
-        const actor = ctx.state?.actor as string | undefined;
-        if (!actor) {
-            ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
-            return;
-        }
-        const isSelf = actor === publicKey;
-        const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
-        if (!isSelf && !isAuthorizedKeeper) {
-            ctx.status = 403;
-            ctx.body = { error: isTreasury(publicKey)
-                ? 'You are not authorized to view transactions for this enterprise'
-                : 'You may only view your own marketplace transactions'
-            };
-            return;
-        }
+    // Only the member themselves, or a keeper of the enterprise named, may read these — whether or not
+    // ENFORCE_READ_AUTH is on. The reader is the verified signer and nothing else.
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    const isSelf = actor === publicKey;
+    const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+    if (!isSelf && !isAuthorizedKeeper) {
+        ctx.status = 403;
+        ctx.body = { error: isTreasury(publicKey)
+            ? 'You are not authorized to view transactions for this enterprise'
+            : 'You may only view your own marketplace transactions'
+        };
+        return;
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

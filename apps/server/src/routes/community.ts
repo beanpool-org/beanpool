@@ -30,6 +30,7 @@ import {
     createTreasury,
     purgeMemberSelf,
     getMembersVersion,
+    canOperateTreasury,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -58,7 +59,27 @@ import type { RouteDeps } from './types.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { rateLimit, clampLimit, clampOffset, checkAdminAuth, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { rateLimit, clampLimit, clampOffset, checkAdminAuth } = deps;
+
+    /**
+     * A read of something only its owner may see. The owner is the verified signer (ctx.state.actor) and
+     * nothing else, and this holds whether or not ENFORCE_READ_AUTH is on: an unsigned caller gets 401, any
+     * other signer 403. Both clients sign every read they can, so the owner is never turned away.
+     */
+    function requireSelf(ctx: any, publicKey: string, refusal: string): boolean {
+        const actor = ctx.state.actor as string | undefined;
+        if (!actor) {
+            ctx.status = 401;
+            ctx.body = { error: 'A signed request is required' };
+            return false;
+        }
+        if (actor !== publicKey) {
+            ctx.status = 403;
+            ctx.body = { error: refusal };
+            return false;
+        }
+        return true;
+    }
 
 // ===================== LOCAL STATUS API =====================
 
@@ -733,9 +754,12 @@ router.get('/api/community/members', async (ctx) => {
 
     // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
     const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+    // The member row carries the contact detail and its visibility. The directory goes to anyone, signed or
+    // not, so it never carries either: a contact is served by GET /api/profile/:publicKey, which applies the
+    // hidden / friends / community rule to the verified signer.
     const members = getMembers()
         .filter(m => !m.isTreasury)
-        .map(m => ({
+        .map(({ contactValue: _contactValue, contactVisibility: _contactVisibility, ...m }) => ({
             ...m,
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             avatarUrl: m.avatarUrl
@@ -859,11 +883,9 @@ router.get('/api/invite/tree', async (ctx) => {
 
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
-        ctx.status = 403;
-        ctx.body = { error: 'You may only read your own invites' };
-        return;
-    }
+    // Invite codes are bearer credentials: only their owner (the verified signer) may list them,
+    // whether or not ENFORCE_READ_AUTH is on.
+    if (!requireSelf(ctx, publicKey, 'You may only read your own invites')) return;
     const invites = getInvitesByMember(publicKey);
     ctx.body = { invites };
 });
@@ -1163,14 +1185,47 @@ router.post('/api/ledger/transfer', async (ctx) => {
     ctx.body = { success: true, transaction: txn };
 });
 
+// A member's transaction history (counterparties, amounts, memos) is theirs: only the member, or a keeper
+// of the enterprise named, may read it — whether or not ENFORCE_READ_AUTH is on. Without a publicKey this
+// used to return every transaction on the node to anyone; no client asks for that, so it is refused.
 router.get('/api/ledger/transactions', async (ctx) => {
     const publicKey = ctx.query.publicKey as string | undefined;
+    if (!publicKey) {
+        ctx.status = 400;
+        ctx.body = { error: 'publicKey query parameter is required' };
+        return;
+    }
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const isEnterprise = !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(publicKey) as any)?.is_treasury;
+    if (actor !== publicKey && !(isEnterprise && canOperateTreasury(actor, publicKey))) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own transactions' };
+        return;
+    }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
     ctx.body = getTransactions(publicKey, limit, offset);
 });
 
+// The whole-ledger audit (every balance, every transaction with its memo) is the community's own record:
+// a signed member of this node may export it, an unsigned caller or an unknown key may not.
 router.get('/api/ledger/export', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!getMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Only a member of this community may export its ledger' };
+        return;
+    }
     ctx.body = exportLedgerAudit();
 });
 
@@ -1220,11 +1275,7 @@ router.get('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'Missing publicKey' };
         return;
     }
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
-        ctx.status = 403;
-        ctx.body = { error: 'You may only read your own preferences' };
-        return;
-    }
+    if (!requireSelf(ctx, publicKey, 'You may only read your own preferences')) return;
     ctx.body = getMemberPreferences(publicKey);
 });
 
@@ -1365,8 +1416,11 @@ router.post('/api/reports', async (ctx) => {
 
 // ======================== FRIENDS ========================
 
+// A member's friends list is their own social graph, and it decides who sees a friends-only contact:
+// only the member (the verified signer) may read it.
 router.get('/api/friends/:publicKey', async (ctx) => {
     const pubkey = ctx.params.publicKey;
+    if (!requireSelf(ctx, pubkey, 'You may only read your own friends list')) return;
     ctx.body = getFriends(pubkey);
 });
 

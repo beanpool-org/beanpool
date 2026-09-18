@@ -767,6 +767,11 @@ export async function getTransactions(publicKey?: string, limit = 50): Promise<T
     return request('GET', `/api/ledger/transactions?${params}`);
 }
 
+/** The whole-ledger audit as two CSVs. Signed: the node serves it to its own members only. */
+export async function getLedgerExport(): Promise<{ balancesCsv: string; transactionsCsv: string }> {
+    return request('GET', '/api/ledger/export');
+}
+
 // ===================== MARKETPLACE =====================
 
 export type EventRsvpStatus = 'going' | 'interested';

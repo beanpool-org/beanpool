@@ -17,7 +17,7 @@ import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDis
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { CategoryPickerSheet } from '../../components/CategoryPickerSheet';
+import { FilterChipRow } from '../../components/FilterChipRow';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
@@ -26,7 +26,8 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { EVENT_ACCENT } from '../../components/EventCard';
-import { EVENT_WINDOWS, eventInWindow, type EventWindow } from '../../utils/events';
+import { type EventWindow } from '../../utils/events';
+import { mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, type MapTypeFilter } from '../../utils/map-filters';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType } from '../../utils/compose-options';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
@@ -260,27 +261,22 @@ export default function MapScreen() {
         // The scroll container shrink-wraps the pills and caps at the screen, so the row centres when it
         // fits and scrolls when it does not. The pill look (fill, radius, shadow) stays on the content.
         filterBarScroll: { maxWidth: '92%', flexGrow: 0, borderRadius: 24 },
-        filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 4, borderRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
-        filterChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
+        filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 2, borderRadius: 26, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
+        // 48dp tall: the touch floor for old phones at 1.3x text. The active variants below only add colour.
+        filterChip: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 24 },
         filterChipActive: { backgroundColor: colors.border.strong },
-        filterChipActiveOffers: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#10b981' },
-        filterChipActiveNeeds: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#ea580c' },
+        filterChipActiveOffers: { backgroundColor: '#10b981' },
+        filterChipActiveNeeds: { backgroundColor: '#ea580c' },
         // The event violet — the same one the event card and the web map's pin use.
-        filterChipActiveEvents: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: EVENT_ACCENT },
+        filterChipActiveEvents: { backgroundColor: EVENT_ACCENT },
         filterChipText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         filterChipTextActive: { color: colors.text.heading, fontWeight: '800' },
         filterChipTextOnGreen: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
         filterChipTextOnOrange: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
         filterChipTextOnViolet: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
-        // A second row under the pills, no wider than the screen, appearing only with Events on.
-        eventChipsRow: { marginTop: 6, maxWidth: '92%', flexGrow: 0 },
-        eventChipsContent: {
-            alignItems: 'center', paddingHorizontal: 4, gap: 2,
-            backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)',
-            borderRadius: 24,
-        },
-        filterDivider: { width: 1, height: 16, backgroundColor: colors.border.strong, marginHorizontal: 4 },
-        filterClear: { paddingHorizontal: 8, paddingVertical: 8 },
+        // The second row, always under the pills: categories, or the date chips under Events.
+        filterSecondRow: { marginTop: 6, maxWidth: '92%' },
+        filterClear: { minHeight: 48, minWidth: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
         filterClearText: { fontSize: 14, color: colors.text.muted, fontWeight: '800' },
 
         // FAB Pill (Right side)
@@ -578,14 +574,26 @@ export default function MapScreen() {
     );
 
     // Filter state
-    const [mapTypeFilter, setMapTypeFilter] = useState<'all' | 'offers' | 'needs' | 'events'>('all');
-    const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
+    const [mapTypeFilter, setMapTypeFilter] = useState<MapTypeFilter>('all');
     /**
-     * Which date chip the event pins are filtered by. The chips only appear while the Events pill is on,
-     * which is what keeps the filter row short at 320dp + 1.3x text.
+     * The category chip and the date chip share the second row (utils/map-filters.ts). Both are remembered
+     * across type switches, and each filters only while its row is showing.
      */
+    const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
-    const [showMapCategoryPicker, setShowMapCategoryPicker] = useState(false);
+    const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
+    const secondRow = mapSecondRow(mapTypeFilter);
+    /**
+     * The zoom pill sits at bottom 120, which on a 320dp phone at 1.3x text runs up under the two filter
+     * rows. Measure the screen, the rows and the pill, and drop the pill just far enough to clear them —
+     * never lower than 36, where it would cover the Google logo.
+     */
+    const [mapAreaH, setMapAreaH] = useState(0);
+    const [filterBottom, setFilterBottom] = useState(0);
+    const [fabPillH, setFabPillH] = useState(0);
+    const fabPillBottom = mapAreaH && filterBottom && fabPillH
+        ? Math.max(36, Math.min(120, mapAreaH - filterBottom - 8 - fabPillH))
+        : 120;
     const [nodeRadius, setNodeRadius] = useState<{ lat: number; lng: number; radiusKm: number } | null>(null);
 
     const fetchNodeLocation = async () => {
@@ -1019,7 +1027,7 @@ export default function MapScreen() {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} onLayout={e => setMapAreaH(e.nativeEvent.layout.height)}>
             {/* Off-screen pin capture layer */}
             {Platform.OS !== 'web' && markerVariants.length > 0 && (
                 <MapMarkerManager
@@ -1062,24 +1070,7 @@ export default function MapScreen() {
                     animationEnabled={false}
                     radius={15}
                 >
-                    {posts.filter(p => {
-                        if (p.status && p.status !== 'active') return false;
-                        if (p.lat == null || p.lng == null) return false;
-                        const l1 = Number(p.lat);
-                        const l2 = Number(p.lng);
-                        if (isNaN(l1) || isNaN(l2)) return false;
-
-                        const pt = (p.type || '').toLowerCase();
-                        // Events have their own layer below, in their own colour. UnifiedMapPin knows only
-                        // Offer and Need, so an event routed through here came out looking like a Need.
-                        if (pt === 'event') return false;
-                        if (mapTypeFilter === 'offers' && pt !== 'offer') return false;
-                        if (mapTypeFilter === 'needs' && pt !== 'need') return false;
-                        if (mapTypeFilter === 'events') return false;
-                        if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
-
-                        return true;
-                    }).map(post => {
+                    {visibleMarketPins(posts, mapFilterState).map(post => {
                         const catObj = CATEGORIES_BY_ID.get(post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
@@ -1101,13 +1092,7 @@ export default function MapScreen() {
                         Events pill, and filtered by the date chips. `eventInWindow` applies the slice-1
                         feed rule first, so an event that has ended or been cancelled never pins — the
                         sync pull is a replica of the list, not the list, and carries both. */}
-                    {(mapTypeFilter === 'all' || mapTypeFilter === 'events') && posts.filter(p => {
-                        if ((p.type || '').toLowerCase() !== 'event') return false;
-                        if (p.lat == null || p.lng == null) return false;
-                        if (isNaN(Number(p.lat)) || isNaN(Number(p.lng))) return false;
-                        if (mapCategoryFilter !== 'all' && p.category !== mapCategoryFilter) return false;
-                        return eventInWindow(p, mapTypeFilter === 'events' ? eventWindow : 'all');
-                    }).map(post => (
+                    {visibleEventPins(posts, mapFilterState).map(post => (
                         <EventMapMarker
                             key={`event-${post.id}-${selectedPostPreview?.id === post.id}`}
                             coordinate={{ latitude: Number(post.lat), longitude: Number(post.lng) }}
@@ -1141,12 +1126,16 @@ export default function MapScreen() {
                 </View>
             )}
 
-            {/* Floating Filter Bar */}
+            {/* Floating Filter Bar — the type pills, and under them one contextual row that stays in
+                the same place: category chips for All / Offers / Needs, date chips for Events. */}
             {!showNewPost && !selectedPostPreview && (
-                <View style={styles.filterBarWrapper} pointerEvents="box-none">
-                    {/* Scrollable: a fourth pill takes the row past the screen at 320dp with 1.3x text,
-                        where All and Category were clipped at both ends with no way to reach them. It
-                        still shrink-wraps and centres at normal sizes. */}
+                <View
+                    style={styles.filterBarWrapper}
+                    pointerEvents="box-none"
+                    onLayout={e => setFilterBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+                >
+                    {/* Scrollable: at 320dp with 1.3x text the pills run past the screen; it still
+                        shrink-wraps and centres at normal sizes. */}
                     <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -1165,56 +1154,41 @@ export default function MapScreen() {
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => setMapTypeFilter('events')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>Events</Text>
                         </Pressable>
-                        <View style={styles.filterDivider} />
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapCategoryFilter !== 'all' }} style={[styles.filterChip, mapCategoryFilter !== 'all' && styles.filterChipActive]} onPress={() => setShowMapCategoryPicker(true)}>
-                            <Text style={[styles.filterChipText, mapCategoryFilter !== 'all' && styles.filterChipTextActive]}>
-                                {mapCategoryFilter === 'all' ? '🏷️ Category' : `${categoryEmoji(mapCategoryFilter)} ▼`}
-                            </Text>
-                        </Pressable>
-                        {/* Clear all icon if filters active */}
-                        {(mapTypeFilter !== 'all' || mapCategoryFilter !== 'all') && (
+                        {mapFiltersActive(mapFilterState) && (
                             <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); setMapCategoryFilter('all'); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}
                     </ScrollView>
 
-                    {/* Date chips, only while Events is on — the pill row has to stay readable at 320dp
-                        with 1.3x text, and four more chips in it would not. Horizontally scrollable for
-                        the same reason: at the small end "This weekend" and "Next 7 days" are wide. */}
-                    {mapTypeFilter === 'events' && (
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.eventChipsRow}
-                            contentContainerStyle={styles.eventChipsContent}
-                        >
-                            {EVENT_WINDOWS.map(w => (
-                                <Pressable
-                                    key={w.id}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: eventWindow === w.id }}
-                                    style={[styles.filterChip, eventWindow === w.id && styles.filterChipActiveEvents]}
-                                    onPress={() => setEventWindow(w.id)}
-                                >
-                                    <Text style={[styles.filterChipText, eventWindow === w.id && styles.filterChipTextOnViolet]}>{w.label}</Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
+                    {/* Keyed by kind so the row remounts on the swap and scrolls its selected chip into view. */}
+                    {secondRow.kind === 'categories' ? (
+                        <FilterChipRow
+                            key="categories"
+                            chips={secondRow.chips}
+                            selected={mapCategoryFilter}
+                            onSelect={setMapCategoryFilter}
+                            activeColor={mapTypeFilter === 'offers' ? '#10b981' : mapTypeFilter === 'needs' ? '#ea580c' : colors.brand.dark}
+                            style={styles.filterSecondRow}
+                            accessibilityLabel="Filter by category"
+                        />
+                    ) : (
+                        <FilterChipRow
+                            key="eventWindows"
+                            chips={secondRow.chips}
+                            selected={eventWindow}
+                            onSelect={setEventWindow}
+                            activeColor={EVENT_ACCENT}
+                            style={styles.filterSecondRow}
+                            accessibilityLabel="Filter events by date"
+                        />
                     )}
                 </View>
             )}
 
-            <CategoryPickerSheet
-                visible={showMapCategoryPicker}
-                selected={mapCategoryFilter}
-                onSelect={(id) => setMapCategoryFilter(id)}
-                onClose={() => setShowMapCategoryPicker(false)}
-            />
-
             {/* Map Action FABs - Left Pill */}
             {!showNewPost && !selectedPostPreview && (
-                <View style={[styles.fabPill, { bottom: 120, left: 16 }]} pointerEvents="box-none">
+                <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
                     <TouchableOpacity accessibilityRole="button" accessibilityLabel="Toggle dark mode" style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>
                     </TouchableOpacity>

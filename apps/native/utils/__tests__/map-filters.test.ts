@@ -9,7 +9,7 @@ import {
     categoryChipLabel, categoryPanelReducer,
     type MapFilterState, type MapTypeFilter, type CategoryPanelState,
 } from '../map-filters';
-import { tilePanelColumns, TILE_GAP } from '../filter-chips';
+import { tilePanelColumns, TILE_GAP, TILE_BASE_MIN_WIDTH, TILE_PANEL_PADDING } from '../filter-chips';
 import { CATEGORY_META } from '../../constants/categories';
 
 const HOUR = 60 * 60 * 1000;
@@ -180,17 +180,24 @@ describe('the category chip and its panel', () => {
 
 describe('tiles per row', () => {
     const tile = (inner: number, cols: number) => (inner - TILE_GAP * (cols - 1)) / cols;
+    // The panel is the screen less 8dp a side, less TILE_PANEL_PADDING inside.
+    const inner = (screenDp: number) => screenDp - 16 - 2 * TILE_PANEL_PADDING;
 
     it('four per row on a normal phone at normal text', () => {
-        // 411dp phone: 92% panel = 378, minus 12 padding.
-        expect(tilePanelColumns(366, 1)).toBe(4);
+        expect(tilePanelColumns(inner(411), 1)).toBe(4);
     });
 
-    it('fewer per row at 320dp with 1.3x text, rather than squeeze a label', () => {
-        // 320dp phone: 92% panel = 294, minus 12 padding.
-        const cols = tilePanelColumns(282, 1.3);
-        expect(cols).toBeLessThan(4);
-        expect(tile(282, cols)).toBeGreaterThanOrEqual(72 * 1.3);
+    it('four on a 320dp phone at 1.3x text, so 18 categories take five rows, not six', () => {
+        const cols = tilePanelColumns(inner(320), 1.3);
+        expect(cols).toBe(4);
+        expect(tile(inner(320), cols)).toBeGreaterThanOrEqual(TILE_BASE_MIN_WIDTH * 1.3);
+        expect(Math.ceil(CATEGORY_FILTER_CHIPS.length / cols)).toBe(5);
+    });
+
+    it('fewer per row when the text is larger still, rather than squeeze a label', () => {
+        const cols = tilePanelColumns(inner(320), 1.5);
+        expect(cols).toBe(3);
+        expect(tile(inner(320), 4)).toBeLessThan(TILE_BASE_MIN_WIDTH * 1.5);
     });
 
     it('never fewer than two', () => {

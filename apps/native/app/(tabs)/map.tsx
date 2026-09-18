@@ -277,8 +277,9 @@ export default function MapScreen() {
         filterChipTextOnViolet: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
         // The second row, always under the pills: categories, or the date chips under Events.
         filterSecondRow: { marginTop: 6, maxWidth: '92%' },
-        // Full 92% so the open panel's tiles get the width; the collapsed chip centres inside it.
-        filterCategoryPicker: { marginTop: 6, width: '92%' },
+        // The screen less 8dp a side, so the open panel's tiles get the width (four per row at 320dp + 1.3x);
+        // the collapsed chip centres inside it.
+        filterCategoryPicker: { marginTop: 6, alignSelf: 'stretch', marginHorizontal: 8 },
         filterClear: { minHeight: 48, minWidth: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
         filterClearText: { fontSize: 14, color: colors.text.muted, fontWeight: '800' },
 
@@ -596,6 +597,8 @@ export default function MapScreen() {
     useEffect(() => {
         if (selectedPostPreview || showNewPost) closeCategoryPanel();
     }, [selectedPostPreview, showNewPost]);
+    // Leaving the tab closes it too, so coming back to the Map shows the map, not the panel.
+    useFocusEffect(useCallback(() => () => dispatchCategoryPanel({ kind: 'dismiss' }), []));
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
     const secondRow = mapSecondRow(mapTypeFilter);

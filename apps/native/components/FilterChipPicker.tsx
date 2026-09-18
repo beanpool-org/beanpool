@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
-import { tilePanelColumns, TILE_GAP, type FilterChip } from '../utils/filter-chips';
+import { tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
 
 interface FilterChipPickerProps<Id extends string> {
     chips: ReadonlyArray<FilterChip<Id>>;
@@ -47,17 +47,19 @@ export function FilterChipPicker<Id extends string>({
         chipTextActive: { color: '#ffffff', fontWeight: '800' },
         panel: {
             marginTop: 6, alignSelf: 'stretch', borderRadius: 20, overflow: 'hidden',
-            backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.97)' : 'rgba(255,255,255,0.97)',
+            // Opaque: at 0.97 the map's labels and pins still showed through behind the tiles.
+            backgroundColor: theme === 'dark' ? '#1a1a1a' : '#ffffff',
             shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8,
         },
-        grid: { flexDirection: 'row', flexWrap: 'wrap', padding: 6, gap: TILE_GAP },
+        grid: { flexDirection: 'row', flexWrap: 'wrap', padding: TILE_PANEL_PADDING, gap: TILE_GAP },
+        // Compact so all 18 categories fit on a 320dp phone at 1.3x text: five rows of four at the 48dp floor.
         tile: {
-            minHeight: 48, paddingVertical: 6, paddingHorizontal: 2, borderRadius: 14,
+            minHeight: 48, paddingVertical: 3, paddingHorizontal: 2, borderRadius: 14,
             alignItems: 'center', justifyContent: 'center',
             backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
         },
-        tileEmoji: { fontSize: 20, lineHeight: 26 },
-        tileText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary, textAlign: 'center' },
+        tileEmoji: { fontSize: 18, lineHeight: 22 },
+        tileText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary, textAlign: 'center' },
         tileTextActive: { color: '#ffffff', fontWeight: '800' },
     }));
 
@@ -80,8 +82,8 @@ export function FilterChipPicker<Id extends string>({
             {open && (
                 <View style={styles.panel}>
                     <ScrollView style={panelMaxHeight ? { maxHeight: panelMaxHeight } : undefined} bounces={false}>
-                        {/* Measured once, then the tiles lay out at the computed width. padding 6 either side. */}
-                        <View style={styles.grid} onLayout={e => setInnerWidth(e.nativeEvent.layout.width - 12)}>
+                        {/* Measured, then the tiles lay out at the computed width. */}
+                        <View style={styles.grid} onLayout={e => setInnerWidth(e.nativeEvent.layout.width - 2 * TILE_PANEL_PADDING)}>
                             {tileWidth > 0 && chips.map(c => {
                                 const on = c.id === selected;
                                 return (
@@ -93,7 +95,8 @@ export function FilterChipPicker<Id extends string>({
                                         style={[styles.tile, { width: tileWidth }, on && { backgroundColor: activeColor }]}
                                         onPress={() => onSelect(c.id)}
                                     >
-                                        {c.emoji ? <Text style={styles.tileEmoji}>{c.emoji}</Text> : null}
+                                        {/* The emoji is a picture, not text: it keeps its size at large text so the label gets the room. */}
+                                        {c.emoji ? <Text style={styles.tileEmoji} allowFontScaling={false}>{c.emoji}</Text> : null}
                                         <Text style={[styles.tileText, on && styles.tileTextActive]} numberOfLines={2}>{c.label}</Text>
                                     </Pressable>
                                 );

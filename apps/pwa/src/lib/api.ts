@@ -1769,6 +1769,28 @@ export interface KeeperRequestItem {
     decidedBy?: string | null;
     callsign?: string;
     avatarUrl?: string | null;
+    /** Approved by the lead and waiting out the other keepers' 3-day objection window. */
+    pendingChange?: KeeperChangeItem | null;
+}
+
+/** A keeper addition or removal the lead has made, open to objection for 3 days. */
+export interface KeeperChangeItem {
+    id: string;
+    enterprisePubkey: string;
+    kind: 'add' | 'remove';
+    memberPubkey: string;
+    memberCallsign: string;
+    requestId: string | null;
+    pledgedBacking: number;
+    proposedBy: string;
+    proposedByCallsign: string | null;
+    status: 'pending' | 'applied' | 'objected' | 'failed';
+    createdAt: string;
+    appliesAt: string;
+    resolvedAt: string | null;
+    resolvedBy: string | null;
+    resolvedByCallsign: string | null;
+    reason: string | null;
 }
 
 export interface SuccessionProposalItem {
@@ -1781,13 +1803,17 @@ export interface SuccessionProposalItem {
     proposedAt?: string;
     createdAt?: string;
     status: 'active' | 'passed' | 'cancelled';
+    closedReason?: 'rejected' | 'expired' | 'lead_returned' | 'lead_changed' | 'candidate_gone' | null;
+    deadlineAt?: string;
     resolvedAt?: string | null;
     executedAt?: string | null;
+    /** Yes votes. */
     votesCount: number;
+    noVotesCount?: number;
     votesRequired?: number;
     requiredVotes?: number;
     totalEligible?: number;
-    votes?: Array<{ voterPubkey: string; callsign?: string; votedAt?: string }>;
+    votes?: Array<{ voterPubkey: string; callsign?: string; votedAt?: string; choice?: 'yes' | 'no' }>;
     candidateCallsign?: string;
     candidateAvatarUrl?: string | null;
     leadCallsign?: string;
@@ -1802,7 +1828,7 @@ export async function getEnterpriseKeeperRequests(treasury: string, status = 'pe
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
 }
 
-export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number }> {
+export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number; applied: boolean; change: KeeperChangeItem | null }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`);
 }
 
@@ -1826,7 +1852,19 @@ export async function proposeEnterpriseSuccession(treasury: string, candidatePub
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
 }
 
-export async function voteEnterpriseSuccession(treasury: string, proposalId: string): Promise<{
+export async function removeEnterpriseKeeper(treasury: string, memberPubkey: string): Promise<{ success: boolean; applied: boolean; change: KeeperChangeItem | null }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/${encodeURIComponent(memberPubkey)}/remove`);
+}
+
+export async function objectToKeeperChange(treasury: string, changeId: string): Promise<{ success: boolean; change: KeeperChangeItem }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/changes/${encodeURIComponent(changeId)}/object`);
+}
+
+export async function stepDownAsKeeper(treasury: string): Promise<{ success: boolean; promoted: string | null; paused: boolean; releasedBacking: number }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/step-down`);
+}
+
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string, choice: 'yes' | 'no' = 'yes'): Promise<{
     success: boolean;
     executed: boolean;
     leadMoved?: boolean;
@@ -1835,7 +1873,7 @@ export async function voteEnterpriseSuccession(treasury: string, proposalId: str
     status?: string;
     proposal?: SuccessionProposalItem;
 }> {
-    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`);
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, { choice });
 }
 
 export interface EnterpriseThreadMessage {

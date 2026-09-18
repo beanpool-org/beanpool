@@ -8,12 +8,18 @@ import {
     getEnterpriseLedger, type EnterpriseLedgerResponse,
     requestToJoinEnterprise, approveKeeperRequest, declineKeeperRequest,
     proposeEnterpriseSuccession, voteEnterpriseSuccession,
-    type KeeperRequestItem, type SuccessionProposalItem,
+    removeEnterpriseKeeper, objectToKeeperChange, stepDownAsKeeper,
+    type KeeperRequestItem, type SuccessionProposalItem, type KeeperChangeItem,
     type BalanceInfo,
     getEnterpriseThread, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     type EnterpriseThreadMessage
 } from '../lib/api';
 import { onSyncActivity } from '../lib/sync';
+import {
+    timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown,
+    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, successionTallyText,
+    successionDeadlineText, myChoice, successionHeading, successionExplainer,
+} from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
@@ -107,6 +113,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [submittingJoinRequest, setSubmittingJoinRequest] = useState(false);
     const [requestProcessingId, setRequestProcessingId] = useState<string | null>(null);
 
+    // Keeper changes (3-day objection window) and stepping down
+    const [changeProcessingId, setChangeProcessingId] = useState<string | null>(null);
+    const [steppingDown, setSteppingDown] = useState(false);
+
     // Succession Proposal State
     const [selectedSuccessionCandidate, setSelectedSuccessionCandidate] = useState<string>('');
     const [submittingSuccession, setSubmittingSuccession] = useState(false);
@@ -144,7 +154,9 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             const res = await approveKeeperRequest(pubkey, requestId);
             setActionFeedback({
                 type: 'success',
-                message: `Approved keeper request with ${res.backing ?? 0} 🫘 backing.`
+                message: res.applied === false
+                    ? 'Approved. They become a keeper in 3 days, unless another keeper objects first.'
+                    : `Approved keeper request with ${res.backing ?? 0} 🫘 backing.`
             });
             await load();
         } catch (err: any) {
@@ -211,24 +223,75 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         }
     };
 
-    const handleVoteSuccession = async (proposalId: string) => {
+    const handleObjectToChange = async (changeId: string) => {
+        if (changeProcessingId) return;
+        try {
+            setChangeProcessingId(changeId);
+            setActionFeedback(null);
+            await objectToKeeperChange(pubkey, changeId);
+            setActionFeedback({ type: 'success', message: 'Objection recorded. The change is cancelled.' });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({ type: 'error', message: err.message || 'Could not object.' });
+        } finally {
+            setChangeProcessingId(null);
+        }
+    };
+
+    const handleRemoveKeeper = async (k: any) => {
+        if (changeProcessingId) return;
+        if (!window.confirm(`Remove ${k.callsign}? ${removeKeeperConfirmText(k)}`)) return;
+        try {
+            setChangeProcessingId(k.publicKey);
+            setActionFeedback(null);
+            await removeEnterpriseKeeper(pubkey, k.publicKey);
+            setActionFeedback({ type: 'success', message: removeKeeperConfirmText(k) });
+            await load();
+        } catch (err: any) {
+            setActionFeedback({ type: 'error', message: err.message || 'Could not remove the keeper.' });
+        } finally {
+            setChangeProcessingId(null);
+        }
+    };
+
+    const handleStepDown = async () => {
+        const me = identity?.publicKey;
+        if (!me || steppingDown) return;
+        if (!window.confirm(`Step down as keeper? ${stepDownConfirmText(me, keeperList)}`)) return;
+        try {
+            setSteppingDown(true);
+            setActionFeedback(null);
+            await stepDownAsKeeper(pubkey);
+            setActionFeedback({ type: 'success', message: 'You have stepped down as a keeper.' });
+            await load();
+        } catch (err: any) {
+            // The server says plainly what must happen first (e.g. the debt your pledge covers).
+            setActionFeedback({ type: 'error', message: err.message || 'Could not step down.' });
+        } finally {
+            setSteppingDown(false);
+        }
+    };
+
+    const handleVoteSuccession = async (proposalId: string, choice: 'yes' | 'no') => {
         if (submittingSuccession) return;
         try {
             setSubmittingSuccession(true);
             setActionFeedback(null);
-            const res: any = await voteEnterpriseSuccession(pubkey, proposalId);
+            const res: any = await voteEnterpriseSuccession(pubkey, proposalId, choice);
             const passed = res.executed ?? res.leadMoved ?? false;
             if (passed) {
                 setActionFeedback({
                     type: 'success',
                     message: 'Succession vote registered and passed! Lead role has been transferred.'
                 });
+            } else if (res.proposal?.closedReason === 'rejected') {
+                setActionFeedback({ type: 'success', message: 'Vote registered. Not enough keepers can now say yes, so the lead stays.' });
             } else {
                 const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
                 const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession vote registered (${count} of ${req} votes).`
+                    message: `Succession vote registered (${count} yes of ${req} needed).`
                 });
             }
             await load();
@@ -711,6 +774,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const successionInfo = detail?.succession || null;
     const activeProposal: SuccessionProposalItem | null =
         successionInfo?.proposals?.find((p: any) => p.status === 'active') || null;
+    const keeperList: any[] = keepers.map((k: any) => ({ ...k, publicKey: k.publicKey || k.pubkey || k.memberPubkey }));
+    const keeperChanges: KeeperChangeItem[] = detail?.keeperChanges || [];
+    const myPubkey: string | null = identity?.publicKey ?? null;
+    const iAmLead = keeperList.some((k) => k.publicKey === myPubkey && k.role === 'lead');
+    const removableKeepers = keeperList.filter((k) => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
     // Map pin: only this enterprise's ACTIVE keepers, and never on a closed enterprise. The keepers list marks
@@ -1513,6 +1581,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     </div>
                                                 </div>
                                             </div>
+                                            {req.pendingChange ? (
+                                                <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                                                    Approved. Joins when the objection window ends ({timeLeftText(req.pendingChange.appliesAt)}).
+                                                </div>
+                                            ) : (
                                             <div className="flex items-center gap-2 self-end sm:self-auto">
                                                 <button
                                                     type="button"
@@ -1531,9 +1604,39 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     Decline
                                                 </button>
                                             </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Keeper changes waiting out the other keepers' 3-day objection window (answers A, M) */}
+                        {keeperChanges.length > 0 && (
+                            <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-3 shadow-sm">
+                                <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                                    Keeper changes waiting ({keeperChanges.length})
+                                </div>
+                                {keeperChanges.map((c) => (
+                                    <div key={c.id} className="bg-white dark:bg-nature-900 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 space-y-2">
+                                        <div className="text-xs font-bold text-nature-900 dark:text-white">{keeperChangeTitle(c)}</div>
+                                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">{keeperChangeBody(c)}</p>
+                                        <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                                            <span aria-hidden="true">⏳ </span>Objection window: {timeLeftText(c.appliesAt)}
+                                        </div>
+                                        {canObjectToChange(c, myPubkey, keeperList) && (
+                                            <button
+                                                type="button"
+                                                disabled={changeProcessingId === c.id}
+                                                onClick={() => handleObjectToChange(c.id)}
+                                                aria-label={`Object: ${keeperChangeTitle(c)}`}
+                                                className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
+                                            >
+                                                {changeProcessingId === c.id ? 'Objecting…' : 'Object'}
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
                         )}
 
@@ -1544,12 +1647,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <span className="text-xl" aria-hidden="true">⚠️</span>
                                     <div>
                                         <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                            Lead Keeper Inactive ({Math.floor(leadInactivity.daysInactive)} days)
+                                            {successionHeading(leadInactivity)}
                                         </div>
                                         <p className="text-xs text-amber-900 dark:text-amber-200 mt-1 leading-relaxed">
-                                            The lead keeper ({leadInactivity.leadCallsign}) has recorded no node activity for 30+ days.
-                                            A strict majority of the other keepers can move the lead role to an active keeper.
-                                            If the lead returns before completion, the proposal is cancelled automatically.
+                                            {successionExplainer(leadInactivity)}
                                         </p>
                                     </div>
                                 </div>
@@ -1560,24 +1661,41 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             Active Succession Proposal: Move lead role to <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span>
                                         </div>
                                         <div className="text-xs text-nature-600 dark:text-nature-400">
-                                            Votes: <strong className="font-extrabold text-nature-900 dark:text-white">{activeProposal.votesCount}</strong> of <strong className="font-extrabold text-nature-900 dark:text-white">{activeProposal.requiredVotes ?? activeProposal.votesRequired ?? 0}</strong> required (strict majority of {activeProposal.totalEligible ?? 'other'} other keepers)
+                                            {successionTallyText(activeProposal)}
                                         </div>
+                                        {successionDeadlineText(activeProposal) && (
+                                            <div className="text-xs text-nature-600 dark:text-nature-400">
+                                                <span aria-hidden="true">⏳ </span>{successionDeadlineText(activeProposal)}
+                                            </div>
+                                        )}
                                         {isEligibleSuccessor && (
                                             <div>
-                                                {activeProposal.votes?.some((v: any) => v.voterPubkey === identity?.publicKey) ? (
+                                                {myChoice(activeProposal, myPubkey) ? (
                                                     <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
                                                         <span aria-hidden="true">✓</span>
-                                                        <span>You voted to approve this succession</span>
+                                                        <span>You voted {myChoice(activeProposal, myPubkey)}. Votes cannot be changed.</span>
                                                     </div>
                                                 ) : (
-                                                    <button
-                                                        type="button"
-                                                        disabled={submittingSuccession}
-                                                        onClick={() => handleVoteSuccession(activeProposal.id)}
-                                                        className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
-                                                    >
-                                                        {submittingSuccession ? 'Registering vote…' : `Vote to elect ${activeProposal.candidateCallsign} as lead keeper`}
-                                                    </button>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            disabled={submittingSuccession}
+                                                            onClick={() => handleVoteSuccession(activeProposal.id, 'yes')}
+                                                            aria-label={`Yes, make ${activeProposal.candidateCallsign} lead keeper`}
+                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
+                                                        >
+                                                            {submittingSuccession ? 'Registering…' : 'Yes'}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={submittingSuccession}
+                                                            onClick={() => handleVoteSuccession(activeProposal.id, 'no')}
+                                                            aria-label={`No, do not make ${activeProposal.candidateCallsign} lead keeper`}
+                                                            className="flex-1 py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px]"
+                                                        >
+                                                            No
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -1627,8 +1745,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <span>Keeper Request Pending</span>
                                     </div>
                                     <p className="text-xs text-sky-900 dark:text-sky-200 leading-relaxed">
-                                        You asked to join this enterprise with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
-                                        Awaiting review by the lead keeper.
+                                        {myPendingRequest.pendingChange ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt) : (
+                                            <>
+                                                You asked to join this enterprise with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
+                                                Awaiting review by the lead keeper.
+                                            </>
+                                        )}
                                     </p>
                                 </div>
                             ) : (
@@ -1742,6 +1864,31 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         );
                                     })}
                                 </div>
+                                {(removableKeepers.length > 0 || canStepDown(myPubkey, keeperList)) && (
+                                    <div className="flex flex-col gap-2 pt-1">
+                                        {removableKeepers.map((k) => (
+                                            <button
+                                                key={`rm-${k.publicKey}`}
+                                                type="button"
+                                                disabled={changeProcessingId === k.publicKey}
+                                                onClick={() => handleRemoveKeeper(k)}
+                                                className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
+                                            >
+                                                Remove {k.callsign}
+                                            </button>
+                                        ))}
+                                        {canStepDown(myPubkey, keeperList) && (
+                                            <button
+                                                type="button"
+                                                disabled={steppingDown}
+                                                onClick={handleStepDown}
+                                                className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
+                                            >
+                                                {steppingDown ? 'Stepping down…' : 'Step down as keeper'}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 

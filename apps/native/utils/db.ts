@@ -2130,8 +2130,21 @@ export async function proposeEnterpriseSuccession(treasury: string, candidatePub
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
 }
 
-export async function voteEnterpriseSuccession(treasury: string, proposalId: string) {
-    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, {});
+export async function voteEnterpriseSuccession(treasury: string, proposalId: string, choice: 'yes' | 'no' = 'yes') {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/succession/${encodeURIComponent(proposalId)}/vote`, { choice });
+}
+
+/** The lead removes an ordinary keeper; the other keepers have 3 days to object. */
+export async function removeEnterpriseKeeper(treasury: string, memberPubkey: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/${encodeURIComponent(memberPubkey)}/remove`, {});
+}
+
+export async function objectToKeeperChange(treasury: string, changeId: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/changes/${encodeURIComponent(changeId)}/object`, {});
+}
+
+export async function stepDownAsKeeper(treasury: string) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/step-down`, {});
 }
 
 export async function getEnterpriseThread(treasury: string, limit = 50, offset = 0): Promise<{ conversation: any; messages: any[]; readOnly: boolean } | null> {

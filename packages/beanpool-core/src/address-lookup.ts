@@ -72,6 +72,18 @@ export function parseNominatimResults(data: unknown, limit = ADDRESS_LOOKUP_LIMI
     return out;
 }
 
+/** Drop results whose display name repeats an earlier one — OpenStreetMap returns each segment of a street as
+ *  its own "Dalley Street, Mullumbimby, …", which reads as the same row twice. */
+export function dedupeAddressResults(results: AddressResult[]): AddressResult[] {
+    const seen = new Set<string>();
+    return results.filter(r => {
+        const key = r.displayName.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 export type AddressLookupState =
     /** Nothing to show: under the minimum length, or cleared. */
     | { status: 'idle'; query: string; results: [] }
@@ -97,6 +109,8 @@ export interface AddressLookupOptions {
     debounceMs?: number;
     minChars?: number;
     limit?: number;
+    /** Show one row per display name (see dedupeAddressResults). Off by default, as the settings app has it. */
+    dedupe?: boolean;
     /** Injected for tests. */
     now?: () => number;
 }
@@ -147,7 +161,8 @@ export function createAddressLookup(opts: AddressLookupOptions): AddressLookup {
             });
             if (mine.signal.aborted) return;
             if (!res.ok) throw new Error(`Nominatim answered ${res.status ?? 'an error'}`);
-            const results = parseNominatimResults(await res.json(), limit);
+            const parsed = parseNominatimResults(await res.json(), limit);
+            const results = opts.dedupe ? dedupeAddressResults(parsed) : parsed;
             if (mine.signal.aborted) return;
             cache.set(key, results);
             if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);

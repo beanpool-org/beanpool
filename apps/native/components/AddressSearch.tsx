@@ -36,6 +36,7 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
 
     useEffect(() => {
         const lookup = createAddressLookup({
+            dedupe: true,
             headers: nominatimHeaders(Constants.expoConfig?.version, Platform.OS),
             onState: (s) => {
                 setState(s);
@@ -54,7 +55,8 @@ export function AddressSearch({ onPick, onResultsShown, accent }: AddressSearchP
     const pick = (item: AddressResult) => {
         Keyboard.dismiss();
         lookupRef.current?.cancel();
-        setQuery(item.displayName);
+        // The short name: Android leaves a long line scrolled to its end ("…South Wales, 2482, Australia").
+        setQuery(item.shortName || item.displayName);
         setOpen(false);
         onPick(item);
     };

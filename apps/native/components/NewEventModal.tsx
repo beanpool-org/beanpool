@@ -90,9 +90,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [approximate, setApproximate] = useState(false);
     const mapRef = useRef<MapView | null>(null);
     const scrollRef = useRef<ScrollView | null>(null);
-    // Where the address box and the pin map sit in the scroll content, for bringing each into view.
+    // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
-    const pinY = useRef(0);
     const centreMap = (latitude: number, longitude: number) => {
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
@@ -296,7 +295,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         placePin(result.lat, result.lng);
         centreMap(result.lat, result.lng);
         setPlaceName(prev => placeNameAfterPick(prev, result, EVENT_PLACE_NAME_MAX));
-        setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, pinY.current - 8), animated: true }), 50);
+        // Scroll to the address box, not the map: the map's offset is stale while the match list collapses, and
+        // the box's is not. With the list gone the map sits right under it, in view even at 320dp and 1.3x.
+        setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, addressY.current - 8), animated: true }), 50);
     };
 
     const makeApproximate = () => {
@@ -515,7 +516,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             />
                         </View>
 
-                        <View style={styles.field} onLayout={(e) => { pinY.current = e.nativeEvent.layout.y; }}>
+                        <View style={styles.field}>
                             <Text style={styles.label}>PIN ON THE MAP *</Text>
                             <View style={styles.mapBox}>
                                 {HAS_MAPS_KEY ? (

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-    createAddressLookup, parseNominatimResults, shortAddressName, buildNominatimSearchUrl,
+    createAddressLookup, parseNominatimResults, dedupeAddressResults, shortAddressName, buildNominatimSearchUrl,
     type AddressLookupState,
 } from '../address-lookup.js';
 
@@ -48,6 +48,17 @@ describe('shortAddressName', () => {
         expect(shortAddressName({ display_name: '4/12a, Main Street, Mullumbimby' })).toBe('4/12a Main Street');
         expect(shortAddressName({ display_name: 'Civic Hall, Dalley St' })).toBe('Civic Hall');
         expect(shortAddressName({})).toBe('');
+    });
+});
+
+describe('dedupeAddressResults', () => {
+    it('keeps the first of rows with the same display name (street segments)', () => {
+        const r = parseNominatimResults([
+            { display_name: 'Dalley Street, Mullumbimby', lat: '-28.55', lon: '153.50' },
+            { display_name: 'Dalley Street, Mullumbimby', lat: '-28.56', lon: '153.51' },
+            { display_name: 'Dalley Lane, Mullumbimby', lat: '-28.57', lon: '153.52' },
+        ]);
+        expect(dedupeAddressResults(r).map(x => x.lat)).toEqual([-28.55, -28.57]);
     });
 });
 
@@ -168,6 +179,17 @@ describe('createAddressLookup', () => {
         l.input('Byron'); await tick(1000);
         expect(fetch.mock.calls[0][1].headers).toEqual({ 'User-Agent': 'BeanPool/1 (+https://beanpool.org)' });
         expect(states.at(-1)).toEqual({ status: 'done', query: 'Byron', results: [] });
+    });
+
+    it('dedupes only when asked, so the settings app lists exactly what Nominatim sent', async () => {
+        const twice = [BYRON[0], { ...BYRON[0], lat: '-28.65' }];
+        const plain = make(vi.fn().mockResolvedValue(okResponse(twice)));
+        plain.input('Byron'); await tick(1000);
+        expect(states.at(-1)?.results).toHaveLength(2);
+        states = [];
+        const deduped = make(vi.fn().mockResolvedValue(okResponse(twice)), { dedupe: true });
+        deduped.input('Byron'); await tick(1000);
+        expect(states.at(-1)?.results).toHaveLength(1);
     });
 
     it('dispose() clears the timer, aborts, and reports nothing afterwards', async () => {

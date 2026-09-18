@@ -23,6 +23,7 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
 
     useEffect(() => {
         const lookup = createAddressLookup({
+            dedupe: true,
             onState: (s) => {
                 setState(s);
                 if (s.status === 'done') setOpen(true);
@@ -37,7 +38,8 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
 
     const pick = (item: AddressResult) => {
         lookupRef.current?.cancel();
-        setQuery(item.displayName);
+        // The short name: a narrow box shows only the end of a long one ("…Street, Mullumbimby").
+        setQuery(item.shortName || item.displayName);
         setOpen(false);
         setSelectedIndex(-1);
         onPick(item);

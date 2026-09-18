@@ -11,7 +11,7 @@ import {
     adminRejectProject,
     createDecision, getDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
-    getActiveMembersCount30d, getDecisionVoiceCredits,
+    getActiveMembersCount30d, getDecisionVoiceCredits, getOwnDecisionVotes,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -146,10 +146,15 @@ router.get('/api/commons/decisions', async (ctx) => {
     const status = ctx.query.status as any;
     const decisions = getAllDecisions(status);
     const activeMembers30d = getActiveMembersCount30d();
+    // Each card carries the signer's own vote (null if they haven't voted) — taken from authentication
+    // only, never from a parameter, so the list never reveals how anyone else voted.
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    const ownVotes = actor ? getOwnDecisionVotes(actor) : null;
     ctx.body = {
         decisions: decisions.map(d => ({
             ...d,
             tally: tallyDecision(d.id, undefined, activeMembers30d),
+            myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         activeMembers30d,
     };
@@ -163,7 +168,8 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
-    ctx.body = { decision, tally, votes, voiceCredits };
+    const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
+    ctx.body = { decision, tally, votes, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {

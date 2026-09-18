@@ -117,6 +117,21 @@ function recordTestActivity(buyer: string, seller: string, amount: number) {
 function closeForTick(id: string) {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
+
+// A Decision row as a node stored it before its effect was withdrawn — createDecision now refuses
+// these effects, so the executor's handling of a stored one is set up directly.
+function insertStoredDecision(opts: { author: string; effect: string; touches: string; subject: string; params?: any }): string {
+    const id = 'stored-' + Math.random().toString(36).slice(2);
+    const now = new Date().toISOString();
+    const closes = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params,
+            franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, ?, ?, 'Stored before the effect was withdrawn', ?, ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+    `).run(id, opts.author, `Stored ${opts.effect}`, opts.touches, opts.effect, opts.subject,
+        opts.params ? JSON.stringify(opts.params) : null, now, closes, now, now);
+    return id;
+}
 async function runDecisionsSuite() {
     console.log('🏛️ Running Community Decisions Engine Test Suite (§3.2–§3.8)...\n');
 
@@ -588,19 +603,29 @@ async function runDecisionsSuite() {
     const rerun = executeDecision(decPoolExecuted.id);
     testAssert(rerun.success && rerun.status === 'executed', 'executeDecision is idempotent on executed decisions');
 
-    // Rollback test: simulate an invalid execution param that throws inside transaction
-    const badDecision = createDecision({
-        authorPubkey: admin,
-        title: 'Bad Decision with failing mutation',
-        description: 'Testing rollback',
-        touches: 'member',
-        effect: 'grant_tier',
-        subject: m1,
-        params: { tier: 'NonExistentTier' as any }, // Will throw in grantedCreditForTier
-    });
+    // Rollback test: an execution that throws inside the transaction. A stored tier Decision now throws
+    // (tier-by-vote was removed), and must leave the member's earned credit untouched.
+    const m1CreditBefore = (db.prepare('SELECT earned_credit FROM members WHERE public_key = ?').get(m1) as any).earned_credit;
+    const badDecision = { id: insertStoredDecision({ author: admin, effect: 'grant_tier', touches: 'member', subject: m1, params: { tier: 'Elder' } }) };
     const execBadRes = executeDecision(badDecision.id);
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
+    const m1CreditAfter = (db.prepare('SELECT earned_credit FROM members WHERE public_key = ?').get(m1) as any).earned_credit;
+    testAssert(m1CreditAfter === m1CreditBefore, `A stored grant_tier Decision does not overwrite earned credit (${m1CreditBefore} -> ${m1CreditAfter})`);
+
+    // Effects that did nothing, and tier/elder by vote, can no longer be proposed at all.
+    for (const [effect, touches] of [
+        ['set_rule', 'rule'], ['set_levy', 'rule'], ['poll', 'nothing'],
+        ['grant_tier', 'member'], ['revoke_tier', 'member'], ['grant_elder', 'member'], ['revoke_elder', 'member'],
+    ] as const) {
+        let refused = '';
+        try {
+            createDecision({ authorPubkey: voterA, title: `Refused ${effect}`, description: 'Should be refused', touches, effect, subject: m1, params: { tier: 'Elder' } });
+        } catch (e: any) {
+            refused = e.message;
+        }
+        testAssert(/not available|earned through trade/.test(refused), `createDecision refuses ${effect} (${refused || 'accepted'})`);
+    }
 
     // ── 9b. Robustness & Preflight Invariants ─────────────────────────────────
     console.log('\n--- 9b. Robustness & Preflight Invariants ---');
@@ -610,8 +635,9 @@ async function runDecisionsSuite() {
         authorPubkey: admin,
         title: 'Vote check decision',
         description: 'Testing vote validation',
-        touches: 'nothing',
-        effect: 'poll',
+        touches: 'member',
+        effect: 'grant_voucher',
+        subject: m1,
     });
     const nanVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, NaN);
     testAssert(!nanVoteRes.success && nanVoteRes.error?.includes('positive finite integer'), 'NaN vote count rejected');
@@ -637,15 +663,7 @@ async function runDecisionsSuite() {
 
     // Head-of-line blocking resilience in tickDecisions:
     // Create an expired decision with broken params that throws, plus a normal valid expired decision
-    const brokenExpiredDec = createDecision({
-        authorPubkey: voterB,
-        title: 'Broken expired decision',
-        description: 'Throws on execution',
-        touches: 'member',
-        effect: 'grant_tier',
-        subject: m1,
-        params: { tier: 'CorruptTier' as any },
-    });
+    const brokenExpiredDec = { id: insertStoredDecision({ author: voterB, effect: 'grant_tier', touches: 'member', subject: m1, params: { tier: 'CorruptTier' } }) };
     castDecisionVote(brokenExpiredDec.id, voterA, true, 1);
     castDecisionVote(brokenExpiredDec.id, voterC, true, 1);
     castDecisionVote(brokenExpiredDec.id, admin, true, 1);

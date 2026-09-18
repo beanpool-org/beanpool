@@ -191,6 +191,25 @@ async function main() {
         assert(getKeeperChanges(ent).find(c => c.id === res4.change!.id)?.status === 'failed' && role(ent, app4.pubKeyHex) === null,
             'A: a change whose lead has since lost the role does not apply');
 
+        // A transient error while applying (not a business refusal) leaves the change pending for the next tick.
+        const app6 = makeIdentity('AApp6', 10);
+        const res6 = approveKeeperRequest(requestToJoinEnterprise(ent, app6.pubKeyHex, 5).id, k2.pubKeyHex);
+        db.exec("CREATE TEMP TRIGGER test_keeper_bind_fails BEFORE INSERT ON treasury_operators BEGIN SELECT RAISE(ABORT, 'simulated database failure'); END");
+        const origError = console.error;
+        let logged = '';
+        console.error = (...a: any[]) => { logged += a.join(' '); };
+        let t6: ReturnType<typeof tickEnterpriseKeepers>;
+        try { t6 = tickEnterpriseKeepers(AFTER_WINDOW()); } finally { console.error = origError; db.exec("DROP TRIGGER test_keeper_bind_fails"); }
+        const c6 = getKeeperChanges(ent).find(c => c.id === res6.change!.id)!;
+        assert(c6.status === 'pending' && t6.failed === 0, 'A: a transient error does not fail the change — it stays pending');
+        assert(role(ent, app6.pubKeyHex) === null && activePledge(ent, app6.pubKeyHex) === 0, 'A: nothing half-applied after a transient error');
+        assert(logged.includes(res6.change!.id) && logged.includes('simulated database failure'), 'A: the transient error is logged with the change id');
+        assert((db.prepare("SELECT status FROM enterprise_keeper_requests WHERE id = ?").get(getKeeperChanges(ent).find(c => c.id === res6.change!.id)!.requestId) as any)?.status === 'pending',
+            'A: the request stays pending after a transient error');
+        tickEnterpriseKeepers(AFTER_WINDOW());
+        assert(getKeeperChanges(ent).find(c => c.id === res6.change!.id)?.status === 'applied' && role(ent, app6.pubKeyHex) === 'keeper',
+            'A: the next tick retries and applies it');
+
         // One keeper: at once.
         const solo = makeIdentity('ASolo', 10);
         const { publicKey: soloEnt } = createTreasury(`ASoloEnt${++seq}`, 'avatar', 0);
@@ -321,6 +340,38 @@ async function main() {
     }
 
     // =====================================================================
+    console.log('\n── G: an automatic promotion opens one succession, not an endless run ──');
+    {
+        // Rejected: the promoted lead is then an ordinary lead.
+        const lead = makeIdentity('ALLead'), senior = makeIdentity('ALSenior'), b = makeIdentity('ALB'), c = makeIdentity('ALC');
+        const ent = makeEnterprise('ALEnt', lead, [senior, b, c]);
+        stepDownAsKeeper(ent, lead.pubKeyHex);
+        assert(role(ent, senior.pubKeyHex) === 'lead' && getLeadInactivity(ent).autoPromoted, 'G: fixture — senior auto-promoted');
+        const p = proposeLeadSuccession(ent, b.pubKeyHex, b.pubKeyHex);
+        voteLeadSuccession(p.proposal.id, c.pubKeyHex, 'no');
+        assert(getSuccessionProposals(ent).proposals[0].closedReason === 'rejected', 'G: fixture — the first succession is rejected');
+        assert(getLeadInactivity(ent).autoPromoted === false, 'G: a rejected first succession ends the automatic-promotion mark');
+        expectThrow(() => proposeLeadSuccession(ent, c.pubKeyHex, c.pubKeyHex), 'within the last 30 days',
+            'G: after it, an active promoted lead is covered by the 30-day rule again');
+
+        // Expired: same, and the promoted lead's activity cancels a later proposal again.
+        const lead2 = makeIdentity('AL2Lead'), senior2 = makeIdentity('AL2Senior'), b2 = makeIdentity('AL2B'), c2 = makeIdentity('AL2C');
+        const ent2 = makeEnterprise('AL2Ent', lead2, [senior2, b2, c2]);
+        stepDownAsKeeper(ent2, lead2.pubKeyHex);
+        proposeLeadSuccession(ent2, b2.pubKeyHex, b2.pubKeyHex);
+        tickEnterpriseKeepers(Date.now() + SUCCESSION_WINDOW_MS + 1000);
+        assert(getSuccessionProposals(ent2).proposals[0].closedReason === 'expired', 'G: fixture — the first succession expires');
+        assert(getLeadInactivity(ent2).autoPromoted === false, 'G: an expired first succession ends the automatic-promotion mark');
+        expectThrow(() => proposeLeadSuccession(ent2, c2.pubKeyHex, c2.pubKeyHex), 'within the last 30 days',
+            'G: no second succession straight away');
+        db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(new Date(Date.now() - 40 * 86400000).toISOString(), senior2.pubKeyHex);
+        const p2 = proposeLeadSuccession(ent2, c2.pubKeyHex, c2.pubKeyHex);
+        db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(new Date(Date.now() + 5000).toISOString(), senior2.pubKeyHex);
+        const after2 = getSuccessionProposals(ent2).proposals.find(x => x.id === p2.proposal.id)!;
+        assert(after2.status === 'cancelled' && after2.closedReason === 'lead_returned', 'G: the once-promoted lead can now cancel a proposal by being active');
+    }
+
+    // =====================================================================
     console.log('\n── M: succession has a 14-day deadline and a No vote ──');
     {
         const lead = makeIdentity('SuLead'), a = makeIdentity('SuA'), b = makeIdentity('SuB'), c = makeIdentity('SuC');
@@ -364,7 +415,31 @@ async function main() {
 
         const detail = await signedFetch('GET', `/api/enterprise/${ent}`, k2);
         assert(Array.isArray(detail.body?.keeperChanges) && detail.body.keeperChanges.some((c: any) => c.id === rm.body.change.id),
-            'HTTP: the enterprise detail lists pending keeper changes');
+            'HTTP: the enterprise detail lists pending keeper changes to a keeper');
+
+        // Pending keeper changes name an applicant and their pledge, or a keeper being removed: keepers and admins only.
+        const happ = makeIdentity('HApp', 10);
+        const hadd = approveKeeperRequest(requestToJoinEnterprise(ent, happ.pubKeyHex, 3).id, lead.pubKeyHex);
+        const anonRes = await fetch(`${BASE}/api/enterprise/${ent}`);
+        const anon = await anonRes.json() as any;
+        assert(anonRes.status === 200 && anon.publicKey === ent, 'HTTP: fixture — the enterprise detail is public-read');
+        assert(Array.isArray(anon.keeperChanges) && anon.keeperChanges.length === 0, 'HTTP: an anonymous reader gets no keeper changes');
+        const outsider = makeIdentity('HOutsider', 5);
+        const out = await signedFetch('GET', `/api/enterprise/${ent}`, outsider);
+        assert(out.status === 200 && Array.isArray(out.body?.keeperChanges) && out.body.keeperChanges.length === 0,
+            'HTTP: a member who is not a keeper gets no keeper changes');
+        const mine = await signedFetch('GET', `/api/enterprise/${ent}`, happ);
+        assert(mine.body?.keeperChanges?.length === 0 && mine.body?.myPendingRequest?.pendingChange?.id === hadd.change!.id,
+            'HTTP: the applicant sees only their own change, through myPendingRequest');
+        const adm = await signedFetch('GET', `/api/enterprise/${ent}`, admin);
+        assert(adm.body?.keeperChanges?.some((c: any) => c.id === rm.body.change.id) && adm.body.keeperChanges.some((c: any) => c.id === hadd.change!.id),
+            'HTTP: a node admin sees the keeper changes');
+        const ldr = await signedFetch('GET', `/api/enterprise/${ent}`, lead);
+        assert(ldr.body?.keeperChanges?.length === 2, 'HTTP: the lead sees both pending changes');
+        adminSetOperator(k3.pubKeyHex, false);
+        const off = await signedFetch('GET', `/api/enterprise/${ent}`, k3);
+        assert(off.body?.keeperChanges?.length === 0, 'HTTP: a keeper whose operator access is switched off gets none');
+        adminSetOperator(k3.pubKeyHex, true);
 
         const obj = await signedFetch('POST', `/api/enterprise/${ent}/keepers/changes/${rm.body.change.id}/object`, k2);
         assert(obj.status === 200 && obj.body?.change?.status === 'objected', 'HTTP: another keeper objects');

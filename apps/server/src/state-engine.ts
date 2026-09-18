@@ -405,18 +405,8 @@ export interface CommunityProject {
     proposerCallsign: string;
     requestedAmount: number;
     status: 'proposed' | 'active' | 'funded' | 'rejected' | 'completed';
-    votes: { pubkey: string; weight: number; creditsUsed?: number }[];
     createdAt: string;
     fundedAt?: string;
-}
-
-export interface VotingRound {
-    id: string;
-    status: 'open' | 'closed';
-    closesAt: string;
-    projectIds: string[];
-    createdBy: string;
-    createdAt: string;
 }
 
 export interface NodeConfig {
@@ -5706,7 +5696,7 @@ export function createProject(proposerPubkey: string, title: string, description
         description: description.trim().slice(0, 500),
         proposerPubkey, proposerCallsign: member.callsign,
         requestedAmount: Math.round(requestedAmount * 100) / 100,
-        status: 'proposed', votes: [], createdAt: new Date().toISOString()
+        status: 'proposed', createdAt: new Date().toISOString()
     };
     
     // For simplicity, we store projects as JSON in node_config (since they are rare)
@@ -5819,182 +5809,6 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     return true;
 }
 
-export function voteForProject(voterPubkey: string, projectId: string, voteCount: number = 1): { success: boolean; creditsUsed?: number; error?: string } {
-    if (!getMember(voterPubkey)) return { success: false, error: 'Not a member' };
-    if (voteCount < 1 || !Number.isInteger(voteCount)) return { success: false, error: 'Vote count must be a positive integer' };
-
-    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
-    const project = blobProjects.find(p => p.id === projectId);
-    if (!project) return { success: false, error: 'Project not found' };
-
-    const activeRound = getActiveRound();
-    if (!activeRound || !activeRound.projectIds.includes(projectId)) return { success: false, error: 'No active voting round for this project' };
-
-    // QV: Cost = N²
-    const creditCost = voteCount * voteCount;
-
-    // Governance credits = qualified trade value (same basis as earned trust; see getGovernanceCredits)
-    const credits = getGovernanceCredits(voterPubkey);
-    if (creditCost > credits.availableCredits) {
-        return { success: false, error: `Insufficient credits: ${voteCount} votes costs ${creditCost} credits, but you have ${credits.availableCredits.toFixed(0)} available` };
-    }
-
-    // Remove any existing votes from this voter in this round (they are re-allocating)
-    for (const p of blobProjects) {
-        if (activeRound.projectIds.includes(p.id)) {
-            p.votes = (p.votes || []).filter(v => v.pubkey !== voterPubkey);
-        }
-    }
-    project.votes = project.votes || [];
-    project.votes.push({ pubkey: voterPubkey, weight: voteCount, creditsUsed: creditCost });
-    
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
-    broadcast({ type: 'vote_cast', projectId, voterPubkey, voteCount, creditCost, totalVotes: project.votes.reduce((sum, v) => sum + (v.weight || 1), 0) });
-    return { success: true, creditsUsed: creditCost };
-}
-
-/**
- * Returns governance (quadratic-voting) credits for a member.
- *
- * Credits = the SAME qualified trade value that backs earned trust: only COMPLETED
- * marketplace (escrow) trades, attributed to the real counterparty, both sides credited,
- * and diversity-capped per counterparty (A2-26). This deliberately excludes direct
- * "send credits" gifts — previously governance ran on raw outbound transfer volume, which
- * let a member mint voting power by gifting beans to alt accounts (Sybil funnel), even
- * though those gifts build no trust. Aligning the two closes that gap: you cannot buy a
- * louder vote with anything you couldn't also turn into trust. Used credits are the sum of
- * all QV costs (voteCount²) in the active round.
- */
-export function getGovernanceCredits(pubkey: string): { totalCredits: number; usedCredits: number; availableCredits: number } {
-    const totalCredits = Math.round(qualifiedTradeValue(pubkey) * 100) / 100;
-
-    // Used credits = sum of creditsUsed in the active voting round
-    let usedCredits = 0;
-    const activeRound = getActiveRound();
-    if (activeRound) {
-        const projects = getAllProjects();
-        for (const p of projects) {
-            if (activeRound.projectIds.includes(p.id)) {
-                for (const v of p.votes) {
-                    if (v.pubkey === pubkey) {
-                        usedCredits += v.creditsUsed || (v.weight * v.weight) || 1;
-                    }
-                }
-            }
-        }
-    }
-
-    return { totalCredits, usedCredits, availableCredits: Math.max(0, totalCredits - usedCredits) };
-}
-
-export function createVotingRound(adminPubkey: string, projectIds: string[], closesAt: string): VotingRound | null {
-    if (!adminPubkey || !isAdminPubkey(adminPubkey) || getActiveRound()) return null;
-
-    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
-    for (const pid of projectIds) {
-        const p = blobProjects.find(pr => pr.id === pid && pr.status === 'proposed');
-        if (p) p.status = 'active';
-        db.prepare("UPDATE members SET status = 'active' WHERE public_key = ? AND is_treasury = 1 AND status = 'proposed'").run(pid);
-    }
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
-
-    const round: VotingRound = { id: crypto.randomUUID(), status: 'open', closesAt, projectIds, createdBy: adminPubkey, createdAt: new Date().toISOString() };
-    const rounds = getVotingRounds();
-    rounds.push(round);
-    db.prepare(`INSERT INTO node_config (key, value) VALUES ('voting_rounds', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(rounds));
-    
-    broadcast({ type: 'voting_round_created', round });
-    return round;
-}
-
-export function closeVotingRound(roundId: string): { success: boolean; winner?: CommunityProject; error?: string } {
-    const rounds = getVotingRounds();
-    const round = rounds.find(r => r.id === roundId && r.status === 'open');
-    if (!round) return { success: false, error: 'Round not closed/found' };
-
-    round.status = 'closed';
-    db.prepare(`UPDATE node_config SET value=? WHERE key='voting_rounds'`).run(JSON.stringify(rounds));
-
-    // A2-5: rank by total QUADRATIC-VOTE WEIGHT, not raw voter count. The previous
-    // `votes.length` sort let a project with many cheap single-credit votes beat a
-    // project the community funded more strongly, and treated a lone self-vote the
-    // same as broad support.
-    const voteWeight = (p: CommunityProject) => p.votes.reduce((s, v) => s + (Number.isFinite(v.weight) ? v.weight : 0), 0);
-    const projects = getAllProjects();
-    const candidates = projects.filter(p => round.projectIds.includes(p.id)).sort((a, b) => voteWeight(b) - voteWeight(a));
-    const winner = candidates[0];
-
-    if (winner && voteWeight(winner) > 0) {
-        // A2-5: the commons→enterprise grant is credited to the enterprise's
-        // IN-MEMORY ledger account AND DB row atomically, with a COMMONS_POOL→enterprise
-        // transaction — so the grant is durable, auditable, and conservation-consistent.
-        const ts = new Date().toISOString();
-        const txId = crypto.randomUUID();
-        const isProposerTreasury = ((db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(winner.proposerPubkey) as any)?.is_treasury === 1);
-        const targetAccount = isProposerTreasury ? winner.proposerPubkey : ((winner as any).enterprisePubkey || winner.id);
-        const funded = conservingTransaction(() => {
-            if (!ledger.deductFromCommons(winner.requestedAmount)) return false;
-            const account = ledger.getAccount(targetAccount);
-            account.balance += winner.requestedAmount;
-            // #138 & Slice 3: the epoch travels with the balance, on BOTH arms. The grant lands on the
-            // enterprise treasury targetAccount (or enterprise proposer) rather than creator's personal wallet.
-            db.prepare(`
-                INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(public_key) DO UPDATE SET
-                    balance = excluded.balance,
-                    last_demurrage_epoch = excluded.last_demurrage_epoch,
-                    last_updated_at = excluded.last_updated_at
-            `).run(targetAccount, account.balance, account.lastDemurrageEpoch, ts);
-            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)`)
-                .run(txId, 'COMMONS_POOL', targetAccount, winner.requestedAmount, `Commons grant: ${winner.title.slice(0, 80)}`, ts);
-            // #137: persistDecayEvents drains any demurrage event collected during getAccount, settling both halves
-            // before anything can resync and giving the collection its demurrage_ transaction row.
-            persistDecayEvents();
-            persistCommonsBalance(); // flush the debited COMMONS_BALANCE to the COMMONS_POOL row
-            return true;
-        });
-        // Marked funded only once the money has actually moved and been committed. Setting it beforehand meant
-        // a rolled-back grant could still leave the project reading as funded to everyone looking at it.
-        if (funded) {
-            winner.status = 'funded';
-            winner.fundedAt = new Date().toISOString();
-            try {
-                db.prepare("UPDATE members SET status = 'funded', updated_at = ? WHERE public_key = ?").run(winner.fundedAt, winner.id);
-            } catch { }
-            // Community-voted project grants are capital grants (raise balance, never earned_surplus).
-            // Under Rule 7 (docs/the-commons.md §2.4), sweeps take only earned surplus, never grant money.
-        } else {
-            winner.status = 'proposed';
-        }
-    }
-
-    const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
-    const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
-    const blobWinner = blobProjects.find(p => p.id === winner?.id);
-    if (blobWinner && winner) {
-        blobWinner.status = winner.status;
-        if (winner.fundedAt) blobWinner.fundedAt = winner.fundedAt;
-    }
-    const fundedWinnerId = winner?.status === 'funded' ? winner.id : null;
-    for (const c of candidates) {
-        if (c.id !== fundedWinnerId && c.status === 'active') {
-            c.status = 'proposed';
-            const bp = blobProjects.find(p => p.id === c.id);
-            if (bp) bp.status = 'proposed';
-            try {
-                db.prepare("UPDATE members SET status = 'proposed' WHERE public_key = ? AND status = 'active' AND is_treasury = 1").run(c.id);
-            } catch { }
-        }
-    }
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(blobProjects));
-
-    broadcast({ type: 'voting_round_closed', roundId, winnerId: winner?.status === 'funded' ? winner.id : null });
-    return { success: true, winner: winner?.status === 'funded' ? winner : undefined };
-}
-
 export function adminRejectProject(projectId: string): boolean {
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
     const blobProjects: CommunityProject[] = row ? JSON.parse(row.value) : [];
@@ -6052,7 +5866,6 @@ export function getAllProjects(): CommunityProject[] {
                     proposerCallsign: leadMember?.callsign || e.callsign,
                     requestedAmount: Number(e.goal_amount || 0),
                     status: (e.status || 'proposed').toLowerCase() as any,
-                    votes: [],
                     createdAt: e.joined_at || new Date().toISOString(),
                 });
                 knownIds.add(e.public_key);
@@ -6064,24 +5877,6 @@ export function getAllProjects(): CommunityProject[] {
         (db.prepare("SELECT public_key FROM members WHERE status IN ('pruned', 'deleted')").all() as any[]).map(r => r.public_key)
     );
     return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
-}
-
-export function getVotingRounds(): VotingRound[] {
-    const row = db.prepare("SELECT value FROM node_config WHERE key='voting_rounds'").get() as any;
-    return row ? JSON.parse(row.value) : [];
-}
-
-export function getActiveRound(): VotingRound | null {
-    const round = getVotingRounds().find(r => r.status === 'open');
-    if (!round) return null;
-
-    // Lazy auto-close: if past deadline, close and return null.
-    // No background timer needed — any read of the active round triggers closure if overdue.
-    if (round.closesAt && new Date(round.closesAt).getTime() <= Date.now()) {
-        closeVotingRound(round.id);
-        return null;
-    }
-    return round;
 }
 
 export function getCommonsBalance(): number {

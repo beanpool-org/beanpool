@@ -250,7 +250,6 @@ run_federation_suites() {
       test-activity-feed-members-only
       test-sync-signature
       test-trust-value-curve
-      test-voting-round-grant
       test-vouch-covenant
       test-wash-sybil-defense
       test-apple-probe
@@ -298,6 +297,7 @@ run_federation_suites() {
       test-commons-projects-update-delete
       test-decisions-engine
       test-decisions-client-api
+      test-rip-out-legacy-voting
       test-escrow-disputes
       test-shutdown-recovery
       test-storage-health

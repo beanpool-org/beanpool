@@ -4,7 +4,7 @@
  *
  * Covers:
  * 1. Franchises & Eligibility:
- *    - 1m1v for member/rule decisions; quadratic on trade standing for pool decisions
+ *    - 1m1v for member decisions; quadratic on trade standing for pool decisions
  *    - Enterprises and frozen members cannot propose or vote
  *    - Author standing gate (earnedCredit > 0) and max 1 open decision per author
  *    - Quadratic voice credits cost = voteCount²
@@ -18,13 +18,13 @@
  *    - Ties fail
  * 4. Tick-driven close without admin intervention (7-day window)
  * 5. Pre-flight assertions & execution_void for dead subjects
- * 6. Reversible member effects (suspend/unsuspend, freeze/unfreeze, voucher, tier, elder, remove lead keeper)
+ * 6. Reversible member effects (suspend/unsuspend, freeze/unfreeze, voucher, remove lead keeper)
  * 7. Pool grants to an enterprise with auth_signer='system:decision:<id>' and conservation audit
  * 8. Underfunded grants -> passed_queued_for_funds queue, auto-execution when funded, 90-day expiry
  * 9. Destructive member removal: 7-day grace period, immediate suspension, admin halt with reason, admin accelerate, auto-prune on grace expiry
  * 10. Reinstatement cancels pending grace removal
  * 11. Executor idempotency and transaction rollback safety
- * 12. Backward compatibility: reading legacy voting rounds
+ * 12. Removed effects (set_rule, set_levy, poll, tier/elder by vote) cannot be proposed
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-decisions-engine.ts
@@ -50,10 +50,6 @@ import {
     getBalance,
     getCommonsBalance,
     grantNodeRole,
-    getVotingRounds,
-    createVotingRound,
-    closeVotingRound,
-    createProject,
     adminSetUserStatus,
 } from './state-engine.js';
 import { db } from './db/db.js';
@@ -118,8 +114,8 @@ function closeForTick(id: string) {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
 
-// A Decision row as a node stored it before its effect was withdrawn — createDecision now refuses
-// these effects, so the executor's handling of a stored one is set up directly.
+// A Decision row set up directly, bypassing createDecision's one-open-per-author gate, so the executor's
+// failure handling can be exercised on a real effect.
 function insertStoredDecision(opts: { author: string; effect: string; touches: string; subject: string; params?: any }): string {
     const id = 'stored-' + Math.random().toString(36).slice(2);
     const now = new Date().toISOString();
@@ -127,7 +123,7 @@ function insertStoredDecision(opts: { author: string; effect: string; touches: s
     db.prepare(`
         INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params,
             franchise, status, opens_at, closes_at, created_at, updated_at)
-        VALUES (?, ?, ?, 'Stored before the effect was withdrawn', ?, ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'Set up directly by the test', ?, ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
     `).run(id, opts.author, `Stored ${opts.effect}`, opts.touches, opts.effect, opts.subject,
         opts.params ? JSON.stringify(opts.params) : null, now, closes, now, now);
     return id;
@@ -603,28 +599,31 @@ async function runDecisionsSuite() {
     const rerun = executeDecision(decPoolExecuted.id);
     testAssert(rerun.success && rerun.status === 'executed', 'executeDecision is idempotent on executed decisions');
 
-    // Rollback test: an execution that throws inside the transaction. A stored tier Decision now throws
-    // (tier-by-vote was removed), and must leave the member's earned credit untouched.
-    const m1CreditBefore = (db.prepare('SELECT earned_credit FROM members WHERE public_key = ?').get(m1) as any).earned_credit;
-    const badDecision = { id: insertStoredDecision({ author: admin, effect: 'grant_tier', touches: 'member', subject: m1, params: { tier: 'Elder' } }) };
+    // Rollback test: an execution that throws inside the transaction. A temporary trigger makes the
+    // grant_voucher write fail part-way, the way a real constraint violation would.
+    const m1VouchBefore = (db.prepare('SELECT can_vouch FROM members WHERE public_key = ?').get(m1) as any).can_vouch;
+    db.exec(`CREATE TRIGGER zz_block_vouch_m1 BEFORE UPDATE OF can_vouch ON members
+             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'vouch blocked by test'); END;`);
+    const badDecision = { id: insertStoredDecision({ author: admin, effect: 'grant_voucher', touches: 'member', subject: m1 }) };
     const execBadRes = executeDecision(badDecision.id);
+    db.exec('DROP TRIGGER zz_block_vouch_m1');
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
-    const m1CreditAfter = (db.prepare('SELECT earned_credit FROM members WHERE public_key = ?').get(m1) as any).earned_credit;
-    testAssert(m1CreditAfter === m1CreditBefore, `A stored grant_tier Decision does not overwrite earned credit (${m1CreditBefore} -> ${m1CreditAfter})`);
+    const m1VouchAfter = (db.prepare('SELECT can_vouch FROM members WHERE public_key = ?').get(m1) as any).can_vouch;
+    testAssert(m1VouchAfter === m1VouchBefore, `A failed execution leaves the member unchanged (can_vouch ${m1VouchBefore} -> ${m1VouchAfter})`);
 
-    // Effects that did nothing, and tier/elder by vote, can no longer be proposed at all.
+    // Effects removed on 2026-09-19 (did nothing, or voted on earned standing) cannot be proposed at all.
     for (const [effect, touches] of [
         ['set_rule', 'rule'], ['set_levy', 'rule'], ['poll', 'nothing'],
         ['grant_tier', 'member'], ['revoke_tier', 'member'], ['grant_elder', 'member'], ['revoke_elder', 'member'],
     ] as const) {
         let refused = '';
         try {
-            createDecision({ authorPubkey: voterA, title: `Refused ${effect}`, description: 'Should be refused', touches, effect, subject: m1, params: { tier: 'Elder' } });
+            createDecision({ authorPubkey: voterA, title: `Refused ${effect}`, description: 'Should be refused', touches: touches as any, effect: effect as any, subject: m1, params: { tier: 'Elder' } });
         } catch (e: any) {
             refused = e.message;
         }
-        testAssert(/not available|earned through trade/.test(refused), `createDecision refuses ${effect} (${refused || 'accepted'})`);
+        testAssert(/Unknown decision effect/.test(refused), `createDecision refuses ${effect} (${refused || 'accepted'})`);
     }
 
     // ── 9b. Robustness & Preflight Invariants ─────────────────────────────────
@@ -663,7 +662,9 @@ async function runDecisionsSuite() {
 
     // Head-of-line blocking resilience in tickDecisions:
     // Create an expired decision with broken params that throws, plus a normal valid expired decision
-    const brokenExpiredDec = { id: insertStoredDecision({ author: voterB, effect: 'grant_tier', touches: 'member', subject: m1, params: { tier: 'CorruptTier' } }) };
+    db.exec(`CREATE TRIGGER zz_block_vouch_hol BEFORE UPDATE OF can_vouch ON members
+             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'vouch blocked by test'); END;`);
+    const brokenExpiredDec = { id: insertStoredDecision({ author: voterB, effect: 'grant_voucher', touches: 'member', subject: m1 }) };
     castDecisionVote(brokenExpiredDec.id, voterA, true, 1);
     castDecisionVote(brokenExpiredDec.id, voterC, true, 1);
     castDecisionVote(brokenExpiredDec.id, admin, true, 1);
@@ -686,6 +687,7 @@ async function runDecisionsSuite() {
     closeForTick(goodExpiredDec.id);
 
     tickDecisions();
+    db.exec('DROP TRIGGER zz_block_vouch_hol');
     testAssert(getDecision(brokenExpiredDec.id)!.status === 'execution_blocked', 'Failing expired decision isolated as execution_blocked');
     testAssert(getDecision(goodExpiredDec.id)!.status === 'executed', 'Subsequent expired decision executed successfully without HOL blocking');
 
@@ -718,28 +720,17 @@ async function runDecisionsSuite() {
     const memberAfterRemoval = db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(keeperMember) as any;
     testAssert(memberAfterRemoval.can_operate === 0, 'can_operate reset to 0 when member has no remaining roles');
 
-    // ── 10. Backward Compatibility: Legacy Voting Rounds ─────────────────────
-    console.log('\n--- 10. Backward Compatibility ---');
-
-    const legacyProj = createProject(m1, 'Legacy Project', 'Legacy desc', 50);
-    testAssert(legacyProj != null, 'Legacy project created');
-    const legacyRound = createVotingRound(admin, [legacyProj!.id], new Date(Date.now() + 3600_000).toISOString());
-    testAssert(legacyRound != null, 'createVotingRound succeeds for backwards compatibility');
-
-    const rounds = getVotingRounds();
-    testAssert(rounds.some(r => r.id === legacyRound!.id), 'getVotingRounds reads legacy round data');
-
     // ── 11. Governance Security, Parameter Decoupling & Ledger Hardening ────
     console.log('\n--- 11. Security, Parameter Decoupling & Ledger Hardening ---');
 
-    // 11a. Parameter Decoupling: cannot propose remove_member with touches='nothing'
+    // 11a. Parameter Decoupling: cannot propose remove_member with touches='pool'
     let decouplingCaught = false;
     try {
         createDecision({
             authorPubkey: admin,
             title: 'Spoofed touches',
-            description: 'Try to bypass quorum',
-            touches: 'nothing',
+            description: 'Try to bypass the member franchise',
+            touches: 'pool',
             effect: 'remove_member',
             subject: m1,
         });

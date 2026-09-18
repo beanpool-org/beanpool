@@ -274,7 +274,7 @@ async function main() {
 
     // Admin updates ceiling: lowers ceiling to 60. Since earned_surplus is 0, nothing sweeps from capital!
     db.prepare('UPDATE members SET working_capital_ceiling = ? WHERE public_key = ?').run(60, cider);
-    const { sweepEnterpriseCeiling, closeVotingRound } = await import('./state-engine.js');
+    const { sweepEnterpriseCeiling, executeDecision } = await import('./state-engine.js');
     const sweptAmountNoSurplus = sweepEnterpriseCeiling(cider);
     assert(sweptAmountNoSurplus === 0, 'Lowering ceiling does not sweep capital when earned_surplus is 0');
     assert(bal(cider) === 129.40, 'CommunityCider balance remains 129.40');
@@ -296,7 +296,7 @@ async function main() {
     assert(bal(batchCider) === 50, 'Enterprise swept to ceiling of 50 post-commit after batch transfers inside db.transaction');
     assert(surplusOf(batchCider) === 20, 'Earned surplus decremented to 20 after 20 swept to Commons');
 
-    // Verify closeVotingRound does NOT sweep community project grants to enterprises
+    // Verify a community grant (a passed grant_enterprise Decision) is NOT swept from the enterprise
     console.log('\n── Rule 7: Community project grant to enterprise is never swept ──');
     const { publicKey: grantEnterprise } = createTreasury('GrantFarm', AVATAR, 100, { workingCapitalCeiling: 100 });
     const grantKeeper = 'grant-keeper-000000000000000000000000000099';
@@ -305,28 +305,17 @@ async function main() {
     assert(bal(grantEnterprise) === 0, 'GrantFarm starts at 0 balance');
     const { moveToCommons } = await import('./state-engine.js');
     moveToCommons('genesis', 500, 'Fund commons for grant test');
-    const projectsConfig = [{
-        id: 'proj-enterprise-farm-grant',
-        title: 'Solar pump for farm',
-        description: 'New water pump',
-        proposerPubkey: grantEnterprise,
-        requestedAmount: 500,
-        status: 'active',
-        votes: [{ pubkey: 'genesis', weight: 10, creditsUsed: 100 }],
-        createdAt: new Date().toISOString(),
-    }];
-    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('commons_projects', ?)`).run(JSON.stringify(projectsConfig));
-    const roundConfig = [{
-        id: 'round-farm-grant',
-        projectIds: ['proj-enterprise-farm-grant'],
-        closesAt: new Date(Date.now() - 1000).toISOString(),
-        status: 'open',
-        createdAt: new Date().toISOString(),
-    }];
-    db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('voting_rounds', ?)`).run(JSON.stringify(roundConfig));
+    const grantDecisionId = 'dec-enterprise-farm-grant';
+    const decNow = new Date().toISOString();
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params,
+            franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, 'genesis', 'Solar pump for farm', 'New water pump', 'pool', 'grant_enterprise', ?, ?,
+            'quadratic_trade', 'passed', ?, ?, ?, ?)
+    `).run(grantDecisionId, grantEnterprise, JSON.stringify({ amount: 500 }), decNow, decNow, decNow, decNow);
 
-    const closeRes = closeVotingRound('round-farm-grant');
-    assert(closeRes.success, 'Voting round closed successfully');
+    const grantRes = executeDecision(grantDecisionId);
+    assert(grantRes.success && grantRes.status === 'executed', 'Passed grant Decision executed successfully');
     assert(bal(grantEnterprise) === 500, 'GrantFarm holds entire 500-bean grant (ceiling of 100 did NOT sweep it)');
     assert(surplusOf(grantEnterprise) === 0, 'Project grant does not increment earned_surplus');
 

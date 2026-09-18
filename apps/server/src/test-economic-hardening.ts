@@ -18,7 +18,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, getGovernanceCredits, importRemoteState, setNodeRole, signSyncPayload, type SyncPayload,
+    initStateEngine, getDecisionVoiceCredits, importRemoteState, setNodeRole, signSyncPayload, type SyncPayload,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
@@ -32,6 +32,8 @@ function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
+// Voice credits on a pool Decision (the only vote weighted by trade). The Decision id only affects usedCredits.
+const voiceCredits = (pk: string) => getDecisionVoiceCredits('no-such-decision', pk).totalCredits;
 function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
@@ -66,20 +68,20 @@ async function main() {
         const wash = 'wash-' + Date.now();
         seedMember(wash); seedMember('sybilPartner');
         for (let i = 0; i < 10; i++) mtx(wash, 'sybilPartner', 2000); // 20000 traded with ONE counterparty
-        assert(getGovernanceCredits(wash).totalCredits === 500,
+        assert(voiceCredits(wash) === 500,
             'A2-26: 20000 traded with one counterparty counts as only 500 (per-counterparty cap)');
 
         const diverse = 'diverse-' + Date.now();
         seedMember(diverse);
         for (let i = 0; i < 6; i++) { seedMember('partner' + i); mtx(diverse, 'partner' + i, 1000); } // 6 distinct counterparties
-        assert(getGovernanceCredits(diverse).totalCredits === 3000,
+        assert(voiceCredits(diverse) === 3000,
             'A2-26: 6000 across 6 counterparties counts capped at 500 each = 3000 (per-counterparty cap)');
 
         // A2-26 (F3 alignment) — direct gifts build NO governance credit, at any size.
         const gifter = 'gifter-' + Date.now();
         seedMember(gifter); seedMember('giftee');
         for (let i = 0; i < 10; i++) tx(gifter, 'giftee', 2000); // 20000 gifted directly
-        assert(getGovernanceCredits(gifter).totalCredits === 0,
+        assert(voiceCredits(gifter) === 0,
             'A2-26: 20000 in direct gifts grants 0 governance credit (gifts ≠ qualified trade)');
 
         // A2-14 — an amount≤0 imported txn is an explicit skip, not a silent drop.

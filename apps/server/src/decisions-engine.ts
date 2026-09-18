@@ -2,9 +2,9 @@
  * Community Decisions Engine (docs/the-commons.md §3.2–§3.8, Slice 5).
  *
  * The binding half of commons governance:
- * - Typed by what the effect touches: member, pool, rule, nothing (§3.6).
+ * - Typed by what the effect touches: member or pool (§3.6).
  * - Two franchises:
- *     - 1m1v (one member, one vote) for member/rule/general decisions.
+ *     - 1m1v (one member, one vote) for member decisions.
  *     - Quadratic on earned trade standing for pool/treasury decisions.
  * - Quorum: 30% of members active in the last 30 days, floor 3 (25% for member removal).
  * - Pass rules (§3.4):
@@ -14,7 +14,7 @@
  *     - Ties fail. Quorum failures expire as UNRESOLVED.
  * - Lifecycle:
  *     - Fixed 7-day voting window.
- *     - Closes and executes ON A TICK — no admin opens or closes rounds.
+ *     - Closes and executes ON A TICK — no admin opens or closes it.
  * - Execution (§3.7):
  *     - Pre-flight assertions: subject alive, pool solvent, invariants intact.
  *     - Single BEGIN IMMEDIATE transaction (via conservingTransaction).
@@ -47,7 +47,7 @@ import {
     persistCommonsBalance,
 } from './state-engine.js';
 
-export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionTouch = 'member' | 'pool';
 
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 
@@ -71,10 +71,6 @@ export type DecisionEffect =
     | 'unfreeze_credit'
     | 'grant_voucher'
     | 'revoke_voucher'
-    | 'grant_tier'
-    | 'revoke_tier'
-    | 'grant_elder'
-    | 'revoke_elder'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     // Member destructive
@@ -82,12 +78,7 @@ export type DecisionEffect =
     // Pool money
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit'
-    | 'set_levy'
-    // Rule
-    | 'set_rule'
-    // Nothing (Poll)
-    | 'poll';
+    | 'write_off_deficit';
 
 export interface Decision {
     id: string;
@@ -177,7 +168,7 @@ function rowToDecision(r: any): Decision {
 /**
  * Maps what a decision touches to its mandatory franchise (§3.6):
  * - pool -> quadratic on earned trade
- * - member, rule, nothing -> 1m1v
+ * - member -> 1m1v
  */
 export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
     if (touches === 'pool') return 'quadratic_trade';
@@ -185,9 +176,6 @@ export function franchiseForTouch(touches: DecisionTouch): DecisionFranchise {
 }
 
 export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
-    poll: 'nothing',
-    set_rule: 'rule',
-    set_levy: 'rule',
     grant_enterprise: 'pool',
     grant_hardship: 'pool',
     write_off_deficit: 'pool',
@@ -199,47 +187,24 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     reinstate_member: 'member',
     grant_voucher: 'member',
     revoke_voucher: 'member',
-    grant_tier: 'member',
-    revoke_tier: 'member',
-    grant_elder: 'member',
-    revoke_elder: 'member',
     remove_lead_keeper: 'member',
 };
-
-/**
- * Effects that can no longer be proposed. The values stay in DecisionEffect so rows already stored
- * still load, but createDecision refuses new ones:
- * - set_rule / set_levy / poll: passing them changed nothing (no executor was ever built).
- * - grant/revoke tier and elder: tiers are merit badges earned through trade, never granted by vote.
- */
-export const UNAVAILABLE_EFFECTS: ReadonlyMap<DecisionEffect, string> = new Map<DecisionEffect, string>([
-    ['set_rule', 'This kind of decision is not available yet'],
-    ['set_levy', 'This kind of decision is not available yet'],
-    ['poll', 'This kind of decision is not available yet. To ask the community a question, post a Poll'],
-    ['grant_tier', 'Tiers are earned through trade and cannot be granted or removed by a vote'],
-    ['revoke_tier', 'Tiers are earned through trade and cannot be granted or removed by a vote'],
-    ['grant_elder', 'Elder standing is earned through trade and cannot be granted or removed by a vote'],
-    ['revoke_elder', 'Elder standing is earned through trade and cannot be granted or removed by a vote'],
-]);
 
 /**
  * Returns required pass threshold per §3.4:
  * - remove_member: 66% (0.66)
  * - restorations (unsuspend_member, unfreeze_credit, reinstate_member): simple majority (> 0.50)
- * - pool / rule / member actions: 60% (0.60)
- * - poll (nothing): simple majority (> 0.50)
+ * - pool / member actions: 60% (0.60)
  */
-export function thresholdForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
+export function thresholdForEffect(effect: DecisionEffect, _touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.66;
     if (
         effect === 'unsuspend_member' ||
         effect === 'unfreeze_credit' ||
-        effect === 'reinstate_member' ||
-        effect === 'poll'
+        effect === 'reinstate_member'
     ) {
         return 0.50;
     }
-    if (touches === 'nothing') return 0.50;
     return 0.60;
 }
 
@@ -247,11 +212,9 @@ export function thresholdForEffect(effect: DecisionEffect, touches?: DecisionTou
  * Returns quorum ratio per §3.4:
  * - remove_member: 25% (0.25)
  * - others: 30% (0.30)
- * - nothing (poll): 0 (no quorum)
  */
-export function quorumRatioForEffect(effect: DecisionEffect, touches?: DecisionTouch): number {
+export function quorumRatioForEffect(effect: DecisionEffect, _touches?: DecisionTouch): number {
     if (effect === 'remove_member') return 0.25;
-    if (effect === 'poll' || touches === 'nothing') return 0;
     return 0.30;
 }
 
@@ -293,7 +256,6 @@ export function getActiveMembersCount30d(asOfTime?: number): number {
  * quorum = max( K_min, ceil(ratio * activeMembers_30d) ), K_min = 3.
  */
 export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number, activeMembersCount?: number): number {
-    if (decision.touches === 'nothing') return 0;
     const ratio = quorumRatioForEffect(decision.effect, decision.touches);
     const active = activeMembersCount !== undefined ? activeMembersCount : getActiveMembersCount30d(asOfTime);
     return Math.max(3, Math.ceil(ratio * active));
@@ -392,9 +354,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(check.error || 'Cannot propose decision');
     }
 
-    const unavailable = UNAVAILABLE_EFFECTS.get(opts.effect);
-    if (unavailable) {
-        throw new Error(unavailable);
+    if (!Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) {
+        throw new Error(`Unknown decision effect '${opts.effect}'`);
     }
 
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
@@ -600,7 +561,7 @@ export function tallyDecision(decisionId: string, asOfTime?: number, activeMembe
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
     const quorumRequired = getQuorumRequired(decision, asOfTime, activeMembersCount);
-    const quorumMet = decision.touches === 'nothing' || totalVoters >= quorumRequired;
+    const quorumMet = totalVoters >= quorumRequired;
 
     let yesWeight = 0;
     let noWeight = 0;
@@ -947,13 +908,6 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     }
                     break;
                 }
-                case 'poll':
-                case 'set_rule':
-                case 'set_levy':
-                    // Rule updates or parameter updates
-                    break;
-                // grant/revoke tier and elder were removed (tiers are earned, never voted): a row stored
-                // before that lands here and blocks, rather than overwriting the member's earned credit.
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }

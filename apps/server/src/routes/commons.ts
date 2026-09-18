@@ -1,13 +1,12 @@
 /**
- * Community Commons, Crowdfund Projects, and Voting Round routes.
+ * Community Commons, Crowdfund Projects, and Community Decision routes.
  */
 
 import Router from '@koa/router';
 import {
-    createProject, updateProject, deleteProject, voteForProject,
-    createVotingRound, closeVotingRound,
-    getProjects, getAllProjects, getVotingRounds, getActiveRound,
-    getCommonsBalance, getGovernanceCredits,
+    createProject, updateProject, deleteProject,
+    getProjects, getAllProjects,
+    getCommonsBalance,
     adminRejectProject,
     createDecision, getDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, getDecisionVotes, tallyDecision, tickDecisions,
@@ -35,7 +34,7 @@ router.get('/api/commons/balance', async (ctx) => {
 });
 
 router.get('/api/commons/projects', async (ctx) => {
-    ctx.body = { projects: getProjects(), activeRound: getActiveRound() };
+    ctx.body = { projects: getProjects() };
 });
 
 router.post('/api/commons/projects', async (ctx) => {
@@ -102,42 +101,6 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         return ctx.throw(400, 'Failed to delete project. It might not exist, you might not own it, or it is no longer in a proposed state.');
     }
     ctx.body = { success: true };
-});
-
-router.post('/api/commons/vote', async (ctx) => {
-    const { voterPubkey, projectId, voteCount } = (ctx as any).requestBody || {};
-    const actor = ctx.state.actor as string | undefined;
-    if (!actor) {
-        ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
-        return;
-    }
-    if (!projectId) {
-        ctx.status = 400;
-        ctx.body = { error: 'voterPubkey and projectId are required' };
-        return;
-    }
-    const result = voteForProject(actor, projectId, voteCount ? Number(voteCount) : 1);
-    if (!result.success) {
-        ctx.status = 400;
-        ctx.body = { error: result.error };
-        return;
-    }
-    ctx.body = { success: true, creditsUsed: result.creditsUsed };
-});
-
-router.get('/api/commons/my-credits/:pubkey', async (ctx) => {
-    const { pubkey } = ctx.params;
-    if (!pubkey) {
-        ctx.status = 400;
-        ctx.body = { error: 'pubkey is required' };
-        return;
-    }
-    ctx.body = getGovernanceCredits(pubkey);
-});
-
-router.get('/api/commons/rounds', async (ctx) => {
-    ctx.body = { rounds: getVotingRounds(), activeRound: getActiveRound() };
 });
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
@@ -428,8 +391,6 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         ctx.body = { error: err.message };
     }
 });
-
-// Admin: create/close voting rounds
 
     return router;
 }

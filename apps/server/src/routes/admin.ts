@@ -20,10 +20,9 @@ import {
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
-    createVotingRound, closeVotingRound, adminRejectProject,
+    adminRejectProject,
     adminHaltDecision, adminAccelerateDecision,
-    getActiveRound, getGovernanceCredits,
-    getVotingRounds, getCommonsBalance,
+    getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
 } from '../state-engine.js';
@@ -1097,54 +1096,6 @@ router.post('/api/local/admin/inbox/send', async (ctx) => {
     }
 });
 
-router.post('/api/local/admin/commons/round', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    const { action, projectIds, closesAt, roundId } = (ctx as any).requestBody || {};
-    if (action === 'create') {
-        if (!projectIds?.length || !closesAt) {
-            ctx.status = 400;
-            ctx.body = { error: 'projectIds and closesAt required' };
-            return;
-        }
-        const signedActor = (ctx.state as any)?.actor;
-        if (signedActor && !isAdminPubkey(signedActor)) {
-            ctx.status = 403;
-            ctx.body = { error: 'Only an active node admin may create a voting round' };
-            return;
-        }
-        const creatorKey = signedActor || getFirstNodeAdminPubkey() || getAdminPubkey();
-        if (!creatorKey) {
-            ctx.status = 400;
-            ctx.body = { error: 'No genesis admin configured' };
-            return;
-        }
-        const round = createVotingRound(creatorKey, projectIds, closesAt);
-        if (!round) {
-            ctx.status = 400;
-            ctx.body = { error: 'Failed — another round may be open, or not admin' };
-            return;
-        }
-        ctx.body = { success: true, round };
-        return;
-    } else if (action === 'close') {
-        if (!roundId) {
-            ctx.status = 400;
-            ctx.body = { error: 'roundId required' };
-            return;
-        }
-        const result = closeVotingRound(roundId);
-        if (!result.success) {
-            ctx.status = 400;
-            ctx.body = { error: result.error };
-            return;
-        }
-        ctx.body = { success: true, winner: result.winner || null };
-    } else {
-        ctx.status = 400;
-        ctx.body = { error: 'action must be "create" or "close"' };
-    }
-});
-
 // Admin: reject a project
 router.post('/api/local/admin/commons/reject', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -1233,12 +1184,11 @@ router.post('/api/local/admin/commons/projects', async (ctx) => {
             requestedAmount: p.goal_amount,
             currentAmount: p.current_amount,
             status: (p.status || 'ACTIVE').toLowerCase(),
-            votes: [],   // voting rounds still tracked in node_config
             createdAt: p.created_at,
             photos: p.photos,
         };
     });
-    ctx.body = { projects, rounds: getVotingRounds(), balance: getCommonsBalance() };
+    ctx.body = { projects, balance: getCommonsBalance() };
 });
 
 // ===================== GATEWAY CONFIGURATION =====================

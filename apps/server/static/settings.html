@@ -1448,10 +1448,10 @@
                 <button class="btn btn-outline btn-full" onclick="loadAdminData()">🔄 Refresh Data</button>
             </div>
 
-            <!-- Commons & Voting -->
+            <!-- Commons -->
             <div class="glass" data-tab="commons" style="display:none;">
                 <h3>🏛️ Community Commons</h3>
-                <p style="font-size:0.8rem;color:#64748b;margin-bottom:1rem;">Manage the circulation pool, voting rounds, and community projects.</p>
+                <p style="font-size:0.8rem;color:#64748b;margin-bottom:1rem;">Manage the circulation pool and community projects.</p>
 
                 <!-- Pool Balance -->
                 <div style="display:flex;gap:1rem;margin-bottom:1rem;">
@@ -1459,20 +1459,13 @@
                         <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.25rem;">Commons Pool</p>
                         <p id="commons-balance" style="font-size:1.8rem;font-weight:700;color:#f59e0b;font-family:monospace;">...</p>
                     </div>
-                    <div style="flex:1;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:1rem;text-align:center;">
-                        <p style="font-size:0.8rem;color:#64748b;margin-bottom:0.25rem;">Active Round</p>
-                        <p id="commons-round-status" style="font-size:1rem;font-weight:600;color:#60a5fa;">None</p>
-                    </div>
                 </div>
 
                 <!-- Projects List -->
                 <h4 style="font-size:0.95rem;margin-bottom:0.5rem;">Projects</h4>
                 <div id="commons-projects-list" style="max-height:300px;overflow-y:auto;border:1px solid #1e293b;border-radius:8px;margin-bottom:1rem;"></div>
 
-                <!-- Voting Round Controls -->
                 <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;">
-                    <button class="btn btn-outline" onclick="createRound()" style="flex:1;">🗳️ Create Round</button>
-                    <button class="btn btn-outline" onclick="closeRound()" style="flex:1;">✅ Close Round</button>
                     <button class="btn btn-outline" onclick="loadCommonsData()" style="flex:1;">🔄 Refresh</button>
                 </div>
 

@@ -12,7 +12,8 @@
  *    - Standing gate: earnedCredit > 0 required.
  *    - Author limit: max 1 open decision per author.
  *    - No bond: zero beans debited on proposal.
- *    - Franchise mapping: member -> 1m1v, pool -> quadratic_trade, rule -> 1m1v, nothing -> 1m1v.
+ *    - Franchise mapping: member -> 1m1v, pool -> quadratic_trade.
+ *    - Removed effects (set_rule, set_levy, poll, tier/elder by vote) are refused.
  * 3. Voting Mechanics:
  *    - 1m1v vote deduction (1 credit).
  *    - Quadratic vote deduction (voteCount² credits).
@@ -402,7 +403,7 @@ async function runSuite() {
         body: { voterPubkey: charlie, support: true, voteCount: 3 },
     });
 
-    console.log('\n--- 3c. Decisions that would do nothing, or vote on tiers, are refused ---');
+    console.log('\n--- 3c. Removed Decision effects (did nothing, or voted on tiers) are refused ---');
 
     // A fresh proposer per effect, so each refusal stands on its own (not the one-open-decision limit).
     const refusedProposers: string[] = [];
@@ -423,13 +424,24 @@ async function runSuite() {
                 params: { tier: 'Elder', key: 'trade_fee', value: '0.01' },
             },
         });
-        assert(res.status === 400 && /not available|earned through trade/.test(res.body?.error || ''),
+        assert(res.status === 400 && /Unknown decision effect/.test(res.body?.error || ''),
             `Proposing ${effect} is refused with 400 (got ${res.status}: ${res.body?.error})`);
     }
     const refusedRows = db.prepare(
         `SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey IN (${refusedProposers.map(() => '?').join(',')})`
     ).get(...refusedProposers) as any;
     assert(refusedRows.c === 0, 'No refused decision was stored');
+
+    // The old voting-round routes were deleted (2026-09-19); none of them is mounted any more.
+    for (const [method, path] of [
+        ['POST', '/api/commons/vote'],
+        ['GET', `/api/commons/my-credits/${charlie}`],
+        ['GET', '/api/commons/rounds'],
+    ] as const) {
+        const mounted = (commonsRouter as any).stack.some((l: any) =>
+            (l.path === path || l.regexp.test(path)) && l.methods.includes(method));
+        assert(!mounted, `${method} ${path.replace(charlie, ':pubkey')} is no longer mounted`);
+    }
 
     console.log('\n--- 4. §3.8 Mandatory Debt Disclosure Verbatim Check ---');
 

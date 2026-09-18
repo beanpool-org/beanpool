@@ -28,7 +28,7 @@ import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
-    canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, eventEditBlockedReason, eventEditValues,
+    canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
@@ -87,7 +87,10 @@ export function EventDetail({ post }: EventDetailProps) {
     const placeName = p.eventPlaceName ?? p.event_place_name ?? '';
     const note: string | undefined = view?.eventPrivateNote;
     const rsvps: any[] | undefined = view?.eventRsvps; // present only when the node says this viewer is a host
-    const isHost = isEventHostView(view);
+    // The node's word first: it sends the RSVP list to hosts only. With no node view (offline, or a node that
+    // does not serve a cancelled event by id yet), the author is still the host — never offer them Report.
+    const hostView = isEventHostView(view);
+    const isHost = hostView || (!view && isOwnEvent(p, identity?.publicKey));
     const editBlocked = eventEditBlockedReason(p);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
@@ -267,7 +270,7 @@ export function EventDetail({ post }: EventDetailProps) {
 
                 {isHost && (
                     <View style={styles.hostBox}>
-                        <Pressable
+                        {hostView && (<Pressable
                             onPress={() => setShowRsvps(s => !s)}
                             style={styles.hostRowBtn}
                             accessibilityRole="button"
@@ -276,8 +279,8 @@ export function EventDetail({ post }: EventDetailProps) {
                         >
                             <Text style={styles.hostRowText} numberOfLines={1}>Who's going ({rsvps!.length})</Text>
                             <Text style={styles.hostRowText}>{showRsvps ? '▲' : '▼'}</Text>
-                        </Pressable>
-                        {showRsvps && (rsvps!.length === 0
+                        </Pressable>)}
+                        {hostView && showRsvps && (rsvps!.length === 0
                             ? <Text style={styles.rsvpEmpty}>Nobody has replied yet.</Text>
                             : rsvps!.map((r: any) => (
                                 <View key={r.memberPubkey} style={styles.rsvpListRow}>

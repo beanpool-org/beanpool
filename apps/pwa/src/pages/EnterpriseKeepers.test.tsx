@@ -255,6 +255,8 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         const approveSpy = vi.spyOn(api, 'approveKeeperRequest').mockResolvedValue({
             success: true,
             backing: 25,
+            applied: true,
+            change: null,
         });
         const declineSpy = vi.spyOn(api, 'declineKeeperRequest').mockResolvedValue({
             success: true,

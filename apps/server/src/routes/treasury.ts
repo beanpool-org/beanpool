@@ -23,6 +23,7 @@ import {
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
+    getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
 } from '../state-engine.js';
@@ -435,6 +436,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             myPendingRequest: actor
                 ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
                 : null,
+            // Keeper additions and removals waiting out the other keepers' 3-day objection window (answers A, M).
+            keeperChanges: getKeeperChanges(treasury, 'pending'),
             leadInactivity: getLeadInactivity(treasury),
             succession: getSuccessionProposals(treasury),
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.
@@ -1363,8 +1366,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
             return;
         }
+        const { choice } = (ctx as any).requestBody || {};
+        if (choice !== undefined && choice !== 'yes' && choice !== 'no') {
+            ctx.status = 400; ctx.body = { error: "choice must be 'yes' or 'no'" }; return;
+        }
         try {
-            const res = voteLeadSuccession(proposalId, actor);
+            const res = voteLeadSuccession(proposalId, actor, choice ?? 'yes');
             ctx.body = {
                 success: true,
                 ...res,
@@ -1381,6 +1388,70 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     };
     router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
     router.post('/api/enterprise/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
+
+    // ---- Keeper changes with an objection window; stepping down (answers A and M, 2026-09-19) ----------
+    // Shared guard for the signed keeper-membership routes below. Returns the actor, or null after answering.
+    const keeperActionGuard = (ctx: any): string | null => {
+        const { treasury } = ctx.params;
+        const actor = ctx.state?.actor;
+        if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return null; }
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return null; }
+        if (blocked(statusOf(treasury))) {
+            ctx.status = 403;
+            ctx.body = { error: 'This enterprise has been closed, so its keepers can no longer be modified.' };
+            return null;
+        }
+        if (blocked(statusOf(actor))) {
+            ctx.status = 403;
+            ctx.body = { error: 'Your account is not active, so you cannot act for this enterprise.' };
+            return null;
+        }
+        return actor;
+    };
+
+    const removeKeeperHandler = async (ctx: any) => {
+        const actor = keeperActionGuard(ctx);
+        if (!actor) return;
+        try {
+            const res = proposeKeeperRemoval(ctx.params.treasury, actor, ctx.params.pubkey);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            ctx.status = /Only the lead keeper/.test(e?.message || '') ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to remove keeper' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/:pubkey/remove', removeKeeperHandler);
+    router.post('/api/enterprise/:treasury/keepers/:pubkey/remove', removeKeeperHandler);
+
+    const objectKeeperChangeHandler = async (ctx: any) => {
+        const actor = keeperActionGuard(ctx);
+        if (!actor) return;
+        const change = getKeeperChanges(ctx.params.treasury).find(c => c.id === ctx.params.changeId);
+        if (!change) { ctx.status = 404; ctx.body = { error: 'Keeper change not found' }; return; }
+        try {
+            const res = objectToKeeperChange(change.id, actor);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            ctx.status = /Only an active keeper|cannot object/.test(e?.message || '') ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to object' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/changes/:changeId/object', objectKeeperChangeHandler);
+    router.post('/api/enterprise/:treasury/keepers/changes/:changeId/object', objectKeeperChangeHandler);
+
+    const stepDownHandler = async (ctx: any) => {
+        const actor = keeperActionGuard(ctx);
+        if (!actor) return;
+        try {
+            const res = stepDownAsKeeper(ctx.params.treasury, actor);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            ctx.status = /not a keeper/.test(e?.message || '') ? 403 : 400;
+            ctx.body = { error: e.message || 'Failed to step down' };
+        }
+    };
+    router.post('/api/treasury/:treasury/keepers/step-down', stepDownHandler);
+    router.post('/api/enterprise/:treasury/keepers/step-down', stepDownHandler);
 
     // =========================================================================
     // Enterprise Discussion Thread (docs/the-commons.md §2.2, §9, Slice 6)

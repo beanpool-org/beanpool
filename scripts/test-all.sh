@@ -309,6 +309,7 @@ run_federation_suites() {
       test-enterprise-pause
       test-enterprise-season-lifecycle
       test-enterprise-keepers-slice6
+      test-enterprise-keeper-answers
       test-enterprise-location
       test-enterprise-thread
       test-enterprise-closed-states

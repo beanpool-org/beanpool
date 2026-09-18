@@ -8,7 +8,7 @@ import L from 'leaflet';
 
 vi.mock('leaflet.markercluster', () => ({}));
 
-const mockCreatedMarkers: Array<{ coords: [number, number]; opts: any; listeners: Record<string, (...args: any[]) => any> }> = [];
+const mockCreatedMarkers: Array<{ coords: [number, number]; opts: any; listeners: Record<string, (...args: any[]) => any>; addTo?: any }> = [];
 
 vi.mock('leaflet', () => {
     const layerGroup = {
@@ -667,6 +667,7 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
         expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-open', 'user-alice-pubkey', {
             eventStartAt: new Date(2030, 8, 28, 10, 0).toISOString(),
+            eventEndAt: new Date(2030, 8, 28, 12, 0).toISOString(),
         });
     });
 

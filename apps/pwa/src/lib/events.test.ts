@@ -203,7 +203,8 @@ describe('editing an event (events round 2, decision 29)', () => {
     it('a new start is sent as ISO UTC and is a change people going hear about', () => {
         const before = eventEditForm(ev);
         const payload = eventEditPayload(before, { ...before, start: '2030-09-28T10:00' });
-        expect(payload).toEqual({ eventStartAt: new Date(at(2030, 9, 28, 10)).toISOString() });
+        // The end the form shows goes too: left out, the node would keep the length and save 10:00–13:00.
+        expect(payload).toEqual({ eventStartAt: new Date(at(2030, 9, 28, 10)).toISOString(), eventEndAt: new Date(at(2030, 9, 28, 12)).toISOString() });
         expect(eventEditNotifies(payload)).toBe(true);
     });
 

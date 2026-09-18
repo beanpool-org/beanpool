@@ -2507,13 +2507,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ? haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng)
                         : null;
 
-                // Compute fresh today count
+                // Listings posted today — the local calendar day, not the last 24 hours (a post from 11 pm last
+                // night is not "today" at 9 am). Events are not listings; their cards carry their own date.
+                const startOfToday = new Date();
+                startOfToday.setHours(0, 0, 0, 0);
                 const freshTodayCount = posts.filter(post => {
-                    if (post.status !== 'active') return false;
+                    if (post.status !== 'active' || post.type === 'event') return false;
                     if (identity && post.authorPublicKey === identity.publicKey) return false;
-                    const postTime = new Date(post.createdAt).getTime();
-                    const diffDays = Math.floor((Date.now() - postTime) / (24 * 60 * 60 * 1000));
-                    return diffDays === 0;
+                    return new Date(post.createdAt).getTime() >= startOfToday.getTime();
                 }).length;
 
                 return (

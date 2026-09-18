@@ -557,8 +557,10 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (startMoved) patch.eventStartAt = after.start.toISOString();
     const endBefore = before.end?.getTime() ?? null;
     const endAfter = after.end?.getTime() ?? null;
-    // A cleared end goes as '', which the node turns into start + 2 hours.
-    if (endAfter !== endBefore) patch.eventEndAt = after.end ? after.end.toISOString() : '';
+    // A cleared end goes as '', which the node turns into start + 2 hours. When the start moves, the end the
+    // form shows goes with it: the node keeps the old LENGTH when no end is named, so moving 9:00–11:00 to
+    // 10:00 would otherwise save 10:00–12:00 while the form said 11:00.
+    if (endAfter !== endBefore || (startMoved && after.end)) patch.eventEndAt = after.end ? after.end.toISOString() : '';
     if (placeName !== before.placeName.trim()) patch.eventPlaceName = placeName;
     if (note !== before.privateNote.trim()) patch.eventPrivateNote = note;
     if (after.lat !== before.lat || after.lng !== before.lng) { patch.lat = after.lat; patch.lng = after.lng; }

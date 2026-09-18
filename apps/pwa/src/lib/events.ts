@@ -262,8 +262,10 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
         const iso = localInputToIso(after.start);
         if (iso) out.eventStartAt = iso;
     }
-    // A cleared end is sent as an empty string, which the node turns into start + 2 hours.
-    if (after.end !== before.end) out.eventEndAt = localInputToIso(after.end) ?? '';
+    // A cleared end is sent as an empty string, which the node turns into start + 2 hours. When the start
+    // moves, the end the form shows goes with it: the node keeps the old LENGTH when no end is named, so
+    // moving 9:00–11:00 to 10:00 would otherwise save 10:00–12:00 while the form said 11:00.
+    if (after.end !== before.end || (out.eventStartAt && after.end)) out.eventEndAt = localInputToIso(after.end) ?? '';
     if (after.placeName.trim() !== before.placeName.trim()) out.eventPlaceName = after.placeName.trim();
     if (after.privateNote.trim() !== before.privateNote.trim()) out.eventPrivateNote = after.privateNote.trim();
     if (after.lat != null && after.lng != null && (after.lat !== before.lat || after.lng !== before.lng)) {

@@ -91,7 +91,10 @@ describe('the edit form and what Save sends (A2, decision 29)', () => {
 
     it('a new time is sent and marks the edit as one people going will hear about', () => {
         const moved = save({ start: new Date(2026, 8, 26, 10, 0) });
-        expect(moved).toEqual({ ok: true, patch: { eventStartAt: new Date(2026, 8, 26, 10, 0).toISOString() }, notifies: true });
+        // The end the form shows goes too: left out, the node would keep the length and save 10:00–13:00.
+        expect(moved).toEqual({ ok: true, patch: {
+            eventStartAt: new Date(2026, 8, 26, 10, 0).toISOString(), eventEndAt: new Date(2026, 8, 26, 12, 0).toISOString(),
+        }, notifies: true });
         expect(save({ end: new Date(2026, 8, 26, 13, 0) })).toMatchObject({ ok: true, notifies: true });
         // A cleared end goes as '', which the node turns into start + 2 hours.
         expect(save({ end: null })).toEqual({ ok: true, patch: { eventEndAt: '' }, notifies: true });

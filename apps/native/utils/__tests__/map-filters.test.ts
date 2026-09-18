@@ -6,8 +6,10 @@
 import { describe, it, expect } from 'vitest';
 import {
     CATEGORY_FILTER_CHIPS, mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive,
-    type MapFilterState, type MapTypeFilter,
+    categoryChipLabel, categoryPanelReducer,
+    type MapFilterState, type MapTypeFilter, type CategoryPanelState,
 } from '../map-filters';
+import { tilePanelColumns, TILE_GAP } from '../filter-chips';
 import { CATEGORY_META } from '../../constants/categories';
 
 const HOUR = 60 * 60 * 1000;
@@ -125,5 +127,77 @@ describe('switching type with a category chosen', () => {
         expect(mapFiltersActive(state('all'))).toBe(false);
         expect(mapFiltersActive(state('all', 'food'))).toBe(true);
         expect(mapFiltersActive(state('events'))).toBe(true);
+    });
+});
+
+describe('the category chip and its panel', () => {
+    it('collapsed, the chip names the current category and points down; open, it points up', () => {
+        expect(categoryChipLabel('all', false)).toBe('🏷️ All Categories ▾');
+        expect(categoryChipLabel('food', false)).toBe('🥕 Food ▾');
+        expect(categoryChipLabel('food', true)).toBe('🥕 Food ▴');
+        // An unknown id never leaves the chip blank.
+        expect(categoryChipLabel('nope', false)).toBe('🏷️ All Categories ▾');
+    });
+
+    const closed: CategoryPanelState = { category: 'all', open: false };
+
+    it('the panel starts closed, so the map keeps its space', () => {
+        expect(closed.open).toBe(false);
+    });
+
+    it('tapping the chip opens the panel; tapping it again closes it with the category unchanged', () => {
+        const opened = categoryPanelReducer({ category: 'food', open: false }, { kind: 'toggle' });
+        expect(opened).toEqual({ category: 'food', open: true });
+        expect(categoryPanelReducer(opened, { kind: 'toggle' })).toEqual({ category: 'food', open: false });
+    });
+
+    it('picking a tile applies it and collapses the panel', () => {
+        const opened = categoryPanelReducer(closed, { kind: 'toggle' });
+        expect(categoryPanelReducer(opened, { kind: 'pick', category: 'garden' })).toEqual({ category: 'garden', open: false });
+    });
+
+    it('picking All Categories clears the category', () => {
+        const opened = { category: 'garden', open: true };
+        expect(categoryPanelReducer(opened, { kind: 'pick', category: 'all' })).toEqual({ category: 'all', open: false });
+    });
+
+    it('a tap on the map closes the panel without changing anything', () => {
+        expect(categoryPanelReducer({ category: 'tools', open: true }, { kind: 'dismiss' })).toEqual({ category: 'tools', open: false });
+        // Closed already: the same object back, so React skips the render.
+        const s = { category: 'tools', open: false };
+        expect(categoryPanelReducer(s, { kind: 'dismiss' })).toBe(s);
+    });
+
+    it('the category picked in the panel is the one that filters pins', () => {
+        const picked = categoryPanelReducer({ category: 'all', open: true }, { kind: 'pick', category: 'food' });
+        expect(ids(visibleMarketPins(POSTS, state('offers', picked.category)))).toEqual(['honey']);
+    });
+
+    it('the panel carries every category, All Categories first', () => {
+        expect(mapSecondRow('offers').chips.map(c => c.id)).toEqual(Object.keys(CATEGORY_META));
+    });
+});
+
+describe('tiles per row', () => {
+    const tile = (inner: number, cols: number) => (inner - TILE_GAP * (cols - 1)) / cols;
+
+    it('four per row on a normal phone at normal text', () => {
+        // 411dp phone: 92% panel = 378, minus 12 padding.
+        expect(tilePanelColumns(366, 1)).toBe(4);
+    });
+
+    it('fewer per row at 320dp with 1.3x text, rather than squeeze a label', () => {
+        // 320dp phone: 92% panel = 294, minus 12 padding.
+        const cols = tilePanelColumns(282, 1.3);
+        expect(cols).toBeLessThan(4);
+        expect(tile(282, cols)).toBeGreaterThanOrEqual(72 * 1.3);
+    });
+
+    it('never fewer than two', () => {
+        expect(tilePanelColumns(100, 2)).toBe(2);
+    });
+
+    it('text smaller than default does not add columns past four', () => {
+        expect(tilePanelColumns(600, 0.85)).toBe(4);
     });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
 import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, TextInput, Pressable, Switch, Dimensions, Image as RNImage, Keyboard, Linking, DeviceEventEmitter, Animated, Modal, FlatList } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Location from 'expo-location';
@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FilterChipRow } from '../../components/FilterChipRow';
+import { FilterChipPicker } from '../../components/FilterChipPicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
@@ -27,7 +28,7 @@ import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { EVENT_ACCENT } from '../../components/EventCard';
 import { type EventWindow } from '../../utils/events';
-import { mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, type MapTypeFilter } from '../../utils/map-filters';
+import { mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, categoryChipLabel, categoryPanelReducer, type MapTypeFilter } from '../../utils/map-filters';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType } from '../../utils/compose-options';
 import { palette } from '../../constants/colors';
 import { HAS_MAPS_KEY } from '../../utils/maps';
@@ -276,6 +277,8 @@ export default function MapScreen() {
         filterChipTextOnViolet: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
         // The second row, always under the pills: categories, or the date chips under Events.
         filterSecondRow: { marginTop: 6, maxWidth: '92%' },
+        // Full 92% so the open panel's tiles get the width; the collapsed chip centres inside it.
+        filterCategoryPicker: { marginTop: 6, width: '92%' },
         filterClear: { minHeight: 48, minWidth: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
         filterClearText: { fontSize: 14, color: colors.text.muted, fontWeight: '800' },
 
@@ -576,10 +579,23 @@ export default function MapScreen() {
     // Filter state
     const [mapTypeFilter, setMapTypeFilter] = useState<MapTypeFilter>('all');
     /**
-     * The category chip and the date chip share the second row (utils/map-filters.ts). Both are remembered
-     * across type switches, and each filters only while its row is showing.
+     * The category chip and the date chips share the second row (utils/map-filters.ts). Both are remembered
+     * across type switches, and each filters only while its row is showing. The category is one chip that
+     * opens a panel of every category; the panel's open/closed state lives with the category so picking a
+     * tile applies it and closes the panel in one step.
      */
-    const [mapCategoryFilter, setMapCategoryFilter] = useState('all');
+    const [categoryPanel, dispatchCategoryPanel] = useReducer(categoryPanelReducer, { category: 'all', open: false });
+    const mapCategoryFilter = categoryPanel.category;
+    const closeCategoryPanel = () => dispatchCategoryPanel({ kind: 'dismiss' });
+    const selectMapType = (t: MapTypeFilter) => {
+        setMapTypeFilter(t);
+        // Events takes the second row for its date chips, so an open category panel goes with it.
+        if (t === 'events') closeCategoryPanel();
+    };
+    // The filter bar hides behind a pin preview or the new-post form; the panel does not come back with it.
+    useEffect(() => {
+        if (selectedPostPreview || showNewPost) closeCategoryPanel();
+    }, [selectedPostPreview, showNewPost]);
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     const mapFilterState = { type: mapTypeFilter, category: mapCategoryFilter, eventWindow };
     const secondRow = mapSecondRow(mapTypeFilter);
@@ -1062,6 +1078,8 @@ export default function MapScreen() {
                     onPress={(e: any) => {
                         handleMapPress(e);
                         if (selectedPostPreview) setSelectedPostPreview(null);
+                        // A tap on the map closes the category panel without changing the filter.
+                        closeCategoryPanel();
                     }}
                     onLongPress={handleMapPress}
                     initialRegion={currentRegion}
@@ -1132,7 +1150,8 @@ export default function MapScreen() {
                 <View
                     style={styles.filterBarWrapper}
                     pointerEvents="box-none"
-                    onLayout={e => setFilterBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+                    // Measured with the panel closed: the zoom pill clears the rows, and hides while the panel is open.
+                    onLayout={e => { if (!categoryPanel.open) setFilterBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height); }}
                 >
                     {/* Scrollable: at 320dp with 1.3x text the pills run past the screen; it still
                         shrink-wraps and centres at normal sizes. */}
@@ -1142,34 +1161,38 @@ export default function MapScreen() {
                         style={styles.filterBarScroll}
                         contentContainerStyle={styles.filterBar}
                     >
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => setMapTypeFilter('all')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => selectMapType('all')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>All</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'offers' }} style={[styles.filterChip, mapTypeFilter === 'offers' && styles.filterChipActiveOffers]} onPress={() => setMapTypeFilter('offers')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'offers' }} style={[styles.filterChip, mapTypeFilter === 'offers' && styles.filterChipActiveOffers]} onPress={() => selectMapType('offers')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'offers' && styles.filterChipTextOnGreen]}>Offers</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} onPress={() => setMapTypeFilter('needs')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} onPress={() => selectMapType('needs')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'needs' && styles.filterChipTextOnOrange]}>Needs</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => setMapTypeFilter('events')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => selectMapType('events')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>Events</Text>
                         </Pressable>
                         {mapFiltersActive(mapFilterState) && (
-                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); setMapCategoryFilter('all'); setEventWindow('all'); }}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}
                     </ScrollView>
 
-                    {/* Keyed by kind so the row remounts on the swap and scrolls its selected chip into view. */}
+                    {/* Categories: one chip, and every category as tiles under it while open. Events: the
+                        date chips, in the same place. */}
                     {secondRow.kind === 'categories' ? (
-                        <FilterChipRow
-                            key="categories"
+                        <FilterChipPicker
                             chips={secondRow.chips}
                             selected={mapCategoryFilter}
-                            onSelect={setMapCategoryFilter}
+                            chipLabel={categoryChipLabel(mapCategoryFilter, categoryPanel.open)}
+                            open={categoryPanel.open}
+                            onToggle={() => dispatchCategoryPanel({ kind: 'toggle' })}
+                            onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
                             activeColor={mapTypeFilter === 'offers' ? '#10b981' : mapTypeFilter === 'needs' ? '#ea580c' : colors.brand.dark}
-                            style={styles.filterSecondRow}
+                            style={styles.filterCategoryPicker}
+                            panelMaxHeight={mapAreaH && filterBottom ? Math.max(120, mapAreaH - filterBottom - 6 - 12) : undefined}
                             accessibilityLabel="Filter by category"
                         />
                     ) : (
@@ -1187,7 +1210,7 @@ export default function MapScreen() {
             )}
 
             {/* Map Action FABs - Left Pill */}
-            {!showNewPost && !selectedPostPreview && (
+            {!showNewPost && !selectedPostPreview && !categoryPanel.open && (
                 <View style={[styles.fabPill, { bottom: fabPillBottom, left: 16 }]} pointerEvents="box-none" onLayout={e => setFabPillH(e.nativeEvent.layout.height)}>
                     <TouchableOpacity accessibilityRole="button" accessibilityLabel="Toggle dark mode" style={styles.pillBtn} onPress={() => setIsDarkMap(!isDarkMap)}>
                         <Text style={styles.pillBtnEmoji}>{isDarkMap ? '☀️' : '🌙'}</Text>

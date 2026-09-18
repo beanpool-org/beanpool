@@ -3,7 +3,10 @@
  * the filters. No React Native imports, so vitest can hold it to the design.
  *
  * Top row: the type pills (All / Offers / Needs / Events). Second row, always in the same place, changes
- * with the type: the category chips under All, Offers and Needs; the date chips under Events.
+ * with the type: under All, Offers and Needs it is ONE chip naming the current category ("🏷️ All
+ * Categories ▾"), which opens a panel of every category as tiles; under Events it is the date chips.
+ * The panel is closed in the normal state so the map keeps its space. Picking a tile applies it and
+ * closes the panel; tapping the chip again or tapping the map closes it without changing anything.
  *
  * The chosen category and the chosen date window are both REMEMBERED across type switches, but each only
  * applies while its row is on screen. Events carry no marketplace category of their own (they post as
@@ -81,6 +84,33 @@ export function visibleEventPins<T = any>(posts: T[], state: MapFilterState, now
         if (!inCategory(p, state)) return false;
         return eventInWindow(p, state.type === 'events' ? state.eventWindow : 'all', nowMs);
     });
+}
+
+/** The collapsed chip's text: the current category, and whether tapping it opens or closes the panel. */
+export function categoryChipLabel(category: string, open: boolean): string {
+    const m = CATEGORY_META[category] ?? CATEGORY_META.all;
+    return `${m.emoji} ${m.label} ${open ? '▴' : '▾'}`;
+}
+
+export interface CategoryPanelState {
+    category: string;
+    open: boolean;
+}
+
+export type CategoryPanelAction =
+    /** The collapsed chip: opens the panel, or closes it if it is open. */
+    | { kind: 'toggle' }
+    /** A tile: applies the category (All Categories clears it) and closes the panel. */
+    | { kind: 'pick'; category: string }
+    /** A tap on the map, a pin preview, or Events taking the row: closes without changing the category. */
+    | { kind: 'dismiss' };
+
+export function categoryPanelReducer(s: CategoryPanelState, a: CategoryPanelAction): CategoryPanelState {
+    switch (a.kind) {
+        case 'toggle': return { ...s, open: !s.open };
+        case 'pick': return { category: a.category, open: false };
+        case 'dismiss': return s.open ? { ...s, open: false } : s;
+    }
 }
 
 /**

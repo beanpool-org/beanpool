@@ -230,7 +230,7 @@ async function main() {
 
     // 11. Decisions and votes
     const decId = 'dec_' + crypto.randomBytes(6).toString('hex');
-    db.prepare("INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, closes_at) VALUES (?, ?, 'Solar Array', 'Install panels', 'nothing', 'none', '1m1v', datetime('now', '+7 days'))").run(decId, oldAliceKey);
+    db.prepare("INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, closes_at) VALUES (?, ?, 'Suspend spammer', 'Posting spam', 'member', 'suspend_member', '1m1v', datetime('now', '+7 days'))").run(decId, oldAliceKey);
     db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support) VALUES (?, ?, 1)").run(decId, oldAliceKey);
 
     // 12. Enterprise pledges

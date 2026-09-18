@@ -69,8 +69,8 @@ import {
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     recordActivity,
     markConversationRead, getUnreadCounts,
-    createProject, updateProject, deleteProject, voteForProject, createVotingRound, closeVotingRound,
-    getProjects, getAllProjects, getVotingRounds, getActiveRound, getCommonsBalance, getGovernanceCredits,
+    createProject, updateProject, deleteProject,
+    getProjects, getAllProjects, getCommonsBalance,
     adminRejectProject,
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
     exportSyncState, getNodeRole,
@@ -242,7 +242,6 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/directory/info',
     '/api/commons/balance',          // community transparency (single aggregate)
     '/api/commons/projects',         // community transparency
-    '/api/commons/rounds',           // community transparency
     '/api/crowdfund/projects',       // public crowdfund list
     '/api/treasuries',               // community transparency: list of treasuries
     '/api/enterprises',              // community transparency: list of enterprises
@@ -274,7 +273,6 @@ const PUBLIC_READ_PATTERNS: RegExp[] = [
     /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
     /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
     /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
-    /^\/api\/commons\/my-credits\/[^/]+$/,                  // governance: voice credits public read
     /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
     /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>

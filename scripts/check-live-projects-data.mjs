@@ -31,7 +31,6 @@ const report = {
     dbPath,
     crowdfundProjects: { count: 0, rows: [] },
     commonsProjectsBlob: { exists: false, count: 0, proposals: [] },
-    votingRoundsBlob: { exists: false, count: 0, rounds: [] },
     treasuries: { count: 0, rows: [] },
     projectTransactions: { count: 0, rows: [] },
 };
@@ -57,17 +56,6 @@ if (tableExists('node_config')) {
         }
     }
 
-    const vrRow = db.prepare("SELECT value FROM node_config WHERE key = 'voting_rounds'").get();
-    if (vrRow && vrRow.value) {
-        report.votingRoundsBlob.exists = true;
-        try {
-            const parsed = JSON.parse(vrRow.value);
-            report.votingRoundsBlob.count = Array.isArray(parsed) ? parsed.length : 0;
-            report.votingRoundsBlob.rounds = parsed;
-        } catch (e) {
-            report.votingRoundsBlob.error = `Failed to parse voting_rounds JSON: ${e.message}`;
-        }
-    }
 }
 
 if (tableExists('members')) {
@@ -95,7 +83,6 @@ if (tableExists('transactions')) {
 console.log('\n--- Live Data Summary ---');
 console.log(`Crowdfund 'projects' table rows: ${report.crowdfundProjects.count}`);
 console.log(`Commons 'commons_projects' blob proposals: ${report.commonsProjectsBlob.count}`);
-console.log(`Commons 'voting_rounds' blob rounds: ${report.votingRoundsBlob.count}`);
 console.log(`Existing Enterprise/Treasury members: ${report.treasuries.count}`);
 console.log(`Transactions referencing a project: ${report.projectTransactions.count}`);
 

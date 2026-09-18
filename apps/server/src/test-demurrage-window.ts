@@ -7,13 +7,13 @@
  * balance. Someone who has not traded for two months is taxed on money their community just handed them.
  *
  * `ledger.applyDecay` closes the window on every branch, and `transfer()` / `moveToCommons()` /
- * `payFromCommons()` persist `last_demurrage_epoch` alongside the balance — so those paths are safe. Three
+ * `payFromCommons()` persist `last_demurrage_epoch` alongside the balance — so those paths are safe. Two
  * host paths were not, and each raises a balance a different way:
  *
  *   1. the crowdfund escrow sweep to a project creator   (db.ts, raw `balance = balance + ?`)
  *   2. the refund to every backer of a deleted project   (db.ts, same shape, widest blast radius)
- *   3. the commons voting-round grant to a proposer      (state-engine.ts, an UPSERT that omitted the
- *      column on DO UPDATE and wrote a literal epoch 0 — i.e. 1970 — on INSERT)
+ *
+ * (A third, the old commons voting-round grant, was deleted with voting rounds on 2026-09-19.)
  *
  * HOW THIS MEASURES IT. Every case is scored against a CONTROL account seeded identically and settled the
  * ordinary way, so "what should this have cost?" is established by construction rather than by re-deriving
@@ -24,7 +24,7 @@
  *
  * PRE-EMPTIVE, NOT A REPAIR. All 9 node snapshots were checked: zero crowdfund pledges, zero commons
  * grants, and zero `demurrage_` rows anywhere — every live account is inside the Green Zone, so nothing has
- * ever decayed and none of these three paths has fired. This becomes real the first time an account crosses
+ * ever decayed and none of these paths has fired. This becomes real the first time an account crosses
  * 200 beans, which is why it is worth pinning now rather than after.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-demurrage-window.ts
@@ -32,7 +32,6 @@
 import crypto from 'node:crypto';
 import {
     initStateEngine, getBalance, reconcileLedgerFromDb, getCommonsBalanceExact,
-    createProject, createVotingRound, closeVotingRound, grantNodeRole,
 } from './state-engine.js';
 import { setCommonsBalance } from '@beanpool/core';
 import { db, createCrowdfundProject, pledgeToProject, deleteCrowdfundProject } from './db/db.js';
@@ -72,8 +71,6 @@ const GREEN_ZONE_HOLDING = 199;
 const PLEDGE_OVER_SETTLED = 5_200;
 /** Small enough that two backers each keep a decayable OPENING after pledging (path 2b). */
 const PLEDGE_SMALL = 100;
-/** Matched by the temporary abort trigger in path 3d, via the memo the grant writes. */
-const DOOMED_GRANT = 'Doomed grant';
 
 function seedMember(pk: string, balance: number, staleDays: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
@@ -114,13 +111,8 @@ async function main() {
     const spender = id('spender');      // path 1c — tries to pledge beans demurrage has already taken
     const refundee = id('refundee');    // path 2 — pledges, then gets refunded
     const emptyHanded = id('emptyhand'); // path 2 — creator of the deleted project, never paid
-    const proposer = id('proposer');    // path 3 — granted, with an existing accounts row
-    const quietProposer = id('quietprop'); // path 3c — the same, from inside the Green Zone
-    const rowless = id('rowless');      // path 3b — granted, with NO accounts row (the epoch-0 insert)
     const backerOne = id('backerone');   // path 2b — two backers of one project, settled as one batch
     const backerTwo = id('backertwo');
-    const failProposer = id('failprop'); // path 3d — a grant whose transaction aborts part-way
-    const admin = id('admin');          // invited_by NULL → eligible round creator
 
     seedMember(control, OPENING, STALE_DAYS);
     seedMember(creator, OPENING, STALE_DAYS);
@@ -132,20 +124,8 @@ async function main() {
     seedMember(backerOne, OPENING + PLEDGE_SMALL, 0);
     seedMember(backerTwo, OPENING + PLEDGE_SMALL, 0);
     seedMember(emptyHanded, 0, 0);
-    seedMember(proposer, OPENING, STALE_DAYS);
-    seedMember(quietProposer, GREEN_ZONE_HOLDING, STALE_DAYS);
-    // Stale, so the failed grant also has real demurrage in flight to unwind.
-    seedMember(failProposer, OPENING, STALE_DAYS);
-    // Seeded EMPTY on purpose. Path 3b deletes this account's row to reach the UPSERT's INSERT arm, and
-    // deleting a row that holds beans destroys them — the conservation check below caught exactly that, off
-    // by the 300 an earlier version of this fixture seeded here. The assertion was right and the fixture was
-    // lying. Nothing is lost for the test either: the INSERT arm is about the epoch written alongside a
-    // NON-ZERO granted balance, and the grant supplies that.
-    seedMember(rowless, 0, 0);
-    seedMember(admin, 0, 0);
-    grantNodeRole(admin, 'owner');
 
-    setCommonsBalance(50_000);          // must cover both grants; deductFromCommons refuses otherwise
+    setCommonsBalance(50_000);
     reconcileLedgerFromDb();            // pull the seeded rows in, as boot would
     const baseline = nodeTotal();
 
@@ -301,72 +281,6 @@ async function main() {
         `path 2b: NEITHER window was closed — settling ${settleOrder.length} backers is one transaction, so the `
         + 'first is rolled back with the second instead of being left settled beside an unsettled peer');
 
-    // ── Path 3: commons voting-round grant, enterprise treasury WITH an existing row ──────────────
-    const grantedProject = await grantTo(proposer, admin, 'Existing row');
-    assert(row(grantedProject.id)!.epoch === nowEpoch(),
-        'path 3: the grant carried the settled epoch into the row on the DO UPDATE arm');
-    assert(Math.abs(row(grantedProject.id)!.balance - PAYOUT) < 1e-9,
-        'path 3: the granted enterprise holds the full grant balance');
-
-    // ── Path 3c: the same grant, proposer inside the Green Zone ────────────────────────────────────
-    const quietGrantedProj = await grantTo(quietProposer, admin, 'Quiet proposer');
-    const quietProjRow = row(quietGrantedProj.id)!;
-    assert(quietProjRow.epoch === nowEpoch(),
-        'path 3c: a granted enterprise still has the window closed in the row — the '
-        + 'UPSERT carries the epoch itself rather than relying on there being a decay event to persist');
-    assert(Math.abs(quietProjRow.balance - PAYOUT) < 1e-9,
-        `path 3c: and the grant arrives whole — ${PAYOUT}`);
-    reconcileLedgerFromDb();
-    assert(Math.abs(getBalance(quietGrantedProj.id).balance - PAYOUT) < 1e-9,
-        'path 3c: and the next read charges nothing against it');
-
-    // ── Path 3b: the same grant, target enterprise with NO accounts row → the literal epoch 0 ──────
-    const rowlessProject = createProject(rowless, 'No row yet', 'tests the INSERT arm', PAYOUT);
-    if (!rowlessProject) throw new Error('setup: createProject failed for the rowless proposer');
-    // Drop the enterprise's row (and the in-memory account with it) so the UPSERT takes its INSERT arm.
-    db.prepare(`DELETE FROM accounts WHERE public_key=?`).run(rowlessProject.id);
-    reconcileLedgerFromDb();
-    await closeRoundFor(rowlessProject.id, admin);
-
-    const rowlessRow = row(rowlessProject.id)!;
-    assert(rowlessRow.epoch === nowEpoch(),
-        'path 3b: inserting a granted account stamps the CURRENT epoch, not the literal 0');
-    reconcileLedgerFromDb();
-    const rowlessBalance = getBalance(rowlessProject.id).balance;
-    assert(Math.abs(rowlessBalance - PAYOUT) < 1e-6,
-        `path 3b: the grant survives the next read intact (${rowlessBalance}) — epoch 0 is 1970, and ~56 years `
-        + `of compound decay would have left roughly the 200-bean Green Zone of a ${PAYOUT} grant`);
-
-    // ── Path 3d: a grant that FAILS must leave the ledger exactly as it was ─────────────────────────
-    // The grant moves value in memory (`deductFromCommons`, the balance credit, and any demurrage the
-    // proposer's read collects) as well as in rows, and a SQLite rollback touches only the rows. So the whole
-    // thing runs inside `conservingTransaction` with the deduct INSIDE the snapshot. Previously the deduct and
-    // the credit happened before a bare `db.transaction`, and a failed grant left the pot debited in memory
-    // with nothing credited anywhere — beans destroyed, and the project already marked funded.
-    //
-    // Forced with a temporary trigger rather than a stub, so the failure arrives from SQLite the way a real
-    // constraint violation would, part-way through the transaction.
-    const blocked = createProject(failProposer, DOOMED_GRANT, 'must roll back cleanly', PAYOUT);
-    if (!blocked) throw new Error('setup: createProject failed for the blocked grant');
-    db.exec(`CREATE TRIGGER zz_block_grant BEFORE INSERT ON transactions
-             WHEN NEW.memo = 'Commons grant: ${DOOMED_GRANT}'
-             BEGIN SELECT RAISE(ABORT, 'grant blocked by test'); END;`);
-    const commonsBeforeFail = getCommonsBalanceExact();
-    const rowBeforeFail = row(failProposer)!;
-    let grantFailed: string | null = null;
-    try { await closeRoundFor(blocked.id, admin); }
-    catch (e: any) { grantFailed = e?.message || String(e); }
-    db.exec(`DROP TRIGGER zz_block_grant`);
-
-    assert(!!grantFailed, `path 3d: the blocked grant really did fail, so the rest of this means something (${grantFailed})`);
-    assert(Math.abs(getCommonsBalanceExact() - commonsBeforeFail) < 1e-9,
-        `path 3d: the Commons pot is back where it started (${getCommonsBalanceExact().toFixed(4)}) — a debit `
-        + `taken in memory for a grant that never landed destroys ${PAYOUT} beans`);
-    const rowAfterFail = row(failProposer)!;
-    assert(Math.abs(rowAfterFail.balance - rowBeforeFail.balance) < 1e-9 && rowAfterFail.epoch === rowBeforeFail.epoch,
-        'path 3d: and the proposer\'s row is untouched, window included — the decay collected inside the failed '
-        + 'transaction was unwound with it, not left as a credit with no debit');
-
     // ── Conservation: none of the above may move the ledger ────────────────────────────────────────
     assert(Math.abs(nodeTotal() - baseline) < 0.005,
         `conservation: sum(accounts) + Commons is unchanged (${nodeTotal().toFixed(4)} vs ${baseline.toFixed(4)}) — `
@@ -374,9 +288,8 @@ async function main() {
 
     // ── And it survives a restart, which is where an un-persisted half shows up ─────────────────────
     // The live COMMONS_BALANCE is thrown away and rebuilt from the COMMONS_POOL row, exactly as
-    // initStateEngine does on boot. Any decay debit or grant that was committed to an account row while its
-    // matching Commons movement stayed in memory reappears here as drift — which is what makes the grant's
-    // persists having to be INSIDE its transaction (review finding) an assertion rather than an argument.
+    // initStateEngine does on boot. Any decay debit that was committed to an account row while its
+    // matching Commons movement stayed in memory reappears here as drift.
     const commonsRow = (db.prepare(`SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'`)
         .get() as { balance: number }).balance;
     setCommonsBalance(commonsRow);
@@ -388,28 +301,6 @@ async function main() {
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ #138 demurrage-window checks PASSED — no path raises a balance on an open window.');
-}
-
-/** Run a full propose → vote → close cycle and return the funded project. */
-async function grantTo(proposerPubkey: string, adminPubkey: string, title: string): Promise<any> {
-    const project = createProject(proposerPubkey, title, 'granted by the commons', PAYOUT);
-    if (!project) throw new Error(`setup: createProject failed for ${title}`);
-    await closeRoundFor(project.id, adminPubkey);
-    reconcileLedgerFromDb();
-    return project;
-}
-
-/** Give a project the only vote in a round, then close it — so it wins and is funded. */
-async function closeRoundFor(projectId: string, adminPubkey: string): Promise<void> {
-    const round = createVotingRound(adminPubkey, [projectId], new Date(Date.now() + 3_600_000).toISOString());
-    if (!round) throw new Error('setup: createVotingRound failed');
-
-    const projects = JSON.parse((db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any).value);
-    for (const p of projects) if (p.id === projectId) p.votes = [{ pubkey: 'voter', weight: 5, creditsUsed: 25 }];
-    db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
-
-    const res = closeVotingRound(round.id);
-    if (!res.success || res.winner?.id !== projectId) throw new Error('setup: the round did not fund its project');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

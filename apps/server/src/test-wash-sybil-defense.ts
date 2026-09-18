@@ -14,7 +14,7 @@
 
 import {
     initStateEngine, getMemberTrustProfile, adminSetCreditFrozen,
-    getCommunityHealth, getGovernanceCredits, clearWashTradingCache
+    getCommunityHealth, clearWashTradingCache
 } from './state-engine.js';
 import { db } from './db/db.js';
 

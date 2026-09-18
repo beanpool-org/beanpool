@@ -1379,25 +1379,15 @@ export interface CommunityProject {
     proposerCallsign: string;
     requestedAmount: number;
     status: 'proposed' | 'active' | 'funded' | 'rejected' | 'completed';
-    votes: { pubkey: string; weight: number; creditsUsed?: number }[];
     createdAt: string;
     fundedAt?: string;
-}
-
-export interface VotingRound {
-    id: string;
-    status: 'open' | 'closed';
-    closesAt: string;
-    projectIds: string[];
-    createdBy: string;
-    createdAt: string;
 }
 
 export async function getCommonsBalance(): Promise<{ balance: number }> {
     return request('GET', '/api/commons/balance');
 }
 
-export async function getCommonsProjects(): Promise<{ projects: CommunityProject[]; activeRound: VotingRound | null }> {
+export async function getCommonsProjects(): Promise<{ projects: CommunityProject[] }> {
     return request('GET', '/api/commons/projects');
 }
 
@@ -1413,17 +1403,9 @@ export async function deleteCommunityProject(proposerPubkey: string, projectId: 
     return request('POST', '/api/commons/projects/delete', { proposerPubkey, projectId });
 }
 
-export async function voteForProject(voterPubkey: string, projectId: string, voteCount: number = 1): Promise<{ success: boolean; creditsUsed?: number }> {
-    return request('POST', '/api/commons/vote', { voterPubkey, projectId, voteCount });
-}
-
-export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
-    return request('GET', `/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
-}
-
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
 
-export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionTouch = 'member' | 'pool';
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 export type DecisionStatus =
     | 'open'
@@ -1444,19 +1426,12 @@ export type DecisionEffect =
     | 'unfreeze_credit'
     | 'grant_voucher'
     | 'revoke_voucher'
-    | 'grant_tier'
-    | 'revoke_tier'
-    | 'grant_elder'
-    | 'revoke_elder'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     | 'remove_member'
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit'
-    | 'set_levy'
-    | 'set_rule'
-    | 'poll';
+    | 'write_off_deficit';
 
 export interface Decision {
     id: string;
@@ -1931,10 +1906,6 @@ export async function postEventChatMessage(postId: string, text: string, clientI
 
 export async function removeEventChatMessage(postId: string, messageId: string): Promise<{ success: boolean; message: EventThreadMessage }> {
     return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/chat/remove`, { messageId });
-}
-
-export async function getVotingRounds(): Promise<{ rounds: VotingRound[]; activeRound: VotingRound | null }> {
-    return request('GET', '/api/commons/rounds');
 }
 
 

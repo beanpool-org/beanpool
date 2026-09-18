@@ -1453,16 +1453,6 @@
             if (!commonsData) return;
             document.getElementById('commons-balance').textContent = commonsData.balance.toFixed(2) + 'B';
 
-            const activeRound = commonsData.rounds.find(r => r.status === 'open');
-            const roundStatus = document.getElementById('commons-round-status');
-            if (activeRound) {
-                roundStatus.textContent = 'Open → ' + new Date(activeRound.closesAt).toLocaleDateString();
-                roundStatus.style.color = '#10b981';
-            } else {
-                roundStatus.textContent = 'None';
-                roundStatus.style.color = '#60a5fa';
-            }
-
             const list = document.getElementById('commons-projects-list');
             if (!commonsData.projects.length) {
                 list.innerHTML = '<div style="padding:1rem;text-align:center;color:#64748b;">No projects yet</div>';
@@ -1471,12 +1461,11 @@
             list.innerHTML = commonsData.projects.map(p => {
                 const statusBadge = {
                     proposed: '📋 Proposed',
-                    active: '🗳️ Voting',
+                    active: '🟢 Active',
                     funded: '✅ Funded',
                     rejected: '❌ Rejected',
                     completed: '🎉 Completed',
                 }[p.status] || p.status;
-                const votes = p.votes?.length || 0;
                 const currentAmt = p.currentAmount || 0;
                 const exceeds = (p.status === 'active' || p.status === 'proposed') && p.requestedAmount > commonsData.balance;
                 const progress = p.requestedAmount > 0 ? Math.min(100, (currentAmt / p.requestedAmount) * 100) : 0;
@@ -1486,7 +1475,7 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem;">
                         <div>
                             <strong style="font-size:0.85rem;">${esc(p.title)}</strong>
-                            <div style="font-size:0.7rem;color:#64748b;margin-top:2px;">${esc(p.proposerCallsign)} · ${votes} vote${votes !== 1 ? 's' : ''}</div>
+                            <div style="font-size:0.7rem;color:#64748b;margin-top:2px;">${esc(p.proposerCallsign)}</div>
                         </div>
                         <div style="display:flex;gap:0.4rem;align-items:center;">
                             <span style="font-size:0.7rem;padding:2px 6px;border-radius:4px;background:${p.status === 'funded' ? '#10b98122' : p.status === 'rejected' ? '#ef444422' : '#2563eb22'};color:${p.status === 'funded' ? '#10b981' : p.status === 'rejected' ? '#ef4444' : '#60a5fa'};">${statusBadge}</span>
@@ -1501,41 +1490,6 @@
                     </div>
                 </div>`;
             }).join('');
-        }
-
-        async function createRound() {
-            if (!authToken || !commonsData) return;
-            const proposed = commonsData.projects.filter(p => p.status === 'proposed');
-            if (!proposed.length) { alert('No proposed projects to include in a round.'); return; }
-            const days = prompt('How many days should voting be open?', '7');
-            if (!days) return;
-            const closesAt = new Date(Date.now() + Number(days) * 86400000).toISOString();
-            try {
-                await fetch('/api/local/admin/commons/round', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: authToken, action: 'create', projectIds: proposed.map(p => p.id), closesAt })
-                });
-                await loadCommonsData();
-            } catch (e) { alert('Failed to create round: ' + e.message); }
-        }
-
-        async function closeRound() {
-            if (!authToken || !commonsData) return;
-            const activeRound = commonsData.rounds.find(r => r.status === 'open');
-            if (!activeRound) { alert('No active round to close.'); return; }
-            if (!confirm('Close the voting round and fund the winner?')) return;
-            try {
-                const res = await fetch('/api/local/admin/commons/round', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: authToken, action: 'close', roundId: activeRound.id })
-                });
-                const data = await res.json();
-                if (data.winner) alert('🎉 Funded: ' + data.winner.title + ' (' + data.winner.requestedAmount + 'B)');
-                else alert('Round closed. No project was funded (not enough in commons or no votes).');
-                await loadCommonsData();
-            } catch (e) { alert('Failed to close round: ' + e.message); }
         }
 
         async function rejectProject(projectId) {

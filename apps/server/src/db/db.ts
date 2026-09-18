@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
+import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -754,6 +755,11 @@ export function initSchema() {
     // idempotent; the column isn't read yet, so this is tidiness rather than a behaviour change.
     try { db.prepare(`UPDATE treasury_operators SET role='keeper' WHERE role='steward'`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';`); } catch { }
+    try {
+        ripOutLegacyVoting(db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not remove retired voting data:', err);
+    }
     try {
         db.exec(`
             DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;

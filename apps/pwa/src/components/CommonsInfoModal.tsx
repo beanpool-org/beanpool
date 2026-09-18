@@ -280,7 +280,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                     1. Any active trader can propose a Decision<br />
                                     2. 7-day open voting window with 48h discussion<br />
                                     3. Members vote using earned trade standing (voice credits)<br />
-                                    4. Round closes → passed Decisions execute automatically<br />
+                                    4. Voting closes → passed Decisions execute automatically<br />
                                     <em style={{ color: '#9ca3af' }}>Fund release is self-executing by the node when quorum and majority are met.</em>
                                 </div>
                             </div>

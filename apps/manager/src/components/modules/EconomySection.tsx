@@ -28,20 +28,11 @@ interface EconomySectionProps {
     initialSubTab?: 'enterprises' | 'decisions' | 'pool' | 'disputes';
 }
 
-interface VotingRound {
-    id: string;
-    projectIds: string[];
-    closesAt: string;
-    status: string;
-    totalVotes?: number;
-}
-
 interface CommonsProject {
     id: string;
     title: string;
     description: string;
     requestedAmount?: number;
-    votes?: number;
     proposer?: string;
     status?: string;
 }
@@ -112,15 +103,11 @@ export function EconomySection({
     const [offerCategory, setOfferCategory] = useState('food');
     const [seedingOffer, setSeedingOffer] = useState(false);
 
-    // Commons voting state
+    // Commons proposals state
     const [commonsData, setCommonsData] = useState<{
         proposed: CommonsProject[];
-        activeRound: VotingRound | null;
-        pastRounds: VotingRound[];
-    }>({ proposed: [], activeRound: null, pastRounds: [] });
+    }>({ proposed: [] });
     const [loadingCommons, setLoadingCommons] = useState(false);
-    const [roundDays, setRoundDays] = useState(7);
-    const [roundActionLoading, setRoundActionLoading] = useState(false);
 
     const members: MemberItem[] = Array.isArray(nodeData?.members) ? nodeData.members : [];
 
@@ -235,8 +222,6 @@ export function EconomySection({
                 const data = await res.json();
                 setCommonsData({
                     proposed: data.projects || data.proposed || [],
-                    activeRound: data.rounds?.find((r: any) => r.status === 'ACTIVE') || data.activeRound || null,
-                    pastRounds: data.rounds?.filter((r: any) => r.status !== 'ACTIVE') || data.pastRounds || [],
                 });
             }
         } catch {
@@ -422,65 +407,6 @@ export function EconomySection({
         }
     };
 
-    const handleStartVotingRound = async () => {
-        if (commonsData.proposed.length === 0) {
-            alert('No proposed projects available for a voting round.');
-            return;
-        }
-        setRoundActionLoading(true);
-        try {
-            const closesAt = new Date(Date.now() + roundDays * 24 * 60 * 60 * 1000).toISOString();
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/round');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
-                body: JSON.stringify({
-                    action: 'create',
-                    projectIds: commonsData.proposed.map((p) => p.id),
-                    closesAt,
-                }),
-            });
-            if (res.ok) {
-                await loadCommonsData();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                alert(err.error || 'Failed to start voting round');
-            }
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        } finally {
-            setRoundActionLoading(false);
-        }
-    };
-
-    const handleCloseVotingRound = async () => {
-        if (!commonsData.activeRound) return;
-        if (!confirm('Close the active voting round now and distribute grants to passing proposals?')) return;
-        setRoundActionLoading(true);
-        try {
-            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/round');
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
-                body: JSON.stringify({
-                    action: 'close',
-                    roundId: commonsData.activeRound.id,
-                }),
-            });
-            if (res.ok) {
-                await loadCommonsData();
-                onRefresh();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                alert(err.error || 'Failed to close voting round');
-            }
-        } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : String(e));
-        } finally {
-            setRoundActionLoading(false);
-        }
-    };
-
     const handleRejectProject = async (projectId: string) => {
         if (!confirm('Reject and dismiss this commons proposal?')) return;
         try {
@@ -529,7 +455,7 @@ export function EconomySection({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Decisions &amp; Polls
+                        Proposals
                     </button>
                     <button
                         onClick={() => setSubTab('pool')}
@@ -753,77 +679,15 @@ export function EconomySection({
                 </div>
             )}
 
-            {/* Subtab: Decisions & Polls */}
+            {/* Subtab: Commons proposals */}
             {subTab === 'decisions' && (
                 <div className="space-y-6">
-                    {/* Active Voting Round */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
-                                <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                                    <span>🗳️</span>
-                                    <span>Active Voting Round</span>
-                                </h3>
-                                <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Quadratic and 1p1v binding community votes currently open
-                                </p>
-                            </div>
-                            {commonsData.activeRound && (
-                                <button
-                                    onClick={handleCloseVotingRound}
-                                    disabled={roundActionLoading}
-                                    className="px-3 py-1.5 rounded-lg bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
-                                >
-                                    {roundActionLoading ? 'Closing...' : 'Close Round & Enact'}
-                                </button>
-                            )}
-                        </div>
-
-                        {commonsData.activeRound ? (
-                            <div className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-emerald-400">Round in Progress</span>
-                                    <span className="text-xs text-nature-400 font-mono">
-                                        Closes: {new Date(commonsData.activeRound.closesAt).toLocaleDateString()}
-                                    </span>
-                                </div>
-                                <p className="text-xs text-nature-300 m-0">
-                                    Includes {commonsData.activeRound.projectIds?.length ?? 0} proposal(s) currently being voted on by the community.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-nature-950/60 border border-nature-800">
-                                <p className="text-xs text-nature-400 m-0">
-                                    No voting round is currently active. Ready to launch a round with pending proposals?
-                                </p>
-                                <div className="flex items-center gap-2">
-                                    <select
-                                        value={roundDays}
-                                        onChange={(e) => setRoundDays(Number(e.target.value))}
-                                        className="bg-nature-900 border border-nature-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                                    >
-                                        <option value={3}>3 days</option>
-                                        <option value={7}>7 days</option>
-                                        <option value={14}>14 days</option>
-                                    </select>
-                                    <button
-                                        onClick={handleStartVotingRound}
-                                        disabled={roundActionLoading || commonsData.proposed.length === 0}
-                                        className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-40"
-                                    >
-                                        {roundActionLoading ? 'Starting...' : 'Start Voting Round'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                         <h3 className="text-base font-bold text-white m-0">Pending Commons Proposals ({commonsData.proposed.length})</h3>
                         {commonsData.proposed.length === 0 ? (
                             <div className="py-6 text-center text-xs text-nature-400">
-                                No proposals waiting for vote.
+                                No pending proposals.
                             </div>
                         ) : (
                             <div className="space-y-3">

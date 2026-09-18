@@ -11,9 +11,8 @@
  *   6. The last owner cannot be removed.
  *   7. A treasury (is_treasury=1) can NEVER hold a node role.
  *   8. Each former getAdminPubkey() call site authorises owner and admin, and refuses regular/SYSTEM.
- *   9. createVotingRound uses the same admin predicate (isNodeAdmin).
- *  10. getBalance() and member read paths expose nodeRole ('owner', 'admin', null).
- *  11. Admin HTTP management routes: GET, POST, DELETE with permission enforcement.
+ *   9. getBalance() and member read paths expose nodeRole ('owner', 'admin', null).
+ *  10. Admin HTTP management routes: GET, POST, DELETE with permission enforcement.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-node-roles.ts
  */
@@ -38,9 +37,6 @@ import {
     keeperOf,
     unvouchMember,
     createTreasury,
-    createProject,
-    createVotingRound,
-    closeVotingRound,
     adminSetVoucher,
     vouchMember,
     adminPruneUser,
@@ -298,23 +294,6 @@ async function main() {
     unvouchMember('dave', 'plain_user');
     assert(getBalance('plain_user').floor === 0, 'Admin Dave withdrew Alice voucher vouch');
 
-    // ── 8. createVotingRound admin check ──
-    const proj1 = createProject('plain_user', 'Community Park', 'desc', 100)!;
-    assert(!!proj1, 'Project created');
-
-    // Plain member cannot create voting round
-    const roundPlain = createVotingRound('plain_user', [proj1.id], new Date(Date.now() + 3600_000).toISOString());
-    assert(roundPlain === null, 'Plain member cannot create voting round');
-
-    // SYSTEM cannot create voting round
-    const roundSystem = createVotingRound('SYSTEM', [proj1.id], new Date(Date.now() + 3600_000).toISOString());
-    assert(roundSystem === null, 'SYSTEM cannot create voting round');
-
-    // Admin (Dave) CAN create voting round
-    const roundDave = createVotingRound('dave', [proj1.id], new Date(Date.now() + 3600_000).toISOString());
-    assert(roundDave !== null, 'Admin Dave CAN create voting round');
-    closeVotingRound(roundDave!.id);
-
     // ── 9. Read paths expose nodeRole ──
     const aliceBal = getBalance('gen_alice');
     assert(aliceBal.nodeRole === 'owner', "getBalance(Alice).nodeRole === 'owner'");
@@ -445,22 +424,13 @@ async function main() {
         assert(delOwner.status === 200 && delOwnerBody.success === true, 'DELETE /api/local/admin/node-roles with owner actor returns 200');
         assert(isNodeAdmin('frank') === false, 'Frank revoked via HTTP endpoint');
 
-        // POST /api/local/admin/commons/round: voting round creation with signed non-admin -> 403
-        const roundSignedNonAdmin = await fetch(`${base}/api/local/admin/commons/round`, {
+        // The old voting-round admin route was deleted with voting rounds (2026-09-19).
+        const retiredRound = await fetch(`${base}/api/local/admin/commons/round`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'plain_user' },
-            body: JSON.stringify({ action: 'create', projectIds: [proj1.id], closesAt: new Date(Date.now() + 3600_000).toISOString() }),
+            headers: { 'Content-Type': 'application/json', 'x-verified-actor': 'gen_alice' },
+            body: JSON.stringify({ action: 'create', projectIds: ['p'], closesAt: new Date(Date.now() + 3600_000).toISOString() }),
         });
-        assert(roundSignedNonAdmin.status === 403, 'POST /api/local/admin/commons/round with signed non-admin returns 403');
-
-        // POST /api/local/admin/commons/round: voting round creation under password auth ignores body adminPubkey and attributes to active admin
-        const roundPasswordAuth = await fetch(`${base}/api/local/admin/commons/round`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create', projectIds: [proj1.id], closesAt: new Date(Date.now() + 3600_000).toISOString(), adminPubkey: 'spoofed_key' }),
-        });
-        const roundBody: any = await roundPasswordAuth.json();
-        assert(roundPasswordAuth.status === 200 && roundBody.round?.createdBy === 'gen_alice', 'POST /api/local/admin/commons/round under password auth creates round attributed to active admin, ignoring body adminPubkey');
+        assert(retiredRound.status === 404, `POST /api/local/admin/commons/round no longer exists (${retiredRound.status})`);
 
         // DELETE last owner -> 400
         const delLastOwner = await fetch(`${base}/api/local/admin/node-roles/gen_alice/owner`, {

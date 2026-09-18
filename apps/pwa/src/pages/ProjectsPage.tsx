@@ -396,7 +396,6 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         decisions={decisions}
                         activeMembers30d={activeMembers30d}
                         identity={identity}
-                        balanceInfo={balanceInfo}
                         commonsBalance={commonsBalance}
                         onRefresh={fetchEnterprises}
                         onOpenPropose={() => {

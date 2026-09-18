@@ -10,7 +10,6 @@
  * 5. canOperate('') is false (cannot operate treasuries).
  * 6. canAdministerTreasury('', treasury) is false.
  * 7. unvouchMember('', target) refuses with not-admin error.
- * 8. createVotingRound('', ...) returns null.
  * 9. adminSendMessage(target, body) throws no genesis admin error.
  * 10. resolveVouchedInBy(target) with invited_by = '' returns null (not admin).
  * 11. When genesis admin is seeded, real admin succeeds and '' is still rejected.
@@ -21,7 +20,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
     initStateEngine, getAdminPubkey, hasListedOffer, hasLiveOffer, liveOfferCount,
-    canVouch, canOperate, canAdministerTreasury, unvouchMember, createVotingRound,
+    canVouch, canOperate, canAdministerTreasury, unvouchMember,
     adminSendMessage, resolveVouchedInBy, createTreasury, seedGenesisMember,
     vouchMember, adminSetVoucher, transfer
 } from './state-engine.js';
@@ -84,10 +83,6 @@ async function runTests() {
         check(e.message === 'Only the voucher who vouched, or an admin, can withdraw a vouch',
             "unvouchMember('', alice) refuses with not-admin error");
     }
-
-    // ── 4. Empty string identity cannot create voting round ──
-    const round = createVotingRound('', ['project-1'], new Date(Date.now() + 86400000).toISOString());
-    check(round === null, "createVotingRound('', ...) returns null");
 
     // ── 5. adminSendMessage throws when no admin exists ──
     try {

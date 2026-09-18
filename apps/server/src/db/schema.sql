@@ -1152,7 +1152,7 @@ CREATE INDEX IF NOT EXISTS idx_pulse_items_owner
 CREATE INDEX IF NOT EXISTS idx_pulse_items_updated ON pulse_items(updated_at);
 
 -- 23. Community Decisions & Decision Votes (docs/the-commons.md §3.2–§3.8, Slice 5)
--- The binding half of governance: proposals typed by what they touch (member, pool, rule, nothing),
+-- The binding half of governance: proposals typed by what they touch (member or pool),
 -- auto-closing on a tick after a fixed 7-day window, evaluated against active-member quorum (30%, floor 3)
 -- and specific supermajority thresholds, executing in a single atomic transaction.
 CREATE TABLE IF NOT EXISTS decisions (
@@ -1160,7 +1160,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     author_pubkey        TEXT NOT NULL REFERENCES members(public_key),
     title                TEXT NOT NULL,
     description          TEXT NOT NULL,
-    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool', 'rule', 'nothing')),
+    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool')),
     effect               TEXT NOT NULL,
     subject              TEXT,
     params               TEXT,

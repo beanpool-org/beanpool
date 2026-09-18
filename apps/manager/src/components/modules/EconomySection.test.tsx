@@ -57,7 +57,7 @@ describe('EconomySection Component', () => {
         });
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
             ok: true,
-            json: () => Promise.resolve({ proposed: [], activeRound: null, pastRounds: [] }),
+            json: () => Promise.resolve({ projects: [], balance: 0 }),
         }));
     });
 

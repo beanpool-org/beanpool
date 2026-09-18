@@ -135,7 +135,6 @@ async function main() {
         '/api/pricing-guide',
         '/api/federation/links',
         '/api/federation/reachable-peers',
-        `/api/commons/my-credits/${alice.pubKeyHex}`,
         `/api/enterprise/${enterprise}`,
         `/api/treasury/${enterprise}`,
         `/api/community/membership/${alice.pubKeyHex}`,

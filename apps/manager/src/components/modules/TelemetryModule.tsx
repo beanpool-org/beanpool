@@ -1,6 +1,6 @@
 import React from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import type { DiagnosticsResponse } from '../../lib/node-client';
+import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
 
 export interface NodeDiagnosticState {
     diag: DiagnosticsResponse | null;
@@ -12,7 +12,7 @@ export interface TelemetryModuleProps {
     profiles: NodeProfile[];
     activeProfileId: string;
     fleetDiags: Record<string, NodeDiagnosticState>;
-    fleetNodeData?: Record<string, any>;
+    fleetNodeData?: Record<string, NodeDataPayload>;
     historyMap?: Record<string, TelemetryHistoryPoint[]>;
     onSelectNode: (id: string) => void;
     onInspectNodeThreats?: (id: string) => void;
@@ -394,7 +394,7 @@ export function TelemetryModule({
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
                                 : (Array.isArray(fleetNodeData?.[profile.id]?.members)
-                                    ? fleetNodeData[profile.id].members.length
+                                    ? fleetNodeData[profile.id]?.members?.length
                                     : undefined);
                             const nodeColor = NODE_COLORS[pIdx % NODE_COLORS.length];
                             const nodePoints = (activeHistoryMap[profile.id] || []).map((pt) => pt.cpu);
@@ -524,7 +524,7 @@ export function TelemetryModule({
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
                                 : (Array.isArray(fleetNodeData?.[profile.id]?.members)
-                                    ? fleetNodeData[profile.id].members.length
+                                    ? fleetNodeData[profile.id]?.members?.length
                                     : undefined);
                             const nodeColor = NODE_COLORS[pIdx % NODE_COLORS.length];
                             const nodePoints = (activeHistoryMap[profile.id] || []).map((pt) => pt.cpu);

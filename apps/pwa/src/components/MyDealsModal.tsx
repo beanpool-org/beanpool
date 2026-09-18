@@ -9,7 +9,7 @@
  * History sub-filter: All | Received | Given
  */
 
-import { useState, useEffect, useRef, type KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { MarketplacePost } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
 
@@ -142,13 +142,35 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
         if (initialTab) setDealsTab(initialTab);
     }, [initialTab, visible]);
 
+    // ── Data derivation hooks (placed unconditionally before early return) ──
+    // ⚡ Bolt: O(1) Set lookups for pending transaction post IDs to avoid O(P * T) nested scans in myPosts / pendingDeals filters
+    const pendingTxPostIds = useMemo(() => {
+        const set = new Set<string>();
+        for (const t of transactions) {
+            if (t.status === 'pending') {
+                set.add(t.postId);
+            }
+        }
+        return set;
+    }, [transactions]);
+
+    const myPendingTxPostIds = useMemo(() => {
+        const set = new Set<string>();
+        if (!identity) return set;
+        for (const t of transactions) {
+            if (t.status === 'pending' && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey)) {
+                set.add(t.postId);
+            }
+        }
+        return set;
+    }, [transactions, identity]);
+
     if (!visible || !identity) return null;
 
-    // ── Data derivation ──
     const myPosts = posts.filter(p =>
         p.authorPublicKey === identity.publicKey ||
         p.acceptedBy === identity.publicKey ||
-        transactions.some(t => t.postId === p.id && t.status === 'pending' && (t.buyerPublicKey === identity.publicKey || t.sellerPublicKey === identity.publicKey))
+        myPendingTxPostIds.has(p.id)
     ).sort((a, b) => {
         if (a.status === 'pending' && b.status !== 'pending') return -1;
         if (b.status === 'pending' && a.status !== 'pending') return 1;
@@ -159,7 +181,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
 
     const pendingDeals = posts.filter(p => {
         if (p.status === 'pending' && (p.authorPublicKey === identity.publicKey || p.acceptedBy === identity.publicKey)) return true;
-        return transactions.some(t => t.postId === p.id && t.status === 'pending');
+        return pendingTxPostIds.has(p.id);
     });
 
     const pendingCount = pendingDeals.length + transactions.filter(t => t.status === 'pending').length;

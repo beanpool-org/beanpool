@@ -63,6 +63,15 @@ describe('feedback client', () => {
         expect(JSON.parse(init.body).website).toBe('');
     });
 
+    it('a 2xx that is not our Worker\'s {ok:true} is NOT success — no false "thank you" (#919 review)', async () => {
+        const page = vi.fn().mockResolvedValue(reply(200));                 // e.g. a static page answering the POST
+        const r1 = await submitFeedback(input(), { fetch: page });
+        expect(r1.ok).toBe(false);
+        expect(!r1.ok && r1.error).toMatch(/still here/);
+        const other = vi.fn().mockResolvedValue(reply(200, { hello: 'x' })); // JSON, but not ours
+        expect((await submitFeedback(input(), { fetch: other })).ok).toBe(false);
+    });
+
     it('passes the server message through (e.g. the friendly 429)', async () => {
         const fetch = vi.fn().mockResolvedValue(reply(429, { ok: false, error: 'Please try again a bit later.' }));
         expect(await submitFeedback(input(), { fetch })).toEqual({ ok: false, error: 'Please try again a bit later.' });

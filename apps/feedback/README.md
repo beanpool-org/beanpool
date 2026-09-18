@@ -33,7 +33,7 @@ Nothing else is readable. Admin routes send no CORS headers.
 }
 ```
 
-`website` is a honeypot the forms keep hidden. If it is filled, the Worker answers `201 {ok:true}` and stores
+`website` is a honeypot: none of our forms send it, so only scripts posting straight to the API fill it. If it is filled, the Worker answers `201 {ok:true}` and stores
 and counts nothing. Bodies over 16 KB are refused (`413`) before they are parsed. A malformed `appVersion`,
 `platform` or `lang` is dropped, never a reason to lose the suggestion.
 
@@ -50,7 +50,7 @@ triage status (`new` → `spam` / `triaged` / `filed`), plus an optional GitHub 
 
 - **No IP address**, no user agent, no member key or identity, no node address, no cookies.
 - The Worker does not log requests (`[observability] enabled = false`, and the code never logs).
-- Rate limiting uses `SHA-256(daily salt ‖ IP)`. The salt is 32 random bytes, kept only in D1, never
+- Rate limiting uses `SHA-256(daily salt ‖ sender)`, where sender is the IPv4 address or the IPv6 /64 network, plus one global daily cap (`RATE_GLOBAL_PER_DAY`, default 2000). The salt is 32 random bytes, kept only in D1, never
   logged, and replaced at the first request of each UTC day. The old salt and all old counters are
   deleted then and again by the daily cron. The counters never point at a feedback row.
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import worker, { tokenMatches, MAX_BODY_BYTES } from '../src/index.js';
+import { senderKey } from '../src/ratelimit.js';
 
 // A real SQLite behind a minimal D1-shaped API, loaded with the real schema.sql — so the SQL the
 // Worker sends (ON CONFLICT … RETURNING, COALESCE updates) is exercised, not pattern-matched.
@@ -233,6 +234,34 @@ test('rate limit: 5 per hour per sender, then a friendly 429 with Retry-After; o
     await withClock(t0 + 3600_000, async () => assert.equal((await post(env, good())).status, 201));
 });
 
+test('rate limit: IPv6 senders are limited by their /64, not the single address (#919 review)', async () => {
+    const env = mkEnv();
+    await withClock(Date.UTC(2026, 8, 21, 10, 15, 0), async () => {
+        const statuses = [];
+        for (let i = 1; i <= 8; i++) statuses.push((await post(env, good(), { ip: `2001:db8:abcd:12::${i.toString(16)}` })).status);
+        assert.deepEqual(statuses, [201, 201, 201, 201, 201, 429, 429, 429]);
+        // A different /64 is a different sender.
+        assert.equal((await post(env, good(), { ip: '2001:db8:abcd:13::1' })).status, 201);
+    });
+});
+
+test('senderKey: IPv4 as is; IPv6 folded to its /64 however it is written', () => {
+    assert.equal(senderKey('203.0.113.77'), '203.0.113.77');
+    assert.equal(senderKey('2001:db8:abcd:12::1'), '2001:db8:abcd:12::/64');
+    assert.equal(senderKey('2001:0db8:abcd:0012:ffff:0:0:9'), '2001:db8:abcd:12::/64');
+    assert.equal(senderKey('2001:db8::1'), '2001:db8:0:0::/64');
+    assert.equal(senderKey(''), 'unknown');
+});
+
+test('rate limit: a global daily cap holds even when every sender is different', async () => {
+    const env = mkEnv({ RATE_GLOBAL_PER_DAY: '3' });
+    await withClock(Date.UTC(2026, 8, 21, 10, 15, 0), async () => {
+        const statuses = [];
+        for (let i = 1; i <= 5; i++) statuses.push((await post(env, good(), { ip: `198.51.100.${i}` })).status);
+        assert.deepEqual(statuses, [201, 201, 201, 429, 429]);
+    });
+});
+
 test('rate limit: 20 per UTC day per sender even when spread over hours', async () => {
     const env = mkEnv();
     const day = Date.UTC(2026, 8, 21, 0, 30, 0);
@@ -251,7 +280,7 @@ test('rate limit: the salt rotates daily and yesterday’s salt and counters are
     await withClock(d1, async () => { for (let i = 0; i < 6; i++) await post(env, good()); });
     const salt1 = env.DB.raw.prepare('SELECT salt FROM rate_salts').all();
     assert.equal(salt1.length, 1);
-    const hash1 = env.DB.raw.prepare('SELECT DISTINCT hash FROM rate_buckets').all();
+    const hash1 = env.DB.raw.prepare('SELECT DISTINCT hash FROM rate_buckets WHERE hash != \'global\'').all();
     assert.equal(hash1.length, 1);
     assert.ok(!hash1[0].hash.includes(IP));
 
@@ -261,7 +290,7 @@ test('rate limit: the salt rotates daily and yesterday’s salt and counters are
     assert.notEqual(salts[0].salt, salt1[0].salt);
     const days = env.DB.raw.prepare('SELECT DISTINCT day FROM rate_buckets').all().map((r) => r.day);
     assert.deepEqual(days, ['2026-09-22']);
-    const hash2 = env.DB.raw.prepare('SELECT DISTINCT hash FROM rate_buckets').all();
+    const hash2 = env.DB.raw.prepare('SELECT DISTINCT hash FROM rate_buckets WHERE hash != \'global\'').all();
     assert.notEqual(hash2[0].hash, hash1[0].hash, 'same IP must not hash the same across days');
 });
 

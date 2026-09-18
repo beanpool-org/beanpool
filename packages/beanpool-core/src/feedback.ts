@@ -100,12 +100,15 @@ export async function submitFeedback(
             body: JSON.stringify(buildFeedbackBody(input)),
             signal: controller?.signal,
         });
-        if (res.ok) return { ok: true };
+        let data: { ok?: unknown; error?: unknown } | undefined;
+        try { data = (await res.json()) as { ok?: unknown; error?: unknown }; } catch { /* not JSON */ }
+        // Only our Worker's own {ok:true} counts as sent. Anything else that answers 2xx (a static page, a
+        // captive portal) must not tell the member "thank you" while their text is lost (#919 review).
+        if (res.ok && data?.ok === true) return { ok: true };
         let message: string | undefined;
         try {
-            const data = (await res.json()) as { error?: unknown };
             if (typeof data?.error === 'string' && data.error) message = data.error;
-        } catch { /* not JSON — fall through to a generic message */ }
+        } catch { /* fall through to a generic message */ }
         if (message) return { ok: false, error: message };
         if (res.status === 429) return { ok: false, error: 'Too many suggestions from your connection recently. Please try again later — your text is still here.' };
         return { ok: false, error: NETWORK_ERROR };

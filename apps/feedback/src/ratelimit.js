@@ -48,19 +48,39 @@ const INCREMENT =
  * counted too, so hammering the endpoint keeps a sender blocked rather than probing the edge.
  * @returns {Promise<{ allowed: boolean, retryAfter: number }>}
  */
+/**
+ * The key a sender is limited by. IPv4: the address. IPv6: its /64 network — anyone with a server
+ * holds a whole /64 (2^64 addresses), so limiting by the full address limits nobody (#919 review).
+ */
+export function senderKey(ip) {
+    const raw = String(ip || '').trim();
+    if (!raw.includes(':')) return raw || 'unknown';
+    const [head, tail = ''] = raw.toLowerCase().split('::');
+    const left = head ? head.split(':') : [];
+    const right = raw.includes('::') && tail ? tail.split(':') : [];
+    const missing = Math.max(0, 8 - left.length - right.length);
+    const full = raw.includes('::') ? [...left, ...Array(missing).fill('0'), ...right] : left;
+    return full.slice(0, 4).map((h) => h.replace(/^0+(?=.)/, '') || '0').join(':') + '::/64';
+}
+
 export async function checkAndCount(env, ip, nowS) {
     const perHour = Number(env.RATE_PER_HOUR) || 5;
     const perDay = Number(env.RATE_PER_DAY) || 20;
     const day = utcDay(nowS);
     const salt = await saltForDay(env, day);
-    const hash = await sha256Hex(`${salt}:${ip || 'unknown'}`);
+    const hash = await sha256Hex(`${salt}:${senderKey(ip)}`);
     const hourBucket = `h${Math.floor(nowS / HOUR)}`;
-    const [h, d] = await env.DB.batch([
+    const globalPerDay = Number(env.RATE_GLOBAL_PER_DAY) || 2000;
+    const [h, d, g] = await env.DB.batch([
         env.DB.prepare(INCREMENT).bind(hash, hourBucket, day),
         env.DB.prepare(INCREMENT).bind(hash, `d${day}`, day),
+        // One cap for everyone together, so a flood from many networks still can't bury the week's real
+        // suggestions behind the digest's oldest-first drain.
+        env.DB.prepare(INCREMENT).bind('global', `d${day}`, day),
     ]);
     const hourCount = h.results[0].count;
     const dayCount = d.results[0].count;
+    if (g.results[0].count > globalPerDay) return { allowed: false, retryAfter: DAY - (nowS % DAY) };
     if (dayCount > perDay) return { allowed: false, retryAfter: DAY - (nowS % DAY) };
     if (hourCount > perHour) return { allowed: false, retryAfter: HOUR - (nowS % HOUR) };
     return { allowed: true, retryAfter: 0 };

@@ -388,6 +388,81 @@ function main() {
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 7. The unguarded posts_au, replaced on boot, and posts_fts rebuilt exactly once (#878) ─────────
+    // Live nodes hold the old trigger, which fired a second time inside posts_touch_updated_at's nested UPDATE
+    // and could leave posts_fts out of step. `CREATE TRIGGER IF NOT EXISTS` cannot replace it, so db.ts drops
+    // it before the exec; and a one-time rebuild repairs whatever the old trigger left behind. The fixture is
+    // a fully-booted node rolled back to the old trigger with a deliberately corrupted index.
+    console.log('\n--- 7. Legacy posts_au + a desynced posts_fts ---');
+    {
+        const OLD_POSTS_AU = `CREATE TRIGGER posts_au AFTER UPDATE ON posts BEGIN
+    INSERT INTO posts_fts(posts_fts, rowid, title, description, search_keywords)
+    VALUES ('delete', old.rowid, old.title, old.description, old.search_keywords);
+    INSERT INTO posts_fts(rowid, title, description, search_keywords)
+    VALUES (new.rowid, new.title, new.description, new.search_keywords);
+END`;
+        const GUARD = /WHEN\s+OLD\.title\s+IS\s+NOT\s+NEW\.title/i;
+        const auSql = (d: Database.Database): string =>
+            (d.prepare(`SELECT sql FROM sqlite_master WHERE type='trigger' AND name='posts_au'`).get() as any)?.sql ?? '';
+        const ftsHealthy = (d: Database.Database): boolean => {
+            try { d.exec(`INSERT INTO posts_fts(posts_fts, rank) VALUES('integrity-check', 1)`); return true; } catch { return false; }
+        };
+
+        const dir = tmp('legacy-posts-au');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const POSTS = 5000;
+        const d = new Database(path.join(dir, 'state.db'));
+        assert(GUARD.test(auSql(d)), 'a fresh install gets the guarded posts_au');
+        assert((d.pragma('user_version', { simple: true }) as number) >= 4, 'and is marked as rebuilt, so it never rebuilds again');
+
+        d.pragma('foreign_keys = OFF');
+        d.exec(`DROP TRIGGER posts_au; ${OLD_POSTS_AU};`);
+        d.pragma('user_version = 3');
+        const pk = 'aa'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z')`).run(pk);
+        const ins = d.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, search_keywords)
+                               VALUES (?, 'offer', 'food', ?, 'Grown without sprays in the back paddock', ?, 'food')`);
+        d.transaction(() => { for (let i = 0; i < POSTS; i++) ins.run(`legacy-${i}`, `Heirloom tomatoes batch ${i}`, pk); })();
+        // Corrupt the index the way the old trigger could: an entry for text the row does not hold.
+        const rowid = (d.prepare(`SELECT rowid FROM posts WHERE id = 'legacy-7'`).get() as any).rowid;
+        d.prepare(`INSERT INTO posts_fts(rowid, title, description, search_keywords) VALUES (?, 'ghostword', '', '')`).run(rowid);
+        assert(!GUARD.test(auSql(d)), 'the fixture holds the OLD unguarded posts_au');
+        assert(!ftsHealthy(d), 'and a posts_fts that no longer matches posts');
+        d.close();
+
+        const first = bootInto(dir);
+        assert(first.ok, 'the legacy node boots');
+        if (!first.ok) console.error(first.output.split('\n').slice(-20).join('\n'));
+        assert(/Replacing posts_au/.test(first.output), 'the boot replaces posts_au');
+        const took = first.output.match(/Rebuilt posts_fts \((\d+)ms\)/);
+        assert(!!took, `and rebuilds posts_fts, once (${took?.[1] ?? '?'}ms for ${POSTS} posts)`);
+        // Generous: measured at tens of ms. A rebuild that took seconds on boot would want rethinking.
+        assert(!!took && Number(took[1]) < 5000, 'the rebuild is cheap enough to sit on the boot path');
+
+        const after = new Database(path.join(dir, 'state.db'));
+        assert(GUARD.test(auSql(after)), 'posts_au now carries the guard');
+        assert(ftsHealthy(after), 'posts_fts agrees with posts again');
+        assert((after.prepare(`SELECT COUNT(*) c FROM posts_fts WHERE posts_fts MATCH 'ghostword'`).get() as any).c === 0,
+            'the ghost entry is gone');
+        assert((after.prepare(`SELECT COUNT(*) c FROM posts_fts WHERE posts_fts MATCH 'heirloom'`).get() as any).c === POSTS,
+            'and every real post is still found');
+        // The collision itself, on the upgraded node: a title change that leaves updated_at alone (so the touch
+        // trigger fires), longer than everything indexed, which the old trigger turned into SQLITE_CORRUPT_VTAB.
+        const filler = Array.from({ length: POSTS * 4 + 10 }, (_, i) => `w${i}`).join(' ');
+        let threw: string | null = null;
+        try { after.prepare(`UPDATE posts SET title = ? WHERE id = 'legacy-7'`).run(`Heirloom tomatoes relabelled ${filler}`); }
+        catch (e: any) { threw = e.code ?? e.message; }
+        assert(threw === null, `a colliding title edit on the upgraded node is accepted${threw ? ` (threw ${threw})` : ''}`);
+        assert(ftsHealthy(after), 'and the index still agrees afterwards');
+        after.close();
+
+        const second = bootInto(dir);
+        assert(second.ok, 'the node boots again');
+        assert(!/Rebuilt posts_fts|Replacing posts_au/.test(second.output),
+            'and the second boot neither replaces the trigger nor rebuilds — the migration is one-time');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

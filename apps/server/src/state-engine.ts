@@ -652,7 +652,13 @@ function backfillSearchKeywords(): void {
                 VALUES ('delete', old.rowid, old.title, old.description, old.search_keywords);
             END;
 
-            CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
+            -- Must match schema.sql's posts_au, WHEN included: without it the touch trigger's nested
+            -- UPDATE desyncs the index (#878). test-posts-fts-same-ms fails if the two drift.
+            CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts
+            WHEN OLD.title IS NOT NEW.title
+              OR OLD.description IS NOT NEW.description
+              OR OLD.search_keywords IS NOT NEW.search_keywords
+            BEGIN
                 INSERT INTO posts_fts(posts_fts, rowid, title, description, search_keywords)
                 VALUES ('delete', old.rowid, old.title, old.description, old.search_keywords);
                 INSERT INTO posts_fts(rowid, title, description, search_keywords)

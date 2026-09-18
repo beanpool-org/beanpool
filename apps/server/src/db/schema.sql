@@ -795,6 +795,9 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
     backing         REAL DEFAULT 0,
+    -- Set when this keeper became lead automatically (the community removed the old lead, or the old lead
+    -- stepped down): the other keepers may then run succession at once, without the 30-day inactivity wait.
+    auto_promoted_at DATETIME,
     PRIMARY KEY (treasury_pubkey, member_pubkey)
 );
 -- Covers "which enterprises does this member steward?" — the stewardOf() lookup that
@@ -1354,7 +1357,12 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
     proposer_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE RESTRICT,
     status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'passed', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    executed_at       DATETIME
+    executed_at       DATETIME,
+    -- 14 days after opening. Not passed by then = closed as 'expired'.
+    deadline_at       DATETIME,
+    -- Why a cancelled proposal closed: 'rejected' (a yes majority is out of reach), 'expired',
+    -- 'lead_returned', 'candidate_gone'.
+    closed_reason     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
 -- recordActivity looks up a lead's active proposals on every signed write.
@@ -1368,5 +1376,30 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_votes (
     proposal_id       TEXT NOT NULL REFERENCES enterprise_succession_proposals(id) ON DELETE CASCADE,
     voter_pubkey      TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     voted_at          DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    choice            TEXT NOT NULL DEFAULT 'yes' CHECK (choice IN ('yes', 'no')),
     PRIMARY KEY (proposal_id, voter_pubkey)
 );
+
+-- A keeper change the lead has made (answers A and M, 2026-09-19): adding an approved applicant, or removing an
+-- ordinary keeper. Any other active keeper may object within 3 days, which cancels it; otherwise the scheduler
+-- applies it when the window ends. A one-keeper enterprise's additions never land here — they apply at once.
+CREATE TABLE IF NOT EXISTS enterprise_keeper_changes (
+    id                TEXT PRIMARY KEY,
+    enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    kind              TEXT NOT NULL CHECK (kind IN ('add', 'remove')),
+    member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    request_id        TEXT REFERENCES enterprise_keeper_requests(id) ON DELETE SET NULL,
+    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    proposed_by       TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'objected', 'withdrawn', 'failed')),
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    applies_at        DATETIME NOT NULL,
+    resolved_at       DATETIME,
+    resolved_by       TEXT,
+    reason            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_keeper_changes_enterprise ON enterprise_keeper_changes(enterprise_pubkey, status);
+CREATE INDEX IF NOT EXISTS idx_keeper_changes_due ON enterprise_keeper_changes(applies_at) WHERE status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_keeper_changes_pending_unique
+ON enterprise_keeper_changes(enterprise_pubkey, member_pubkey)
+WHERE status = 'pending';

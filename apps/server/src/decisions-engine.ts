@@ -45,6 +45,9 @@ import {
     isSoleOwner,
     persistDecayEvents,
     persistCommonsBalance,
+    promoteOrPauseAfterLeadLeft,
+    closePendingKeeperChangesFor,
+    clearEnterpriseFloorCache,
 } from './state-engine.js';
 
 export type DecisionTouch = 'member' | 'pool';
@@ -759,6 +762,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     try {
         let alreadyExecuted = false;
         const cancelledDecisionIds: string[] = [];
+        const touchedEnterprises: string[] = [];
+        const touchedProfiles: string[] = [];
 
         conservingTransaction(() => {
             // Re-verify status under write lock to guard against concurrent execution
@@ -814,20 +819,24 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'remove_lead_keeper': {
-                    let entPubkey = decision.params?.enterprisePubkey;
+                    // Answer G (2026-09-19): the removed lead's place goes at once to the longest-serving remaining
+                    // active keeper, who may then be replaced by the other keepers' succession without the 30-day
+                    // wait. No active keeper left: the enterprise pauses, and its next step is wind-up.
                     const leadPubkey = decision.params?.leadPubkey || decision.subject!;
-                    if (!entPubkey || entPubkey === leadPubkey) {
-                        const op = db.prepare("SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'").get(leadPubkey) as any;
-                        if (op?.treasury_pubkey) entPubkey = op.treasury_pubkey;
-                    }
-                    if (entPubkey) {
-                        db.prepare(
+                    const named = decision.params?.enterprisePubkey;
+                    const enterprises: string[] = named && named !== leadPubkey
+                        ? [named]
+                        : (db.prepare("SELECT treasury_pubkey FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'").all(leadPubkey) as any[])
+                            .map(r => r.treasury_pubkey);
+                    for (const entPubkey of enterprises) {
+                        const removed = db.prepare(
                             "DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'"
                         ).run(entPubkey, leadPubkey);
-                    } else {
-                        db.prepare(
-                            "DELETE FROM treasury_operators WHERE member_pubkey = ? AND role = 'lead'"
-                        ).run(leadPubkey);
+                        if (removed.changes === 0) continue;
+                        closePendingKeeperChangesFor(entPubkey, leadPubkey, 'The community removed this lead keeper');
+                        const { promoted } = promoteOrPauseAfterLeadLeft(entPubkey, `decision:${decision.id}`);
+                        touchedEnterprises.push(entPubkey);
+                        if (promoted) touchedProfiles.push(promoted);
                     }
                     const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?").get(leadPubkey) as any;
                     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(leadPubkey);
@@ -927,6 +936,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             return { success: true, status: current?.status || 'executed' };
         }
 
+        for (const ent of touchedEnterprises) {
+            clearEnterpriseFloorCache(ent);
+            broadcast({ type: 'profile_updated', publicKey: ent });
+        }
+        for (const pk of touchedProfiles) broadcast({ type: 'profile_updated', publicKey: pk });
         for (const cid of cancelledDecisionIds) {
             broadcast({ type: 'decision_updated', decision: getDecision(cid)! });
         }

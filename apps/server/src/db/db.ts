@@ -381,6 +381,14 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN backing REAL DEFAULT 0`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS members_touch_updated_at`).run(); } catch { }
 
+    // Enterprise keeper answers (A, G, M): a lead installed automatically (community removal of the old lead, or
+    // the old lead stepping down) is marked, which opens succession at once; succession gets a deadline, a
+    // closing reason (rejected / expired / lead returned) and a yes-or-no vote.
+    try { db.prepare(`ALTER TABLE treasury_operators ADD COLUMN auto_promoted_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN deadline_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN closed_reason TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN choice TEXT NOT NULL DEFAULT 'yes' CHECK (choice IN ('yes', 'no'))`).run(); } catch { }
+
     // Enterprise location (docs/the-commons.md §2.2, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN lat REAL CHECK (lat IS NULL OR (lat >= -90 AND lat <= 90))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN lng REAL CHECK (lng IS NULL OR (lng >= -180 AND lng <= 180))`).run(); } catch { }
@@ -514,6 +522,13 @@ export function initSchema() {
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
+
+    // A succession proposal opened before deadlines existed gets the same 14 days from when it opened.
+    try {
+        db.prepare(`UPDATE enterprise_succession_proposals
+                    SET deadline_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '+14 days')
+                    WHERE deadline_at IS NULL`).run();
+    } catch { }
 
     // One-time posts_fts rebuild, for whatever the unguarded posts_au left behind. A rebuild recomputes the
     // whole external-content index from `posts`, so it repairs any drift and is idempotent — the marker only

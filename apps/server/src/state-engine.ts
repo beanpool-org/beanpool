@@ -587,6 +587,8 @@ export function initStateEngine(): void {
         }, 30 * 1000);
         setInterval(() => {
             try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+            // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
+            try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
         }, 60 * 1000);
     }
 
@@ -2170,64 +2172,125 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
  * Handles keeper exit backing release/covenant lock (docs/the-commons.md §2.6).
  */
 export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey: string): { ok: true } {
+    let promoted: string | null = null;
     db.transaction(() => {
-        db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
-            .run(treasuryPubkey, memberPubkey);
-        const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
-            .get(memberPubkey) as any;
-        if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
-
-        // Keeper exit (docs/the-commons.md §2.6):
-        // Solvent: leave immediately, backing released, floor recalculates.
-        // In deficit: backing is locked to the extent the deficit needs it (Rule 3).
-        const activeRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-        ).get(memberPubkey, treasuryPubkey) as any;
-        const keeperPledge = Number(activeRow?.total || 0);
-
-        if (keeperPledge > 0) {
-            const balance = getBalance(treasuryPubkey).balance;
-            const deficit = Math.max(0, -balance);
-            const totalRow = db.prepare(`
-                SELECT COALESCE(SUM(p.amount), 0) as total
-                FROM enterprise_pledges p
-                JOIN members m ON m.public_key = p.keeper
-                WHERE p.enterprise = ?
-                  AND p.keeper != ?
-                  AND p.released_at IS NULL
-                  AND m.status = 'active'
-                  AND COALESCE(m.credit_frozen, 0) = 0
-            `).get(treasuryPubkey, memberPubkey) as any;
-            const otherPledges = Number(totalRow?.total || 0);
-            const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
-            const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-            const otherAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
-
-            if (otherAllowance >= deficit) {
-                // Solvent or remaining keepers cover deficit: full release
-                db.prepare(
-                    "UPDATE enterprise_pledges SET released_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-                ).run(memberPubkey, treasuryPubkey);
-            } else {
-                // In deficit: lock what deficit needs (deficit - otherAllowance), release excess
-                const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
-                const toRelease = keeperPledge - lockedNeeded;
-                if (toRelease > 0) {
-                    const nowIso = new Date().toISOString();
-                    db.prepare(
-                        "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-                    ).run(nowIso, memberPubkey, treasuryPubkey);
-                    db.prepare(`
-                        INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                        VALUES (?, ?, ?, ?, ?, NULL)
-                    `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
-                }
-            }
-        }
+        const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+            .get(treasuryPubkey, memberPubkey) as any)?.role === 'lead';
+        unbindKeeper(treasuryPubkey, memberPubkey);
+        if (wasLead) promoted = promoteOrPauseAfterLeadLeft(treasuryPubkey, 'admin').promoted;
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
+    if (promoted) broadcast({ type: 'profile_updated', publicKey: promoted });
+    broadcast({ type: 'profile_updated', publicKey: treasuryPubkey });
     return { ok: true };
+}
+
+/**
+ * The allowance the enterprise would still have from everyone else's pledges if this keeper's pledge went:
+ * the other active, unfrozen keepers' pledges (or the legacy floor, whichever is larger), capped.
+ */
+function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): number {
+    const totalRow = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) as total
+        FROM enterprise_pledges p
+        JOIN members m ON m.public_key = p.keeper
+        WHERE p.enterprise = ?
+          AND p.keeper != ?
+          AND p.released_at IS NULL
+          AND m.status = 'active'
+          AND COALESCE(m.credit_frozen, 0) = 0
+    `).get(treasuryPubkey, memberPubkey) as any;
+    const otherPledges = Number(totalRow?.total || 0);
+    const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
+    const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
+    return Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+}
+
+function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number {
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+    ).get(memberPubkey, treasuryPubkey) as any;
+    return Number(row?.total || 0);
+}
+
+/**
+ * Remove one keeper binding and settle their pledge (docs/the-commons.md §2.6). Runs inside the caller's
+ * transaction; the caller clears the floor cache and broadcasts.
+ * Solvent (or the remaining keepers cover the deficit): the pledge is released in full.
+ * Otherwise: the part of the pledge the deficit still needs stays locked, the rest is released (Rule 3).
+ */
+function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
+    db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .run(treasuryPubkey, memberPubkey);
+    const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
+        .get(memberPubkey) as any;
+    if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
+
+    const keeperPledge = activePledgeTotal(treasuryPubkey, memberPubkey);
+    if (keeperPledge > 0) {
+        const deficit = Math.max(0, -getBalance(treasuryPubkey).balance);
+        const otherAllowance = allowanceWithoutKeeper(treasuryPubkey, memberPubkey);
+        if (otherAllowance >= deficit) {
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+            ).run(memberPubkey, treasuryPubkey);
+        } else {
+            const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
+            const toRelease = keeperPledge - lockedNeeded;
+            if (toRelease > 0) {
+                const nowIso = new Date().toISOString();
+                db.prepare(
+                    "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+                ).run(nowIso, memberPubkey, treasuryPubkey);
+                db.prepare(`
+                    INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                    VALUES (?, ?, ?, ?, ?, NULL)
+                `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+            }
+        }
+    }
+
+    // Nothing pending may still name someone who has left: a change about them, or one they made as lead.
+    closePendingKeeperChangesFor(treasuryPubkey, memberPubkey, 'They are no longer a keeper of this enterprise');
+}
+
+/**
+ * The lead has gone (removed by a community Decision, stepped down, or unbound by an admin) — answer G,
+ * 2026-09-19. The longest-serving remaining ACTIVE keeper becomes lead at once, marked auto-promoted so the
+ * other keepers may run succession immediately to choose someone else. No active keeper left: the enterprise
+ * pauses (its next step is wind-up). Runs inside the caller's transaction; the caller broadcasts.
+ */
+export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(enterprisePubkey)) {
+        return { promoted: null, paused: false };
+    }
+    const nowIso = new Date().toISOString();
+    // A proposal to replace the departed lead is moot.
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
+                WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
+
+    const next = db.prepare(`
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.can_operate, 0) = 1
+        ORDER BY o.granted_at ASC, o.rowid ASC
+        LIMIT 1
+    `).get(enterprisePubkey) as any;
+    if (next) {
+        db.prepare("UPDATE treasury_operators SET role = 'lead', auto_promoted_at = ? WHERE treasury_pubkey = ? AND member_pubkey = ?")
+            .run(nowIso, enterprisePubkey, next.member_pubkey);
+        return { promoted: next.member_pubkey, paused: false };
+    }
+
+    const ent = db.prepare("SELECT paused, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!ent || ent.paused === 1 || ent.status === 'completed') return { promoted: null, paused: ent?.paused === 1 };
+    const currentUsable = usableFloor(enterprisePubkey);
+    const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(enterprisePubkey);
+    const snapshot = currentUsable !== 0 ? currentUsable : underlyingFloor;
+    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ? WHERE public_key = ?")
+        .run(nowIso, by, snapshot, enterprisePubkey);
+    return { promoted: null, paused: true };
 }
 
 /**
@@ -2485,6 +2548,8 @@ export interface KeeperJoinRequest {
     decidedBy?: string | null;
     availableToBack?: number;
     earnedCredit?: number;
+    /** Approved by the lead and waiting out the other keepers' 3-day objection window (answer A). */
+    pendingChange?: KeeperChangeInfo | null;
 }
 
 /**
@@ -2581,6 +2646,11 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
     }
     sql += ` ORDER BY r.created_at DESC`;
 
+    const pendingByRequest = new Map<string, KeeperChangeInfo>();
+    for (const c of getKeeperChanges(enterprisePubkey, 'pending')) {
+        if (c.requestId) pendingByRequest.set(c.requestId, c);
+    }
+
     return (db.prepare(sql).all(...params) as any[]).map(r => {
         const trust = getMemberTrustProfile(r.member_pubkey);
         const available = getAvailableBacking(r.member_pubkey);
@@ -2599,30 +2669,40 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
             decidedBy: r.decided_by,
             availableToBack: available,
             earnedCredit: trust.earnedCredit,
+            pendingChange: pendingByRequest.get(r.id) ?? null,
         };
     });
 }
 
+/** How long the other keepers have to object to a keeper change the lead has made (answers A and M). */
+export const KEEPER_CHANGE_OBJECTION_MS = 3 * 24 * 60 * 60 * 1000;
+/** How long a succession proposal stays open (answer M). */
+export const SUCCESSION_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function isActiveKeeperOf(enterprisePubkey: string, memberPubkey: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).get(enterprisePubkey, memberPubkey);
+}
+
+function keeperBindingCount(enterprisePubkey: string): number {
+    return Number((db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE treasury_pubkey = ?").get(enterprisePubkey) as any)?.c ?? 0);
+}
+
 /**
- * Approve a keeper join request.
- * Gated by lead keeper, sole keeper, or node admin (isLeadOrSoleKeeperOrAdmin).
- * Re-validates available_to_back SERVER-SIDE AT APPROVAL.
- * On approval the member becomes a keeper with the pledged backing through existing keeper/backing machinery.
+ * Validate that an approved applicant may still become a keeper, then bind them with their pledge. Runs inside the
+ * caller's transaction. Used by an immediate approval and by the scheduler when an objection window closes, so the
+ * pledge is re-checked against the applicant's available backing at the moment the binding is made.
  */
-export function approveKeeperRequest(requestId: string, actorPubkey: string): { ok: true; keeper: string; backing: number } {
-    const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
-    if (!req) throw new Error('Keeper request not found');
-    if (req.status !== 'pending') throw new Error('Request is no longer pending');
-
-    if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
-        throw new Error('Only the lead keeper, sole keeper, or admin may approve keeper requests');
-    }
-
-    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(req.enterprise_pubkey) as any;
+function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: string, pledged: number): void {
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Completed enterprise accepts no requests');
+    if (ent.status === 'disabled' || ent.status === 'pruned') throw new Error('This enterprise has been closed');
 
-    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(req.member_pubkey) as any;
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.status !== 'active') {
         throw new Error('Applicant account is not active, so they cannot be approved as a keeper');
     }
@@ -2630,81 +2710,123 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): { 
         throw new Error('Applicant credit is frozen, so they cannot be approved as a keeper');
     }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
-    if (isOperatorSwitchedOff(req.member_pubkey)) {
+    if (isOperatorSwitchedOff(memberPubkey)) {
         throw new Error("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
     }
-
-    // Re-validate available_to_back SERVER-SIDE AT APPROVAL
-    const pledged = Number(req.pledged_backing || 0);
-    const available = getAvailableBacking(req.member_pubkey);
+    if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, memberPubkey)) {
+        throw new Error('Already a keeper of this enterprise');
+    }
+    const available = getAvailableBacking(memberPubkey);
     if (pledged > available) {
         throw new Error(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
     }
+}
 
-    db.transaction(() => {
-        const now = new Date().toISOString();
-        const updateRes = db.prepare(`
-            UPDATE enterprise_keeper_requests
-            SET status = 'approved', decided_at = ?, decided_by = ?
-            WHERE id = ? AND status = 'pending'
-        `).run(now, actorPubkey, requestId);
-        if (updateRes.changes === 0) {
-            throw new Error('Request is no longer pending');
-        }
+function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pledged: number, grantedBy: string): void {
+    // The operator switch is raised only for a first binding. For anyone who already keeps an
+    // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
+    const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(memberPubkey);
+    db.prepare(`
+        INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+        VALUES (?, ?, 'keeper', ?, ?)
+    `).run(enterprisePubkey, memberPubkey, grantedBy, pledged);
+    if (!hadBinding) {
+        db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
+    }
 
-        // The operator switch is raised only for a first binding. For anyone who already keeps an
-        // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
-        const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(req.member_pubkey);
+    if (pledged > 0) {
         db.prepare(`
-            INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
-            VALUES (?, ?, 'keeper', ?, ?)
-            ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing
-        `).run(req.enterprise_pubkey, req.member_pubkey, actorPubkey, pledged);
-        if (!hadBinding) {
-            db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(req.member_pubkey);
-        }
+            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+            VALUES (?, ?, ?, ?, ?, NULL)
+        `).run(crypto.randomUUID(), memberPubkey, enterprisePubkey, pledged, new Date().toISOString());
 
-        if (pledged > 0) {
-            const pledgeId = crypto.randomUUID();
-            const nowIso = new Date().toISOString();
-            db.prepare(`
-                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                VALUES (?, ?, ?, ?, ?, NULL)
-            `).run(pledgeId, req.member_pubkey, req.enterprise_pubkey, pledged, nowIso);
-
-            // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
-            const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(req.enterprise_pubkey) as any;
-            const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
-            if (legacyFloor > 0) {
-                const pledgeSumRow = db.prepare(`
-                    SELECT COALESCE(SUM(p.amount), 0) as total
-                    FROM enterprise_pledges p
-                    JOIN members m ON m.public_key = p.keeper
-                    WHERE p.enterprise = ?
-                      AND p.released_at IS NULL
-                      AND m.status = 'active'
-                      AND COALESCE(m.credit_frozen, 0) = 0
-                `).get(req.enterprise_pubkey) as any;
-                if (Number(pledgeSumRow?.total || 0) >= legacyFloor) {
-                    db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(req.enterprise_pubkey);
-                    broadcast({ type: 'profile_updated', publicKey: req.enterprise_pubkey });
-                }
+        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
+        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
+        if (legacyFloor > 0) {
+            const pledgeSumRow = db.prepare(`
+                SELECT COALESCE(SUM(p.amount), 0) as total
+                FROM enterprise_pledges p
+                JOIN members m ON m.public_key = p.keeper
+                WHERE p.enterprise = ?
+                  AND p.released_at IS NULL
+                  AND m.status = 'active'
+                  AND COALESCE(m.credit_frozen, 0) = 0
+            `).get(enterprisePubkey) as any;
+            if (Number(pledgeSumRow?.total || 0) >= legacyFloor) {
+                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
             }
         }
-    })();
+    }
+}
 
-    clearEnterpriseFloorCache(req.enterprise_pubkey);
-    broadcast({ type: 'profile_updated', publicKey: req.member_pubkey });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: req.enterprise_pubkey, keeper: req.member_pubkey });
-    broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey });
+function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): void {
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'profile_updated', publicKey: memberPubkey });
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey, memberPubkey });
+}
 
-    return { ok: true, keeper: req.member_pubkey, backing: pledged };
+/**
+ * Approve a keeper join request (answer A, 2026-09-19).
+ * Gated by lead keeper, sole keeper, or node admin (isLeadOrSoleKeeperOrAdmin).
+ *
+ * A one-keeper enterprise (and a node admin acting from outside it, break-glass) binds the applicant at once.
+ * Otherwise the approval opens a 3-day window in which any other active keeper may object, which cancels it;
+ * the scheduler binds the applicant when the window ends, re-checking their pledge then.
+ */
+export function approveKeeperRequest(requestId: string, actorPubkey: string): {
+    ok: true; keeper: string; backing: number; applied: boolean; change: KeeperChangeInfo | null;
+} {
+    const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
+    if (!req) throw new Error('Keeper request not found');
+    if (req.status !== 'pending') throw new Error('Request is no longer pending');
+
+    if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper, sole keeper, or admin may approve keeper requests');
+    }
+    if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE request_id = ? AND status = 'pending'").get(requestId)) {
+        throw new Error('This request is already approved and waiting out its objection window');
+    }
+
+    const pledged = Number(req.pledged_backing || 0);
+    assertApplicantStillEligible(req.enterprise_pubkey, req.member_pubkey, pledged);
+
+    const actorIsKeeper = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(req.enterprise_pubkey, actorPubkey);
+    const immediate = keeperBindingCount(req.enterprise_pubkey) <= 1 || (!actorIsKeeper && isAdminPubkey(actorPubkey));
+
+    const now = new Date().toISOString();
+    if (immediate) {
+        db.transaction(() => {
+            const updateRes = db.prepare(`
+                UPDATE enterprise_keeper_requests
+                SET status = 'approved', decided_at = ?, decided_by = ?
+                WHERE id = ? AND status = 'pending'
+            `).run(now, actorPubkey, requestId);
+            if (updateRes.changes === 0) throw new Error('Request is no longer pending');
+            bindApprovedKeeper(req.enterprise_pubkey, req.member_pubkey, pledged, actorPubkey);
+        })();
+        broadcastKeeperBound(req.enterprise_pubkey, req.member_pubkey);
+        return { ok: true, keeper: req.member_pubkey, backing: pledged, applied: true, change: null };
+    }
+
+    const changeId = crypto.randomUUID();
+    const appliesAt = new Date(Date.now() + KEEPER_CHANGE_OBJECTION_MS).toISOString();
+    db.prepare(`
+        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, request_id, pledged_backing, proposed_by, status, created_at, applies_at)
+        VALUES (?, ?, 'add', ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(changeId, req.enterprise_pubkey, req.member_pubkey, requestId, pledged, actorPubkey, now, appliesAt);
+    broadcast({ type: 'enterprise_keeper_change_proposed', enterprisePubkey: req.enterprise_pubkey, changeId, kind: 'add', memberPubkey: req.member_pubkey, appliesAt });
+    return { ok: true, keeper: req.member_pubkey, backing: pledged, applied: false, change: getKeeperChange(changeId) };
 }
 
 /**
  * Decline a keeper join request.
  * Gated by lead keeper, sole keeper, or node admin (isLeadOrSoleKeeperOrAdmin).
- * Leaves no keeper row and no backing.
+ * Leaves no keeper row and no backing. A request already approved and in its objection window is out of the
+ * lead's hands: the other keepers object to it, or it lands.
  */
 export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
@@ -2713,6 +2835,9 @@ export function declineKeeperRequest(requestId: string, actorPubkey: string): { 
 
     if (!isLeadOrSoleKeeperOrAdmin(req.enterprise_pubkey, actorPubkey)) {
         throw new Error('Only the lead keeper, sole keeper, or admin may decline keeper requests');
+    }
+    if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE request_id = ? AND status = 'pending'").get(requestId)) {
+        throw new Error('This request is already approved and waiting out its objection window');
     }
 
     const now = new Date().toISOString();
@@ -2727,14 +2852,310 @@ export function declineKeeperRequest(requestId: string, actorPubkey: string): { 
 }
 
 // -------------------------------------------------------------------------------------
-// Lead Succession Without an Admin (docs/the-commons.md §2.3)
+// Keeper changes with an objection window (answers A and M, 2026-09-19)
+// An enterprise's own membership is the keepers' own work: the lead acts, the other keepers can object.
+// -------------------------------------------------------------------------------------
+
+export interface KeeperChangeInfo {
+    id: string;
+    enterprisePubkey: string;
+    kind: 'add' | 'remove';
+    memberPubkey: string;
+    memberCallsign: string;
+    requestId: string | null;
+    pledgedBacking: number;
+    proposedBy: string;
+    proposedByCallsign: string | null;
+    status: 'pending' | 'applied' | 'objected' | 'failed';
+    createdAt: string;
+    appliesAt: string;
+    resolvedAt: string | null;
+    resolvedBy: string | null;
+    resolvedByCallsign: string | null;
+    reason: string | null;
+}
+
+function toKeeperChangeInfo(r: any): KeeperChangeInfo {
+    return {
+        id: r.id,
+        enterprisePubkey: r.enterprise_pubkey,
+        kind: r.kind,
+        memberPubkey: r.member_pubkey,
+        memberCallsign: r.member_callsign || r.member_pubkey.slice(0, 8),
+        requestId: r.request_id ?? null,
+        pledgedBacking: Number(r.pledged_backing || 0),
+        proposedBy: r.proposed_by,
+        proposedByCallsign: r.proposer_callsign ?? null,
+        status: r.status,
+        createdAt: r.created_at,
+        appliesAt: r.applies_at,
+        resolvedAt: r.resolved_at ?? null,
+        resolvedBy: r.resolved_by ?? null,
+        resolvedByCallsign: r.resolver_callsign ?? null,
+        reason: r.reason ?? null,
+    };
+}
+
+const KEEPER_CHANGE_SELECT = `
+    SELECT c.*, mm.callsign AS member_callsign, pm.callsign AS proposer_callsign, rm.callsign AS resolver_callsign
+    FROM enterprise_keeper_changes c
+    LEFT JOIN members mm ON mm.public_key = c.member_pubkey
+    LEFT JOIN members pm ON pm.public_key = c.proposed_by
+    LEFT JOIN members rm ON rm.public_key = c.resolved_by
+`;
+
+export function getKeeperChange(changeId: string): KeeperChangeInfo | null {
+    const r = db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.id = ?`).get(changeId);
+    return r ? toKeeperChangeInfo(r) : null;
+}
+
+/** Keeper changes for an enterprise, newest first. Public, like the keeper list itself. */
+export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChangeInfo['status']): KeeperChangeInfo[] {
+    applyDueKeeperChanges(enterprisePubkey);
+    const rows = status
+        ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
+        : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);
+    return (rows as any[]).map(toKeeperChangeInfo);
+}
+
+/**
+ * Close every pending change that names this member — as the keeper being added or removed, or as the lead who
+ * made it. Runs inside the caller's transaction.
+ */
+export function closePendingKeeperChangesFor(enterprisePubkey: string, memberPubkey: string, reason: string): void {
+    const now = new Date().toISOString();
+    const rows = db.prepare(`
+        SELECT id, request_id FROM enterprise_keeper_changes
+        WHERE enterprise_pubkey = ? AND status = 'pending' AND (member_pubkey = ? OR proposed_by = ?)
+    `).all(enterprisePubkey, memberPubkey, memberPubkey) as any[];
+    for (const r of rows) {
+        db.prepare("UPDATE enterprise_keeper_changes SET status = 'failed', resolved_at = ?, reason = ? WHERE id = ?")
+            .run(now, reason, r.id);
+        if (r.request_id) {
+            db.prepare("UPDATE enterprise_keeper_requests SET status = 'cancelled', decided_at = ? WHERE id = ? AND status = 'pending'")
+                .run(now, r.request_id);
+        }
+    }
+}
+
+/**
+ * The lead asks to remove an ordinary keeper (answer M, 2026-09-19). Same shape as adding one: any other active
+ * keeper (not the keeper being removed) may object within 3 days, which cancels it; otherwise it is applied when
+ * the window ends. A node admin acting from outside the enterprise removes at once (break-glass, as the admin
+ * route already does). To leave yourself, step down instead.
+ */
+export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: string, memberPubkey: string): {
+    ok: true; applied: boolean; change: KeeperChangeInfo | null;
+} {
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
+    if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
+    if (!isLeadOrSoleKeeperOrAdmin(enterprisePubkey, actorPubkey)) {
+        throw new Error('Only the lead keeper may remove a keeper');
+    }
+    if (actorPubkey === memberPubkey) throw new Error('To leave this enterprise yourself, step down instead');
+
+    const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as any;
+    if (!target) throw new Error('That member is not a keeper of this enterprise');
+    if (target.role === 'lead') {
+        throw new Error('The lead keeper cannot be removed this way — the lead can step down, or the community can decide');
+    }
+    applyDueKeeperChanges(enterprisePubkey);
+    if (db.prepare("SELECT 1 FROM enterprise_keeper_changes WHERE enterprise_pubkey = ? AND member_pubkey = ? AND status = 'pending'")
+        .get(enterprisePubkey, memberPubkey)) {
+        throw new Error('A change for this keeper is already waiting out its objection window');
+    }
+
+    const actorIsKeeper = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, actorPubkey);
+    if (!actorIsKeeper && isAdminPubkey(actorPubkey)) {
+        adminRevokeTreasuryOperator(enterprisePubkey, memberPubkey);
+        return { ok: true, applied: true, change: null };
+    }
+
+    const changeId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const appliesAt = new Date(Date.now() + KEEPER_CHANGE_OBJECTION_MS).toISOString();
+    db.prepare(`
+        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, pledged_backing, proposed_by, status, created_at, applies_at)
+        VALUES (?, ?, 'remove', ?, 0, ?, 'pending', ?, ?)
+    `).run(changeId, enterprisePubkey, memberPubkey, actorPubkey, now, appliesAt);
+    broadcast({ type: 'enterprise_keeper_change_proposed', enterprisePubkey, changeId, kind: 'remove', memberPubkey, appliesAt });
+    return { ok: true, applied: false, change: getKeeperChange(changeId) };
+}
+
+/**
+ * Object to a pending keeper change. Any active keeper of the enterprise other than the lead who made it — and,
+ * for a removal, other than the keeper being removed — may object while the window is open. One objection cancels.
+ */
+export function objectToKeeperChange(changeId: string, actorPubkey: string): { ok: true; change: KeeperChangeInfo } {
+    const c = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
+    if (!c) throw new Error('Keeper change not found');
+    applyDueKeeperChanges(c.enterprise_pubkey);
+    const cur = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
+    if (cur.status !== 'pending') throw new Error('The objection window for this change has closed');
+
+    if (!isActiveKeeperOf(c.enterprise_pubkey, actorPubkey)) {
+        throw new Error('Only an active keeper of this enterprise may object');
+    }
+    if (actorPubkey === c.proposed_by) throw new Error('You made this change — you cannot object to it');
+    if (actorPubkey === c.member_pubkey) throw new Error('You cannot object to your own removal');
+
+    const now = new Date().toISOString();
+    db.transaction(() => {
+        const res = db.prepare(`
+            UPDATE enterprise_keeper_changes SET status = 'objected', resolved_at = ?, resolved_by = ?, reason = 'A keeper objected'
+            WHERE id = ? AND status = 'pending'
+        `).run(now, actorPubkey, changeId);
+        if (res.changes === 0) throw new Error('The objection window for this change has closed');
+        if (c.request_id) {
+            db.prepare(`UPDATE enterprise_keeper_requests SET status = 'declined', decided_at = ?, decided_by = ?
+                        WHERE id = ? AND status = 'pending'`).run(now, actorPubkey, c.request_id);
+        }
+    })();
+    broadcast({ type: 'enterprise_keeper_change_objected', enterprisePubkey: c.enterprise_pubkey, changeId, kind: c.kind, memberPubkey: c.member_pubkey });
+    return { ok: true, change: getKeeperChange(changeId)! };
+}
+
+/**
+ * Apply one pending change whose window has ended. Everything is re-checked now: the lead who made it must still
+ * be the lead, an applicant must still be eligible with their pledge still available, a keeper being removed must
+ * still be an ordinary keeper. Anything that no longer holds closes the change as 'failed' with the reason.
+ */
+function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' {
+    let outcome: 'applied' | 'failed' = 'applied';
+    let failReason: string | null = null;
+    try {
+        db.transaction(() => {
+            if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new Error('The keeper who made this change is no longer the lead');
+
+            if (c.kind === 'add') {
+                assertApplicantStillEligible(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0));
+                if (c.request_id) {
+                    db.prepare(`UPDATE enterprise_keeper_requests SET status = 'approved', decided_at = ?, decided_by = ?
+                                WHERE id = ? AND status = 'pending'`).run(nowIso, c.proposed_by, c.request_id);
+                }
+                bindApprovedKeeper(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0), c.proposed_by);
+            } else {
+                const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+                    .get(c.enterprise_pubkey, c.member_pubkey) as any;
+                if (!target) throw new Error('They are no longer a keeper of this enterprise');
+                if (target.role === 'lead') throw new Error('They have since become the lead keeper');
+                // Mark this change applied first: unbindKeeper closes whatever else is still pending for this member.
+                db.prepare("UPDATE enterprise_keeper_changes SET status = 'applied', resolved_at = ? WHERE id = ?").run(nowIso, c.id);
+                unbindKeeper(c.enterprise_pubkey, c.member_pubkey);
+            }
+            db.prepare("UPDATE enterprise_keeper_changes SET status = 'applied', resolved_at = ? WHERE id = ?").run(nowIso, c.id);
+        })();
+    } catch (e: any) {
+        outcome = 'failed';
+        failReason = e?.message || String(e);
+        db.transaction(() => {
+            db.prepare("UPDATE enterprise_keeper_changes SET status = 'failed', resolved_at = ?, reason = ? WHERE id = ? AND status = 'pending'")
+                .run(nowIso, failReason, c.id);
+            if (c.request_id) {
+                db.prepare("UPDATE enterprise_keeper_requests SET status = 'cancelled', decided_at = ? WHERE id = ? AND status = 'pending'")
+                    .run(nowIso, c.request_id);
+            }
+        })();
+    }
+
+    if (outcome === 'applied') {
+        if (c.kind === 'add') {
+            broadcastKeeperBound(c.enterprise_pubkey, c.member_pubkey);
+        } else {
+            clearEnterpriseFloorCache(c.enterprise_pubkey);
+            broadcast({ type: 'profile_updated', publicKey: c.member_pubkey });
+            broadcast({ type: 'profile_updated', publicKey: c.enterprise_pubkey });
+            broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
+        }
+    }
+    broadcast({ type: 'enterprise_keeper_change_resolved', enterprisePubkey: c.enterprise_pubkey, changeId: c.id, kind: c.kind, memberPubkey: c.member_pubkey, status: outcome, reason: failReason });
+    return outcome;
+}
+
+/** Apply every change whose objection window has ended (optionally for one enterprise). */
+export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: number): { applied: number; failed: number } {
+    const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
+    const rows = (enterprisePubkey
+        ? db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? AND enterprise_pubkey = ? ORDER BY applies_at ASC").all(nowIso, enterprisePubkey)
+        : db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? ORDER BY applies_at ASC").all(nowIso)) as any[];
+    let applied = 0, failed = 0;
+    for (const c of rows) {
+        // An earlier change in this batch may have closed this one (e.g. its lead was removed).
+        const still = db.prepare("SELECT status FROM enterprise_keeper_changes WHERE id = ?").get(c.id) as any;
+        if (still?.status !== 'pending') continue;
+        if (applyKeeperChange(c, nowIso) === 'applied') applied++; else failed++;
+    }
+    return { applied, failed };
+}
+
+/**
+ * Any keeper may step down (answer M, 2026-09-19).
+ * - The only keeper cannot: there would be nobody left to run or wind up the enterprise.
+ * - A keeper whose pledge is still needed to cover the enterprise's debt cannot yet: the message says how much
+ *   the debt must come down, or how much more the others must pledge, first.
+ * - A lead stepping down hands the lead role on by answer G's rule (longest-serving active keeper; none → pause).
+ * Their pledge is released in full (the check above guarantees the others cover any deficit).
+ */
+export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string): {
+    ok: true; promoted: string | null; paused: boolean; releasedBacking: number;
+} {
+    const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
+    if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
+
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as any;
+    if (!op) throw new Error('You are not a keeper of this enterprise');
+    if (keeperBindingCount(enterprisePubkey) <= 1) {
+        throw new Error('You are the only keeper. Add another keeper first, or wind the enterprise up.');
+    }
+
+    const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    const othersCover = allowanceWithoutKeeper(enterprisePubkey, memberPubkey);
+    if (pledge > 0 && othersCover < deficit) {
+        const gap = Math.round((deficit - othersCover) * 100) / 100;
+        const dr = Math.round(deficit * 100) / 100;
+        const oc = Math.round(othersCover * 100) / 100;
+        throw new Error(
+            `This enterprise is ${dr} beans in debt and your pledge is part of what covers it. ` +
+            `You can step down once the debt is down to ${oc} beans, or once the other keepers pledge ${gap} beans more.`
+        );
+    }
+
+    let result = { promoted: null as string | null, paused: false };
+    db.transaction(() => {
+        unbindKeeper(enterprisePubkey, memberPubkey);
+        if (op.role === 'lead') result = promoteOrPauseAfterLeadLeft(enterprisePubkey, memberPubkey);
+        // A proposal naming them as the candidate is moot.
+        db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone'
+                    WHERE enterprise_pubkey = ? AND candidate_pubkey = ? AND status = 'active'`).run(enterprisePubkey, memberPubkey);
+    })();
+
+    clearEnterpriseFloorCache(enterprisePubkey);
+    broadcast({ type: 'profile_updated', publicKey: memberPubkey });
+    broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    if (result.promoted) broadcast({ type: 'profile_updated', publicKey: result.promoted });
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcast({ type: 'enterprise_keeper_stepped_down', enterprisePubkey, memberPubkey, promoted: result.promoted, paused: result.paused });
+    return { ok: true, promoted: result.promoted, paused: result.paused, releasedBacking: pledge };
+}
+
+// -------------------------------------------------------------------------------------
+// Lead Succession Without an Admin (docs/the-commons.md §2.3; answers G and M, 2026-09-19)
 // -------------------------------------------------------------------------------------
 
 export interface SuccessionVoteInfo {
     voterPubkey: string;
     callsign: string;
     votedAt: string;
+    choice: 'yes' | 'no';
 }
+
+export type SuccessionClosedReason = 'rejected' | 'expired' | 'lead_returned' | 'lead_changed' | 'candidate_gone';
 
 export interface SuccessionProposalInfo {
     id: string;
@@ -2746,18 +3167,26 @@ export interface SuccessionProposalInfo {
     proposerPubkey: string;
     proposerCallsign: string;
     status: 'active' | 'passed' | 'cancelled';
+    closedReason: SuccessionClosedReason | null;
     createdAt: string;
+    deadlineAt: string;
     executedAt: string | null;
     votes: SuccessionVoteInfo[];
     totalEligible: number;
     requiredVotes: number;
+    /** Yes votes. */
     votesCount: number;
+    noVotesCount: number;
 }
 
 /**
  * Check lead inactivity for an enterprise.
  * Activity signal: members.last_active_at (falling back to joined_at), which is automatically
  * updated whenever the lead performs authenticated node actions via recordActivity.
+ *
+ * `autoPromoted`: the lead got the role automatically (the community removed the previous lead, or they stepped
+ * down). The other keepers may then run succession at once — answer G — so isEligible is true without the wait,
+ * and the lead's own activity does not cancel a proposal.
  */
 export function getLeadInactivity(enterprisePubkey: string): {
     leadPubkey: string | null;
@@ -2765,9 +3194,10 @@ export function getLeadInactivity(enterprisePubkey: string): {
     lastActiveAt: string | null;
     daysInactive: number;
     isEligible: boolean;
+    autoPromoted: boolean;
 } {
     const leadRow = db.prepare(`
-        SELECT o.member_pubkey, m.callsign, m.last_active_at, m.joined_at
+        SELECT o.member_pubkey, o.auto_promoted_at, m.callsign, m.last_active_at, m.joined_at
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ? AND o.role = 'lead'
@@ -2780,6 +3210,7 @@ export function getLeadInactivity(enterprisePubkey: string): {
             lastActiveAt: null,
             daysInactive: 0,
             isEligible: false,
+            autoPromoted: false,
         };
     }
 
@@ -2787,7 +3218,8 @@ export function getLeadInactivity(enterprisePubkey: string): {
     const lastActiveTime = lastActiveStr ? new Date(lastActiveStr).getTime() : 0;
     const msInactive = Math.max(0, Date.now() - lastActiveTime);
     const daysInactive = msInactive / (24 * 60 * 60 * 1000);
-    const isEligible = daysInactive >= 30;
+    const autoPromoted = !!leadRow.auto_promoted_at;
+    const isEligible = autoPromoted || daysInactive >= 30;
 
     return {
         leadPubkey: leadRow.member_pubkey,
@@ -2795,32 +3227,152 @@ export function getLeadInactivity(enterprisePubkey: string): {
         lastActiveAt: lastActiveStr || null,
         daysInactive,
         isEligible,
+        autoPromoted,
     };
+}
+
+function leadIsAutoPromoted(enterprisePubkey: string, leadPubkey: string): boolean {
+    const r = db.prepare("SELECT auto_promoted_at FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'")
+        .get(enterprisePubkey, leadPubkey) as any;
+    return !!r?.auto_promoted_at;
+}
+
+/** Has the lead a proposal targets done anything on the node since it opened? (Never, for an auto-promoted lead.) */
+function leadReturnedSince(prop: any): boolean {
+    if (leadIsAutoPromoted(prop.enterprise_pubkey, prop.lead_pubkey)) return false;
+    const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(prop.lead_pubkey) as any;
+    return !!leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(prop.created_at).getTime();
+}
+
+function closeSuccession(prop: any, reason: SuccessionClosedReason): void {
+    db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = ? WHERE id = ? AND status = 'active'")
+        .run(reason, prop.id);
+    broadcast({ type: 'enterprise_succession_cancelled', proposalId: prop.id, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey, reason });
+}
+
+/** Close active proposals past their 14-day deadline (optionally for one enterprise). */
+export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: number): number {
+    const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
+    const rows = (enterprisePubkey
+        ? db.prepare("SELECT * FROM enterprise_succession_proposals WHERE status = 'active' AND deadline_at <= ? AND enterprise_pubkey = ?").all(nowIso, enterprisePubkey)
+        : db.prepare("SELECT * FROM enterprise_succession_proposals WHERE status = 'active' AND deadline_at <= ?").all(nowIso)) as any[];
+    for (const p of rows) closeSuccession(p, 'expired');
+    return rows.length;
 }
 
 /**
  * Automatically cancel any active succession proposals if the lead keeper records node activity.
+ * An auto-promoted lead's activity cancels nothing (answer G).
  */
 export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
     const activeProps = db.prepare(
-        "SELECT id, enterprise_pubkey FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
+        "SELECT * FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
     ).all(leadPubkey) as any[];
+    for (const p of activeProps) {
+        if (leadIsAutoPromoted(p.enterprise_pubkey, leadPubkey)) continue;
+        closeSuccession(p, 'lead_returned');
+    }
+}
 
-    if (activeProps.length > 0) {
-        db.prepare(
-            "UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'"
-        ).run(leadPubkey);
+function otherActiveKeepers(enterprisePubkey: string, leadPubkey: string): string[] {
+    return (db.prepare(`
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
+    `).all(enterprisePubkey, leadPubkey) as any[]).map(r => r.member_pubkey);
+}
 
-        for (const p of activeProps) {
-            broadcast({ type: 'enterprise_succession_cancelled', proposalId: p.id, enterprisePubkey: p.enterprise_pubkey, leadPubkey });
+function successionVotes(proposalId: string): SuccessionVoteInfo[] {
+    return (db.prepare(`
+        SELECT v.voter_pubkey, v.voted_at, v.choice, m.callsign
+        FROM enterprise_succession_votes v
+        JOIN members m ON m.public_key = v.voter_pubkey
+        WHERE v.proposal_id = ?
+        ORDER BY v.voted_at ASC
+    `).all(proposalId) as any[]).map(v => ({
+        voterPubkey: v.voter_pubkey,
+        callsign: v.callsign,
+        votedAt: v.voted_at,
+        choice: v.choice === 'no' ? 'no' : 'yes',
+    }));
+}
+
+function toSuccessionInfo(r: any, totalEligible: number): SuccessionProposalInfo {
+    const votes = successionVotes(r.id);
+    const cs = (pk: string) => getMember(pk)?.callsign || pk.slice(0, 8);
+    return {
+        id: r.id,
+        enterprisePubkey: r.enterprise_pubkey,
+        leadPubkey: r.lead_pubkey,
+        leadCallsign: cs(r.lead_pubkey),
+        candidatePubkey: r.candidate_pubkey,
+        candidateCallsign: cs(r.candidate_pubkey),
+        proposerPubkey: r.proposer_pubkey,
+        proposerCallsign: cs(r.proposer_pubkey),
+        status: r.status,
+        closedReason: r.closed_reason ?? null,
+        createdAt: r.created_at,
+        deadlineAt: r.deadline_at,
+        executedAt: r.executed_at ?? null,
+        votes,
+        totalEligible,
+        requiredVotes: Math.floor(totalEligible / 2) + 1,
+        votesCount: votes.filter(v => v.choice === 'yes').length,
+        noVotesCount: votes.filter(v => v.choice === 'no').length,
+    };
+}
+
+/**
+ * Tally an active proposal and act on it, inside the caller's transaction: more than half of the other keepers
+ * saying yes moves the lead role; once enough have said no that a yes majority is out of reach, it is rejected.
+ */
+function settleSuccession(prop: any, nowIso: string): 'passed' | 'rejected' | 'candidate_gone' | 'open' {
+    const eligible = otherActiveKeepers(prop.enterprise_pubkey, prop.lead_pubkey);
+    const required = Math.floor(eligible.length / 2) + 1;
+    const counts = db.prepare(`
+        SELECT SUM(CASE WHEN choice = 'yes' THEN 1 ELSE 0 END) AS yes, SUM(CASE WHEN choice = 'no' THEN 1 ELSE 0 END) AS no
+        FROM enterprise_succession_votes WHERE proposal_id = ?
+    `).get(prop.id) as any;
+    const yes = Number(counts?.yes || 0);
+    const no = Number(counts?.no || 0);
+
+    if (yes >= required) {
+        if (!isActiveKeeperOf(prop.enterprise_pubkey, prop.candidate_pubkey)) {
+            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'candidate_gone' WHERE id = ?").run(prop.id);
+            return 'candidate_gone';
         }
+        // Old lead becomes ordinary keeper and keeps their backing; the chosen lead is not auto-promoted.
+        db.prepare("UPDATE treasury_operators SET role = 'keeper', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ?")
+            .run(prop.enterprise_pubkey, prop.lead_pubkey);
+        db.prepare("UPDATE treasury_operators SET role = 'lead', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ?")
+            .run(prop.enterprise_pubkey, prop.candidate_pubkey);
+        db.prepare("UPDATE enterprise_succession_proposals SET status = 'passed', executed_at = ? WHERE id = ?")
+            .run(nowIso, prop.id);
+        return 'passed';
+    }
+    if (no > eligible.length - required) {
+        db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'rejected' WHERE id = ?").run(prop.id);
+        return 'rejected';
+    }
+    return 'open';
+}
+
+function broadcastSuccessionOutcome(prop: any, outcome: ReturnType<typeof settleSuccession>, voterPubkey: string, info: SuccessionProposalInfo): void {
+    if (outcome === 'passed') {
+        broadcast({ type: 'enterprise_succession_passed', proposalId: prop.id, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey, candidatePubkey: prop.candidate_pubkey, executed: true });
+        broadcast({ type: 'profile_updated', publicKey: prop.enterprise_pubkey });
+    } else if (outcome === 'open') {
+        broadcast({ type: 'enterprise_succession_voted', proposalId: prop.id, enterprisePubkey: prop.enterprise_pubkey, voterPubkey, votesCount: info.votesCount, noVotesCount: info.noVotesCount, requiredVotes: info.requiredVotes });
+    } else {
+        broadcast({ type: 'enterprise_succession_cancelled', proposalId: prop.id, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey, reason: outcome });
     }
 }
 
 /**
- * Propose moving the lead role to an active keeper when the current lead has been inactive for 30 days.
- * Gated by: proposer is an active keeper (other than the lead), lead has no activity for 30 days.
- * Succeeds on a strict majority of keepers excluding the inactive lead.
+ * Propose moving the lead role to an active keeper.
+ * Gated by: proposer is an active keeper (other than the lead), and either the lead has no activity for 30 days
+ * or the lead was auto-promoted (answer G). Open for 14 days; passes on more than half of the other keepers
+ * saying yes (answer M). The proposer's proposal counts as their yes.
  */
 export function proposeLeadSuccession(
     enterprisePubkey: string,
@@ -2847,46 +3399,25 @@ export function proposeLeadSuccession(
     if (candidatePubkey === leadPubkey) {
         throw new Error('Candidate cannot be the current lead keeper');
     }
-
-    // Proposer must be an active keeper of this enterprise
-    const proposerOp = db.prepare(`
-        SELECT 1 FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).get(enterprisePubkey, proposerPubkey);
-    if (!proposerOp) {
+    if (!isActiveKeeperOf(enterprisePubkey, proposerPubkey)) {
         throw new Error('Only an active keeper of this enterprise may propose succession');
     }
-
-    // Candidate must be an active keeper of this enterprise
-    const candidateOp = db.prepare(`
-        SELECT 1 FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).get(enterprisePubkey, candidatePubkey);
-    if (!candidateOp) {
+    if (!isActiveKeeperOf(enterprisePubkey, candidatePubkey)) {
         throw new Error('Candidate must be an active keeper of this enterprise');
     }
 
-    // Other keepers excluding lead
-    const otherKeepers = db.prepare(`
-        SELECT o.member_pubkey FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).all(enterprisePubkey, leadPubkey) as any[];
-
+    const otherKeepers = otherActiveKeepers(enterprisePubkey, leadPubkey);
     if (otherKeepers.length === 0) {
         throw new Error('No other keepers available for succession');
     }
 
-    // Check for existing active proposal
+    expireSuccessionProposals(enterprisePubkey);
     const existingActive = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
     ).get(enterprisePubkey) as any;
     if (existingActive) {
-        const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(leadPubkey) as any;
-        if (leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(existingActive.created_at).getTime()) {
-            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(existingActive.id);
+        if (leadReturnedSince(existingActive)) {
+            closeSuccession(existingActive, 'lead_returned');
             throw new Error('Lead keeper has returned to activity; active proposal cancelled');
         }
         throw new Error('An active succession proposal already exists for this enterprise');
@@ -2894,237 +3425,86 @@ export function proposeLeadSuccession(
 
     const proposalId = crypto.randomUUID();
     const now = new Date().toISOString();
-    const totalEligible = otherKeepers.length;
-    const requiredVotes = Math.floor(totalEligible / 2) + 1; // Strict majority: > totalEligible / 2
+    const deadlineAt = new Date(Date.now() + SUCCESSION_WINDOW_MS).toISOString();
 
-    let executed = false;
-    let finalStatus: 'active' | 'passed' = 'active';
-    let executedAt: string | null = null;
-
+    let outcome = 'open' as ReturnType<typeof settleSuccession>;
     db.transaction(() => {
         db.prepare(`
-            INSERT INTO enterprise_succession_proposals (id, enterprise_pubkey, lead_pubkey, candidate_pubkey, proposer_pubkey, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'active', ?)
-        `).run(proposalId, enterprisePubkey, leadPubkey, candidatePubkey, proposerPubkey, now);
-
+            INSERT INTO enterprise_succession_proposals (id, enterprise_pubkey, lead_pubkey, candidate_pubkey, proposer_pubkey, status, created_at, deadline_at)
+            VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+        `).run(proposalId, enterprisePubkey, leadPubkey, candidatePubkey, proposerPubkey, now, deadlineAt);
         db.prepare(`
-            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at)
-            VALUES (?, ?, ?)
+            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at, choice)
+            VALUES (?, ?, ?, 'yes')
         `).run(proposalId, proposerPubkey, now);
-
-        if (1 >= requiredVotes) {
-            // Proposer alone reaches strict majority (e.g. N = 1 other keeper)
-            executed = true;
-            finalStatus = 'passed';
-            executedAt = now;
-
-            // Old lead becomes ordinary keeper and keeps their backing
-            db.prepare("UPDATE treasury_operators SET role = 'keeper' WHERE treasury_pubkey = ? AND member_pubkey = ?")
-                .run(enterprisePubkey, leadPubkey);
-            // Candidate becomes lead
-            db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?")
-                .run(enterprisePubkey, candidatePubkey);
-            // Mark proposal passed
-            db.prepare("UPDATE enterprise_succession_proposals SET status = 'passed', executed_at = ? WHERE id = ?")
-                .run(now, proposalId);
-        }
+        const row = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId);
+        outcome = settleSuccession(row, now);
     })();
 
-    broadcast({
-        type: executed ? 'enterprise_succession_passed' : 'enterprise_succession_proposed',
-        proposalId,
-        enterprisePubkey,
-        leadPubkey,
-        candidatePubkey,
-        proposerPubkey,
-        executed,
-    });
-    if (executed) {
-        broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
+    const row = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
+    const proposal = toSuccessionInfo(row, otherKeepers.length);
+    if (outcome === 'open') {
+        broadcast({ type: 'enterprise_succession_proposed', proposalId, enterprisePubkey, leadPubkey, candidatePubkey, proposerPubkey, executed: false, deadlineAt });
+    } else {
+        broadcastSuccessionOutcome(row, outcome, proposerPubkey, proposal);
     }
-
-    const leadMem = getMember(leadPubkey);
-    const candMem = getMember(candidatePubkey);
-    const propMem = getMember(proposerPubkey);
-
-    return {
-        ok: true,
-        executed,
-        proposal: {
-            id: proposalId,
-            enterprisePubkey,
-            leadPubkey,
-            leadCallsign: leadMem?.callsign || leadPubkey.slice(0, 8),
-            candidatePubkey,
-            candidateCallsign: candMem?.callsign || candidatePubkey.slice(0, 8),
-            proposerPubkey,
-            proposerCallsign: propMem?.callsign || proposerPubkey.slice(0, 8),
-            status: finalStatus,
-            createdAt: now,
-            executedAt,
-            votes: [{
-                voterPubkey: proposerPubkey,
-                callsign: propMem?.callsign || proposerPubkey.slice(0, 8),
-                votedAt: now,
-            }],
-            totalEligible,
-            requiredVotes,
-            votesCount: 1,
-        },
-    };
+    return { ok: true, executed: outcome === 'passed', proposal };
 }
 
 /**
- * Vote on an active succession proposal.
- * Sits behind: voter is an active keeper excluding the lead, lead has not returned.
- * Strict majority (> totalEligible / 2) moves the role; a tie does not.
+ * Vote yes or no on an active succession proposal (answer M).
+ * Sits behind: voter is an active keeper excluding the lead, lead has not returned, deadline not passed.
+ * More than half of the other keepers saying yes moves the role; enough no votes to put that out of reach rejects it.
+ * A vote cannot be changed.
  */
 export function voteLeadSuccession(
     proposalId: string,
-    voterPubkey: string
+    voterPubkey: string,
+    choice: 'yes' | 'no' = 'yes'
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
     if (!prop) throw new Error('Succession proposal not found');
-    if (prop.status !== 'active') throw new Error(`Proposal is no longer active (${prop.status})`);
+    expireSuccessionProposals(prop.enterprise_pubkey);
+    const cur = db.prepare("SELECT status, closed_reason FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
+    if (cur.status !== 'active') {
+        throw new Error(cur.closed_reason === 'expired'
+            ? 'This succession proposal has passed its 14-day deadline'
+            : `Proposal is no longer active (${cur.status})`);
+    }
 
-    // Check if lead returned to activity
-    const leadMem = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(prop.lead_pubkey) as any;
-    if (leadMem?.last_active_at && new Date(leadMem.last_active_at).getTime() > new Date(prop.created_at).getTime()) {
-        db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(proposalId);
-        broadcast({ type: 'enterprise_succession_cancelled', proposalId, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey });
+    if (leadReturnedSince(prop)) {
+        closeSuccession(prop, 'lead_returned');
         throw new Error('Lead keeper has returned to activity; succession proposal was cancelled');
     }
 
     if (voterPubkey === prop.lead_pubkey) {
         throw new Error('Lead keeper cannot vote on succession');
     }
-
-    const voterOp = db.prepare(`
-        SELECT 1 FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).get(prop.enterprise_pubkey, voterPubkey);
-    if (!voterOp) {
+    if (!isActiveKeeperOf(prop.enterprise_pubkey, voterPubkey)) {
         throw new Error('Only active keepers of this enterprise may vote on succession');
     }
-
-    const alreadyVoted = db.prepare(
-        "SELECT 1 FROM enterprise_succession_votes WHERE proposal_id = ? AND voter_pubkey = ?"
-    ).get(proposalId, voterPubkey);
-    if (alreadyVoted) {
+    if (db.prepare("SELECT 1 FROM enterprise_succession_votes WHERE proposal_id = ? AND voter_pubkey = ?").get(proposalId, voterPubkey)) {
         throw new Error('You have already voted on this proposal');
     }
 
-    const otherKeepers = db.prepare(`
-        SELECT o.member_pubkey FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).all(prop.enterprise_pubkey, prop.lead_pubkey) as any[];
-    const totalEligible = otherKeepers.length;
-    const requiredVotes = Math.floor(totalEligible / 2) + 1; // Strict majority: > totalEligible / 2
-
     const now = new Date().toISOString();
-    let executed = false;
-    let finalStatus: 'active' | 'passed' = 'active';
-    let executedAt: string | null = null;
-    let newVoteCount = 0;
-
-    let candidateInvalidated = false;
-
+    let outcome = 'open' as ReturnType<typeof settleSuccession>;
     db.transaction(() => {
         db.prepare(`
-            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at)
-            VALUES (?, ?, ?)
-        `).run(proposalId, voterPubkey, now);
-
-        const votes = (db.prepare(
-            "SELECT COUNT(*) as c FROM enterprise_succession_votes WHERE proposal_id = ?"
-        ).get(proposalId) as any)?.c ?? 0;
-        newVoteCount = Number(votes);
-
-        if (newVoteCount >= requiredVotes) {
-            const candidateOp = db.prepare(`
-                SELECT 1 FROM treasury_operators o
-                JOIN members m ON m.public_key = o.member_pubkey
-                WHERE o.treasury_pubkey = ? AND o.member_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-            `).get(prop.enterprise_pubkey, prop.candidate_pubkey);
-            if (!candidateOp) {
-                db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(proposalId);
-                candidateInvalidated = true;
-                return;
-            }
-
-            executed = true;
-            finalStatus = 'passed';
-            executedAt = now;
-
-            // Old lead becomes ordinary keeper and keeps their backing
-            db.prepare("UPDATE treasury_operators SET role = 'keeper' WHERE treasury_pubkey = ? AND member_pubkey = ?")
-                .run(prop.enterprise_pubkey, prop.lead_pubkey);
-            // Candidate becomes lead
-            db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?")
-                .run(prop.enterprise_pubkey, prop.candidate_pubkey);
-            // Mark proposal passed
-            db.prepare("UPDATE enterprise_succession_proposals SET status = 'passed', executed_at = ? WHERE id = ?")
-                .run(now, proposalId);
-        }
+            INSERT INTO enterprise_succession_votes (proposal_id, voter_pubkey, voted_at, choice)
+            VALUES (?, ?, ?, ?)
+        `).run(proposalId, voterPubkey, now, choice);
+        outcome = settleSuccession(prop, now);
     })();
 
-    if (candidateInvalidated) {
-        broadcast({ type: 'enterprise_succession_cancelled', proposalId, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey });
+    const row = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
+    const proposal = toSuccessionInfo(row, otherActiveKeepers(prop.enterprise_pubkey, prop.lead_pubkey).length);
+    broadcastSuccessionOutcome(prop, outcome, voterPubkey, proposal);
+    if (outcome === 'candidate_gone') {
         throw new Error('Succession candidate is no longer an active keeper of this enterprise; proposal cancelled');
     }
-
-    broadcast({
-        type: executed ? 'enterprise_succession_passed' : 'enterprise_succession_voted',
-        proposalId,
-        enterprisePubkey: prop.enterprise_pubkey,
-        voterPubkey,
-        executed,
-        votesCount: newVoteCount,
-        requiredVotes,
-    });
-    if (executed) {
-        broadcast({ type: 'profile_updated', publicKey: prop.enterprise_pubkey });
-    }
-
-    const allVotes = (db.prepare(`
-        SELECT v.voter_pubkey, v.voted_at, m.callsign
-        FROM enterprise_succession_votes v
-        JOIN members m ON m.public_key = v.voter_pubkey
-        WHERE v.proposal_id = ?
-        ORDER BY v.voted_at ASC
-    `).all(proposalId) as any[]).map(r => ({
-        voterPubkey: r.voter_pubkey,
-        callsign: r.callsign,
-        votedAt: r.voted_at,
-    }));
-
-    const leadM = getMember(prop.lead_pubkey);
-    const candM = getMember(prop.candidate_pubkey);
-    const propM = getMember(prop.proposer_pubkey);
-
-    return {
-        ok: true,
-        executed,
-        proposal: {
-            id: proposalId,
-            enterprisePubkey: prop.enterprise_pubkey,
-            leadPubkey: prop.lead_pubkey,
-            leadCallsign: leadM?.callsign || prop.lead_pubkey.slice(0, 8),
-            candidatePubkey: prop.candidate_pubkey,
-            candidateCallsign: candM?.callsign || prop.candidate_pubkey.slice(0, 8),
-            proposerPubkey: prop.proposer_pubkey,
-            proposerCallsign: propM?.callsign || prop.proposer_pubkey.slice(0, 8),
-            status: finalStatus,
-            createdAt: prop.created_at,
-            executedAt,
-            votes: allVotes,
-            totalEligible,
-            requiredVotes,
-            votesCount: newVoteCount,
-        },
-    };
+    return { ok: true, executed: outcome === 'passed', proposal };
 }
 
 /**
@@ -3134,75 +3514,30 @@ export function getSuccessionProposals(enterprisePubkey: string): {
     inactivity: ReturnType<typeof getLeadInactivity>;
     proposals: SuccessionProposalInfo[];
 } {
+    expireSuccessionProposals(enterprisePubkey);
     const inactivity = getLeadInactivity(enterprisePubkey);
 
     // Cancel active proposal if lead returned
     const active = db.prepare(
-        "SELECT id, created_at FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
+        "SELECT * FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
     ).get(enterprisePubkey) as any;
-    if (active && inactivity.leadPubkey) {
-        const leadRow = db.prepare("SELECT last_active_at FROM members WHERE public_key = ?").get(inactivity.leadPubkey) as any;
-        if (leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(active.created_at).getTime()) {
-            db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE id = ?").run(active.id);
-            broadcast({ type: 'enterprise_succession_cancelled', proposalId: active.id, enterprisePubkey, leadPubkey: inactivity.leadPubkey });
-        }
-    }
+    if (active && leadReturnedSince(active)) closeSuccession(active, 'lead_returned');
 
     const rows = db.prepare(`
-        SELECT p.id, p.enterprise_pubkey, p.lead_pubkey, p.candidate_pubkey, p.proposer_pubkey,
-               p.status, p.created_at, p.executed_at,
-               lm.callsign as lead_callsign,
-               cm.callsign as candidate_callsign,
-               pm.callsign as proposer_callsign
-        FROM enterprise_succession_proposals p
-        JOIN members lm ON lm.public_key = p.lead_pubkey
-        JOIN members cm ON cm.public_key = p.candidate_pubkey
-        JOIN members pm ON pm.public_key = p.proposer_pubkey
-        WHERE p.enterprise_pubkey = ?
-        ORDER BY p.created_at DESC
+        SELECT * FROM enterprise_succession_proposals
+        WHERE enterprise_pubkey = ?
+        ORDER BY created_at DESC
     `).all(enterprisePubkey) as any[];
 
-    const otherKeepers = inactivity.leadPubkey ? db.prepare(`
-        SELECT o.member_pubkey FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND o.member_pubkey != ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active'
-    `).all(enterprisePubkey, inactivity.leadPubkey) as any[] : [];
-    const totalEligible = otherKeepers.length;
-    const requiredVotes = Math.floor(totalEligible / 2) + 1;
+    const totalEligible = inactivity.leadPubkey ? otherActiveKeepers(enterprisePubkey, inactivity.leadPubkey).length : 0;
+    return { inactivity, proposals: rows.map(r => toSuccessionInfo(r, totalEligible)) };
+}
 
-    const proposals: SuccessionProposalInfo[] = rows.map(r => {
-        const votes = (db.prepare(`
-            SELECT v.voter_pubkey, v.voted_at, m.callsign
-            FROM enterprise_succession_votes v
-            JOIN members m ON m.public_key = v.voter_pubkey
-            WHERE v.proposal_id = ?
-            ORDER BY v.voted_at ASC
-        `).all(r.id) as any[]).map(v => ({
-            voterPubkey: v.voter_pubkey,
-            callsign: v.callsign,
-            votedAt: v.voted_at,
-        }));
-
-        return {
-            id: r.id,
-            enterprisePubkey: r.enterprise_pubkey,
-            leadPubkey: r.lead_pubkey,
-            leadCallsign: r.lead_callsign,
-            candidatePubkey: r.candidate_pubkey,
-            candidateCallsign: r.candidate_callsign,
-            proposerPubkey: r.proposer_pubkey,
-            proposerCallsign: r.proposer_callsign,
-            status: r.status,
-            createdAt: r.created_at,
-            executedAt: r.executed_at,
-            votes,
-            totalEligible,
-            requiredVotes,
-            votesCount: votes.length,
-        };
-    });
-
-    return { inactivity, proposals };
+/** Scheduler hook: apply keeper changes whose objection window has ended; close expired succession proposals. */
+export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; failed: number; expired: number } {
+    const { applied, failed } = applyDueKeeperChanges(undefined, asOfTime);
+    const expired = expireSuccessionProposals(undefined, asOfTime);
+    return { applied, failed, expired };
 }
 
 

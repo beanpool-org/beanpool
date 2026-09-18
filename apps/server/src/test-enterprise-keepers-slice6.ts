@@ -33,6 +33,7 @@ import {
     requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
     cancelActiveSuccessionIfLeadActive, adminSetOperator, canOperateTreasury, createProject,
+    tickEnterpriseKeepers, KEEPER_CHANGE_OBJECTION_MS,
 } from './state-engine.js';
 import { createDecision, castDecisionVote, tickDecisions, getDecision, getQuorumRequired } from './decisions-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -215,6 +216,10 @@ async function main() {
     const approveRes = approveKeeperRequest(backedReq.id, lead1.pubKeyHex);
     assert(approveRes.ok === true, 'Approval succeeded');
     assert(approveRes.backing === 50, 'Approved backing is 50');
+    // Answer A (2026-09-19): with another keeper, the lead's approval opens a 3-day objection window.
+    assert(approveRes.applied === false && approveRes.change?.kind === 'add', 'Approval in a two-keeper enterprise waits out the objection window');
+    assert(!hasBinding(ent1, applicant1.pubKeyHex), 'Applicant is not a keeper while the window is open');
+    tickEnterpriseKeepers(Date.now() + KEEPER_CHANGE_OBJECTION_MS + 1000);
 
     // Verify treasury_operators row
     const opRow = db.prepare("SELECT * FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(ent1, applicant1.pubKeyHex) as any;
@@ -279,6 +284,7 @@ async function main() {
     const soleApproveRes = approveKeeperRequest(soleReq.id, soleKeeper.pubKeyHex);
     assert(soleApproveRes.ok === true, 'Sole keeper successfully approved join request');
     assert(soleApproveRes.backing === 20, 'Backing recorded');
+    assert(soleApproveRes.applied === true && hasBinding(soleEnt, applicant3.pubKeyHex), 'A: a one-keeper enterprise binds the applicant at once');
 
     // 1.9 Suspended or frozen applicant cannot request to join or be approved
     const suspendedApplicant = makeIdentity('SuspendedApplicant', 50);
@@ -342,6 +348,7 @@ async function main() {
     db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(freshApplicant.pubKeyHex);
     const freshReq = requestToJoinEnterprise(ent1, freshApplicant.pubKeyHex, 0);
     approveKeeperRequest(freshReq.id, lead1.pubKeyHex);
+    tickEnterpriseKeepers(Date.now() + KEEPER_CHANGE_OBJECTION_MS + 1000);
     assert((db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(freshApplicant.pubKeyHex) as any).can_operate === 1,
         'B3: approving a member with no prior binding raises their operator switch');
 

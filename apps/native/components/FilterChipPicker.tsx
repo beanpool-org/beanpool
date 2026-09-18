@@ -23,17 +23,23 @@ interface FilterChipButtonProps {
     onLayout?: (e: LayoutChangeEvent) => void;
 }
 
-/** One filter chip, at least 48dp tall, its label on one line. The map's rows and the Market feed's share it. */
+/**
+ * One filter chip, its label on one line. The map's rows and the Market feed's share it. Slim, as the pills were
+ * before #892: 8dp above and below the label, about 34dp tall, and the pill is the tap target (about 38dp with the
+ * bar's padding). A 48dp minimum height drew every pill as a tall lozenge (Marty, 2026-09-19). hitSlop cannot
+ * help here: Android never delivers a touch outside a clipping parent, and in a wrapped row it would steal taps
+ * from the pill above.
+ */
 export function FilterChipButton({
     label, active, activeColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
 }: FilterChipButtonProps) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         floating: {
-            minHeight: 48, paddingHorizontal: 16, borderRadius: 24, justifyContent: 'center', alignItems: 'center',
+            paddingVertical: 8, paddingHorizontal: 16, borderRadius: 24, justifyContent: 'center', alignItems: 'center',
             backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.95)' : 'rgba(255,255,255,0.95)',
             shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 6, elevation: 6,
         },
-        flat: { minHeight: 48, paddingHorizontal: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+        flat: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
         floatingText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         flatText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         textActive: { color: '#ffffff', fontWeight: '800' },

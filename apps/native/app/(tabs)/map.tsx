@@ -289,8 +289,8 @@ export default function MapScreen() {
         // fits and scrolls when it does not. The pill look (fill, radius, shadow) stays on the content.
         filterBarScroll: { maxWidth: '92%', flexGrow: 0, borderRadius: 24 },
         filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 2, borderRadius: 26, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
-        // 48dp tall: the touch floor for old phones at 1.3x text. The active variants below only add colour.
-        filterChip: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 24 },
+        // Slim, as before #892 (~34dp; the pill is the tap target). The active variants below only add colour.
+        filterChip: { paddingVertical: 8, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 24 },
         filterChipActive: { backgroundColor: colors.border.strong },
         filterChipActiveOffers: { backgroundColor: '#10b981' },
         filterChipActiveNeeds: { backgroundColor: '#ea580c' },
@@ -306,7 +306,7 @@ export default function MapScreen() {
         // The screen less 8dp a side, so the open panel's tiles get the width (four per row at 320dp + 1.3x);
         // the collapsed chip centres inside it.
         filterCategoryPicker: { marginTop: 6, alignSelf: 'stretch', marginHorizontal: 8 },
-        filterClear: { minHeight: 48, minWidth: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
+        filterClear: { paddingVertical: 8, minWidth: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
         filterClearText: { fontSize: 14, color: colors.text.muted, fontWeight: '800' },
 
         // FAB Pill (Right side)

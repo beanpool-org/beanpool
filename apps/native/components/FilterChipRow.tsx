@@ -13,7 +13,7 @@ interface FilterChipBarProps {
     fill?: boolean;
     /**
      * Wrap onto more lines instead of scrolling sideways, so every chip is always on screen. For a short
-     * row whose every option must be seen (the Market feed's type pills); a line of chips costs 52dp.
+     * row whose every option must be seen (the Market feed's type pills); a line of chips costs about 38dp.
      */
     wrap?: boolean;
     /**
@@ -28,7 +28,7 @@ interface FilterChipBarProps {
 /**
  * The rounded backing that a row of flat filter chips (FilterChipButton variant="flat") sits in. Unless told
  * to wrap, it never does: at 320dp with 1.3x text the row scrolls sideways instead of clipping a label, and
- * every chip keeps its 48dp touch height.
+ * every chip keeps its height.
  */
 export function FilterChipBar({ children, style, fill, wrap, moreHint, accessibilityLabel, scrollRef }: FilterChipBarProps) {
     const [barW, setBarW] = useState(0);

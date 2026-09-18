@@ -45,9 +45,22 @@ function simpleHash(str: string): number {
     return Math.abs(hash);
 }
 
-// Default to Mullumbimby, Australia
-const DEFAULT_CENTER: [number, number] = [-28.5495, 153.5005];
 const DEFAULT_ZOOM = 13;
+// Where the map starts before it knows where this community is, and stays when the community has never set its
+// location and has nothing on the map yet: the whole world, not some other community's town.
+const NEUTRAL_CENTER: [number, number] = [20, 0];
+const NEUTRAL_ZOOM = 2;
+// Closest a fit to this community's own pins may zoom, so one lone pin does not open at street level.
+const FIT_MAX_ZOOM = 15;
+
+// The view the member last left the map at, kept for this page load. The map tab unmounts when the member leaves
+// it, so without this every return re-centred the map and threw away where they had panned to. Set only once the
+// map has been centred, so a member who leaves before the node answers still gets centred next time.
+let savedView: { center: [number, number]; zoom: number } | null = null;
+/** Forget the remembered view. For tests, which mount MapPage many times in one module. */
+export function resetSavedMapView() {
+    savedView = null;
+}
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -134,6 +147,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [pinDropMode, setPinDropMode] = useState(false);
     const pinDropMarkerRef = useRef<L.Marker | null>(null);
     const [nodeRadius, setNodeRadius] = useState<{lat: number, lng: number, radiusKm: number} | null>(null);
+    // Whether the node has told us where this community is. 'unknown' when the config could not be fetched, so
+    // the page never claims the location is missing when it only failed to ask.
+    const [nodeLocation, setNodeLocation] = useState<'pending' | 'set' | 'unset' | 'unknown'>('pending');
+    // True once the first load of posts and enterprise pins has finished, so a fit to them sees them all.
+    const [pinsLoaded, setPinsLoaded] = useState(false);
+    // True once the map has been given its first view: the node's location, the community's own pins, or the
+    // neutral view. After that the map is the member's: nothing re-centres it (except their own taps).
+    const centredRef = useRef(false);
     const [previewPost, setPreviewPost] = useState<MarketplacePost | null>(null);
     const [lightboxState, setLightboxState] = useState<{
         isOpen: boolean;
@@ -277,9 +298,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     useEffect(() => {
         if (!mapContainer.current || mapRef.current) return;
 
+        // Coming back to the tab: open where the member left it, and do not centre it again.
+        const restored = savedView;
+        centredRef.current = !!restored;
         const map = L.map(mapContainer.current, {
-            center: DEFAULT_CENTER,
-            zoom: DEFAULT_ZOOM,
+            center: restored?.center ?? NEUTRAL_CENTER,
+            zoom: restored?.zoom ?? NEUTRAL_ZOOM,
             zoomControl: false, // We add custom controls
             attributionControl: false,
         });
@@ -331,9 +355,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         //     setUserMarker(map, e.latlng);
         // });
 
-        // Draw service radius circle from node config & center map on node location
+        // Draw service radius circle from node config & center map on node location (first visit only)
         getNodeConfig().then(config => {
-            if (config.serviceRadius && typeof config.serviceRadius.lat === 'number' && typeof config.serviceRadius.lng === 'number' && mapRef.current) {
+            if (!(config.serviceRadius && typeof config.serviceRadius.lat === 'number' && typeof config.serviceRadius.lng === 'number')) {
+                // The operator has never set where this community is. The effect below centres on its own pins.
+                setNodeLocation('unset');
+                return;
+            }
+            setNodeLocation('set');
+            if (mapRef.current) {
                 setNodeRadius(config.serviceRadius);
                 const { lat, lng, radiusKm } = config.serviceRadius;
                 if (radiusCircleRef.current) {
@@ -350,7 +380,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         dashArray: '8 5',
                         interactive: false,
                     }).addTo(mapRef.current);
-
+                }
+                if (centredRef.current) return;
+                centredRef.current = true;
+                if (radiusCircleRef.current) {
                     // Frame the map around the radius so it touches the edges
                     mapRef.current.fitBounds(radiusCircleRef.current.getBounds(), { padding: [10, 10] });
                 } else {
@@ -358,9 +391,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     mapRef.current.setView([lat, lng], DEFAULT_ZOOM);
                 }
             }
-        }).catch(() => {});
+        }).catch(() => { setNodeLocation('unknown'); });
 
         return () => {
+            if (centredRef.current) {
+                try {
+                    const c = map.getCenter();
+                    savedView = { center: [c.lat, c.lng], zoom: map.getZoom() };
+                } catch { /* map never laid out; nothing worth keeping */ }
+            }
             map.remove();
             mapRef.current = null;
         };
@@ -477,6 +516,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     }
                 }
                 setPosts(allPosts);
+                setPinsLoaded(true);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
                 // until the 300s backstop, which is exactly the window this stage widened.
@@ -829,17 +869,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             // Remote pins get indigo border; local pins get type color
             const borderColor = isRemote ? '#6366f1' : typeColor;
 
-            // Use real coordinates if available, otherwise deterministic fallback
+            // Use real coordinates if available, otherwise a deterministic spot near the community's centre. With
+            // no coordinates and no community location there is nowhere true to put it, so it gets no pin.
             let lat: number, lng: number;
             if (post.lat != null && post.lng != null) {
                 lat = post.lat;
                 lng = post.lng;
-            } else {
+            } else if (nodeRadius) {
                 const hash = simpleHash(post.id || post.title);
-                const centerLat = nodeRadius?.lat ?? DEFAULT_CENTER[0];
-                const centerLng = nodeRadius?.lng ?? DEFAULT_CENTER[1];
-                lat = centerLat + ((hash % 1000) - 500) * 0.00004;
-                lng = centerLng + ((Math.floor(hash / 1000) % 1000) - 500) * 0.00004;
+                lat = nodeRadius.lat + ((hash % 1000) - 500) * 0.00004;
+                lng = nodeRadius.lng + ((Math.floor(hash / 1000) % 1000) - 500) * 0.00004;
+            } else {
+                return;
             }
 
             const typeLabel = post.type === 'offer' ? 'Offer' : 'Need';
@@ -1036,7 +1077,30 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
                 marker.addTo(markersRef.current!);
             });
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, eventWindow]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, eventWindow, nodeRadius]);
+
+    // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
+    // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
+    // a one-line hint.
+    const ownPinPoints = useMemo<[number, number][]>(() => [
+        ...posts
+            .filter(p => p.lat != null && p.lng != null && !(p as any)._remoteNode
+                && (!p.status || p.status === 'active') && !blockedSet.has(p.authorPublicKey))
+            .map(p => [p.lat!, p.lng!] as [number, number]),
+        ...enterprises
+            .filter(e => e.lat != null && e.lng != null && e.status !== 'completed')
+            .map(e => [e.lat!, e.lng!] as [number, number]),
+    ], [posts, enterprises, blockedSet]);
+    const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0;
+    useEffect(() => {
+        if (centredRef.current || !mapRef.current) return;
+        if (nodeLocation !== 'unset' && nodeLocation !== 'unknown') return;
+        if (!pinsLoaded) return;
+        centredRef.current = true;
+        if (ownPinPoints.length > 0) {
+            mapRef.current.fitBounds(ownPinPoints, { padding: [40, 40], maxZoom: FIT_MAX_ZOOM });
+        }
+    }, [nodeLocation, pinsLoaded, ownPinPoints]);
 
     // "Copy to a new date": fetch the event signed and fill the form from it. Fetched rather than taken from
     // `posts`, because the copy is most useful once the event has already run — and an event that has ended is
@@ -1082,6 +1146,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setEventIsCopy(true);
             if (copy.lat != null && copy.lng != null) {
                 placePreviewPin(copy.lat, copy.lng);
+                centredRef.current = true;
                 mapRef.current?.setView([copy.lat, copy.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 15));
             }
             setShowNewPost(true);
@@ -1096,6 +1161,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         const target = posts.find(p => p.id === focusPostId);
         if (!target) return;
         if (target.lat != null && target.lng != null && mapRef.current) {
+            centredRef.current = true;
             mapRef.current.setView([target.lat, target.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 16));
         }
         setEventWindow('all');
@@ -1254,6 +1320,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
             {/* Map container */}
             <div ref={mapContainer} className="w-full h-full" />
+
+            {/* The node has no location and nothing is pinned yet, so the map is on the world view. One line an
+                operator can act on and a member can ignore: it takes no taps and covers no controls. Never shown
+                with the event chips — no pins means no events. */}
+            {showLocationHint && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-location-hint"
+                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none"
+                >
+                    This community hasn't set its location yet
+                </p>
+            )}
 
             {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
                 that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this

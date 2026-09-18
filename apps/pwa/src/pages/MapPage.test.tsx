@@ -1,7 +1,7 @@
 import { render, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { MapPage } from './MapPage';
+import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import L from 'leaflet';
@@ -19,12 +19,15 @@ vi.mock('leaflet', () => {
 
     return {
         default: {
-            map: vi.fn(() => ({
+            map: vi.fn((_el: unknown, opts: any) => ({
                 setView: vi.fn(),
+                fitBounds: vi.fn(),
                 on: vi.fn(),
                 off: vi.fn(),
                 remove: vi.fn(),
-                getZoom: vi.fn(() => 13),
+                removeLayer: vi.fn(),
+                getZoom: vi.fn(() => opts?.zoom ?? 13),
+                getCenter: vi.fn(() => ({ lat: opts?.center?.[0] ?? 0, lng: opts?.center?.[1] ?? 0 })),
             })),
             tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
             control: {
@@ -53,7 +56,10 @@ vi.mock('leaflet', () => {
                 mockCreatedMarkers.push(m);
                 return m;
             }),
-            circle: vi.fn(() => ({ addTo: vi.fn(), setLatLng: vi.fn(), setRadius: vi.fn() })),
+            circle: vi.fn((center: [number, number], opts: any) => ({
+                addTo: vi.fn().mockReturnThis(), setLatLng: vi.fn(), setRadius: vi.fn(),
+                getBounds: vi.fn(() => ({ circleBoundsOf: center, radius: opts?.radius })),
+            })),
             markerClusterGroup: vi.fn(() => layerGroup),
         },
     };
@@ -546,5 +552,136 @@ describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
         // The pin and the title came across, so the button names the one thing still missing.
         const post = within(panel).getByRole('button', { name: /Add a title and start time/i }) as HTMLButtonElement;
         expect(post.disabled).toBe(true);
+    });
+});
+
+describe('MapPage: where the map opens (no hard-coded town)', () => {
+    // Mullumbimby, where the map used to open for every community that had not set its location.
+    const MULLUM: [number, number] = [-28.5495, 153.5005];
+
+    function mapInstance(i = 0): any {
+        return vi.mocked(L.map).mock.results[i].value;
+    }
+    function mapOptions(i = 0): any {
+        return (vi.mocked(L.map).mock.calls[i] as any[])[1];
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it('is created on the neutral world view, not on Mullumbimby', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockReturnValue(new Promise(() => {}) as any);
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        expect(mapOptions().zoom).toBe(2);
+        expect(mapOptions().center).not.toEqual(MULLUM);
+    });
+
+    it('location set: frames the service radius as before, and shows no hint', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({ serviceRadius: { lat: -37.06, lng: 144.22, radiusKm: 10 } } as any);
+        const { queryByTestId } = render(<MapPage identity={mockIdentity} />);
+        await waitFor(() => expect(mapInstance().fitBounds).toHaveBeenCalledTimes(1));
+        expect(L.circle).toHaveBeenCalledWith([-37.06, 144.22], expect.objectContaining({ radius: 10_000 }));
+        expect(mapInstance().fitBounds.mock.calls[0][0]).toEqual({ circleBoundsOf: [-37.06, 144.22], radius: 10_000 });
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
+        await act(async () => {});
+        expect(queryByTestId('map-location-hint')).toBeNull();
+    });
+
+    it('location set with no radius: centres on the node point', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({ serviceRadius: { lat: -37.06, lng: 144.22, radiusKm: 0 } } as any);
+        render(<MapPage identity={mockIdentity} />);
+        await waitFor(() => expect(mapInstance().setView).toHaveBeenCalledWith([-37.06, 144.22], 13));
+        expect(mapInstance().fitBounds).not.toHaveBeenCalled();
+    });
+
+    it('no location, but the community has pins: fits the view to its own posts and enterprises, with no hint', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([
+            { id: 'p1', type: 'offer', category: 'general', title: 'Eggs', authorPublicKey: 'bob', lat: -8.65, lng: 115.21, status: 'active' },
+            { id: 'p2', type: 'need', category: 'general', title: 'Ladder', authorPublicKey: 'cat', lat: -8.70, lng: 115.17, status: 'active' },
+            { id: 'p3', type: 'offer', category: 'general', title: 'Sold', authorPublicKey: 'dan', lat: 40, lng: 40, status: 'completed' },
+        ] as any);
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({
+            enterprises: [
+                { publicKey: 'e1', name: 'Garden', callsign: 'G', lat: -8.60, lng: 115.25, paused: false, status: 'active' },
+                { publicKey: 'e2', name: 'Done', callsign: 'D', lat: 50, lng: 50, paused: false, status: 'completed' },
+            ],
+        } as any);
+        const { queryByTestId } = render(<MapPage identity={mockIdentity} />);
+        await waitFor(() => expect(mapInstance().fitBounds).toHaveBeenCalledTimes(1));
+        const [points, opts] = mapInstance().fitBounds.mock.calls[0];
+        // Only what is live on this community: the sold post and the finished enterprise are left out.
+        expect(points).toEqual([[-8.65, 115.21], [-8.70, 115.17], [-8.60, 115.25]]);
+        expect(opts).toEqual(expect.objectContaining({ maxZoom: 15 }));
+        expect(mapInstance().setView).not.toHaveBeenCalled();
+        expect(queryByTestId('map-location-hint')).toBeNull();
+    });
+
+    it('no location and nothing pinned: stays on the neutral view with a one-line hint', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        const { findByTestId } = render(<MapPage identity={mockIdentity} />);
+        const hint = await findByTestId('map-location-hint');
+        expect(hint.textContent).toBe("This community hasn't set its location yet");
+        // It takes no taps, so it never gets in the way of the map.
+        expect(hint.className).toContain('pointer-events-none');
+        expect(mapInstance().setView).not.toHaveBeenCalled();
+        expect(mapInstance().fitBounds).not.toHaveBeenCalled();
+    });
+
+    it('a post with no coordinates gets no pin when the community has no location (it used to land in Mullumbimby)', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([
+            { id: 'nocoords', type: 'offer', category: 'general', title: 'Somewhere', authorPublicKey: 'bob', status: 'active' },
+        ] as any);
+        const { findByTestId } = render(<MapPage identity={mockIdentity} />);
+        await findByTestId('map-location-hint');
+        expect(mockCreatedMarkers).toHaveLength(0);
+    });
+
+    it('does not claim the location is missing when the config could not be fetched', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockRejectedValue(new Error('offline'));
+        const { queryByTestId } = render(<MapPage identity={mockIdentity} />);
+        await waitFor(() => expect(api.getMarketplacePosts).toHaveBeenCalled());
+        await act(async () => {});
+        expect(queryByTestId('map-location-hint')).toBeNull();
+    });
+
+    it('centres once: coming back to the tab keeps the view the member left, and does not re-centre', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({ serviceRadius: { lat: -37.06, lng: 144.22, radiusKm: 10 } } as any);
+        const first = render(<MapPage identity={mockIdentity} />);
+        await waitFor(() => expect(mapInstance(0).fitBounds).toHaveBeenCalledTimes(1));
+        // The member pans and zooms somewhere else, then leaves the tab (which unmounts the page).
+        mapInstance(0).getCenter.mockReturnValue({ lat: -37.5, lng: 144.9 });
+        mapInstance(0).getZoom.mockReturnValue(16);
+        first.unmount();
+
+        render(<MapPage identity={mockIdentity} />);
+        expect(mapOptions(1).center).toEqual([-37.5, 144.9]);
+        expect(mapOptions(1).zoom).toBe(16);
+        await waitFor(() => expect(L.circle).toHaveBeenCalledTimes(2));
+        await act(async () => {});
+        // The service radius is still drawn, but the member's view is kept.
+        expect(mapInstance(1).fitBounds).not.toHaveBeenCalled();
+        expect(mapInstance(1).setView).not.toHaveBeenCalled();
+    });
+
+    it('a member who leaves before the node answers is still centred next time', async () => {
+        vi.spyOn(api, 'getNodeConfig').mockReturnValueOnce(new Promise(() => {}) as any);
+        const first = render(<MapPage identity={mockIdentity} />);
+        first.unmount();
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({ serviceRadius: { lat: -37.06, lng: 144.22, radiusKm: 10 } } as any);
+        render(<MapPage identity={mockIdentity} />);
+        expect(mapOptions(1).zoom).toBe(2);
+        await waitFor(() => expect(mapInstance(1).fitBounds).toHaveBeenCalledTimes(1));
     });
 });

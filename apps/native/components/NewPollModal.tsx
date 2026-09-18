@@ -24,9 +24,13 @@ import {
     Platform,
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
+import { pageSheetTopInset } from '../utils/modal-safe-area';
+
+const HEADER_PAD_TOP = 14;
 
 interface NewPollModalProps {
     visible: boolean;
@@ -38,6 +42,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
+    // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
+    const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
 
     const [question, setQuestion] = useState('');
     const [description, setDescription] = useState('');
@@ -143,7 +149,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             >
                 <View style={styles.container}>
                     {/* Header */}
-                    <View style={styles.header}>
+                    <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                         <Pressable
                             onPress={onClose}
                             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -151,9 +157,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             accessibilityRole="button"
                             accessibilityLabel="Cancel"
                         >
-                            <Text style={styles.cancelText}>Cancel</Text>
+                            <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                         </Pressable>
-                        <Text style={styles.headerTitle}>New Community Poll</Text>
+                        <Text style={styles.headerTitle} numberOfLines={1}>New Community Poll</Text>
                         <Pressable
                             onPress={handleCreatePoll}
                             disabled={submitting}
@@ -167,7 +173,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             {submitting ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={styles.postText}>Create</Text>
+                                <Text style={styles.postText} numberOfLines={1}>Create</Text>
                             )}
                         </Pressable>
                     </View>
@@ -297,11 +303,16 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             justifyContent: 'space-between',
             alignItems: 'center',
             paddingHorizontal: 16,
-            paddingVertical: 14,
+            paddingTop: HEADER_PAD_TOP,
+            paddingBottom: 14,
+            gap: 8,
             borderBottomWidth: 1,
             borderBottomColor: theme === 'dark' ? '#374151' : '#e5e7eb',
         },
+        // At 320 wide and 1.3x text the title pushed Create off the right edge; it now shrinks instead.
         headerTitle: {
+            flex: 1,
+            textAlign: 'center',
             fontSize: 16,
             fontWeight: '800',
             color: colors.text.body,
@@ -309,8 +320,9 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         cancelBtn: {
             paddingHorizontal: 10,
             paddingVertical: 10,
-            minHeight: 44,
-            minWidth: 44,
+            minHeight: 48,
+            minWidth: 48,
+            flexShrink: 0,
             justifyContent: 'center',
             alignItems: 'center',
         },
@@ -321,8 +333,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         postBtn: {
             backgroundColor: '#7c3aed',
             paddingHorizontal: 16,
-            paddingVertical: 7,
-            borderRadius: 18,
+            minHeight: 40,
+            borderRadius: 20,
+            justifyContent: 'center',
+            alignItems: 'center',
+            flexShrink: 0,
         },
         postText: {
             fontSize: 14,

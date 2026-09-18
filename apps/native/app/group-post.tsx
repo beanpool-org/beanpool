@@ -314,6 +314,9 @@ export default function GroupPostScreen() {
                         <Pressable
                             style={[styles.input, styles.pickerRow, errors.has('category') && styles.fieldError]}
                             onPress={() => setShowCategoryPicker(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Category: ${categoryLabel(category)}`}
+                            accessibilityHint="Opens category picker sheet"
                         >
                             <Text style={styles.pickerText}>
                                 {categoryEmoji(category)} {categoryLabel(category)}
@@ -334,7 +337,13 @@ export default function GroupPostScreen() {
                                 placeholderTextColor={colors.text.muted}
                                 keyboardType="numeric"
                             />
-                            <Pressable style={styles.priceTypeBtn} onPress={cyclePriceType}>
+                            <Pressable
+                                style={styles.priceTypeBtn}
+                                onPress={cyclePriceType}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Price unit: ${PRICE_TYPE_LABEL[priceType] || 'Total'}`}
+                                accessibilityHint="Cycles price unit"
+                            >
                                 <Text style={styles.priceTypeText}>{PRICE_TYPE_LABEL[priceType] || 'Total'}</Text>
                             </Pressable>
                         </View>

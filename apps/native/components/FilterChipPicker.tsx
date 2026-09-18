@@ -3,9 +3,6 @@ import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, typ
 import { useStyles } from '../app/ThemeContext';
 import { tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
 
-/** Adds 7dp above and below a ~34dp pill, so the finger target is 48dp. */
-export const CHIP_HIT_SLOP = { top: 7, bottom: 7 } as const;
-
 interface FilterChipButtonProps {
     label: string;
     /** Filled with `activeColor` and white text while its filter is doing something. */
@@ -27,9 +24,11 @@ interface FilterChipButtonProps {
 }
 
 /**
- * One filter chip, its label on one line. The map's rows and the Market feed's share it. It looks as slim as the
- * pills always did (8dp above and below the label); `hitSlop` stretches the tap area to 48dp without making
- * the pill taller — a 48dp minimum height here drew every pill as a tall lozenge.
+ * One filter chip, its label on one line. The map's rows and the Market feed's share it. Slim, as the pills were
+ * before #892: 8dp above and below the label, about 34dp tall, and the pill is the tap target (about 38dp with the
+ * bar's padding). A 48dp minimum height drew every pill as a tall lozenge (Marty, 2026-09-19). hitSlop cannot
+ * help here: Android never delivers a touch outside a clipping parent, and in a wrapped row it would steal taps
+ * from the pill above.
  */
 export function FilterChipButton({
     label, active, activeColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
@@ -53,7 +52,6 @@ export function FilterChipButton({
             accessibilityLabel={accessibilityLabel}
             style={[flat ? styles.flat : styles.floating, active && { backgroundColor: activeColor }, style]}
             onPress={onPress}
-            hitSlop={CHIP_HIT_SLOP}
             onLayout={onLayout}
         >
             <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive]} numberOfLines={1}>{label}</Text>

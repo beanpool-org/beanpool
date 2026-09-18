@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FilterChipRow } from '../../components/FilterChipRow';
-import { CHIP_HIT_SLOP, FilterChipPicker } from '../../components/FilterChipPicker';
+import { FilterChipPicker } from '../../components/FilterChipPicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
@@ -289,8 +289,7 @@ export default function MapScreen() {
         // fits and scrolls when it does not. The pill look (fill, radius, shadow) stays on the content.
         filterBarScroll: { maxWidth: '92%', flexGrow: 0, borderRadius: 24 },
         filterBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme === 'dark' ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)', padding: 2, borderRadius: 26, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8 },
-        // Slim, as the pills always were; hitSlop (CHIP_HIT_SLOP) makes the finger target 48dp without the height.
-        // The active variants below only add colour.
+        // Slim, as before #892 (~34dp; the pill is the tap target). The active variants below only add colour.
         filterChip: { paddingVertical: 8, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 24 },
         filterChipActive: { backgroundColor: colors.border.strong },
         filterChipActiveOffers: { backgroundColor: '#10b981' },
@@ -1216,20 +1215,20 @@ export default function MapScreen() {
                         style={styles.filterBarScroll}
                         contentContainerStyle={styles.filterBar}
                     >
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} hitSlop={CHIP_HIT_SLOP} onPress={() => selectMapType('all')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'all' }} style={[styles.filterChip, mapTypeFilter === 'all' && styles.filterChipActive]} onPress={() => selectMapType('all')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'all' && styles.filterChipTextActive]}>All</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'offers' }} style={[styles.filterChip, mapTypeFilter === 'offers' && styles.filterChipActiveOffers]} hitSlop={CHIP_HIT_SLOP} onPress={() => selectMapType('offers')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'offers' }} style={[styles.filterChip, mapTypeFilter === 'offers' && styles.filterChipActiveOffers]} onPress={() => selectMapType('offers')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'offers' && styles.filterChipTextOnGreen]}>Offers</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} hitSlop={CHIP_HIT_SLOP} onPress={() => selectMapType('needs')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'needs' }} style={[styles.filterChip, mapTypeFilter === 'needs' && styles.filterChipActiveNeeds]} onPress={() => selectMapType('needs')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'needs' && styles.filterChipTextOnOrange]}>Needs</Text>
                         </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} hitSlop={CHIP_HIT_SLOP} onPress={() => selectMapType('events')}>
+                        <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => selectMapType('events')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>Events</Text>
                         </Pressable>
                         {mapFiltersActive(mapFilterState) && (
-                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} hitSlop={CHIP_HIT_SLOP} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
+                            <Pressable accessibilityRole="button" accessibilityLabel="Clear filters" style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>
                             </Pressable>
                         )}

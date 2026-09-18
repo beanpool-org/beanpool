@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getBalance, getActiveVotingRound, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
+import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
@@ -22,7 +22,6 @@ export default function ProjectsScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
-    const [activeRound, setActiveRound] = useState<any>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -79,9 +78,6 @@ export default function ProjectsScreen() {
         sectionBadge: { position: 'absolute', top: 4, right: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, backgroundColor: colors.brand.primary },
         sectionBadgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
 
-        roundBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.feedback.info.bg, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.info.border },
-        roundBannerTitle: { fontSize: 13, color: colors.feedback.info.fg, fontWeight: '700' },
-        roundBannerSubtitle: { fontSize: 12, color: colors.feedback.info.solid, fontWeight: '500', marginTop: 2 },
 
         filterRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 4 },
         filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
@@ -188,11 +184,6 @@ export default function ProjectsScreen() {
             console.error('[Commons] Failed loading enterprises:', err);
             setLoading(false);
         }
-
-        try {
-            const r = await getActiveVotingRound();
-            setActiveRound(r);
-        } catch {}
 
         try {
             const decData = await getDecisions();
@@ -695,19 +686,6 @@ export default function ProjectsScreen() {
                                         <Text style={styles.operatorBadgeText}>You can operate treasuries — post their offers & pay tenders</Text>
                                     </View>
                                 )}
-                            </View>
-                        )}
-
-                        {/* Active round banner if any */}
-                        {activeRound && (
-                            <View style={styles.roundBanner}>
-                                <MaterialCommunityIcons name="vote" size={18} color={colors.feedback.info.solid} />
-                                <View style={{ flex: 1, marginLeft: 8 }}>
-                                    <Text style={styles.roundBannerTitle}>Voting round open</Text>
-                                    <Text style={styles.roundBannerSubtitle}>
-                                        {activeRound.projectIds?.length || 0} proposal{(activeRound.projectIds?.length || 0) === 1 ? '' : 's'}
-                                    </Text>
-                                </View>
                             </View>
                         )}
 

@@ -2014,19 +2014,6 @@ export async function deleteCrowdfundProjectApi(projectId: string) {
     } catch { }
 }
 
-export async function getActiveVotingRound(): Promise<{ id: string; status: string; closesAt: string; projectIds: string[]; createdAt: string } | null> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return null;
-    try {
-        const res = await fetch(`${anchorUrl}/api/commons/rounds`);
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.activeRound || null;
-    } catch {
-        return null;
-    }
-}
-
 // ===================== COMMUNITY TREASURIES =====================
 export interface TreasurySummary {
     publicKey: string;
@@ -2266,7 +2253,7 @@ export async function getEnterpriseLedger(treasury: string, opts?: { since?: str
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
 
-export type DecisionTouch = 'member' | 'pool' | 'rule' | 'nothing';
+export type DecisionTouch = 'member' | 'pool';
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 export type DecisionStatus =
     | 'open'
@@ -2287,19 +2274,12 @@ export type DecisionEffect =
     | 'unfreeze_credit'
     | 'grant_voucher'
     | 'revoke_voucher'
-    | 'grant_tier'
-    | 'revoke_tier'
-    | 'grant_elder'
-    | 'revoke_elder'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     | 'remove_member'
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit'
-    | 'set_levy'
-    | 'set_rule'
-    | 'poll';
+    | 'write_off_deficit';
 
 export interface Decision {
     id: string;
@@ -2360,8 +2340,11 @@ export async function getDecisions(status?: string): Promise<{ decisions: Decisi
     const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!rawUrl) return { decisions: [], activeMembers30d: 0 };
     try {
-        // Signed, so the node can return this member's own vote on each card (and so a read-auth node answers).
-        const res = await signedGet(`/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
+        const path = `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`;
+        // The list is a public read. It is signed only so the node can return this member's own vote on each card.
+        let res = await signedGet(path);
+        // A phone whose clock is off gets 401 for the signature; the list still loads unsigned, just without "you voted".
+        if (res.status === 401) res = await fetch(`${rawUrl}${path}`, { headers: { 'Accept': 'application/json' } });
         if (!res.ok) return { decisions: [], activeMembers30d: 0 };
         const data = await res.json();
         return {
@@ -2405,16 +2388,6 @@ export async function castDecisionVote(decisionId: string, payload: {
     signature?: string;
 }): Promise<{ success: boolean; creditsUsed: number }> {
     return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, payload);
-}
-
-export async function getGovernanceCredits(pubkey: string): Promise<{ totalCredits: number; usedCredits: number; availableCredits: number }> {
-    try {
-        const res = await signedGet(`/api/commons/my-credits/${encodeURIComponent(pubkey)}`);
-        if (!res.ok) return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
-        return await res.json();
-    } catch {
-        return { totalCredits: 0, usedCredits: 0, availableCredits: 0 };
-    }
 }
 
 export async function updatePost(id: string, updates: any) {

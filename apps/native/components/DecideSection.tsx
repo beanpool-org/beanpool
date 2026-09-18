@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,6 @@ import { palette } from '../constants/colors';
 import {
     type DecisionWithTally,
     castDecisionVote,
-    getGovernanceCredits,
 } from '../utils/db';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 
@@ -21,7 +20,7 @@ interface Props {
     decisions: DecisionWithTally[];
     activeMembers30d: number;
     identity: any;
-    balanceState: { earnedCredit: number; commons: number; qualifiedValue?: number };
+    balanceState: { earnedCredit: number; commons: number };
     onRefresh: () => Promise<void>;
     onOpenPropose: () => void;
     canPropose: boolean;
@@ -46,13 +45,6 @@ export function DecideSection({
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
-    const [voiceCredits, setVoiceCredits] = useState<{ totalCredits: number; usedCredits: number; availableCredits: number } | null>(null);
-
-    useEffect(() => {
-        if (identity?.publicKey) {
-            getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
-        }
-    }, [identity?.publicKey]);
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -88,21 +80,8 @@ export function DecideSection({
             return;
         }
 
+        // The node checks the cost of a quadratic vote against this Decision; its refusal shows in the alert below.
         const count = startingVoteCount(selectedVoteCount[decision.id], decision.myVote);
-        if (decision.franchise === 'quadratic_trade') {
-            const cost = count * count;
-            let available = voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
-            try {
-                const fresh = await getGovernanceCredits(identity.publicKey);
-                setVoiceCredits(fresh);
-                available = fresh.availableCredits ?? 0;
-            } catch { }
-
-            if (cost > available) {
-                Alert.alert('Insufficient Credits', `Casting ${count} votes costs ${cost} credits, but you have ${available}.`);
-                return;
-            }
-        }
 
         setVotingId(decision.id);
         try {
@@ -114,9 +93,6 @@ export function DecideSection({
 
             if (res.success) {
                 Alert.alert('Vote Recorded', `Your ${support ? 'YES' : 'NO'} vote (${count} weight) has been cast.`);
-                if (identity?.publicKey) {
-                    getGovernanceCredits(identity.publicKey).then(setVoiceCredits).catch(() => {});
-                }
                 await onRefresh();
             } else {
                 Alert.alert('Voting Error', (res as any).error || 'Failed to record vote');
@@ -733,7 +709,7 @@ export function DecideSection({
                                         {item.franchise === 'quadratic_trade' && (
                                             <View style={styles.qvStepper}>
                                                 <Text style={styles.qvLabel}>
-                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits · Available: {voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0})
+                                                    Votes: {currentCount} (Cost: {currentCount * currentCount} credits)
                                                 </Text>
                                                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                                     <Pressable

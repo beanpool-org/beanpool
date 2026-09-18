@@ -15,7 +15,8 @@ export function createActivityRouter(deps: RouteDeps): Router {
 
     /**
      * GET /api/activity/feed
-     * Public endpoint to fetch recent community pulse activity.
+     * Recent community pulse activity, readable by any member of this community. Not on the
+     * public-read allowlist: it names the members in every trade and join, and the Beans involved.
      */
     router.get('/api/activity/feed', async (ctx) => {
         // Clamped to the SAME bound the query applies. deps.clampLimit allows up to 200 while
@@ -35,10 +36,10 @@ export function createActivityRouter(deps: RouteDeps): Router {
         const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}"`;
         ctx.set('ETag', etag);
 
-        // `public`, not `private`: the ambient community activity waterfall does NOT vary
-        // by viewer or require authenticated identity. Every member and guest sees the
-        // identical public event feed. `max-age=0, must-revalidate` ensures fresh data.
-        ctx.set('Cache-Control', 'public, max-age=0, must-revalidate');
+        // `private`: the body is the same for every member, but only a signed member may read it, so
+        // no shared cache (a CDN or proxy in front of the node) may store it and hand it to a stranger.
+        // `max-age=0, must-revalidate` still lets the member's own client revalidate with the ETag.
+        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
         const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
         if (ifNoneMatch) {

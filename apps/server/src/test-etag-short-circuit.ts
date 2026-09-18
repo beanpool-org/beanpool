@@ -318,8 +318,8 @@ async function main() {
     assert(activityQueries > 0, `Initial 200 touched SQLite activity_feed table (${activityQueries} query)`);
     const actEtag1 = actRes1.headers['etag'];
     assert(!!actEtag1 && actEtag1.startsWith('W/"'), `Returned weak ETag: ${actEtag1}`);
-    assert(actRes1.headers['cache-control'] === 'public, max-age=0, must-revalidate',
-        `Cache-Control header is public, max-age=0, must-revalidate (got: ${actRes1.headers['cache-control']})`);
+    assert(actRes1.headers['cache-control'] === 'private, max-age=0, must-revalidate',
+        `Cache-Control header is private (the feed is members-only), max-age=0, must-revalidate (got: ${actRes1.headers['cache-control']})`);
 
     // 4.2 Matching ETag -> 304 WITHOUT TOUCHING SQLITE
     activityQueries = 0;
@@ -328,7 +328,7 @@ async function main() {
     });
     assert(actRes304.status === 304, 'Conditional GET /api/activity/feed with matching ETag returns 304');
     assert(actRes304.body === undefined, '304 response has empty body');
-    assert(actRes304.headers['cache-control'] === 'public, max-age=0, must-revalidate',
+    assert(actRes304.headers['cache-control'] === 'private, max-age=0, must-revalidate',
         '304 response preserves Cache-Control header');
     assert(actRes304.headers['etag'] === actEtag1, '304 response preserves ETag header');
     assert(activityQueries === 0, `304 short-circuit executed ZERO queries on activity_feed table (actual: ${activityQueries})`);

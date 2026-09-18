@@ -7,7 +7,8 @@
  * 2. The HTML document (/app, /settings, /) and static assets still receive the full set of security headers.
  * 3. X-Content-Type-Options: nosniff and Strict-Transport-Security remain present on all responses,
  *    including API endpoints and /api/avatar/:pubkey.
- * 4. GET /api/activity/feed emits a weak ETag and Cache-Control: public, max-age=0, must-revalidate.
+ * 4. GET /api/activity/feed emits a weak ETag and Cache-Control: private, max-age=0, must-revalidate.
+ *    The feed is members-only, so every feed request here is signed by a member.
  * 5. Conditional GET /api/activity/feed with matching If-None-Match returns 304 without querying SQLite.
  * 6. Every enumerated write path to the activity feed bumps activityVersion:
  *    - recordActivity('member_joined')
@@ -59,8 +60,9 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
 
-    // Setup a test member author with an avatar
-    const authorPk = crypto.randomBytes(32).toString('hex');
+    // A real keypair: the activity feed is members-only, so the suite reads it signed as this member.
+    const { publicKey: authorKey, privateKey: authorPriv } = crypto.generateKeyPairSync('ed25519');
+    const authorPk = authorKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const authorCallsign = 'HeaderTester_' + crypto.randomBytes(4).toString('hex');
     db.prepare(`
         INSERT INTO members (public_key, callsign, joined_at, avatar_url)
@@ -70,13 +72,29 @@ async function main(): Promise<void> {
     // Start real HTTPS server
     await startHttpsServer(PORT);
 
+    // GET signed as the member (replay-proof headers; the path is signed without its query string).
+    const memberFetch = (path: string, extra: Record<string, string> = {}) => {
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        return fetch(`${BASE}${path}`, {
+            headers: {
+                ...extra,
+                'X-Public-Key': authorPk,
+                'X-Signature': crypto.sign(null, Buffer.from(canonical), authorPriv).toString('base64'),
+                'X-Timestamp': String(ts),
+                'X-Nonce': nonce,
+            },
+        });
+    };
+
     // =========================================================================
     // SECTION 1: Security Headers on API vs Document/Static Paths
     // =========================================================================
     console.log('--- Section 1: Security Headers Verification ---');
 
     // 1.1 /api/activity/feed
-    const feedRes = await fetch(`${BASE}/api/activity/feed`);
+    const feedRes = await memberFetch('/api/activity/feed');
     assert(feedRes.status === 200, 'GET /api/activity/feed returns 200');
     assert(!feedRes.headers.has('content-security-policy'),
         'API route (/api/activity/feed) does NOT include Content-Security-Policy');
@@ -144,24 +162,22 @@ async function main(): Promise<void> {
     } as any;
 
     activityQueries = 0;
-    const initialFeed = await fetch(`${BASE}/api/activity/feed`);
+    const initialFeed = await memberFetch('/api/activity/feed');
     assert(initialFeed.status === 200, 'Initial feed fetch returned 200');
     assert(activityQueries > 0, `Initial feed fetch queried SQLite activity_feed (${activityQueries} query)`);
     const initialEtag = initialFeed.headers.get('etag');
     assert(!!initialEtag && initialEtag.startsWith('W/"activity-feed-'),
         `Emitted weak ETag with proper prefix: ${initialEtag}`);
-    assert(initialFeed.headers.get('cache-control') === 'public, max-age=0, must-revalidate',
-        `Cache-Control is public, max-age=0, must-revalidate (got: ${initialFeed.headers.get('cache-control')})`);
+    assert(initialFeed.headers.get('cache-control') === 'private, max-age=0, must-revalidate',
+        `Cache-Control is private, max-age=0, must-revalidate — members-only, so no shared cache may keep it (got: ${initialFeed.headers.get('cache-control')})`);
 
     // Conditional GET with matching If-None-Match
     activityQueries = 0;
-    const conditionalRes = await fetch(`${BASE}/api/activity/feed`, {
-        headers: { 'If-None-Match': initialEtag! },
-    });
+    const conditionalRes = await memberFetch('/api/activity/feed', { 'If-None-Match': initialEtag! });
     assert(conditionalRes.status === 304, 'Conditional GET with matching ETag returns 304');
     const textBody = await conditionalRes.text();
     assert(textBody === '', '304 response body is completely empty (0 bytes)');
-    assert(conditionalRes.headers.get('cache-control') === 'public, max-age=0, must-revalidate',
+    assert(conditionalRes.headers.get('cache-control') === 'private, max-age=0, must-revalidate',
         '304 response preserves Cache-Control');
     assert(conditionalRes.headers.get('etag') === initialEtag,
         '304 response preserves ETag');
@@ -169,11 +185,11 @@ async function main(): Promise<void> {
         `304 short-circuit executed ZERO SQLite queries on activity_feed (actual: ${activityQueries})`);
 
     // Varying query parameters create distinct ETags
-    const limitFeed = await fetch(`${BASE}/api/activity/feed?limit=10&offset=0`);
+    const limitFeed = await memberFetch('/api/activity/feed?limit=10&offset=0');
     const limitEtag = limitFeed.headers.get('etag');
     assert(limitEtag !== initialEtag, `Limit parameter partitioned ETag (${initialEtag} !== ${limitEtag})`);
 
-    const offsetFeed = await fetch(`${BASE}/api/activity/feed?limit=10&offset=5`);
+    const offsetFeed = await memberFetch('/api/activity/feed?limit=10&offset=5');
     const offsetEtag = offsetFeed.headers.get('etag');
     assert(offsetEtag !== limitEtag, `Offset parameter partitioned ETag (${limitEtag} !== ${offsetEtag})`);
 
@@ -239,9 +255,7 @@ async function main(): Promise<void> {
 
     // 3.4 After mutation, old ETag now invalidates (returns 200 with new ETag)
     activityQueries = 0;
-    const invalidatedFeed = await fetch(`${BASE}/api/activity/feed`, {
-        headers: { 'If-None-Match': initialEtag! },
-    });
+    const invalidatedFeed = await memberFetch('/api/activity/feed', { 'If-None-Match': initialEtag! });
     assert(invalidatedFeed.status === 200, 'GET /api/activity/feed with stale ETag returns 200 OK');
     assert(activityQueries > 0, `Stale ETag re-queried SQLite (${activityQueries} query)`);
     const newEtag = invalidatedFeed.headers.get('etag');

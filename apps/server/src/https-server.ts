@@ -224,6 +224,8 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): boolean {
 
 // Reads that stay public even under enforcement. Deny-by-default: anything NOT
 // listed here is gated, so a newly-added sensitive endpoint fails safe.
+// Deliberately NOT here: /api/activity/feed. It names both members of every completed trade, the
+// listing and the Beans, plus each member who joins, so it is readable by members only (2026-09-18).
 //   - discovery / federation: a peer or prospective member must read these
 //     before it has (or to decide whether to join with) an identity.
 //   - onboarding / recovery: a not-yet-joined or recovering user has no member
@@ -253,7 +255,6 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
-    '/api/activity/feed',            // living activity waterfall community pulse feed (#208)
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
     '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)

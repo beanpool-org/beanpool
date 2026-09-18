@@ -12,6 +12,10 @@ import { onSyncActivity } from '../lib/sync';
 
 interface Props {
     isFullView?: boolean;
+    /** The node only serves this feed to its members (it names who traded with whom, and for how many
+     *  Beans). A guest (false) is not sent to fetch a 403 — the full view says why it is empty instead;
+     *  null means membership is still being checked, so nothing is fetched yet. */
+    isMember?: boolean | null;
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -25,11 +29,12 @@ function formatRelativeTime(isoDate: string): string {
     return `${diffDays}d ago`;
 }
 
-export function ActivityWaterfall({ isFullView = false }: Props) {
+export function ActivityWaterfall({ isFullView = false, isMember = true }: Props) {
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (isMember !== true) return;
         let isMounted = true;
         let timer: ReturnType<typeof setInterval> | null = null;
         let lastFetchTime = 0;
@@ -104,7 +109,19 @@ export function ActivityWaterfall({ isFullView = false }: Props) {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             unsubscribe();
         };
-    }, []);
+    }, [isMember]);
+
+    if (isMember === false) {
+        return isFullView ? (
+            <div className="py-12 flex flex-col items-center justify-center text-center p-6 bg-zinc-50 dark:bg-zinc-900/40 rounded-2xl border border-zinc-200/80 dark:border-zinc-800">
+                <div className="text-4xl mb-3" aria-hidden="true">🌱</div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Community activity is for members</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mt-1">
+                    Join this community to see who is trading and who is new.
+                </p>
+            </div>
+        ) : null;
+    }
 
     if (loading && feed.length === 0) {
         return isFullView ? (

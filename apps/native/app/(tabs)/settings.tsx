@@ -1623,6 +1623,19 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
+                {/* ─── The BeanPool project (goes to beanpool.org, not to this community's node) ─── */}
+                <Text style={styles.sectionHeader}>BEANPOOL PROJECT</Text>
+                <View style={styles.menuGroup}>
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Suggest a change to BeanPool</Text>
+                            <Text style={styles.menuSub}>Ideas and problems go to the project team</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                </View>
+
                 {/* ─── Legal & Privacy ─── */}
                 <Text style={styles.sectionHeader}>LEGAL & PRIVACY</Text>
                 <View style={styles.menuGroup}>

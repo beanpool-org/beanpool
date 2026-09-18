@@ -12,7 +12,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
-import { CLIENT_POST_TYPES, isEventOpen } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -104,6 +104,8 @@ function remoteOriginLabel(post: any): string {
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember }: Props) {
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
     const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
+    // The date chips under the Events pill — the map's chips, as on the phone's feed (#895).
+    const [feedEventWindow, setFeedEventWindow] = useState<EventWindow>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
     // so it persists across sessions.
     const [beansOnly, setBeansOnly] = useState(() => localStorage.getItem('bp_beans_only') === 'true');
@@ -244,6 +246,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, [marketClickCount]);
 
     // Handle deep-link from Map pins or routes
+    const deepLinkFetched = useRef<string | null>(null);
     useEffect(() => {
         if (openPostId === 'deals_active') {
              setShowDealsModal(true);
@@ -255,6 +258,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setSelectedPost(found);
                 // Note: deep-link doesn't set txId yet in MVP, requires manual navigation into Deals
                 onPostOpened?.();
+            } else if (deepLinkFetched.current !== openPostId) {
+                // Not in the feed: an event that has ended or been cancelled has left it, but its host and the
+                // people going can still open it by id — from its chat, for one. Ask the node once.
+                const id = openPostId;
+                deepLinkFetched.current = id;
+                getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
+                    .then(rows => { if (rows[0]) { setSelectedPost(rows[0]); onPostOpened?.(); } })
+                    .catch(() => { });
             }
         }
     }, [openPostId, posts, onPostOpened]);
@@ -382,8 +393,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (typeFilter !== 'all' && typeFilter !== 'for-you') filter.type = typeFilter;
                 // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page renders them.
                 else filter.types = CLIENT_POST_TYPES;
-                if (categoryFilter !== 'all' && typeFilter !== 'poll') filter.category = categoryFilter;
-                if (beansOnly) filter.beansOnly = true;
+                // Under Events only the date chips filter (#895): the category and beans-only chips are off screen.
+                if (categoryFilter !== 'all' && typeFilter !== 'poll' && typeFilter !== 'event') filter.category = categoryFilter;
+                if (beansOnly && typeFilter !== 'event') filter.beansOnly = true;
                 if (groupFilter !== 'all') filter.targetGroupId = groupFilter;
 
                 // Always fetch home node listings, the viewer's OWN posts, and lightweight enterprise statuses
@@ -757,9 +769,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
                         onOpenChat={(p) => onNavigate?.('messages', p.id)}
                         onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
+                        onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
                         onChange={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
-                        onCancelled={() => { setSelectedPost(null); refresh().catch(() => {}); }}
+                        onCancelled={(p) => { if (p) setSelectedPost(p); refresh().catch(() => {}); }}
                     />
                 </div>
             );
@@ -2181,34 +2194,39 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                 </div>
 
-                {/* Row 2: Full-Width Type Segmented Control */}
-                <div className="w-full bg-nature-100 dark:bg-nature-900/60 rounded-2xl p-0.5 flex gap-0.5 mt-0.5 mb-1 shadow-inner border border-nature-200/50 dark:border-nature-800/40">
-                    {(['all', 'for-you', 'offer', 'need', 'poll'] as const).map((t) => {
+                {/* Row 2: Full-Width Type Segmented Control. Six types: two rows of three on a phone, so every type
+                    stays on screen at 320px with large text; one row from sm up. */}
+                <div data-testid="feed-type-filter" className="w-full bg-nature-100 dark:bg-nature-900/60 rounded-2xl p-0.5 grid grid-cols-3 sm:grid-cols-6 gap-0.5 mt-0.5 mb-1 shadow-inner border border-nature-200/50 dark:border-nature-800/40">
+                    {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
                         if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
                         if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
                         if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-500 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
                         if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
                             <button
                                 key={t}
+                                aria-pressed={isSelected}
                                 onClick={() => setTypeFilter(typeFilter === t ? 'all' : t)}
-                                className={`flex-1 py-1.5 text-center rounded-xl text-xs font-black transition-all duration-305 flex items-center justify-center gap-1 border-0 cursor-pointer ${
+                                className={`min-w-0 min-h-[48px] px-1 py-1.5 text-center rounded-xl text-xs font-black transition-all duration-305 flex items-center justify-center gap-1 border-0 cursor-pointer whitespace-nowrap ${
                                     isSelected 
                                         ? activeStyles 
                                         : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-nature-200 hover:bg-white/40 dark:hover:bg-nature-800/30'
                                 }`}
                             >
-                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : t === 'need' ? '🟠 Needs' : '🗳️ Polls'}
+                                {t === 'all' ? 'All' : t === 'for-you' ? '★ For You' : t === 'offer' ? '🟢 Offers' : t === 'need' ? '🟠 Needs' : t === 'event' ? 'Events' : '🗳️ Polls'}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* Row 2.5: Secondary Action & Filter Chips */}
+                {/* Row 2.5: Secondary Action & Filter Chips. Under Events only the group choice stays: beans only,
+                    new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
+                    {typeFilter !== 'event' && (<>
                     <button
                         onClick={() => {
                             const next = !beansOnly;
@@ -2245,6 +2263,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         💡 Pricing Guide
                     </button>
+                    </>)}
 
                     {userGroups.length > 0 && (
                         <div className="relative inline-block">
@@ -2269,7 +2288,35 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     )}
                 </div>
 
+                {/* Under Events: the map's date chips in place of Category and Distance (same as the phone, #895). */}
+                {typeFilter === 'event' && (
+                    <div
+                        data-testid="feed-event-window-chips"
+                        role="group"
+                        aria-label="Filter events by date"
+                        className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
+                        style={{ scrollbarWidth: 'none' }}
+                    >
+                        {EVENT_WINDOWS.map(w => (
+                            <button
+                                key={w.id}
+                                type="button"
+                                aria-pressed={feedEventWindow === w.id}
+                                onClick={() => setFeedEventWindow(w.id)}
+                                className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold transition-colors cursor-pointer ${
+                                    feedEventWindow === w.id
+                                        ? 'bg-violet-700 border-violet-700 text-white'
+                                        : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                }`}
+                            >
+                                {w.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
                 {/* Row 3: Symmetrical Filter Dropdowns (50% / 50% split) */}
+                {typeFilter !== 'event' && (
                 <div className="grid grid-cols-2 gap-2 mt-0.5 mb-2.5">
                     {/* Category Dropdown Button */}
                     <button
@@ -2329,6 +2376,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
                     </button>
                 </div>
+                )}
             </div>
 
                 {/* Connected Communities — multi-toggle (only if peer nodes exist) */}
@@ -2398,8 +2446,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
                 }
 
-                // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs
-                if (radiusSettings) {
+                // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs.
+                // Not under Events, where the distance chip is off screen.
+                if (radiusSettings && typeFilter !== 'event') {
                     filtered = filtered.filter(p => {
                         if (p.type === 'poll') return typeFilter === 'all' || typeFilter === 'poll';
                         if (p.lat == null || p.lng == null) return false;
@@ -2413,13 +2462,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && favCategories.includes(p.category));
                 }
 
-                // Beans-only filter (exclude polls and events)
-                if (beansOnly) {
+                // Beans-only filter (exclude polls and events). Off screen under Events.
+                if (beansOnly && typeFilter !== 'event') {
                     filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event');
                 }
 
-                // Founding-trade filter (exclude polls)
-                if (foundingOnly) {
+                // Founding-trade filter (exclude polls). Off screen under Events.
+                if (foundingOnly && typeFilter !== 'event') {
                     filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && p.authorFoundingNeeded);
                 }
 
@@ -2430,6 +2479,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => p.type === 'need');
                 } else if (typeFilter === 'poll') {
                     filtered = filtered.filter(p => p.type === 'poll');
+                } else if (typeFilter === 'event') {
+                    filtered = eventsFeedFilter(filtered, feedEventWindow);
                 }
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).

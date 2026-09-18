@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildEventCopy, eventInWindow, eventWindowRange, formatDistance, formatEventWhen, isEventOpen, localInputToIso } from './events';
+import {
+    buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, eventInWindow, eventWindowRange,
+    eventsFeedFilter, formatDistance, formatEventWhen, isEventOpen, isoToLocalInput, localInputToIso,
+} from './events';
 import type { MarketplacePost } from './api';
 
 // Local-time constructors keep these independent of the machine's time zone.
@@ -158,5 +161,91 @@ describe('Copy to a new date', () => {
         expect(copy.lat).toBeNull();
         expect(copy.lng).toBeNull();
         expect(copy.placeName).toBe('');
+    });
+});
+
+describe('editing an event (events round 2, decision 29)', () => {
+    const start = at(2030, 9, 28, 9);
+    const ev = event(start, start + 3 * HOUR, {
+        description: 'Clearing the back garden', eventPlaceName: 'The hall', eventPrivateNote: 'Gate 1234',
+        photos: ['https://node/api/marketplace/posts/ev/photos/0?v=1'],
+    });
+
+    it('fills every field of the form, the dates in local time', () => {
+        const form = eventEditForm(ev);
+        expect(form).toEqual({
+            title: 'Working bee', description: 'Clearing the back garden', start: '2030-09-28T09:00', end: '2030-09-28T12:00',
+            placeName: 'The hall', lat: -28.5, lng: 153.5, privateNote: 'Gate 1234',
+            photos: ['https://node/api/marketplace/posts/ev/photos/0?v=1'],
+        });
+        expect(localInputToIso(isoToLocalInput(ev.eventStartAt))).toBe(ev.eventStartAt);
+    });
+
+    it('sends nothing when nothing changed', () => {
+        const form = eventEditForm(ev);
+        expect(eventEditPayload(form, { ...form })).toEqual({});
+    });
+
+    it('sends only the title for a title fix — never the dates, so it cannot mark the event UPDATED', () => {
+        const before = eventEditForm(ev);
+        const payload = eventEditPayload(before, { ...before, title: 'Working bee and lunch' });
+        expect(payload).toEqual({ title: 'Working bee and lunch' });
+        expect(eventEditNotifies(payload)).toBe(false);
+    });
+
+    it('description, note and photo edits are silent too', () => {
+        const before = eventEditForm(ev);
+        const payload = eventEditPayload(before, { ...before, description: 'Bring a hat', privateNote: 'Gate 9999', photos: [] });
+        expect(payload).toEqual({ description: 'Bring a hat', eventPrivateNote: 'Gate 9999', photos: [] });
+        expect(eventEditNotifies(payload)).toBe(false);
+    });
+
+    it('a new start is sent as ISO UTC and is a change people going hear about', () => {
+        const before = eventEditForm(ev);
+        const payload = eventEditPayload(before, { ...before, start: '2030-09-28T10:00' });
+        expect(payload).toEqual({ eventStartAt: new Date(at(2030, 9, 28, 10)).toISOString() });
+        expect(eventEditNotifies(payload)).toBe(true);
+    });
+
+    it('a moved pin or a renamed place is a place change', () => {
+        const before = eventEditForm(ev);
+        expect(eventEditNotifies(eventEditPayload(before, { ...before, lat: -28.6 }))).toBe(true);
+        expect(eventEditPayload(before, { ...before, lat: -28.6 })).toEqual({ lat: -28.6, lng: 153.5 });
+        expect(eventEditNotifies(eventEditPayload(before, { ...before, placeName: 'The old bowls club' }))).toBe(true);
+    });
+
+    it('a cleared end goes as an empty string, which the node turns into start + 2 hours', () => {
+        const before = eventEditForm(ev);
+        expect(eventEditPayload(before, { ...before, end: '' })).toEqual({ eventEndAt: '' });
+    });
+
+    it('can be edited while open; not once cancelled or ended, and says which', () => {
+        const now = at(2030, 9, 27, 12);
+        expect(eventEditBlockedReason(ev, now)).toBeNull();
+        expect(eventEditBlockedReason({ ...ev, eventState: 'cancelled', status: 'cancelled' }, now)).toBe('This event was cancelled, so it can no longer be edited.');
+        expect(eventEditBlockedReason(ev, start + 4 * HOUR)).toBe('This event has ended, so it can no longer be edited.');
+        // Under way is still editable: the note often needs fixing on the day.
+        expect(eventEditBlockedReason(ev, start + HOUR)).toBeNull();
+    });
+});
+
+describe('the feed\'s Events filter (B5, same as the phone)', () => {
+    const now = at(2026, 9, 23, 10); // a Wednesday
+    const today = event(at(2026, 9, 23, 18));
+    const saturday = event(at(2026, 9, 26, 9));
+    const nextMonth = event(at(2026, 10, 20, 9));
+    const cancelled = event(at(2026, 9, 24, 9), undefined, { eventState: 'cancelled', status: 'cancelled' });
+    const offer: MarketplacePost = { ...event(at(2026, 9, 24, 9)), id: 'offer-1', type: 'offer' };
+    const remote = { ...event(at(2026, 9, 24, 9)), id: 'remote-1', _remoteNode: 'https://elsewhere' } as MarketplacePost;
+    const all = [nextMonth, offer, saturday, cancelled, today, remote];
+
+    it('shows events only, soonest first, never cancelled ones or another community\'s', () => {
+        expect(eventsFeedFilter(all, 'all', now).map(p => p.id)).toEqual([today.id, saturday.id, nextMonth.id]);
+    });
+
+    it('narrows by the date chips', () => {
+        expect(eventsFeedFilter(all, 'today', now).map(p => p.id)).toEqual([today.id]);
+        expect(eventsFeedFilter(all, 'weekend', now).map(p => p.id)).toEqual([saturday.id]);
+        expect(eventsFeedFilter(all, 'week', now).map(p => p.id)).toEqual([today.id, saturday.id]);
     });
 });

@@ -17,7 +17,7 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import {
-    getMarketplacePosts, createMarketplacePost, getNodeInfo, getRemotePosts,
+    getMarketplacePosts, createMarketplacePost, updateMarketplacePost, getNodeInfo, getRemotePosts,
     getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
     getEnterpriseMapPins, type EnterpriseMapPin,
     getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group
@@ -34,7 +34,10 @@ import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
 import { approximateLocation } from '@beanpool/core';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventInWindow, isEventOpen, localInputToIso, type EventWindow } from '../lib/events';
+import {
+    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
+    eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
+} from '../lib/events';
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -52,6 +55,13 @@ const NEUTRAL_CENTER: [number, number] = [20, 0];
 const NEUTRAL_ZOOM = 2;
 // Closest a fit to this community's own pins may zoom, so one lone pin does not open at street level.
 const FIT_MAX_ZOOM = 15;
+
+/**
+ * The event pin's glyph: a calendar drawn in white, with no date on it. The 📅 emoji it replaces is drawn by
+ * each platform with a date printed on the page ("JUL 17" on Android), which read as the event's date
+ * (events round 2, B7).
+ */
+export const EVENT_PIN_ICON_SVG = `<svg data-event-pin-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="8.5" cy="14.5" r="0.6" fill="#ffffff"/><circle cx="12" cy="14.5" r="0.6" fill="#ffffff"/><circle cx="15.5" cy="14.5" r="0.6" fill="#ffffff"/></svg>`;
 
 // The view the member last left the map at, kept for this page load. The map tab unmounts when the member leaves
 // it, so without this every return re-centred the map and threw away where they had panned to. Set only once the
@@ -90,16 +100,29 @@ interface Props {
      */
     copyEventPostId?: string | null;
     onCopyEventHandled?: () => void;
+    /**
+     * "Edit event" from an event's host panel (events round 2, decision 29): open the event form in edit mode,
+     * filled from this event — every field, dates included. Save sends only what changed.
+     */
+    editEventPostId?: string | null;
+    onEditEventHandled?: () => void;
 }
 
 /** Event form limits, as the node enforces them (docs/events-on-the-map.md §2.2). */
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHandled, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const markersRef = useRef<L.LayerGroup | null>(null);
+    /**
+     * Event pins, in their own layer OUTSIDE the cluster group: an event folded into a bubble of listings could
+     * not be found under the date chips (events round 2, B2). Few enough to never need clustering — five
+     * upcoming per host.
+     */
+    const eventLayerRef = useRef<L.LayerGroup | null>(null);
+    const eventChipsRef = useRef<HTMLDivElement | null>(null);
     const userMarkerRef = useRef<L.Marker | null>(null);
     const radiusCircleRef = useRef<L.Circle | null>(null);
 
@@ -125,6 +148,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
     /** True while the event form holds a copy of an existing event, so the form can say what did not come with it. */
     const [eventIsCopy, setEventIsCopy] = useState(false);
+    /** Non-null while the event form is editing an existing event: its id and the form as it was opened. */
+    const [eventEdit, setEventEdit] = useState<{ id: string; before: EventEditForm } | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
@@ -338,6 +363,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
             }
         }).addTo(map);
+        eventLayerRef.current = L.layerGroup().addTo(map);
 
         mapRef.current = map;
 
@@ -588,6 +614,71 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setEventHost('me');
         setPostApproximate(false);
         setEventIsCopy(false);
+        setEventEdit(null);
+    }
+
+    /** The event form as it stands, in the shape the edit diff compares. */
+    function currentEventForm(): EventEditForm {
+        return {
+            title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
+            placeName: eventPlaceName, lat: postLat, lng: postLng, privateNote: eventNote, photos: newPostPhotos,
+        };
+    }
+
+    function closeEventForm() {
+        setNewPostTitle('');
+        setNewPostDescription('');
+        setNewPostPhotos([]);
+        resetEventForm();
+        setAudienceScope('public');
+        setTargetGroupId('');
+        setPostLat(null);
+        setPostLng(null);
+        setPinDropMode(false);
+        if (pinDropMarkerRef.current) {
+            pinDropMarkerRef.current.remove();
+            pinDropMarkerRef.current = null;
+        }
+        setShowNewPost(false);
+    }
+
+    /**
+     * Save an edit. Only the changed fields go to the node, so a title fix is silent and only a time or place
+     * change marks the event UPDATED and tells everyone going (decision 29). A start that has not been touched
+     * is not re-checked against the clock: an event already under way can still have its note fixed.
+     */
+    async function handleSaveEvent() {
+        if (!eventEdit) return;
+        const errors = new Set<string>();
+        const startIso = localInputToIso(eventStart);
+        const endIso = localInputToIso(eventEnd);
+        if (!newPostTitle.trim()) errors.add('title');
+        if (!startIso || (eventStart !== eventEdit.before.start && Date.parse(startIso) <= Date.now())) errors.add('event_start');
+        if (eventEnd && (!endIso || !startIso || Date.parse(endIso) <= Date.parse(startIso))) errors.add('event_end');
+        if (postLat == null || postLng == null) errors.add('location');
+        if (eventPlaceName.trim().length > EVENT_PLACE_NAME_MAX) errors.add('event_place');
+        if (eventNote.trim().length > EVENT_PRIVATE_NOTE_MAX) errors.add('event_note');
+        setValidationErrors(errors);
+        if (errors.size > 0) return;
+
+        const id = eventEdit.id;
+        const payload = eventEditPayload(eventEdit.before, currentEventForm());
+        if (Object.keys(payload).length === 0) {
+            closeEventForm();
+            onNavigate?.('marketplace', id);
+            return;
+        }
+        setPosting(true);
+        try {
+            // The signed caller's own key: the node checks it against the host set (author, keeper, convenor).
+            await updateMarketplacePost(id, identity.publicKey || '', payload);
+            closeEventForm();
+            refreshPosts();
+            onNavigate?.('marketplace', id);
+        } catch (e: any) {
+            alert(e.message || 'The event could not be saved.');
+        }
+        setPosting(false);
     }
 
     async function handleCreateEvent() {
@@ -648,6 +739,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }
 
     async function handleCreatePost() {
+        if (newPostType === 'event' && eventEdit) {
+            await handleSaveEvent();
+            return;
+        }
         if (newPostType === 'event') {
             await handleCreateEvent();
             return;
@@ -853,10 +948,37 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         return () => { map.off('click', onMapClick); };
     }, [pinDropMode]);
 
+    const visibleEventPins = useMemo(() => posts.filter(post => post.type === 'event' && post.lat != null && post.lng != null
+        && eventInWindow(post, eventWindow)
+        && !(post as any)._remoteNode
+        && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey)),
+    [posts, eventWindow, blockedSet, inactiveEnterpriseKeys]);
+
+    /**
+     * A tap on a date chip brings that chip's events into view BELOW the chip row, so a member who asks for
+     * events always sees one (events round 2, B2). The top padding is measured from the chips themselves,
+     * which sit lower on a phone (under the header) and grow with large text.
+     */
+    function fitEventPins(window: EventWindow) {
+        const map = mapRef.current;
+        if (!map) return;
+        const points = posts
+            .filter(post => post.type === 'event' && post.lat != null && post.lng != null && eventInWindow(post, window)
+                && !(post as any)._remoteNode && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+            .map(post => [post.lat!, post.lng!] as [number, number]);
+        if (points.length === 0) return;
+        const container = map.getContainer().getBoundingClientRect();
+        const chips = eventChipsRef.current?.getBoundingClientRect();
+        // The pin is drawn 48px tall above its point, so clear the chips by that much and a margin.
+        const top = Math.max(110, (chips ? chips.bottom - container.top : 120) + 48 + 16);
+        map.fitBounds(points, { paddingTopLeft: [40, top], paddingBottomRight: [40, 140], maxZoom: FIT_MAX_ZOOM });
+    }
+
     // Render marketplace post pins on the map
     useEffect(() => {
         if (!markersRef.current || !mapRef.current) return;
         markersRef.current.clearLayers();
+        eventLayerRef.current?.clearLayers();
 
         posts
             .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
@@ -950,13 +1072,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             marker.addTo(markersRef.current!);
         });
 
-        // Event pins (docs/events-on-the-map.md §3): purple with a calendar glyph, filtered by the chips.
-        // Cancelled and ended events never pin.
-        posts
-            .filter(post => post.type === 'event' && post.lat != null && post.lng != null
-                && eventInWindow(post, eventWindow)
-                && !(post as any)._remoteNode
-                && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+        // Event pins (docs/events-on-the-map.md §3): violet with a drawn calendar, filtered by the chips, in their
+        // own unclustered layer above the listings. Cancelled and ended events never pin.
+        visibleEventPins
             .forEach(post => {
                 const html = `
                 <div style="position: relative; width: 40px; height: 48px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));">
@@ -966,7 +1084,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         display: flex; align-items: center; justify-content: center;
                         box-sizing: border-box; z-index: 2; position: relative;
                     ">
-                        <span style="font-size: 20px; line-height: 1; padding-bottom: 1px;">📅</span>
+                        ${EVENT_PIN_ICON_SVG}
                     </div>
                     <div style="
                         position: absolute; bottom: 0; width: 0; height: 0;
@@ -983,14 +1101,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     iconAnchor: [20, 48],
                 });
                 const label = `Event: ${post.title}`;
-                const marker = L.marker([post.lat!, post.lng!], { icon, title: label, alt: label });
+                const marker = L.marker([post.lat!, post.lng!], { icon, title: label, alt: label, zIndexOffset: 1000 });
                 marker.on('click', () => {
                     setPreviewPost(post);
                     if (mapRef.current) {
                         mapRef.current.setView([post.lat!, post.lng!], mapRef.current.getZoom(), { animate: true });
                     }
                 });
-                marker.addTo(markersRef.current!);
+                marker.addTo(eventLayerRef.current ?? markersRef.current!);
             });
 
         // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)
@@ -1077,7 +1195,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 });
                 marker.addTo(markersRef.current!);
             });
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, eventWindow, nodeRadius]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
     // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
@@ -1144,6 +1262,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             setPostApproximate(false);
             setPinDropMode(false);
             setValidationErrors(new Set());
+            setEventEdit(null);
             setEventIsCopy(true);
             if (copy.lat != null && copy.lng != null) {
                 placePreviewPin(copy.lat, copy.lng);
@@ -1155,6 +1274,62 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         // `posts` is only a fallback for an offline fetch; it is deliberately not a dependency here, because
         // re-running on every poll would reopen the form.
     }, [copyEventPostId, identity?.publicKey, onCopyEventHandled]);
+
+    // "Edit event": fetch the event signed (the host's view carries the note and the RSVP list, which is how
+    // the node says this viewer is a host) and fill every field of the form from it. Handled once per id, for
+    // the reason the copy effect above gives.
+    const handledEditId = useRef<string | null>(null);
+    useEffect(() => {
+        if (!editEventPostId || handledEditId.current === editEventPostId) return;
+        const id = editEventPostId;
+        handledEditId.current = id;
+        (async () => {
+            let source: MarketplacePost | undefined;
+            try {
+                source = (await getMarketplacePosts({ id, types: CLIENT_POST_TYPES }))[0];
+            } catch {
+                source = undefined;
+            }
+            onEditEventHandled?.();
+            if (!source || source.type !== 'event') {
+                alert('That event could not be loaded, so it cannot be edited right now.');
+                return;
+            }
+            if (!isEventHostView(source)) {
+                alert('Only the host can edit this event.');
+                return;
+            }
+            const blocked = eventEditBlockedReason(source);
+            if (blocked) {
+                alert(blocked);
+                return;
+            }
+            const form = eventEditForm(source);
+            setNewPostType('event');
+            setEventIsCopy(false);
+            setNewPostTitle(form.title);
+            setNewPostDescription(form.description);
+            setNewPostPhotos(form.photos);
+            setEventStart(form.start);
+            setEventEnd(form.end);
+            setEventPlaceName(form.placeName);
+            setEventNote(form.privateNote);
+            setAudienceScope(source.audienceScope === 'group' ? 'group' : 'public');
+            setTargetGroupId(source.audienceScope === 'group' ? (source.targetGroupId ?? '') : '');
+            setPostLat(form.lat);
+            setPostLng(form.lng);
+            setPostApproximate(false);
+            setPinDropMode(false);
+            setValidationErrors(new Set());
+            setEventEdit({ id, before: form });
+            if (form.lat != null && form.lng != null) {
+                placePreviewPin(form.lat, form.lng);
+                centredRef.current = true;
+                mapRef.current?.setView([form.lat, form.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 15));
+            }
+            setShowNewPost(true);
+        })();
+    }, [editEventPostId, onEditEventHandled]);
 
     // "Show on map" from an event's detail: centre on it and open its card once it has loaded.
     useEffect(() => {
@@ -1341,6 +1516,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             {/* Hidden while composing: at 320px the New Post panel leaves only a strip of map to drop a pin in. */}
             {hasOpenEvents && !showNewPost && (
                 <div
+                    ref={eventChipsRef}
                     data-testid="event-window-chips"
                     role="group"
                     aria-label="Show events"
@@ -1352,14 +1528,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             key={w.id}
                             type="button"
                             aria-pressed={eventWindow === w.id}
-                            onClick={() => { setEventWindow(w.id); setPreviewPost(null); }}
+                            onClick={() => { setEventWindow(w.id); setPreviewPost(null); fitEventPins(w.id); }}
                             className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
                                 eventWindow === w.id
                                     ? 'bg-violet-700 border-violet-700 text-white'
                                     : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
                             }`}
                         >
-                            {w.id === 'all' ? '📅 All' : w.label}
+                            {w.id === 'all' ? 'All events' : w.label}
                         </button>
                     ))}
                 </div>
@@ -1531,7 +1707,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">
-                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventIsCopy ? 'Copy Event' : 'New Post'}</span>
+                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? 'Edit Event' : eventIsCopy ? 'Copy Event' : 'New Post'}</span>
                     <button onClick={() => {
                         setShowNewPost(false);
                         setPostApproximate(false);
@@ -1541,6 +1717,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setPostLat(null);
                         setPostLng(null);
                         setEventIsCopy(false);
+                        if (eventEdit) {
+                            // Leaving an edit drops what was typed: the next New Post starts empty, not as this event.
+                            setNewPostTitle('');
+                            setNewPostDescription('');
+                            setNewPostPhotos([]);
+                            resetEventForm();
+                        }
                         if (pinDropMarkerRef.current) {
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
@@ -1550,7 +1733,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     </button>
                 </div>
 
+                {/* Editing: the type, the audience and the host are what the event IS, and the node keeps them —
+                    say so once instead of showing controls that would do nothing. */}
+                {eventEdit && (
+                    <p data-testid="event-edit-fixed" className="m-0 mb-4 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
+                        {audienceScope === 'group'
+                            ? `For ${userGroups.find(g => g.id === targetGroupId)?.name || 'the group'} only. `
+                            : 'For this community. '}
+                        Who can see it and who hosts it stay as they are.
+                    </p>
+                )}
+
                 {/* Type toggle */}
+                {!eventEdit && (<>
                 <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mb-4">
                     {(['offer', 'need', 'poll', 'event'] as const).map(t => (
                         <button
@@ -1564,7 +1759,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
                             }`}
                         >
-                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? '📅 Event' : '🗳️ Poll'}
+                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
                         </button>
                     ))}
                 </div>
@@ -1647,6 +1842,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                     )}
                 </div>
+                </>)}
 
                 {newPostType === 'event' ? (
                     <div className="space-y-4 mb-4">
@@ -1655,7 +1851,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.
                             </p>
                         )}
-                        {(keeperOf.length > 0 || convenorGroups.length > 0) && (
+                        {!eventEdit && (keeperOf.length > 0 || convenorGroups.length > 0) && (
                             <div>
                                 <label htmlFor="event-host" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Post as</label>
                                 <select
@@ -1793,6 +1989,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             />
                             <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see this.</p>
                         </div>
+                        {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
+                            <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
+                                You changed the time or place. The event will show UPDATED and everyone going will be told.
+                            </p>
+                        )}
                     </div>
                 ) : newPostType === 'poll' ? (
                     <div className="space-y-4 mb-4">
@@ -2119,7 +2320,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     }`}
                 >
                     {posting ? 'Posting...' :
-                     newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : '📅 Create Event') :
+                     newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
                      needBlocked ? '🔵 List an Offer first to post Needs' :
                      postLat == null ? '📍 Map location required' :

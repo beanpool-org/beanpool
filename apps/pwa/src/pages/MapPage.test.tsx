@@ -28,6 +28,7 @@ vi.mock('leaflet', () => {
                 removeLayer: vi.fn(),
                 getZoom: vi.fn(() => opts?.zoom ?? 13),
                 getCenter: vi.fn(() => ({ lat: opts?.center?.[0] ?? 0, lng: opts?.center?.[1] ?? 0 })),
+                getContainer: vi.fn(() => ({ getBoundingClientRect: () => ({ top: 0, bottom: 640, left: 0, right: 320 }) })),
             })),
             tileLayer: vi.fn(() => ({ addTo: vi.fn() })),
             control: {
@@ -61,6 +62,8 @@ vi.mock('leaflet', () => {
                 getBounds: vi.fn(() => ({ circleBoundsOf: center, radius: opts?.radius })),
             })),
             markerClusterGroup: vi.fn(() => layerGroup),
+            // Event pins: their own layer, outside the cluster group.
+            layerGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn(), addTo: vi.fn().mockReturnThis() })),
         },
     };
 });
@@ -410,11 +413,42 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
         const titles = eventPins().map(m => m.opts.title);
         expect(new Set(titles)).toEqual(new Set(['Event: Repair café', 'Event: Spring working bee']));
-        expect(eventPins()[0].opts.html).toContain('📅');
+        // A drawn calendar with no date on it: the 📅 emoji printed "JUL 17" on Android (events round 2, B7).
+        expect(eventPins()[0].opts.html).toContain('data-event-pin-icon');
+        expect(eventPins().every(m => !String(m.opts.html).includes('📅'))).toBe(true);
         expect(eventPins()[0].opts.html).toContain('#7c3aed');
         const offerPins = mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
         expect(offerPins.length).toBeGreaterThan(0);
-        expect(offerPins.every(m => !String(m.opts.html).includes('📅'))).toBe(true);
+        expect(offerPins.every(m => !String(m.opts.html).includes('data-event-pin-icon'))).toBe(true);
+    });
+
+    it('keeps event pins out of the listing clusters, in their own layer drawn above the listings (B2)', async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+        const clusterGroup = (L as any).markerClusterGroup.mock.results[0].value;
+        const eventLayer = (L as any).layerGroup.mock.results[0].value;
+        expect(eventLayer).not.toBe(clusterGroup);
+        for (const pin of eventPins()) {
+            expect(pin.addTo).toHaveBeenCalledWith(eventLayer);
+            expect(pin.addTo).not.toHaveBeenCalledWith(clusterGroup);
+            expect(pin.opts.zIndexOffset).toBeGreaterThan(0);
+        }
+        const offerPins = mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+        expect(offerPins.every(m => m.addTo.mock.calls.every((c: any[]) => c[0] === clusterGroup))).toBe(true);
+    });
+
+    it('a date chip fits the map to its events, below the chip row (B2)', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(view!.getByTestId('event-window-chips')).toBeTruthy());
+        const map = (L as any).map.mock.results[0].value;
+        map.fitBounds.mockClear();
+        await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
+        expect(map.fitBounds).toHaveBeenCalledTimes(1);
+        const [points, opts] = map.fitBounds.mock.calls[0];
+        expect(points.length).toBe(eventPins().length);
+        // The chips' own bottom edge plus the 48px pin and a margin: the pin's head never sits under them.
+        expect(opts.paddingTopLeft[1]).toBeGreaterThanOrEqual(48 + 16);
     });
 
     it('filters event pins with Today / This weekend / Next 7 days / All, in one row', async () => {
@@ -424,7 +458,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(chips.className).toContain('flex-nowrap');
         expect(chips.className).toContain('overflow-x-auto');
         const buttons = Array.from(chips.querySelectorAll('button'));
-        expect(buttons.map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', '📅 All']);
+        expect(buttons.map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', 'All events']);
         for (const b of buttons) expect(b.className).toContain('whitespace-nowrap');
 
         mockCreatedMarkers.length = 0;
@@ -434,7 +468,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true);
 
         mockCreatedMarkers.length = 0;
-        await act(async () => { fireEvent.click(view!.getByRole('button', { name: '📅 All' })); });
+        await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
         expect(eventPins().length).toBe(2);
     });
 
@@ -455,7 +489,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost onNavigate={onNavigate} />); });
         const panel = await view!.findByTestId('map-new-post-panel');
-        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '📅 Event' })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
 
         fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
         fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
@@ -471,7 +505,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
 
-        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '📅 Create Event' })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
         await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
         const body = create.mock.calls[0][0];
         expect(body).toMatchObject({
@@ -552,6 +586,118 @@ describe('Copy to a new date (docs/events-on-the-map.md §3, slice 5)', () => {
         // The pin and the title came across, so the button names the one thing still missing.
         const post = within(panel).getByRole('button', { name: /Add a title and start time/i }) as HTMLButtonElement;
         expect(post.disabled).toBe(true);
+    });
+});
+
+describe('Edit event (events round 2, A1–A3, decision 29)', () => {
+    // Local-time start so the datetime-local value is the same on any machine.
+    const start = new Date(2030, 8, 28, 9, 0);
+    const hosted: any = {
+        id: 'ev-open', type: 'event', category: 'community', title: 'Working bee at the hall',
+        description: 'Clearing the back garden', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'user-alice-pubkey', authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z',
+        active: true, status: 'active', repeatable: false, lat: -28.55, lng: 153.5,
+        eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 3 * 3600_000).toISOString(),
+        eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234', eventState: 'scheduled',
+        audienceScope: 'public', photos: ['https://node/api/marketplace/posts/ev-open/photos/0?v=1'],
+        eventRsvps: [{ memberPubkey: 'b', memberCallsign: 'Bo', status: 'going', updatedAt: '' }],
+    };
+
+    function setup(byId: any) {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => (filter?.id === byId.id ? [byId] : []) as any);
+        vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: byId });
+    }
+
+    async function openEdit(post: any, onNavigate = vi.fn()) {
+        let view: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} editEventPostId={post.id} onEditEventHandled={vi.fn()} onNavigate={onNavigate} />);
+        });
+        return view!;
+    }
+
+    it('opens the event form titled Edit Event with EVERY field filled, dates included', async () => {
+        setup(hosted);
+        const view = await openEdit(hosted);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        expect(within(panel).getByText('Edit Event')).toBeTruthy();
+        expect((within(panel).getByLabelText(/What's happening/i) as HTMLInputElement).value).toBe('Working bee at the hall');
+        expect((within(panel).getByLabelText(/^Starts/i) as HTMLInputElement).value).toBe('2030-09-28T09:00');
+        expect((within(panel).getByLabelText(/^Ends/i) as HTMLInputElement).value).toBe('2030-09-28T12:00');
+        expect((within(panel).getByLabelText(/Place name/i) as HTMLInputElement).value).toBe('Bindarrabi Hall');
+        expect((within(panel).getByLabelText(/^Description/i) as HTMLTextAreaElement).value).toBe('Clearing the back garden');
+        expect((within(panel).getByLabelText(/Note for people who are going/i) as HTMLTextAreaElement).value).toBe('Gate code 1234');
+        expect(within(panel).getByText('1/5 photos')).toBeTruthy();
+        // Type, audience and host are what the event is; the form says so instead of offering them.
+        expect(within(panel).queryByRole('button', { name: 'Offer' })).toBeNull();
+        expect(within(panel).getByTestId('event-edit-fixed')).toBeTruthy();
+        expect(within(panel).getByRole('button', { name: 'Save changes' })).toBeTruthy();
+    });
+
+    it('a title edit saves only the title, with the host\'s own key — silent, so no UPDATED warning', async () => {
+        setup(hosted);
+        const onNavigate = vi.fn();
+        const view = await openEdit(hosted, onNavigate);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        fireEvent.change(within(panel).getByLabelText(/What's happening/i), { target: { value: 'Working bee and lunch' } });
+        expect(within(panel).queryByTestId('event-edit-notifies')).toBeNull();
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-open', 'user-alice-pubkey', { title: 'Working bee and lunch' });
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-open');
+    });
+
+    it('a time change is sent, and the form warns that it will show UPDATED and tell everyone going', async () => {
+        setup(hosted);
+        const view = await openEdit(hosted);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        fireEvent.change(within(panel).getByLabelText(/^Starts/i), { target: { value: '2030-09-28T10:00' } });
+        expect(within(panel).getByTestId('event-edit-notifies').textContent).toMatch(/UPDATED and everyone going will be told/);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-open', 'user-alice-pubkey', {
+            eventStartAt: new Date(2030, 8, 28, 10, 0).toISOString(),
+        });
+    });
+
+    it('is refused for an event that has ended, and says so (A3)', async () => {
+        const ended = { ...hosted, id: 'ev-ended', eventStartAt: '2020-01-01T09:00:00.000Z', eventEndAt: '2020-01-01T11:00:00.000Z' };
+        setup(ended);
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const view = await openEdit(ended);
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('This event has ended, so it can no longer be edited.'));
+        expect(view.queryByTestId('map-new-post-panel')).toBeNull();
+        alert.mockRestore();
+    });
+
+    it('is refused for a cancelled event, and says so (A3)', async () => {
+        const cancelled = { ...hosted, id: 'ev-cancelled', status: 'cancelled', eventState: 'cancelled', active: false };
+        setup(cancelled);
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const view = await openEdit(cancelled);
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('This event was cancelled, so it can no longer be edited.'));
+        expect(view.queryByTestId('map-new-post-panel')).toBeNull();
+        alert.mockRestore();
+    });
+
+    it('is refused for someone the node does not treat as a host (no RSVP list in their view)', async () => {
+        const notMine = { ...hosted, id: 'ev-theirs', eventRsvps: undefined };
+        setup(notMine);
+        const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const view = await openEdit(notMine);
+        await waitFor(() => expect(alert).toHaveBeenCalledWith('Only the host can edit this event.'));
+        expect(view.queryByTestId('map-new-post-panel')).toBeNull();
+        alert.mockRestore();
     });
 });
 

@@ -82,7 +82,12 @@ async function handleSubmit(request, env) {
     const rl = await checkAndCount(env, request.headers.get('cf-connecting-ip'), now);
     if (!rl.allowed) {
         return json(
-            { ok: false, error: "Thank you — we've had a lot of suggestions from your connection recently. Please try again a bit later; your text is still here." },
+            {
+                ok: false,
+                error: rl.reason === 'global'
+                    ? "Thank you — we've had a lot of suggestions today. Please try again tomorrow; your text is still here."
+                    : "Thank you — we've had a lot of suggestions from your connection recently. Please try again a bit later; your text is still here.",
+            },
             429,
             { ...cors, 'retry-after': String(rl.retryAfter) },
         );

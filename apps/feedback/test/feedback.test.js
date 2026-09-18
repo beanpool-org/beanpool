@@ -255,12 +255,25 @@ test('senderKey: IPv4 as is; IPv6 folded to its /64 however it is written', () =
     assert.notEqual(senderKey('::ffff:203.0.113.77'), senderKey('::ffff:198.51.100.9'));
 });
 
+test('rate limit: one sender hammering the endpoint cannot use up the global cap for everyone (#919 delta review)', async () => {
+    const env = mkEnv({ RATE_GLOBAL_PER_DAY: '30' });
+    await withClock(Date.UTC(2026, 8, 21, 10, 15, 0), async () => {
+        const statuses = [];
+        for (let i = 0; i < 31; i++) statuses.push((await post(env, good(), { ip: '203.0.113.5' })).status);
+        assert.equal(statuses.filter((x) => x === 201).length, 5);
+        const fresh = await post(env, good(), { ip: '198.51.100.200' });
+        assert.equal(fresh.status, 201, 'a new sender must still get through');
+    });
+});
+
 test('rate limit: a global daily cap holds even when every sender is different', async () => {
     const env = mkEnv({ RATE_GLOBAL_PER_DAY: '3' });
     await withClock(Date.UTC(2026, 8, 21, 10, 15, 0), async () => {
         const statuses = [];
         for (let i = 1; i <= 5; i++) statuses.push((await post(env, good(), { ip: `198.51.100.${i}` })).status);
         assert.deepEqual(statuses, [201, 201, 201, 429, 429]);
+        const res = await post(env, good(), { ip: '198.51.100.99' });
+        assert.match((await res.json()).error, /today/, 'the global limit says so, not "your connection"');
     });
 });
 

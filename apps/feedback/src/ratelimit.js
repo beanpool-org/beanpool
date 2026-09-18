@@ -74,17 +74,20 @@ export async function checkAndCount(env, ip, nowS) {
     const hash = await sha256Hex(`${salt}:${senderKey(ip)}`);
     const hourBucket = `h${Math.floor(nowS / HOUR)}`;
     const globalPerDay = Number(env.RATE_GLOBAL_PER_DAY) || 2000;
-    const [h, d, g] = await env.DB.batch([
+    const [h, d] = await env.DB.batch([
         env.DB.prepare(INCREMENT).bind(hash, hourBucket, day),
         env.DB.prepare(INCREMENT).bind(hash, `d${day}`, day),
-        // One cap for everyone together, so a flood from many networks still can't bury the week's real
-        // suggestions behind the digest's oldest-first drain.
-        env.DB.prepare(INCREMENT).bind('global', `d${day}`, day),
     ]);
     const hourCount = h.results[0].count;
     const dayCount = d.results[0].count;
-    if (g.results[0].count > globalPerDay) return { allowed: false, retryAfter: DAY - (nowS % DAY) };
-    if (dayCount > perDay) return { allowed: false, retryAfter: DAY - (nowS % DAY) };
-    if (hourCount > perHour) return { allowed: false, retryAfter: HOUR - (nowS % HOUR) };
+    // Per-sender limits FIRST, and only a sender still within them touches the global counter. Counting
+    // refused attempts globally let one address burn the whole day's cap in a minute and shut the form for
+    // everyone (#919 delta review). Now one sender adds at most RATE_PER_DAY to the global count.
+    if (dayCount > perDay) return { allowed: false, reason: 'sender', retryAfter: DAY - (nowS % DAY) };
+    if (hourCount > perHour) return { allowed: false, reason: 'sender', retryAfter: HOUR - (nowS % HOUR) };
+    // One cap for everyone together, so a flood from many networks still can't bury the week's real
+    // suggestions behind the digest's oldest-first drain.
+    const g = await env.DB.prepare(INCREMENT).bind('global', `d${day}`, day).all();
+    if (g.results[0].count > globalPerDay) return { allowed: false, reason: 'global', retryAfter: DAY - (nowS % DAY) };
     return { allowed: true, retryAfter: 0 };
 }

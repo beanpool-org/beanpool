@@ -79,6 +79,8 @@ async function main(): Promise<void> {
     const dave = makeMember('Dave');     // stays a member
     const erin = makeMember('Erin');     // never joins
     const frank = makeMember('Frank');   // pending request
+    const gina = makeMember('Gina');     // declined, then asks again
+    const hugo = makeMember('Hugo');     // invitation withdrawn, then asks again
 
     // ── 3. Removal sticks ───────────────────────────────────────────────────────────────────────
     console.log('\n--- 3. A removed member stays removed; a member who left can come back ---');
@@ -140,6 +142,19 @@ async function main(): Promise<void> {
     joinGroup(circle.id, erin);
     removeGroupMember(circle.id, alice, erin);
     assert(!listGroups({}, erin).some(g => g.id === circle.id), 'a removed member no longer sees a hidden invite-only group listed');
+
+    // A decline or a withdrawn invitation is NOT a removal: the person was never in the group, so they must be able
+    // to ask again, and must never be told "a convenor removed you". (Deciding review of #912, B1.)
+    const club = createGroup({ name: 'Supper Club', joinPolicy: 'request_to_join', createdBy: alice });
+    joinGroup(club.id, gina);
+    assert(removeGroupMember(club.id, alice, gina) === true, 'the convenor declines Gina\'s request');
+    const ginaAgain = attempt(() => joinGroup(club.id, gina));
+    assert(ginaAgain?.status === 'pending_approval', 'a declined person can ask again (a new pending request)');
+
+    inviteGroupMember(club.id, alice, hugo);
+    assert(removeGroupMember(club.id, alice, hugo) === true, 'the convenor withdraws Hugo\'s invitation');
+    const hugoAgain = attempt(() => joinGroup(club.id, hugo));
+    assert(hugoAgain?.status === 'pending_approval', 'someone whose invitation was withdrawn can still ask to join');
 
     // ── 1 & 2. Replication ──────────────────────────────────────────────────────────────────────
     console.log('\n--- 1. Groups, members and roles survive export → import on a fresh node ---');

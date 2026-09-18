@@ -503,7 +503,11 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
 
     const now = membershipWriteAt(db, groupId, targetPubkey);
 
-    if (isSelf) {
+    // Deleting the row (with a tombstone for backups) means the person can come back. That is right for someone who
+    // leaves on their own, and ALSO for a convenor declining a request or withdrawing an invitation: that person was
+    // never in the group, so barring them for good — and telling them "a convenor removed you" — would be false, and no
+    // screen exists to undo it. Only removing an ACTIVE member sticks.
+    if (isSelf || target.status !== 'active') {
         // Leaving (or withdrawing a request, or declining an invitation) deletes the row, so someone who left can
         // come back to an open group. The tombstone carries the delete to backups; a later re-join is stamped
         // after it and wins.

@@ -465,8 +465,38 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
     }
 
+    // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
+    // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
+    // it here and let schema.sql create the guarded one. Keyed on the trigger's own text, so this only ever
+    // drops the old shape: once replaced, every later boot finds the guard and does nothing.
+    try {
+        const au = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_au'`).get() as { sql: string } | undefined;
+        if (au && !/WHEN\s+OLD\.title\s+IS\s+NOT\s+NEW\.title/i.test(au.sql)) {
+            db.prepare(`DROP TRIGGER posts_au`).run();
+            console.log('[DB] Replacing posts_au with the guarded FTS trigger');
+        }
+    } catch (e) {
+        console.error('[DB] ❌ Could not replace posts_au:', e);
+    }
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
+
+    // One-time posts_fts rebuild, for whatever the unguarded posts_au left behind. A rebuild recomputes the
+    // whole external-content index from `posts`, so it repairs any drift and is idempotent — the marker only
+    // saves doing it on every boot. user_version moves to 4 AFTER the rebuild succeeds, so a crash in between
+    // just means it runs again next boot. Fresh installs pass through here too, on an empty index.
+    if ((db.pragma('user_version', { simple: true }) as number) < 4) {
+        try {
+            const started = Date.now();
+            db.exec(`INSERT INTO posts_fts(posts_fts) VALUES('rebuild')`);
+            db.pragma('user_version = 4');
+            console.log(`[DB] Rebuilt posts_fts (${Date.now() - started}ms)`);
+        } catch (e) {
+            // Search is degraded, not the node: keep booting, and try again next boot (user_version unchanged).
+            console.error('[DB] ❌ posts_fts rebuild failed:', e);
+        }
+    }
 
     // Enterprise discussion threads (docs/the-commons.md §2.2, Slice 6)
     // created_at is when the row is written, not the enterprise's joined_at: the delta backup exporter cursors

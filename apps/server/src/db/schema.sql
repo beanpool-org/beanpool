@@ -441,7 +441,27 @@ CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN
     VALUES ('delete', old.rowid, old.title, old.description, old.search_keywords);
 END;
 
-CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
+-- Fires ONLY when indexed text changed. Without the WHEN, posts_touch_updated_at (below) broke the index: a
+-- statement that leaves updated_at where it was (two writes in one millisecond, a replica applying a row
+-- without its own timestamp, any writer that never sets it) makes the touch trigger run a nested
+-- UPDATE posts, which fired this trigger a second time with OLD = the row the outer statement had just
+-- written. That asked posts_fts to 'delete' the NEW text before the outer statement had indexed it; FTS5
+-- either refused the statement as SQLITE_CORRUPT_VTAB and rolled the edit back, or absorbed the bogus
+-- delete silently, depending on the size of the index (#878).
+--
+-- The touch trigger's nested UPDATE sets updated_at and nothing else, so it can never satisfy this WHEN:
+-- exactly one delete/insert pair runs per statement, with OLD = what the index holds and NEW = what the row
+-- ends up holding. That is independent of which trigger SQLite fires first, and holds for every writer,
+-- because it lives on the table rather than in any one code path. It also stops status-only writes (an
+-- RSVP, an escrow step) from churning the index for text that did not change.
+--
+-- db.ts replaces the old unguarded trigger on boot and rebuilds posts_fts once; state-engine.ts's
+-- backfillSearchKeywords re-creates this trigger and must keep the same WHEN (test-posts-fts-same-ms checks).
+CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts
+WHEN OLD.title IS NOT NEW.title
+  OR OLD.description IS NOT NEW.description
+  OR OLD.search_keywords IS NOT NEW.search_keywords
+BEGIN
     INSERT INTO posts_fts(posts_fts, rowid, title, description, search_keywords)
     VALUES ('delete', old.rowid, old.title, old.description, old.search_keywords);
     INSERT INTO posts_fts(rowid, title, description, search_keywords)

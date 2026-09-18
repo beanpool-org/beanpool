@@ -51,24 +51,6 @@ function makeMember(callsign: string): string {
 const broadcasts: any[] = [];
 const capture = (event: any) => { broadcasts.push(event); };
 
-/**
- * Wait out the current millisecond before the next write to the same post.
- *
- * NOT cosmetic, and not about events. `posts_touch_updated_at` (schema.sql) fires
- * `WHEN NEW.updated_at IS OLD.updated_at` and runs a nested `UPDATE posts` — and that nested update
- * interleaves with the posts_au FTS delete/insert pair, leaving the posts_fts external-content index out of
- * step with the row. The next edit that changes the title or description then throws SQLITE_CORRUPT_VTAB
- * ("database disk image is malformed") and is rolled back. `updatePost` stamps `updated_at` from
- * `Date.now()`, so two writes to one post inside a millisecond collide — which is what a test that edits the
- * same event several times in a row does every time, and what a retried or replayed request does in
- * production. This is a bug on main, reproduced on origin/main without any of this slice's code, and it is
- * reported with the PR rather than fixed here: the trigger is on every post write path, not just events.
- */
-function nextMillisecond(): void {
-    const t = Date.now();
-    while (Date.now() === t) { /* spin: shorter than any timer, and this is a test */ }
-}
-
 /** Every call the engine made to the push dispatcher, in order. */
 interface PushCall { targets: string[]; actor: string; title: string; body: string; data: any; category: string }
 let pushes: PushCall[] = [];
@@ -101,7 +83,6 @@ async function main(): Promise<void> {
     rsvpEvent(capture, ev.id, maybe, 'interested');
 
     pushes = [];
-    nextMillisecond();
     const moved = inHours(48);
     assert(updatePost(capture, ev.id, host, { eventStartAt: moved } as any, pushSpy)?.eventState === 'updated',
         'a time change still marks the event UPDATED');
@@ -118,46 +99,37 @@ async function main(): Promise<void> {
         'the payload routes the phone to /post/:id');
 
     pushes = [];
-    nextMillisecond();
     updatePost(capture, ev.id, host, { lat: -28.61, lng: 153.51 } as any, pushSpy);
     assert(pushes.length === 1 && told(pushes[0]).length === 2, 'moving the pin notifies Going');
 
     pushes = [];
-    nextMillisecond();
     updatePost(capture, ev.id, host, { eventPlaceName: 'The hall' } as any, pushSpy);
     assert(pushes.length === 1 && told(pushes[0]).length === 2, 'renaming the place notifies Going');
 
     pushes = [];
-    nextMillisecond();
     updatePost(capture, ev.id, host, { eventPlaceName: 'The hall' } as any, pushSpy);
     assert(pushes.length === 0, 'setting the place name to what it already was notifies nobody');
 
     // ── 2. Every other edit is silent ────────────────────────────────────────────────────────
     console.log('\n--- 2. Silent edits ---');
     pushes = [];
-    nextMillisecond();
     updatePost(capture, ev.id, host, { title: 'Working bee and morning tea' } as any, pushSpy);
     assert(pushes.length === 0, 'a title edit is silent');
-    nextMillisecond();
     updatePost(capture, ev.id, host, { description: 'Bring gloves and a hat' } as any, pushSpy);
     assert(pushes.length === 0, 'a description edit is silent');
-    nextMillisecond();
     updatePost(capture, ev.id, host, { eventPrivateNote: 'Gate code 9999' } as any, pushSpy);
     assert(pushes.length === 0, 'editing the note for people going is silent');
-    nextMillisecond();
     updatePost(capture, ev.id, host, { photos: [PHOTO] } as any, pushSpy);
     assert(pushes.length === 0, 'changing the photo is silent');
 
     const quiet = newEvent(stranger);
     pushes = [];
-    nextMillisecond();
     updatePost(capture, quiet.id, stranger, { eventStartAt: inHours(72) } as any, pushSpy);
     assert(pushes.length === 0, 'an event nobody is going to sends no push at all');
 
     // ── 3. Cancelling ────────────────────────────────────────────────────────────────────────
     console.log('\n--- 3. Cancel ---');
     pushes = [];
-    nextMillisecond();
     assert(removePost(capture, ev.id, host, pushSpy) === true, 'the host cancels through the remove path');
     assert(pushes.length === 1 && told(pushes[0]).sort().join() === [goer, alsoGoing].sort().join(),
         'cancelling notifies everyone marked Going');
@@ -200,7 +172,6 @@ async function main(): Promise<void> {
 
     pushes = [];
     // Without a signed actor the author is the fallback, which is the enterprise — nobody is dropped wrongly.
-    nextMillisecond();
     updatePost(capture, entEvent.id, enterprisePubkey, { eventStartAt: inHours(120) } as any, pushSpy);
     assert(pushes.length === 1 && told(pushes[0]).sort().join() === [goer, keeper].sort().join(),
         'with no signed actor everyone going is notified');
@@ -227,7 +198,6 @@ async function main(): Promise<void> {
         rsvpEvent(capture, wired.id, maybe, 'interested');
 
         sent.length = 0;
-        nextMillisecond();
         // state-engine's own wrappers: this is the path the HTTP routes take.
         updatePostStateful(wired.id, host, { eventStartAt: inHours(30) } as any, host);
         // The dispatcher fires the HTTP send without awaiting it.
@@ -241,7 +211,6 @@ async function main(): Promise<void> {
             'and the payload the phone routes to /post/:id');
 
         sent.length = 0;
-        nextMillisecond();
         removePostStateful(wired.id, host);
         await new Promise(r => setImmediate(r));
         assert(sent.length === 1 && sent[0]?.title === EVENT_CANCELLED_PUSH_TITLE && sent[0]?.channelId === 'marketplace',
@@ -252,7 +221,6 @@ async function main(): Promise<void> {
         rsvpEvent(capture, optedOut.id, goer, 'going');
         db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'notify_marketplace', 'false')`).run(goer);
         sent.length = 0;
-        nextMillisecond();
         updatePostStateful(optedOut.id, host, { eventStartAt: inHours(34) } as any, host);
         await new Promise(r => setImmediate(r));
         assert(sent.length === 0, 'a member with notify_marketplace off is not pushed to');

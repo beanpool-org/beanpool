@@ -35,6 +35,9 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import {
@@ -305,6 +308,24 @@ async function main(): Promise<void> {
         setNodeRole('primary');
         assert(err === null, `a new remote row then its re-title both import${why(err)}`);
         searchThenEdit('sync insert+update', freshId, author, 'rooted', { viaFeedSearch: false });
+    }
+
+    // ── 8. Nothing can put the unguarded trigger back ──────────────────────────────────────────
+    // posts_au is defined twice: schema.sql, and backfillSearchKeywords in state-engine.ts, which drops and
+    // re-creates the FTS table and its triggers on any boot that finds posts without keywords (a replica
+    // does, after importing rows). If either lost the WHEN, that path would silently reinstate the bug.
+    console.log('\n--- 8. Every posts_au definition carries the guard ---');
+    {
+        const GUARD = /WHEN\s+OLD\.title\s+IS\s+NOT\s+NEW\.title\s+OR\s+OLD\.description\s+IS\s+NOT\s+NEW\.description\s+OR\s+OLD\.search_keywords\s+IS\s+NOT\s+NEW\.search_keywords/i;
+        const live = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_au'`).get() as any)?.sql ?? '';
+        assert(GUARD.test(live), 'the posts_au this node is running has the guard');
+        const here = path.dirname(fileURLToPath(import.meta.url));
+        for (const file of ['db/schema.sql', 'state-engine.ts']) {
+            const src = fs.readFileSync(path.join(here, file), 'utf-8');
+            const defs = [...src.matchAll(/CREATE TRIGGER (?:IF NOT EXISTS )?posts_au\b[\s\S]*?\bBEGIN\b/g)].map(m => m[0]);
+            assert(defs.length > 0 && defs.every(d => GUARD.test(d)),
+                `${file}: all ${defs.length} posts_au definition(s) carry the guard`);
+        }
     }
 
     assert(indexHealthy(), 'posts_fts is consistent at the end of the run');

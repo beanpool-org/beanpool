@@ -680,7 +680,7 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                // Events are opt-in on the list route; only the All view shows them.
+                // Events are opt-in on the list route; All and Events ask for them.
                 const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : filter === 'events' ? '&type=event' : '&type=offer';
                 // Only while the category chip is on screen (not under Polls or Events).
                 const row = marketSecondRow(filter);

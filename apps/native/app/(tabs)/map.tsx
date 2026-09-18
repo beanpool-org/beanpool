@@ -1125,6 +1125,8 @@ export default function MapScreen() {
                     customMapStyle={isDarkMap ? darkMapStyle : hidePoisStyle}
                     userInterfaceStyle={isDarkMap ? "dark" : "light"}
                     showsUserLocation={true}
+                    // Google's own locate button (top right, Android) doubled the one in the left pill. The pill's is the only one.
+                    showsMyLocationButton={false}
                     onRegionChangeComplete={(r: any) => {
                         setCurrentRegion(r);
                     }}

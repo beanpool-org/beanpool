@@ -1619,6 +1619,8 @@ footer {
 /* Hero: the worked example card and the join card */
 /* On one column, the join card comes first: most visitors arrive holding an invite. */
 @media (max-width: 1024px) { .hero-lower-grid .hero-cta-card { order: -1; } }
+/* The worked example sits under the two hero cards, one column, same max width as the grid. */
+.hero-example-row { max-width: 1040px; margin: 1.25rem auto 0; }
 .hero-example { border-color: rgba(245, 158, 11, 0.22); }
 .hero-example::before { background: linear-gradient(90deg, var(--accent), #10b981); }
 .hero-example .not-card-tag { color: var(--accent); }

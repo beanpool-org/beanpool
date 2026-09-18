@@ -19,9 +19,10 @@ services:
       - PUBLIC_ADDRESS_AUTO=${PUBLIC_ADDRESS_AUTO:-0}
       - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =
-      # primary role, backup puller off, all enforcement flags off — the safe
-      # dormant state. Set per node via the node-local .env (preserved across
-      # redeploys by deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
+      # primary role, backup puller off, READ AUTH ON (private reads need a member
+      # signature; set ENFORCE_READ_AUTH=false to opt out), WS and ledger auth off.
+      # Set per node via the node-local .env (preserved across redeploys by
+      # deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
       - NODE_ROLE=${NODE_ROLE:-}
       - BACKUP_PRIMARY_URL=${BACKUP_PRIMARY_URL:-}
       - BACKUP_ADMIN_PASSWORD=${BACKUP_ADMIN_PASSWORD:-}

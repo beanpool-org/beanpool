@@ -2,8 +2,9 @@
 
 Operational runbook for shipping the 2026-06 security remediation to the **test pair**
 (`test` + `test-mirror`) and validating it over a few days before any production rollout.
-Everything is **flag-gated and off by default** — landing the code changes nothing until
-you flip a flag. The native app must carry the client-side changes BEFORE any flag flips,
+Everything is **flag-gated**. `ENFORCE_READ_AUTH` is **ON by default** (since
+fix/read-auth-on-by-default; opt out with `ENFORCE_READ_AUTH=false`); the other flags are
+off until you flip them. The native app must carry the client-side changes BEFORE any flag flips,
 or old apps break.
 
 ## Topology: one-directional live backup (Phase 1)
@@ -69,7 +70,7 @@ admin password.
 > `local-config.json` (preserve `thresholds`/branding/contact), then restart with `ADMIN_PASSWORD`
 > set — it re-locks to that value. Set `BACKUP_ADMIN_PASSWORD` on the backup to the same value.
 
-## Enforcement flags (all default OFF)
+## Enforcement flags (read auth default ON; WS and ledger default OFF)
 | Flag | Closes | Requires (clients) |
 |---|---|---|
 | `ENFORCE_READ_AUTH` | SRV-2/SRV-4 unauth reads | app signs GET reads (native #138 + PWA) |

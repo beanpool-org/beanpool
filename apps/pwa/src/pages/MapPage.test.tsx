@@ -1,5 +1,5 @@
 import { render, waitFor, act, fireEvent, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -21,6 +21,7 @@ vi.mock('leaflet', () => {
         default: {
             map: vi.fn((_el: unknown, opts: any) => ({
                 setView: vi.fn(),
+                panBy: vi.fn(),
                 fitBounds: vi.fn(),
                 on: vi.fn(),
                 off: vi.fn(),
@@ -516,6 +517,80 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(body).not.toHaveProperty('eventEndAt');
         expect(body).not.toHaveProperty('reach');
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-new');
+    });
+
+    describe('address search in the location section (settings app lookup, reused)', () => {
+        const nominatim = [
+            { display_name: 'Bindarrabi Hall, 12, Main Street, Mullumbimby, NSW, Australia', name: 'Bindarrabi Hall', lat: '-28.5543712', lon: '153.5026149', type: 'community_centre' },
+            { display_name: '12, Main Street, Mullumbimby, NSW, Australia', name: '', lat: '-28.5540', lon: '153.5020', type: 'house' },
+        ];
+        const openEventForm = async (fetchImpl: (url: string) => Promise<any>) => {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation(fetchImpl));
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+            const panel = await view!.findByTestId('map-new-post-panel');
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+            return panel;
+        };
+        const search = async (panel: HTMLElement, text: string) => {
+            const box = within(panel).getByLabelText('Find an address');
+            fireEvent.change(box, { target: { value: text } });
+            // The Search key sends at once instead of waiting out the 1 s pause.
+            await act(async () => { fireEvent.keyDown(box, { key: 'Enter' }); });
+            await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+            return box;
+        };
+
+        afterEach(() => { vi.unstubAllGlobals(); });
+
+        it('picking a match places the pin there, fills an empty Place name, and Approximate still rounds it', async () => {
+            const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+            const panel = await openEventForm(async () => ({ ok: true, json: async () => nominatim }));
+            await search(panel, 'bindarrabi hall');
+            expect((globalThis.fetch as any).mock.calls[0][0]).toBe(
+                'https://nominatim.openstreetmap.org/search?format=json&q=bindarrabi%20hall&limit=5');
+
+            const options = within(panel).getAllByRole('option');
+            expect(options).toHaveLength(2);
+            expect(options[1]).toHaveTextContent('12 Main Street');
+            await act(async () => { fireEvent.click(options[0]); });
+
+            expect((within(panel).getByLabelText('Place name') as HTMLInputElement).value).toBe('Bindarrabi Hall');
+            expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
+            const preview = mockCreatedMarkers.filter(m => m.opts?.className === 'custom-preview-pin').at(-1)!;
+            expect(preview.coords).toEqual([-28.5544, 153.5026]);
+            const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+            expect(map.setView).toHaveBeenLastCalledWith([-28.5544, 153.5026], 16, { animate: false });
+
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
+            fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+            fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+            await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+            expect(create.mock.calls[0][0]).toMatchObject({ lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall' });
+        });
+
+        it('keeps a Place name the member already typed', async () => {
+            const panel = await openEventForm(async () => ({ ok: true, json: async () => nominatim }));
+            fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'The old bowls club' } });
+            await search(panel, '12 main street');
+            await act(async () => { fireEvent.click(within(panel).getAllByRole('option')[1]); });
+            expect((within(panel).getByLabelText('Place name') as HTMLInputElement).value).toBe('The old bowls club');
+            expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
+        });
+
+        it('a failed search says so in one line, and dropping a pin still works', async () => {
+            const panel = await openEventForm(async () => { throw new TypeError('Failed to fetch'); });
+            await search(panel, 'bindarrabi hall');
+            expect(within(panel).getByText(/Address search isn.t working right now/)).toBeInTheDocument();
+            expect(within(panel).queryAllByRole('option')).toHaveLength(0);
+
+            await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+            const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+            const clickHandlers = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+            await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+            expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
+        });
     });
 });
 

@@ -3,7 +3,8 @@
  * "Create form", slice 3). Opened the way NewPollModal is, so the protected map screen is not involved.
  *
  * One column, in the design's order: title; Starts / Ends (optional, 2 hours after start if blank); place
- * name; the pin with Approximate and the public-pin warning; description; photo; the note for people who are
+ * name; an address search (the settings app's, shared through @beanpool/core) and the pin with Approximate and
+ * the public-pin warning; description; photo; the note for people who are
  * going; audience (this community or a group); and "Post as", shown only to a keeper or convenor.
  *
  * Reach is always local in v1 (§2.4), so there is no linked-communities option. Keyboard avoidance comes from
@@ -38,6 +39,9 @@ import {
     type EventCopy, type EventEditValues,
 } from '../utils/events';
 import { EVENT_ACCENT } from './EventCard';
+import { AddressSearch } from './AddressSearch';
+import { placeNameAfterPick } from '../utils/address-search';
+import type { AddressResult } from '@beanpool/core';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -85,6 +89,9 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
     const [approximate, setApproximate] = useState(false);
     const mapRef = useRef<MapView | null>(null);
+    const scrollRef = useRef<ScrollView | null>(null);
+    // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
+    const addressY = useRef(0);
     const centreMap = (latitude: number, longitude: number) => {
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
@@ -282,6 +289,17 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
     };
 
+    // An address picked from the search is placed exactly as a tap on the map would be, so Approximate still
+    // applies the same way; an empty Place name takes the result's short name. Then the map scrolls into view.
+    const pickAddress = (result: AddressResult) => {
+        placePin(result.lat, result.lng);
+        centreMap(result.lat, result.lng);
+        setPlaceName(prev => placeNameAfterPick(prev, result, EVENT_PLACE_NAME_MAX));
+        // Scroll to the address box, not the map: the map's offset is stale while the match list collapses, and
+        // the box's is not. With the list gone the map sits right under it, in view even at 320dp and 1.3x.
+        setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, addressY.current - 8), animated: true }), 50);
+    };
+
     const makeApproximate = () => {
         if (!pin) return;
         setPin(approximatePin(pin.lat, pin.lng));
@@ -454,7 +472,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </Pressable>
                     </View>
 
-                    <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+                    <ScrollView ref={scrollRef} style={styles.body} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
                         <View style={styles.field}>
                             <Text style={styles.label}>TITLE *</Text>
                             <TextInput
@@ -486,6 +504,15 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 onChangeText={setPlaceName}
                                 maxLength={EVENT_PLACE_NAME_MAX}
                                 accessibilityLabel="Place name"
+                            />
+                        </View>
+
+                        <View style={styles.field} onLayout={(e) => { addressY.current = e.nativeEvent.layout.y; }}>
+                            <Text style={styles.label}>FIND AN ADDRESS</Text>
+                            <AddressSearch
+                                accent={EVENT_ACCENT}
+                                onPick={pickAddress}
+                                onResultsShown={() => scrollRef.current?.scrollTo({ y: Math.max(0, addressY.current - 8), animated: true })}
                             />
                         </View>
 

@@ -5,6 +5,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 
 export interface NodeIdentityPanelProps {
     activeNode: NodeProfile;
@@ -30,12 +31,11 @@ export function NodeIdentityPanel({
 
     // Geocoding location search
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string; type: string }>>([]);
+    const [searchResults, setSearchResults] = useState<AddressResult[]>([]);
     const [searching, setSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-    const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
+    const lookupRef = useRef<AddressLookup | null>(null);
     const searchWrapperRef = useRef<HTMLDivElement>(null);
 
     // Directory publishing flags
@@ -230,11 +230,30 @@ export function NodeIdentityPanel({
         }
     }, [lat, lng, radiusKm, nodeIcon]);
 
-    // Cleanup timers and abort controllers on unmount
+    // The shared Nominatim lookup (debounce, abort, 1 req/s floor, cache); disposed on unmount so no timer or
+    // request outlives the panel. A failed search just stops the spinner and keeps the last list, as before.
     useEffect(() => {
+        const lookup = createAddressLookup({
+            onState: (state) => {
+                if (state.status === 'searching') {
+                    setSearching(true);
+                } else if (state.status === 'idle') {
+                    setSearching(false);
+                    setSearchResults([]);
+                    setShowResults(false);
+                } else if (state.status === 'done') {
+                    setSearching(false);
+                    setSearchResults(state.results);
+                    setShowResults(true);
+                } else {
+                    setSearching(false);
+                }
+            },
+        });
+        lookupRef.current = lookup;
         return () => {
-            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-            if (abortControllerRef.current) abortControllerRef.current.abort();
+            lookup.dispose();
+            lookupRef.current = null;
         };
     }, []);
 
@@ -259,46 +278,15 @@ export function NodeIdentityPanel({
     const handleSearchInput = (value: string) => {
         setSearchQuery(value);
         setSelectedIndex(-1);
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-        if (abortControllerRef.current) abortControllerRef.current.abort();
-
-        const q = value.trim();
-        if (q.length < 3) {
-            setSearching(false);
-            setSearchResults([]);
-            setShowResults(false);
-            return;
-        }
-        setSearching(true);
-        searchTimeoutRef.current = setTimeout(async () => {
-            try {
-                const controller = new AbortController();
-                abortControllerRef.current = controller;
-                const res = await fetch(
-                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`,
-                    { signal: controller.signal }
-                );
-                if (res.ok) {
-                    const data = await res.json();
-                    setSearchResults(Array.isArray(data) ? data : []);
-                    setShowResults(true);
-                }
-            } catch (err: unknown) {
-                if ((err as Error)?.name !== 'AbortError') {
-                    console.error('Geocoding failed:', err);
-                }
-            } finally {
-                setSearching(false);
-            }
-        }, 1000);
+        lookupRef.current?.input(value);
     };
 
-    const handleSelectLocation = (item: { display_name: string; lat: string; lon: string }) => {
-        const itemLat = parseFloat(parseFloat(item.lat).toFixed(6));
-        const itemLng = parseFloat(parseFloat(item.lon).toFixed(6));
+    const handleSelectLocation = (item: AddressResult) => {
+        const itemLat = item.lat;
+        const itemLng = item.lng;
         setLat(itemLat);
         setLng(itemLng);
-        setSearchQuery(item.display_name);
+        setSearchQuery(item.displayName);
         setShowResults(false);
         setSelectedIndex(-1);
         panMapTo(itemLat, itemLng, 12);
@@ -525,7 +513,7 @@ export function NodeIdentityPanel({
                                             selectedIndex === idx ? 'bg-nature-800' : 'hover:bg-nature-800/80'
                                         }`}
                                     >
-                                        <div className="text-white font-medium">{item.display_name}</div>
+                                        <div className="text-white font-medium">{item.displayName}</div>
                                         <div className="text-[10px] text-terra-400 font-mono mt-0.5 capitalize">{item.type}</div>
                                     </div>
                                 ))}

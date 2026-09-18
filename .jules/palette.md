@@ -157,3 +157,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-17 - GroupDetailModal Dialog Title Linking, Emojis, and Focus Rings
 **Learning:** `GroupDetailModal.tsx` modal header lacked title ID linking (`id="group-detail-title"` with `aria-labelledby="group-detail-title"`), raw decorative emojis (`👥`, `🏷️`, `🚪`, `🛡️`, `ℹ️`, `✏️`) were unhidden from screen readers, and interactive controls (close button, post button, leave/join buttons) lacked explicit `type="button"` attributes and visible keyboard focus ring indicators (`focus-visible:ring-2`).
 **Action:** Linked modal header title via `id="group-detail-title"` and `aria-labelledby="group-detail-title"`, wrapped decorative emojis with `<span aria-hidden="true">`, added `type="button"` and `focus-visible:outline-none focus-visible:ring-2` focus ring styling across modal buttons, and added unit test coverage in `GroupDetailModal.test.tsx`.
+
+## 2026-09-18 - CategoryPickerModal Touch Target Sizing, Focus Ring & Emoji Hiding
+**Learning:** `CategoryPickerModal.tsx` close button lacked minimum touch target sizing (< 44px), custom focus rings lacked explicit `focus-visible:outline-none` styling, and decorative category emojis were exposed to screen readers without `aria-hidden="true"`.
+**Action:** Added `w-11 h-11 min-w-[44px] min-h-[44px]` touch target sizing and `focus-visible:outline-none` to the modal close button, wrapped category emojis with `<span aria-hidden="true">`, and added unit tests in `CategoryPickerModal.test.tsx`.

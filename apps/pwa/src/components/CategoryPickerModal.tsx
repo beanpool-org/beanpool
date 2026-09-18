@@ -70,7 +70,7 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
                         type="button"
                         onClick={onClose}
                         aria-label="Close category picker"
-                        className="w-8 h-8 rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
                         ✕
                     </button>
@@ -85,13 +85,13 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
                                 type="button"
                                 aria-pressed={isActive}
                                 onClick={() => { onSelect(cat.id); onClose(); }}
-                                className={`flex flex-col items-center justify-center py-3 rounded-2xl border-[1.5px] transition-all focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                                className={`flex flex-col items-center justify-center py-3 rounded-2xl border-[1.5px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                                     isActive
                                         ? 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-400 dark:border-indigo-600'
                                         : 'bg-nature-50 dark:bg-nature-900 border-nature-200 dark:border-nature-800 hover:bg-nature-100 dark:hover:bg-nature-800'
                                 }`}
                             >
-                                <span className="text-2xl mb-1">{cat.emoji}</span>
+                                <span className="text-2xl mb-1" aria-hidden="true">{cat.emoji}</span>
                                 <span className={`text-[11px] font-bold ${
                                     isActive
                                         ? 'text-indigo-700 dark:text-indigo-300'

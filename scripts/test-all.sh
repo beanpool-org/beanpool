@@ -229,6 +229,7 @@ run_federation_suites() {
       test-admin-key-auth
       test-backend-monitors
       test-backup-hardening
+      test-backup-identity-bundle
       test-backup-topology
       test-cash-also-needed
       test-posts-ignore-archetypes

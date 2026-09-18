@@ -15,6 +15,7 @@ import {
     castDecisionVote,
     getGovernanceCredits,
 } from '../utils/db';
+import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 
 interface Props {
     decisions: DecisionWithTally[];
@@ -87,7 +88,7 @@ export function DecideSection({
             return;
         }
 
-        const count = selectedVoteCount[decision.id] || 1;
+        const count = startingVoteCount(selectedVoteCount[decision.id], decision.myVote);
         if (decision.franchise === 'quadratic_trade') {
             const cost = count * count;
             let available = voiceCredits?.availableCredits ?? balanceState.qualifiedValue ?? balanceState.earnedCredit ?? 0;
@@ -382,8 +383,25 @@ export function DecideSection({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
+            minHeight: 48,
             paddingVertical: 10,
+            paddingHorizontal: 8,
             borderRadius: 12,
+        },
+        voteBtnCurrent: {
+            opacity: 0.55,
+        },
+        myVoteRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 8,
+        },
+        myVoteText: {
+            flexShrink: 1,
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text.heading,
         },
         voteBtnYes: {
             backgroundColor: palette.green600,
@@ -392,6 +410,8 @@ export function DecideSection({
             backgroundColor: palette.red600,
         },
         voteBtnText: {
+            flexShrink: 1,
+            textAlign: 'center',
             color: colors.text.inverse,
             fontSize: 13,
             fontWeight: '800',
@@ -607,7 +627,10 @@ export function DecideSection({
                             const quorumPct = Math.min(100, Math.round((tally.totalVoters / Math.max(1, tally.quorumRequired)) * 100));
                             const supportPct = Math.round(tally.supportRatio * 100);
                             const thresholdPct = Math.round(tally.thresholdRequired * 100);
-                            const currentCount = selectedVoteCount[item.id] || 1;
+                            const currentCount = startingVoteCount(selectedVoteCount[item.id], item.myVote);
+                            const isQuadratic = item.franchise === 'quadratic_trade';
+                            const myVoteLine = ownVoteSummary(item.myVote, isQuadratic);
+                            const buttons = voteButtonStates(item.myVote, isQuadratic, currentCount);
 
                             // §3.8 Removal ballot text
                             const targetName = item.params?.memberName || item.subject?.slice(0, 8) || 'Member';
@@ -723,7 +746,7 @@ export function DecideSection({
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
-                                                                [item.id]: Math.max(1, (prev[item.id] || 1) - 1),
+                                                                [item.id]: Math.max(1, startingVoteCount(prev[item.id], item.myVote) - 1),
                                                             }));
                                                         }}
                                                     >
@@ -739,7 +762,7 @@ export function DecideSection({
                                                         onPress={() => {
                                                             setSelectedVoteCount(prev => ({
                                                                 ...prev,
-                                                                [item.id]: (prev[item.id] || 1) + 1,
+                                                                [item.id]: startingVoteCount(prev[item.id], item.myVote) + 1,
                                                             }));
                                                         }}
                                                     >
@@ -749,12 +772,20 @@ export function DecideSection({
                                             </View>
                                         )}
 
+                                        {myVoteLine && (
+                                            <View style={styles.myVoteRow}>
+                                                <MaterialCommunityIcons name="check-circle" size={16} color={colors.brand.primary} />
+                                                <Text style={styles.myVoteText}>{myVoteLine}</Text>
+                                            </View>
+                                        )}
+
                                         <View style={styles.voteButtonsRow}>
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel="Vote Yes"
-                                                style={[styles.voteBtn, styles.voteBtnYes]}
-                                                disabled={votingId === item.id}
+                                                accessibilityLabel={buttons.yes.label}
+                                                accessibilityState={{ disabled: votingId === item.id || buttons.yes.disabled }}
+                                                style={[styles.voteBtn, styles.voteBtnYes, buttons.yes.disabled && styles.voteBtnCurrent]}
+                                                disabled={votingId === item.id || buttons.yes.disabled}
                                                 onPress={() => handleVote(item, true)}
                                             >
                                                 {votingId === item.id ? (
@@ -762,16 +793,17 @@ export function DecideSection({
                                                 ) : (
                                                     <>
                                                         <MaterialCommunityIcons name="thumb-up" size={16} color="#fff" />
-                                                        <Text style={styles.voteBtnText}>Vote YES</Text>
+                                                        <Text style={styles.voteBtnText}>{buttons.yes.label}</Text>
                                                     </>
                                                 )}
                                             </Pressable>
 
                                             <Pressable
                                                 accessibilityRole="button"
-                                                accessibilityLabel="Vote No"
-                                                style={[styles.voteBtn, styles.voteBtnNo]}
-                                                disabled={votingId === item.id}
+                                                accessibilityLabel={buttons.no.label}
+                                                accessibilityState={{ disabled: votingId === item.id || buttons.no.disabled }}
+                                                style={[styles.voteBtn, styles.voteBtnNo, buttons.no.disabled && styles.voteBtnCurrent]}
+                                                disabled={votingId === item.id || buttons.no.disabled}
                                                 onPress={() => handleVote(item, false)}
                                             >
                                                 {votingId === item.id ? (
@@ -779,7 +811,7 @@ export function DecideSection({
                                                 ) : (
                                                     <>
                                                         <MaterialCommunityIcons name="thumb-down" size={16} color="#fff" />
-                                                        <Text style={styles.voteBtnText}>Vote NO</Text>
+                                                        <Text style={styles.voteBtnText}>{buttons.no.label}</Text>
                                                     </>
                                                 )}
                                             </Pressable>

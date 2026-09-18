@@ -33,7 +33,8 @@ import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
-import { approximateLocation } from '@beanpool/core';
+import { approximateLocation, type AddressResult } from '@beanpool/core';
+import { AddressSearch } from '../components/AddressSearch';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -898,6 +899,28 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setPostLng(approx.lng);
         setPostApproximate(true);
         placePreviewPin(approx.lat, approx.lng);
+    }
+
+    // An address picked from the event form's search places the pin as a tap would (same rounding, Approximate
+    // off until tapped again) and names the place if the member hasn't yet. The sheet covers the lower part of
+    // the map, so the pin is nudged up into the part that shows.
+    function pickAddress(result: AddressResult) {
+        const lat = Math.round(result.lat * 10000) / 10000;
+        const lng = Math.round(result.lng * 10000) / 10000;
+        setPostLat(lat);
+        setPostLng(lng);
+        setPostApproximate(false);
+        setPinDropMode(false);
+        setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); if (result.shortName) n.delete('event_place'); return n; });
+        setEventPlaceName(prev => prev.trim() ? prev : result.shortName.slice(0, EVENT_PLACE_NAME_MAX));
+        placePreviewPin(lat, lng);
+        const map = mapRef.current;
+        if (map) {
+            centredRef.current = true;
+            map.setView([lat, lng], Math.max(map.getZoom?.() ?? DEFAULT_ZOOM, 16), { animate: false });
+            const sheet = document.querySelector<HTMLElement>('[data-testid="map-new-post-panel"]');
+            if (sheet?.offsetHeight) map.panBy([0, Math.round(sheet.offsetHeight / 2)], { animate: false });
+        }
     }
 
     // Place a preview pin on the map
@@ -1930,6 +1953,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
 
                         <div>
+                            <AddressSearch onPick={pickAddress} />
                             {renderLocationPicker()}
                             {/* The pin is public like every post and enterprise pin; Approximate is one tap away with the
                                 same plain warning enterprise pins carry (§1, §2.3). Exact details go in the note. */}

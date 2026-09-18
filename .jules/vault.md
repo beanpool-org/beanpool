@@ -38,7 +38,8 @@ Vault's domain is `apps/manager/` ONLY. Do NOT touch `apps/server` (Sentinel's d
 ## ✅ Resolved — do NOT re-file
 ### 2026-09-19 — "Don't persist the AI API key in localStorage" (#908) — CLOSED, deliberate.
 `AiServicesModule.tsx` reloads its config with `loadAiConfig()`, so stripping `apiKey` in `saveAiConfig` makes the
-operator's key vanish on every reload and OpenRouter calls fail with no explanation. The key is one the operator pasted
+operator's key vanish on every reload; OpenRouter calls then fail with a 401 "verify your API key" message although
+Save reported success. The key is one the operator pasted
 into their own browser for a bring-your-own-key feature; storing it there is intended. Any change here must keep the key
 usable across reloads (and say what the operator sees) or it is a regression.
 

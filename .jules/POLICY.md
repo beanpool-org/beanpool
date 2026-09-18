@@ -411,7 +411,8 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Category:** REGRESSION DRESSED AS HARDENING
 - **Claim:** the manager stores the AI provider key in localStorage.
 - **Verified:** true, and intended. The settings screen reloads its config from storage, so dropping the key makes it
-  vanish on every reload and OpenRouter calls fail silently. It is the operator's own bring-your-own key in their own browser.
+  vanish on every reload: Save still reports success, the key field comes back empty, and OpenRouter calls return a 401
+  error that never says the key was discarded. It is the operator's own bring-your-own key in their own browser.
 - **Standing rule:** a "don't store X" change must say how X survives a reload and what the user sees.
 
 ### 2026-09-19 — Sentinel: rating author bound to signer (#909) — LANDED, CLAIM WAS FALSE

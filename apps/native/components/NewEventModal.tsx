@@ -16,6 +16,7 @@ import {
     Linking, Keyboard,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -27,6 +28,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import { createPost, fetchGroups, getBalance, getTreasuries } from '../utils/db';
 import { HAS_MAPS_KEY } from '../utils/maps';
+import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
@@ -38,6 +40,8 @@ import { EVENT_ACCENT } from './EventCard';
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
 
 type Field = 'start' | 'end';
+
+const HEADER_PAD_TOP = 10;
 type HostOption = { key: string; label: string; authorPubkey: string; groupId: string | null };
 
 interface NewEventModalProps {
@@ -61,6 +65,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
+    // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
+    const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
 
     const [title, setTitle] = useState('');
     const [start, setStart] = useState<Date | null>(null);
@@ -364,7 +370,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
                 <View style={styles.container}>
-                    <View style={styles.header}>
+                    <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                         <Pressable onPress={onClose} hitSlop={12} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Cancel">
                             <Text style={styles.cancelText} numberOfLines={1}>Cancel</Text>
                         </Pressable>
@@ -546,7 +552,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         container: { flex: 1, backgroundColor: colors.surface.app },
         header: {
             flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1,
+            paddingHorizontal: 12, paddingTop: HEADER_PAD_TOP, paddingBottom: 10, borderBottomWidth: 1,
             borderBottomColor: theme === 'dark' ? '#374151' : '#e5e7eb', gap: 8,
         },
         headerBtn: { minHeight: 48, minWidth: 48, justifyContent: 'center', paddingHorizontal: 6, flexShrink: 0 },

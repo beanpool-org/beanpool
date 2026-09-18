@@ -1756,12 +1756,14 @@ function ChatScreen() {
             )}
 
             {/* Full-screen image viewer — opened from a tapped chat image (full 1000px, from the
-                local cache so it's instant/offline after first view). */}
+                local cache so it's instant/offline after first view).
+                The Modal is its own full-screen window, outside this screen's SafeAreaView, so the close
+                button takes the status-bar inset itself: a fixed 50 is less than the 59pt inset on Dynamic Island iPhones. */}
             {viewerUri && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
                     <Pressable accessibilityRole="button" accessibilityLabel="Dismiss full-size photo" style={styles.imageViewerOverlay} onPress={() => setViewerUri(null)}>
                         <Image source={{ uri: viewerUri }} style={styles.imageViewerImage} resizeMode="contain" accessibilityLabel="Full-size photo" />
-                        <Pressable accessibilityRole="button" accessibilityLabel="Close photo" style={styles.imageViewerClose} onPress={() => setViewerUri(null)}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Close photo" style={[styles.imageViewerClose, { top: Math.max(50, insets.top + 8) }]} onPress={() => setViewerUri(null)}>
                             <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
                         </Pressable>
                     </Pressable>

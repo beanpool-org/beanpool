@@ -11,6 +11,7 @@ import {
     Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     ARCHETYPES,
     QUICK_SPARK_QUESTIONS,
@@ -22,6 +23,9 @@ import {
 } from '@beanpool/core';
 import { colors, palette } from '../constants/colors';
 import { useTheme } from '../app/ThemeContext';
+import { pageSheetTopInset } from '../utils/modal-safe-area';
+
+const HEADER_PAD_TOP = 14;
 
 interface ArchetypeQuizModalProps {
     visible: boolean;
@@ -37,6 +41,9 @@ export function ArchetypeQuizModal({
     onComplete,
 }: ArchetypeQuizModalProps) {
     const { theme, colors } = useTheme();
+    // react-native's SafeAreaView below is a no-op on Android, where this pageSheet is full-screen under the
+    // status bar; see utils/modal-safe-area.
+    const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
     const [step, setStep] = useState<'intro' | 'quiz' | 'result'>('intro');
     const [mode, setMode] = useState<'quick' | 'deep'>(initialMode);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -145,6 +152,7 @@ export function ArchetypeQuizModal({
                     style={[
                         styles.header,
                         {
+                            paddingTop: HEADER_PAD_TOP + topInset,
                             backgroundColor: colors.surface.card,
                             borderBottomColor: colors.border.default,
                         },
@@ -662,7 +670,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 14,
+        paddingTop: HEADER_PAD_TOP,
+        paddingBottom: 14,
         borderBottomWidth: 1,
     },
     headerBtn: {

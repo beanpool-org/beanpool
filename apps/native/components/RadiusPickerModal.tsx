@@ -4,8 +4,12 @@ import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, palette } from '../constants/colors';
 import { HAS_MAPS_KEY } from '../utils/maps';
+import { pageSheetTopInset } from '../utils/modal-safe-area';
+
+const HEADER_PAD_TOP = 18;
 
 // Default to Mullumbimby for the demo/mock
 const DEFAULT_LAT = -28.5523;
@@ -25,6 +29,8 @@ interface RadiusPickerModalProps {
 
 export function RadiusPickerModal({ visible, initialRadius, initialLat, initialLng, onApply, onCancel, onReset }: RadiusPickerModalProps) {
     const defaultRadius = 20;
+    // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
+    const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
     const mapRef = useRef<MapView | null>(null);
 
     const getInitialIndex = (rad: number | null) => {
@@ -101,7 +107,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
     return (
         <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onCancel}>
             <View style={styles.container}>
-                <View style={styles.header}>
+                <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel location picker" style={styles.headerBtn}>
                         <Text style={styles.cancelText}>Cancel</Text>
                     </Pressable>
@@ -210,7 +216,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         backgroundColor: colors.surface.card,
         paddingHorizontal: 28,
-        paddingTop: 18,
+        paddingTop: HEADER_PAD_TOP,
         paddingBottom: 14,
         borderBottomWidth: 1,
         borderBottomColor: colors.border.default,

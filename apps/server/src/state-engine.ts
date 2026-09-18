@@ -921,6 +921,11 @@ export function broadcast(event: any, recipients?: string[]): void {
                 bumpActivityVersion(); // Profile updates change member callsigns joined in activity feed
                 break;
             case 'state_synced':
+                bumpGroupsVersion();
+                bumpPostsVersion();
+                bumpMembersVersion();
+                bumpActivityVersion();
+                break;
             case 'user_pruned':
                 bumpPostsVersion();
                 bumpMembersVersion();
@@ -6225,7 +6230,8 @@ export function clearReplicatedTables(): void {
         'members', 'posts', 'post_photos', 'projects', 'ratings', 'accounts',
         'transactions', 'marketplace_transactions', 'friends', 'conversations',
         'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'tombstones',
+        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
+        'tombstones',
     ];
     db.transaction(() => {
         for (const t of tables) {
@@ -6516,7 +6522,9 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
 
 // ===================== GROUPS & CONVENOR MODERATION (§9) =====================
 
-let _groupsVersion = 1;
+// Seeded from the clock like the other list versions (engine/versions.ts): starting at 1 on every boot handed
+// out ETags a client had already cached from before a restart or a restore, and it got a 304 for stale groups.
+let _groupsVersion = Date.now();
 export function getGroupsVersion(): number { return _groupsVersion; }
 export function bumpGroupsVersion(): void { _groupsVersion++; }
 

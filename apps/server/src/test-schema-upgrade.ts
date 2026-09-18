@@ -463,6 +463,50 @@ END`;
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
+    // ── 8. group_members gains the 'removed' status (#823 review) ────────────────────────────────────
+    // A CHECK constraint cannot be altered in place, so db.ts rebuilds the table. The fixture is a booted node
+    // rolled back to the old CHECK, holding memberships, so the rebuild has to keep every row, and the touch
+    // trigger and indexes that dropping the old table took with it have to come back.
+    console.log("\n--- 8. Legacy group_members without 'removed' ---");
+    {
+        const dir = tmp('legacy-group-members');
+        assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+        const d = new Database(path.join(dir, 'state.db'));
+        d.pragma('foreign_keys = OFF');
+        const oldDdl = legacyDdl('group_members', [])
+            .replace("CHECK (status IN ('active', 'pending_approval', 'invited', 'removed'))",
+                "CHECK (status IN ('active', 'pending_approval', 'invited'))");
+        assert(!oldDdl.includes("'removed'"), "the fixture DDL is the OLD status CHECK");
+        d.exec(`DROP TABLE group_members; ${oldDdl}`);
+        const pk = 'bb'.repeat(32);
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Legacy', '2025-01-01T00:00:00.000Z')`).run(pk);
+        d.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('g1', 'Garden', 'garden', ?)`).run(pk);
+        d.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status, updated_at) VALUES ('g1', ?, 'convenor', 'active', '2025-01-01T00:00:00.000Z')`).run(pk);
+        let refused = false;
+        try { d.prepare(`UPDATE group_members SET status = 'removed'`).run(); } catch { refused = true; }
+        assert(refused, "and refuses a 'removed' row");
+        d.close();
+
+        const result = bootInto(dir);
+        assert(result.ok, 'the legacy node boots');
+        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
+        const after = new Database(path.join(dir, 'state.db'));
+        const row = after.prepare(`SELECT role, status, updated_at FROM group_members WHERE group_id = 'g1'`).get() as any;
+        assert(row?.role === 'convenor' && row?.status === 'active' && row?.updated_at === '2025-01-01T00:00:00.000Z',
+            'the rebuild keeps every membership row as it was');
+        let accepted = true;
+        try { after.prepare(`UPDATE group_members SET status = 'removed', updated_at = '2025-02-01T00:00:00.000Z'`).run(); } catch { accepted = false; }
+        assert(accepted, "the upgraded table accepts status 'removed'");
+        after.prepare(`UPDATE group_members SET role = 'member'`).run();
+        const touched = (after.prepare(`SELECT updated_at FROM group_members WHERE group_id = 'g1'`).get() as any).updated_at;
+        assert(touched > '2025-02-01T00:00:00.000Z', 'the updated_at touch trigger is back after the rebuild');
+        assert(JSON.stringify(indexes(after, 'group_members')) === JSON.stringify(indexes(freshDb, 'group_members')),
+            'and so are its indexes');
+        after.close();
+        assert(!/Migrated group_members/.test(bootInto(dir).output), 'a second boot does not rebuild again');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

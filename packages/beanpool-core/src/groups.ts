@@ -34,12 +34,18 @@ export type AudienceScope = 'public' | 'group' | 'direct';
 
 export const AUDIENCE_SCOPES: readonly AudienceScope[] = ['public', 'group', 'direct'] as const;
 
-export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+/**
+ * 'removed' is a convenor's removal, kept as a record so it sticks: the person cannot Join (or ask to join)
+ * again until a convenor re-admits them by invitation or approval. Leaving on your own deletes the row instead,
+ * so a member who left can come back to an open group. Only 'active' is ever a member.
+ */
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited' | 'removed';
 
 export const GROUP_MEMBER_STATUSES: readonly GroupMemberStatus[] = [
     'active',
     'pending_approval',
-    'invited'
+    'invited',
+    'removed'
 ] as const;
 
 export interface Group {

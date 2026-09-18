@@ -1251,7 +1251,8 @@ CREATE TABLE IF NOT EXISTS group_members (
     group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('convenor', 'member', 'observer')),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited')),
+    -- 'removed' = a convenor removed them; kept so the removal sticks (only a convenor re-admits). Leaving deletes.
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'invited', 'removed')),
     joined_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     invited_by TEXT REFERENCES members(public_key),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

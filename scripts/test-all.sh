@@ -303,6 +303,7 @@ run_federation_suites() {
       test-groups-isolation
       test-groups-routes
       test-groups-patch-http
+      test-groups-sync-and-removal
       test-member-wizards
       test-enterprise-pause
       test-enterprise-season-lifecycle

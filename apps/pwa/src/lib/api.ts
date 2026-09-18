@@ -915,7 +915,7 @@ export async function createMarketplacePost(post: {
 export type GroupRole = 'convenor' | 'member' | 'observer';
 export type JoinPolicy = 'open' | 'request_to_join' | 'invite_only';
 export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
-export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited';
+export type GroupMemberStatus = 'active' | 'pending_approval' | 'invited' | 'removed';
 
 export interface Group {
     id: string;

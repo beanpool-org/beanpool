@@ -22,7 +22,7 @@ vi.mock('../crypto', () => ({
 
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
-    canManageNode, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
+    canManageNode, manageLabel, manageSubtitle, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
     buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
@@ -53,11 +53,26 @@ beforeEach(() => {
     vi.mocked(LocalAuthentication.authenticateAsync).mockResolvedValue({ success: true } as any);
 });
 
-describe('role gating — only owners and admins see Manage', () => {
-    it('canManageNode accepts exactly owner and admin', () => {
+describe('role gating — owners and admins see Manage, moderators see Moderate', () => {
+    it('canManageNode accepts exactly owner, admin and moderator', () => {
         expect(canManageNode('owner')).toBe(true);
         expect(canManageNode('admin')).toBe(true);
-        for (const r of [null, undefined, '', 'moderator', 'member', 'OWNER', 1, {}]) expect(canManageNode(r)).toBe(false);
+        expect(canManageNode('moderator')).toBe(true);
+        for (const r of [null, undefined, '', 'member', 'OWNER', 'Moderator', 1, {}]) expect(canManageNode(r)).toBe(false);
+    });
+
+    it('labels the button for the role: Manage for owners and admins, Moderate for a moderator', () => {
+        expect(manageLabel('owner', 'Mullum')).toBe('Manage Mullum');
+        expect(manageLabel('admin', 'Mullum')).toBe('Manage Mullum');
+        expect(manageLabel('moderator', 'Mullum')).toBe('Moderate Mullum');
+        expect(manageSubtitle('owner')).toMatch(/^You're an owner · /);
+        expect(manageSubtitle('admin')).toMatch(/^You're an admin · /);
+        expect(manageSubtitle('moderator')).toMatch(/^You're a moderator · opens the reports/);
+    });
+
+    it('passes a moderator through, so the button shows for them', async () => {
+        mockFetch({ '/api/node-admin/me': { status: 200, body: { role: 'moderator', communityName: 'Mullum' } } });
+        expect(await fetchMyNodeRole(NODE, identity)).toEqual({ role: 'moderator', communityName: 'Mullum' });
     });
 
     it('asks the node, signed, and passes an owner through', async () => {
@@ -67,8 +82,8 @@ describe('role gating — only owners and admins see Manage', () => {
         expect((calls[0].init?.headers as any)['X-Signature']).toBe('sig:GET:/api/node-admin/me');
     });
 
-    it('a plain member, a moderator or an unknown role gets no button', async () => {
-        for (const role of [null, 'moderator', 'superuser']) {
+    it('a plain member or an unknown role gets no button', async () => {
+        for (const role of [null, 'member', 'superuser']) {
             mockFetch({ '/api/node-admin/me': { status: 200, body: { role } } });
             expect((await fetchMyNodeRole(NODE, identity)).role).toBeNull();
         }

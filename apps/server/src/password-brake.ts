@@ -41,6 +41,12 @@
  *          The whole allowance, less the checks held for waiting 'typo' sources.
  *        - 'backoff': a source already in backoff. Only the first NODE_BACKOFF_CHECKS_PER_MIN, less those held.
  *      An attempt over the allowance is refused with Retry-After (at most a minute), not counted.
+ *      A check that turns out not to be a guess is handed back (refundNodeCheck): a right password sent with a valid
+ *      2FA session (admin-auth.ts). Under 2FA only a right code clears a source's record, so after one mistyped
+ *      current code an owner's dashboard keeps polling from a source with a failure on record; without the refund
+ *      its own polling (about 22 requests a minute) spent the whole allowance and was refused, and so was signing
+ *      in again with the right code (Fable's review of #955, B1). Only the one check in flight per source is ever
+ *      out, so the owner's own requests never fill the allowance; other sources' guesses still can, as in 'typo'.
  *
  *   4. Being clean must not be free to mint. One IPv6 customer can hold a /48: 65,536 /64s, each a fresh clean
  *      source. So failures are also counted per wider prefix (IPv6 /48, IPv4 /24); once a prefix has had
@@ -57,7 +63,8 @@
  * One attempt at a time per source: password checks are async (scrypt on the threadpool), so a burst of parallel
  * guesses could otherwise all pass the gate before the first one failed. A second attempt from a source waits for
  * the first to settle (a few milliseconds), then is judged on the result. An owner's dashboard sending several
- * right passwords at once is served one after another, never refused.
+ * right passwords at once is served one after another, never refused: from a clean source nothing is counted, and
+ * from a source with a failure on record each check is handed back once the password (and 2FA session) proves right.
  *
  * What a guesser with N sources gets (docs/admin-surface.md §2.6 has the working):
  *   - clean checks: one per source per day, and at most PREFIX_CLEAN_FAILURES a day per /48 or /24;
@@ -238,7 +245,7 @@ function tierOf(key: string, s: SourceState, now: number): Tier {
 }
 
 export type Admission =
-    | { admitted: true }
+    | { admitted: true; chargedAt?: number }
     | { admitted: false; retryAfter: number; reason: 'source' | 'node' };
 
 /**
@@ -278,9 +285,21 @@ export function tryAdmit(key: string, now = Date.now()): Admission | 'wait' {
         }
         nodeChecks.push(now);
         pending.delete(key);
+        s.busy = true;
+        return { admitted: true, chargedAt: now };
     }
     s.busy = true;
     return { admitted: true };
+}
+
+/**
+ * Hand back the node-wide check an admission took (its `chargedAt`), because the attempt proved not to be a guess.
+ * The caller decides that; the source's own failure record is untouched.
+ */
+export function refundNodeCheck(chargedAt: number | undefined): void {
+    if (chargedAt === undefined) return;
+    const i = nodeChecks.lastIndexOf(chargedAt);
+    if (i !== -1) nodeChecks.splice(i, 1);
 }
 
 /**

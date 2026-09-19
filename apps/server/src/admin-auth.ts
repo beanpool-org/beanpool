@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
@@ -123,11 +123,13 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     const brakeKey = password ? clientLimiterKey(ctx) : '';
     let refusal: Exclude<Admission, { admitted: true }> | null = null;
     let admitted = false;
+    let chargedAt: number | undefined;
 
     if (password) {
         const admission = await acquirePasswordAttempt(brakeKey);
         admitted = admission.admitted;
         if (!admission.admitted) refusal = admission;
+        else chargedAt = admission.chargedAt;
         let pwOk = false;
         try {
             // While the source is braked the password is not checked at all; a break-glass code still is (64 random
@@ -204,6 +206,14 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             // disable or re-enrol, each wiped by their next request, and never be slowed (Fable's review of #953).
             // Nor does it ease the tarpit below, for the same reason.
             viaSession = true;
+            // But this request is no guess: the password is right and the session valid. So it hands back the
+            // node-wide check it took (password-brake.ts, 3). Otherwise, after one wrong current code, the owner's
+            // own dashboard polling spends the whole allowance and is refused (Fable's review of #955, B1). A code
+            // this request goes on to check (requireCurrentSecondFactor) is admitted afresh, so it still costs one.
+            if (admitted) {
+                refundNodeCheck(chargedAt);
+                ctx.state.passwordBrakeKey = undefined;
+            }
         } else {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||

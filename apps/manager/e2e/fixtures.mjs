@@ -210,6 +210,12 @@ const REPORTS = [
         reason: 'Repeatedly no-showed on three separate firewood trades after confirming pickup times, cost the seller a full afternoon each time',
         severity: 'alert',
         status: 'pending',
+        outcome: 'open',
+        postId: 'post-2001',
+        postTitle: 'Split Ironbark Firewood, 1 Trailer Load',
+        title: 'Split Ironbark Firewood, 1 Trailer Load',
+        postAuthorCallsign: MEMBER_NAMES[1],
+        postRemoved: false,
     },
     {
         id: 'report-1002',
@@ -220,6 +226,12 @@ const REPORTS = [
         reason: 'Listed the same secondhand generator in both the free and for-sale categories at once',
         severity: 'warning',
         status: 'pending',
+        outcome: 'open',
+        postId: 'post-2002',
+        postTitle: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription',
+        title: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription',
+        postAuthorCallsign: MEMBER_NAMES[5],
+        postRemoved: true,
     },
     {
         id: 'report-1003',
@@ -231,6 +243,12 @@ const REPORTS = [
         reason: 'Cross-posted the same "urgent free firewood, gate code 4482, ask for Dave" listing to the Pulse feed every day for a week',
         severity: 'Report',
         status: 'pending',
+        outcome: 'open',
+        postId: null,
+        postTitle: null,
+        title: null,
+        postAuthorCallsign: null,
+        postRemoved: null,
         pulseItem: {
             title: 'URGENT free firewood pickup today only, gate code 4482, ask for Dave out back',
             platform: 'facebook',
@@ -765,9 +783,51 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/decisions\/[^/]+\/halt$/.test(pathname)) return ok({ success: true });
 
     // ---- disputes ----
-    if (pathname === '/api/local/admin/disputes') return ok({ disputes: DISPUTES, total: DISPUTES.length, minDays: Number(searchParams.get('minDays')) || 7 });
+    if (pathname === '/api/local/admin/disputes') {
+        const minDays = Number(searchParams.get('minDays')) || 7;
+        const status = searchParams.get('status') || 'all';
+        const limit = Number(searchParams.get('limit')) || 50;
+        const offset = Number(searchParams.get('offset')) || 0;
+        const isResolved = (d) => Boolean(d.resolution || d.disputeResolution);
+        const filtered = DISPUTES.filter((d) => {
+            if (status === 'pending') return d.status === 'pending';
+            if (status === 'resolved') return isResolved(d);
+            return d.status === 'pending' || isResolved(d);
+        });
+        const paged = filtered.slice(offset, offset + limit);
+        return ok({
+            disputes: paged,
+            total: filtered.length,
+            count: paged.length,
+            minDays,
+            limit,
+            offset,
+        });
+    }
     if (/^\/api\/local\/admin\/disputes\/[^/]+\/resolve$/.test(pathname)) {
         return ok({ success: true, transactionId: 'tx-resolved-1', resolution: 'release_to_seller', authSigner: MEMBERS[0].publicKey, transaction: { ...DISPUTES[0], status: 'completed' } });
+    }
+
+    // ---- reports ----
+    if (pathname === '/api/local/admin/reports') {
+        const status = searchParams.get('status') || 'open';
+        const limit = Number(searchParams.get('limit')) || 50;
+        const offset = Number(searchParams.get('offset')) || 0;
+        const getOutcome = (r) => r.outcome || (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open');
+        const filtered = REPORTS.filter((r) => {
+            if (status === 'all') return true;
+            return getOutcome(r) === status;
+        });
+        const openCount = REPORTS.filter((r) => getOutcome(r) === 'open').length;
+        const paged = filtered.slice(offset, offset + limit);
+        return ok({
+            success: true,
+            reports: paged,
+            total: filtered.length,
+            pendingCount: openCount,
+            limit,
+            offset,
+        });
     }
 
     // ---- announcements & pulse ----
@@ -862,7 +922,17 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- posts / users / members mutation endpoints (settings screens trigger, don't render lists from these) ----
     if (/^\/api\/local\/admin\/posts\/[^/]+\/delete$/.test(pathname)) return ok({ success: true });
     if (pathname === '/api/local/admin/posts/bulk-delete') return ok({ success: true });
-    if (/^\/api\/local\/admin\/reports\/[^/]+\/(action|dismiss)$/.test(pathname)) return ok({ success: true });
+    if (/^\/api\/local\/admin\/reports\/([^/]+)\/(action|dismiss)$/.test(pathname)) {
+        const match = pathname.match(/^\/api\/local\/admin\/reports\/([^/]+)\/(action|dismiss)$/);
+        const reportId = match?.[1];
+        const actionType = match?.[2];
+        const r = REPORTS.find((x) => String(x.id) === String(reportId));
+        if (r) {
+            r.status = actionType === 'dismiss' ? 'reviewed' : 'actioned';
+            r.outcome = actionType === 'dismiss' ? 'dismissed' : 'actioned';
+        }
+        return ok({ success: true });
+    }
     if (/^\/api\/local\/admin\/branches\/[^/]+\/prune$/.test(pathname)) return ok({ success: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/freeze$/.test(pathname)) return ok({ success: true, frozen: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/prune$/.test(pathname)) return ok({ success: true });

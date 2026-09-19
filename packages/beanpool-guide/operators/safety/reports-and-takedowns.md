@@ -19,8 +19,8 @@ The report form tells members their note goes to moderators. In practice it goes
 
 **People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them.
 
-- The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.
-- It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.
+- The list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
+- Each row shows which post the report is about, who wrote it, and whether it has already been removed.
 
 ## What each action does
 

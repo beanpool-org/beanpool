@@ -1495,7 +1495,7 @@ router.get('/api/local/admin/disputes', async (ctx) => {
 
     const total = (db.prepare(`
         SELECT COUNT(*) FROM marketplace_transactions mt
-        WHERE (? = 'all'
+        WHERE ((? = 'all' AND (mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL))
            OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
            OR (? = 'pending' AND mt.status = 'pending'))
           AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 18,
-  "hash": "7d661ac9989d5d18cde07a663ba8a4cfffd1ab1225a888519937d717be3fbc3d",
+  "version": 19,
+  "hash": "3a18cd7f9c68bea3a740022080d92d01b50ed0e6615776a233ef9460b4f721e5",
   "sections": [
     {
       "id": "setup",
@@ -776,8 +776,8 @@
         {
           "type": "ul",
           "items": [
-            "The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.",
-            "It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter."
+            "The list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.",
+            "Each row shows which post the report is about, who wrote it, and whether it has already been removed."
           ]
         },
         {
@@ -936,7 +936,7 @@
         },
         {
           "type": "p",
-          "text": "The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held."
+          "text": "Only real disputes that needed an admin ruling appear in the Resolved history; ordinary finished deals do not. The list pages through disputes 50 at a time, so you can reach every dispute on the node."
         },
         {
           "type": "p",

@@ -259,7 +259,9 @@ describe('EscrowDisputesPanel Component', () => {
         expect(screen.queryByText('Split Ironbark Firewood 1 Trailer')).not.toBeInTheDocument();
         expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
         expect(screen.getByText(/Public Provenance Stamp/i)).toBeInTheDocument();
-        expect(screen.getByText(/owner:password/i)).toBeInTheDocument();
+        // #945: resolution never shows raw key or owner:password
+        expect(screen.getByText(/a community admin/i)).toBeInTheDocument();
+        expect(screen.queryByText(/owner:password/i)).not.toBeInTheDocument();
 
         // Switch to all
         const allTab = screen.getByRole('button', { name: /^All/i });
@@ -269,6 +271,92 @@ describe('EscrowDisputesPanel Component', () => {
 
         expect(screen.getByText('Split Ironbark Firewood 1 Trailer')).toBeInTheDocument();
         expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
+    });
+
+    it('excludes finished ordinary deals without dispute resolution from resolved history and all', async () => {
+        const ordinaryDeal: nodeClient.EscrowDisputeItem = {
+            id: 'tx_ordinary_completed',
+            postId: 'post_bread',
+            buyerPubkey: 'pk_buyer_alice',
+            sellerPubkey: 'pk_seller_bob',
+            credits: 10,
+            status: 'completed',
+            createdAt: Date.now() - 20 * 86400 * 1000,
+            daysStuck: 20,
+            post: {
+                id: 'post_bread',
+                title: 'Sourdough Loaf',
+                description: 'Fresh bread',
+                authorPubkey: 'pk_seller_bob',
+                priceCredits: 10,
+                unitPrice: 10,
+                category: 'goods',
+            },
+            chatContext: [],
+            resolution: null,
+            resolvedAt: null,
+            resolvedBy: null,
+        };
+
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockResolvedValue({
+            disputes: [...mockDisputes, ordinaryDeal],
+            total: 3,
+            minDays: 7,
+        });
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+
+        // Switch to resolved
+        const resolvedTab = screen.getByRole('button', { name: /Resolved History/i });
+        await act(async () => {
+            fireEvent.click(resolvedTab);
+        });
+
+        expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
+        expect(screen.queryByText('Sourdough Loaf')).not.toBeInTheDocument();
+
+        // Switch to all
+        const allTab = screen.getByRole('button', { name: /^All/i });
+        await act(async () => {
+            fireEvent.click(allTab);
+        });
+
+        expect(screen.queryByText('Sourdough Loaf')).not.toBeInTheDocument();
+    });
+
+    it('renders pagination controls and fetches next page when total > 50', async () => {
+        const fetchSpy = vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockResolvedValue({
+            disputes: mockDisputes,
+            total: 60,
+            minDays: 7,
+            limit: 50,
+            offset: 0,
+        });
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+
+        expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
+        const prevBtn = screen.getByRole('button', { name: /Previous/i });
+        const nextBtn = screen.getByRole('button', { name: /Next/i });
+
+        expect(prevBtn).toBeDisabled();
+        expect(nextBtn).toBeEnabled();
+
+        await act(async () => {
+            fireEvent.click(nextBtn);
+        });
+
+        expect(fetchSpy).toHaveBeenCalledWith(
+            mockProfile.url,
+            7,
+            mockProfile.adminPassword,
+            undefined,
+            expect.objectContaining({ limit: 50, offset: 50 })
+        );
     });
 
     it('renders empty state when no disputes found', async () => {

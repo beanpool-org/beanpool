@@ -3,6 +3,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import {
     fetchEscrowDisputes,
     resolveEscrowDisputeApi,
+    formatResolverName,
     type EscrowDisputeItem,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
@@ -24,6 +25,9 @@ export function EscrowDisputesPanel({
     const [error, setError] = useState<string | null>(null);
     const [minDays, setMinDays] = useState<number>(7);
     const [filterStatus, setFilterStatus] = useState<'pending' | 'resolved' | 'all'>('pending');
+    const [page, setPage] = useState<number>(0);
+    const [totalCount, setTotalCount] = useState<number>(0);
+    const PAGE_SIZE = 50;
 
     // Resolution modal state
     const [selectedDispute, setSelectedDispute] = useState<EscrowDisputeItem | null>(null);
@@ -45,9 +49,12 @@ export function EscrowDisputesPanel({
                 activeNode.url,
                 minDays,
                 activeNode.adminPassword,
-                tfaToken
+                tfaToken,
+                { limit: PAGE_SIZE, offset: page * PAGE_SIZE, status: filterStatus }
             );
-            setDisputes(data.disputes || []);
+            const list = data.disputes || [];
+            setDisputes(list);
+            setTotalCount(typeof data.total === 'number' ? data.total : list.length);
         } catch (err: any) {
             setError(err.message || 'Failed to load escrow disputes');
         } finally {
@@ -57,16 +64,23 @@ export function EscrowDisputesPanel({
 
     useEffect(() => {
         loadDisputes();
-    }, [activeNode?.id, activeNode?.url, minDays]);
+    }, [activeNode?.id, activeNode?.url, minDays, filterStatus, page]);
 
-    const filteredDisputes = disputes.filter((d) => {
+    const isResolved = (d: EscrowDisputeItem) => Boolean(d.resolution || (d as any).disputeResolution);
+    const isRealDispute = (d: EscrowDisputeItem) => d.status === 'pending' || isResolved(d);
+
+    const realDisputes = disputes.filter(isRealDispute);
+    const filteredDisputes = realDisputes.filter((d) => {
         if (filterStatus === 'pending') return d.status === 'pending';
-        if (filterStatus === 'resolved') return d.status !== 'pending' || Boolean(d.resolution);
+        if (filterStatus === 'resolved') return isResolved(d);
         return true;
     });
 
     const pendingCount = disputes.filter((d) => d.status === 'pending').length;
-    const resolvedCount = disputes.filter((d) => d.status !== 'pending' || Boolean(d.resolution)).length;
+    const resolvedCount = disputes.filter(isResolved).length;
+    const allRealCount = realDisputes.length;
+    const displayTotal = totalCount > 0 ? totalCount : allRealCount;
+    const totalPages = Math.ceil(displayTotal / PAGE_SIZE) || 1;
 
     const toggleChat = (id: string) => {
         setExpandedChat((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -206,7 +220,10 @@ export function EscrowDisputesPanel({
                             <select
                                 id="min-days-select"
                                 value={minDays}
-                                onChange={(e) => setMinDays(Number(e.target.value))}
+                                onChange={(e) => {
+                                    setMinDays(Number(e.target.value));
+                                    setPage(0);
+                                }}
                                 className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer"
                             >
                                 <option value={3} className="bg-nature-900 text-white">3 days</option>
@@ -220,7 +237,7 @@ export function EscrowDisputesPanel({
                         <button
                             onClick={loadDisputes}
                             disabled={loading}
-                            className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-nature-700"
+                            className="px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-nature-700 min-h-[48px] lg:min-h-0"
                         >
                             <span className={loading ? 'animate-spin' : ''}>🔄</span>
                             <span>Refresh</span>
@@ -231,8 +248,11 @@ export function EscrowDisputesPanel({
                 {/* Subtabs for Pending vs Resolved */}
                 <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
                     <button
-                        onClick={() => setFilterStatus('pending')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        onClick={() => {
+                            setFilterStatus('pending');
+                            setPage(0);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition min-h-[48px] lg:min-h-0 ${
                             filterStatus === 'pending'
                                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -241,8 +261,11 @@ export function EscrowDisputesPanel({
                         Pending Actions ({pendingCount})
                     </button>
                     <button
-                        onClick={() => setFilterStatus('resolved')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        onClick={() => {
+                            setFilterStatus('resolved');
+                            setPage(0);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition min-h-[48px] lg:min-h-0 ${
                             filterStatus === 'resolved'
                                 ? 'bg-nature-700 text-white border border-nature-600'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -251,14 +274,17 @@ export function EscrowDisputesPanel({
                         Resolved History ({resolvedCount})
                     </button>
                     <button
-                        onClick={() => setFilterStatus('all')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                        onClick={() => {
+                            setFilterStatus('all');
+                            setPage(0);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition min-h-[48px] lg:min-h-0 ${
                             filterStatus === 'all'
                                 ? 'bg-nature-700 text-white border border-nature-600'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        All ({disputes.length})
+                        All ({allRealCount})
                     </button>
                 </div>
             </div>
@@ -462,7 +488,7 @@ export function EscrowDisputesPanel({
                                             Action: <strong className="text-white">{formatActionName(dispute.resolution || null)}</strong>
                                         </span>
                                         <span>
-                                            Resolved By: <code className="text-terra-300">{dispute.resolvedBy || 'admin'}</code>
+                                            Resolved By: <code className="text-terra-300">{formatResolverName(dispute.resolvedBy)}</code>
                                         </span>
                                         <span>
                                             Timestamp: <span className="text-white">{new Date(dispute.resolvedAt).toLocaleString()}</span>
@@ -527,6 +553,29 @@ export function EscrowDisputesPanel({
                     );
                 })}
             </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between gap-3 pt-4 border-t border-nature-800/80">
+                    <button
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0 || loading}
+                        className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 disabled:opacity-40 disabled:hover:bg-nature-800 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-nature-700 min-h-[48px] lg:min-h-0"
+                    >
+                        <span>◀</span> Previous
+                    </button>
+                    <span className="text-xs text-nature-400 font-mono">
+                        Page {page + 1} of {totalPages} ({displayTotal} total)
+                    </span>
+                    <button
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1 || loading}
+                        className="px-3.5 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 disabled:opacity-40 disabled:hover:bg-nature-800 text-white text-xs font-semibold transition flex items-center gap-1.5 border border-nature-700 min-h-[48px] lg:min-h-0"
+                    >
+                        Next <span>▶</span>
+                    </button>
+                </div>
+            )}
 
             {/* Resolve Confirmation Modal */}
             {selectedDispute && selectedAction && (

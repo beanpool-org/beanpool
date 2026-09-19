@@ -591,6 +591,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="propose-project" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="treasury-post" options={{ presentation: 'modal' }} />
                 <Stack.Screen name="suggest-change" options={{ presentation: 'modal' }} />
+                <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />

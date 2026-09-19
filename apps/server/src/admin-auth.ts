@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refuseBraked, resetPasswordBrake } from './password-brake.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
+import { clientLimiterKey } from './client-ip.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -116,17 +117,20 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 
     let ok = false;
     let breakGlassOwner: string | null = null;
-    // The node-wide password brake (password-brake.ts). Under 2FA it lets go only when the code passes too.
+    // The password brake (password-brake.ts), per source. Under 2FA a source's record clears only when the code
+    // passes too.
     const totpOn = !!(config.totpEnabled && config.totpSecret);
-    let braked = false;
+    const brakeKey = password ? clientLimiterKey(ctx) : '';
+    let refusal: Exclude<Admission, { admitted: true }> | null = null;
     let admitted = false;
 
     if (password) {
-        admitted = await acquirePasswordAttempt();
-        braked = !admitted;
+        const admission = await acquirePasswordAttempt(brakeKey);
+        admitted = admission.admitted;
+        if (!admission.admitted) refusal = admission;
         let pwOk = false;
         try {
-            // While the brake is on the password is not checked at all; a break-glass code still is (64 random
+            // While the source is braked the password is not checked at all; a break-glass code still is (64 random
             // bits: not guessable online, and how an owner enrols a key while the password is under attack).
             if (admitted && config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
                 pwOk = true;
@@ -138,13 +142,13 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                 }
             }
         } finally {
-            if (admitted) settlePasswordAttempt(pwOk, !totpOn);
+            if (admitted) settlePasswordAttempt(brakeKey, pwOk, !totpOn);
         }
         ok = pwOk;
     }
 
-    if (!ok && braked) {
-        refuseBraked(ctx);
+    if (!ok && refusal) {
+        refuseBraked(ctx, refusal);
         return false;
     }
 
@@ -188,7 +192,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.headers?.['x-admin-2fa-session'];
         if (sessionToken && isValid2faSession(sessionToken)) {
             // Session token is valid — 2FA already verified this session
-            if (admitted) notePasswordSuccess();
+            if (admitted) notePasswordSuccess(brakeKey);
         } else {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||
@@ -222,7 +226,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         if (!totpValid) {
             // #135 CR: Increment tarpit counter on 2FA code failure so TOTP codes cannot be brute-forced
             adminAuthFailures++;
-            if (admitted) notePasswordFailure();
+            if (admitted) notePasswordFailure(brakeKey);
             ctx.status = 401;
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return false;
@@ -240,7 +244,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         // ctx.state to hand off the token without fighting the response).
         if (!ctx.state) ctx.state = {};
         ctx.state.tfaSessionToken = newSessionToken;
-        if (admitted) notePasswordSuccess();
+        if (admitted) notePasswordSuccess(brakeKey);
         } // end of else block (no valid 2FA session token)
     }
 

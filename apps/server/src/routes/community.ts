@@ -131,12 +131,12 @@ router.post('/api/local/verify-password', async (ctx) => {
         }
 
         if (!totpValid) {
-            notePasswordFailure();
+            notePasswordFailure(clientLimiterKey(ctx));
             ctx.status = 401;
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return;
         }
-        notePasswordSuccess();
+        notePasswordSuccess(clientLimiterKey(ctx));
     }
 
     // Issue 2FA session token so subsequent API calls can skip TOTP re-entry

@@ -125,8 +125,8 @@ import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
-import { clientIp, clientLimiterKey, resolveClientIp } from './client-ip.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, passwordBrakeRetryAfter } from './password-brake.js';
+import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
+import { acquirePasswordAttempt, settlePasswordAttempt } from './password-brake.js';
 import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 
 
@@ -573,9 +573,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             if (ticket && isValidWsTicket(ticket)) {
                 authorized = true;
             } else if (auth && config.adminHash && config.salt) {
-                // The admin password, so under the node-wide brake like every other password check.
-                if (!(await acquirePasswordAttempt())) {
-                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${passwordBrakeRetryAfter()}\r\n\r\n`);
+                // The admin password, so under the same per-source brake as every other password check.
+                const brakeKey = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
+                const admission = await acquirePasswordAttempt(brakeKey);
+                if (!admission.admitted) {
+                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${admission.retryAfter}\r\n\r\n`);
                     socket.destroy();
                     return;
                 }
@@ -583,7 +585,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 try {
                     pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
                 } finally {
-                    settlePasswordAttempt(pwOk);
+                    settlePasswordAttempt(brakeKey, pwOk);
                 }
                 if (pwOk) {
                     logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');

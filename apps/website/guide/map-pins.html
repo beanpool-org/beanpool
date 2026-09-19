@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What the map shows — BeanPool members' guide</title>
+    <meta name="description" content="The pins on the Map, what their colours mean, and the buttons around them.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#map">Map</a></p>
+        <h1>What the map shows</h1>
+        <p class="lede">The pins on the Map, what their colours mean, and the buttons around them.</p>
+        <h2>Pins</h2>
+        <p>Tap <strong>Map</strong> in the row of tabs. The map shows your community's posts:</p>
+        <ul>
+            <li><strong>Green pins:</strong> Offers.</li>
+            <li><strong>Orange pins:</strong> Needs.</li>
+            <li><strong>Purple pins with a calendar:</strong> events that have not finished yet.</li>
+        </ul>
+        <p>A pin shows the post's category picture. Where many Offers and Needs are close together, they join into a blue circle with a number. Zoom in to see them one by one. Events always show on their own.</p>
+        <p>People, groups and enterprises are not on the map. Neither are polls.</p>
+        <h2>Tapping a pin</h2>
+        <ul>
+            <li><strong>An Offer or a Need:</strong> a card shows the title and who posted it. Tap <strong>View Details</strong> to open it, or their name to see their profile. Tap the map or <strong>✕</strong> to close the card.</li>
+            <li><strong>An event:</strong> a card shows when and where, and how many are going. Tap <strong>View event</strong>.</li>
+        </ul>
+        <h2>Filters</h2>
+        <p>At the top of the map:</p>
+        <ul>
+            <li><strong>All</strong>, <strong>Offers</strong>, <strong>Needs</strong> or <strong>Events</strong>. Tap <strong>✕</strong> to clear.</li>
+            <li><strong>All Categories</strong> to show one category.</li>
+            <li>For events: <strong>Today</strong>, <strong>This weekend</strong> or <strong>Next 7 days</strong>. The map moves to fit them.</li>
+        </ul>
+        <h2>Buttons on the left</h2>
+        <ul>
+            <li>The moon or sun: a dark or light map.</li>
+            <li>The target: show where you are. The first time, the app asks for permission to use your location.</li>
+            <li><strong>+</strong> and <strong>−</strong>: zoom.</li>
+        </ul>
+        <p>The amber circle shows the area your community serves.</p>
+        <h2>Adding a post from the map</h2>
+        <p>Tap <strong>+ ADD POST</strong>. See &quot;Posting an Offer or a Need&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Where your pin goes</strong><span>Who sees where your posts and events are, and how to keep your home private.</span></a></li>
+            <li><a href="near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="events.html"><strong>Events</strong><span>Create an event, say you are going, and run it as the host.</span></a></li>
+            <li><a href="posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 5.</p>
+    </main>
+</body>
+</html>

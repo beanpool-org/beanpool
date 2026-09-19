@@ -314,6 +314,9 @@ importers:
       '@beanpool/core':
         specifier: workspace:*
         version: link:../../packages/beanpool-core
+      '@beanpool/guide':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-guide
       '@noble/ciphers':
         specifier: ^2.1.1
         version: 2.1.1

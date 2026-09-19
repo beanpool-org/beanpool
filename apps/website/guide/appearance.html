@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light and dark — BeanPool members' guide</title>
+    <meta name="description" content="Make the app light or dark, or follow your phone.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#settings">Settings and safety</a></p>
+        <h1>Light and dark</h1>
+        <p class="lede">Make the app light or dark, or follow your phone.</p>
+        <h2>Choosing</h2>
+        <ul>
+            <li>Open <strong>Settings</strong>. Under <strong>App Settings</strong>, find <strong>Appearance</strong>.</li>
+            <li>Choose one:</li>
+            <li><strong>Same as phone:</strong> the app is dark when your phone is set to dark, and light when it is light. This is how it starts.</li>
+            <li><strong>Light:</strong> always light.</li>
+            <li><strong>Dark:</strong> always dark.</li>
+        </ul>
+        <p>When the app is light, <strong>Light Color Scheme</strong> lets you choose <strong>Classic</strong>, <strong>Earth</strong> or <strong>Slate</strong>.</p>
+        <p>The map has its own light and dark button, on the left of the map.</p>
+        <p>In the web app, the first choice is called <strong>Same as device</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Your privacy</strong><span>What others can see about you, and the settings that control it.</span></a></li>
+            <li><a href="notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone.</span></a></li>
+            <li><a href="the-bean.html"><strong>This guide</strong><span>Where to find this guide, how to search it, and how it stays up to date.</span></a></li>
+            <li><a href="web-app.html"><strong>Using BeanPool in a web browser</strong><span>The web app does most of what the phone app does. Where its buttons have different names.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 5.</p>
+    </main>
+</body>
+</html>

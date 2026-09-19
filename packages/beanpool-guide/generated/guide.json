@@ -1,12 +1,136 @@
 {
-  "schema": 1,
-  "version": 1,
-  "hash": "59615b0012a3cd0d40faf7cdb06bc1da961290e4ed733c8dc5a61f91a0e03203",
+  "schema": 2,
+  "version": 5,
+  "hash": "9509ecaaa61e64d8de17a5708bcbd91a239e1136b163e16acb23ad89eb08c589",
+  "sections": [
+    {
+      "id": "about",
+      "title": "About BeanPool",
+      "summary": "How BeanPool works, the rules and how decisions are made, common questions, and what is new.",
+      "slugs": [
+        "how-it-works",
+        "rules",
+        "faq",
+        "whats-new"
+      ]
+    },
+    {
+      "id": "getting-started",
+      "title": "Getting started",
+      "summary": "Joining, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "slugs": [
+        "joining",
+        "your-12-words",
+        "your-profile",
+        "the-top-bar",
+        "the-bean",
+        "getting-help",
+        "communities",
+        "web-app"
+      ]
+    },
+    {
+      "id": "market",
+      "title": "Market",
+      "summary": "Finding and posting Offers and Needs, and how a deal works from start to finish.",
+      "slugs": [
+        "browsing-the-market",
+        "posting",
+        "my-deals",
+        "a-deal-step-by-step",
+        "when-a-deal-goes-wrong"
+      ]
+    },
+    {
+      "id": "map",
+      "title": "Map",
+      "summary": "What the pins are, where yours goes, and finding things near you.",
+      "slugs": [
+        "map-pins",
+        "pin-locations",
+        "near-you"
+      ]
+    },
+    {
+      "id": "talk",
+      "title": "Talk",
+      "summary": "Messages, people and friends, groups, and event chats.",
+      "slugs": [
+        "messages",
+        "people",
+        "groups",
+        "event-chat",
+        "mute",
+        "mentions"
+      ]
+    },
+    {
+      "id": "pulse",
+      "title": "Pulse",
+      "summary": "What your neighbours share, the Learn videos, and adding your own channels.",
+      "slugs": [
+        "the-pulse",
+        "learn",
+        "your-channels"
+      ]
+    },
+    {
+      "id": "commons",
+      "title": "Commons",
+      "summary": "Decisions and voting, polls, events, enterprises and keepers, and the shared beans.",
+      "slugs": [
+        "decisions",
+        "proposing-a-decision",
+        "polls",
+        "events",
+        "enterprises",
+        "keepers",
+        "commons-fund"
+      ]
+    },
+    {
+      "id": "ledger",
+      "title": "Ledger",
+      "summary": "Your balance, your credit line, gifts, trust badges and the circulation fee.",
+      "slugs": [
+        "your-balance",
+        "credit-line",
+        "gifts",
+        "trust-badges",
+        "trading-partner-limit",
+        "circulation-fee"
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Settings and safety",
+      "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, and getting your account back.",
+      "slugs": [
+        "privacy",
+        "blocking",
+        "reporting",
+        "notifications",
+        "appearance",
+        "holiday-mode",
+        "leaving-or-deleting",
+        "recovery"
+      ]
+    }
+  ],
   "guides": [
     {
       "slug": "how-it-works",
       "title": "How BeanPool works",
       "summary": "Beans, trading, offers and needs, and credit, in plain words.",
+      "section": "about",
+      "related": [
+        "posting",
+        "a-deal-step-by-step",
+        "credit-line",
+        "gifts",
+        "circulation-fee",
+        "trust-badges"
+      ],
       "blocks": [
         {
           "type": "h2",
@@ -180,6 +304,15 @@
       "slug": "rules",
       "title": "Rules and how decisions work",
       "summary": "Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.",
+      "section": "about",
+      "related": [
+        "decisions",
+        "proposing-a-decision",
+        "polls",
+        "keepers",
+        "groups",
+        "people"
+      ],
       "blocks": [
         {
           "type": "h2",
@@ -433,6 +566,15 @@
       "slug": "faq",
       "title": "Questions",
       "summary": "Short answers to the questions members ask most.",
+      "section": "about",
+      "related": [
+        "your-12-words",
+        "recovery",
+        "communities",
+        "holiday-mode",
+        "leaving-or-deleting",
+        "getting-help"
+      ],
       "blocks": [
         {
           "type": "h2",
@@ -544,6 +686,13 @@
       "slug": "whats-new",
       "title": "What's new",
       "summary": "What changed in each version of the app, in plain words.",
+      "section": "about",
+      "related": [
+        "the-bean",
+        "how-it-works",
+        "rules",
+        "faq"
+      ],
       "blocks": [
         {
           "type": "h2",
@@ -626,6 +775,3422 @@
             "The map has one locate button again.",
             "The Market feed is easier to read in dark mode."
           ]
+        }
+      ]
+    },
+    {
+      "slug": "joining",
+      "title": "Joining with an invite",
+      "summary": "How to join a community with an invite, and how to invite someone else.",
+      "section": "getting-started",
+      "related": [
+        "your-12-words",
+        "your-profile",
+        "communities",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "You need an invite"
+        },
+        {
+          "type": "p",
+          "text": "You join a BeanPool community when a member invites you. An invite is a link, a QR code or a code. A code looks like **INV-** followed by letters, or a long code that starts with **BP-**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "An invite works **once**.",
+            "An invite lasts **30 days**. After that, ask for a new one."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Joining"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.",
+            "On the first screen, tap **I'm New Here**. If the invite is on your clipboard, you can tap **Paste** instead.",
+            "Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.",
+            "Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.",
+            "Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The four steps"
+        },
+        {
+          "type": "p",
+          "text": "The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
+            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon.",
+            "**How it Works:** a short tour. Tap **Let's Begin!** to start."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If you close the app halfway, it carries on from the same step next time."
+        },
+        {
+          "type": "h2",
+          "text": "If the invite does not work"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.",
+            "**Expired:** invites last 30 days. Ask for a new one.",
+            "**Not recognised:** check you copied all of it, and that the community name or address is right."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Inviting someone"
+        },
+        {
+          "type": "p",
+          "text": "Any member can invite people. Your trust badge does not matter."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap the invite icon (a person with a plus) at the top right of the screen. This opens **Invites**.",
+            "If you like, write who the invite is for, just for your own records.",
+            "Tap **Generate Ticket**. Without a connection, the button says **Generate Offline Ticket**, and that works too.",
+            "Show them the QR code, or tap **Share Invite** to send the link and the code.",
+            "Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A community's admins can turn invites off for the whole community."
+        }
+      ]
+    },
+    {
+      "slug": "your-12-words",
+      "title": "Your 12 words",
+      "summary": "The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.",
+      "section": "getting-started",
+      "related": [
+        "recovery",
+        "joining",
+        "communities",
+        "faq"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Why they matter"
+        },
+        {
+          "type": "p",
+          "text": "Your account is not a password kept by someone else. It is a key kept on your phone. Your **12 words** are that key, written as words."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "With the 12 words, you can get your account back on a new phone: your name, your beans and your trust.",
+            "Without them, a lost or broken phone can mean a lost account.",
+            "Anyone who has your 12 words can use your account. Never share them, never type them anywhere except the BeanPool app or your own community's BeanPool web app, and never send them in a message. Nobody from BeanPool or your community will ever ask for them."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Write them down"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Write the 12 words on paper, in order, and check the spelling.",
+            "Keep the paper somewhere safe, away from your phone.",
+            "A photo or screenshot of the words is easy for someone else to find. Paper is safer."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Where to see them again"
+        },
+        {
+          "type": "p",
+          "text": "Open **Settings** with the sliders button at the top of the screen. Then either:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Under **Account & Identity**, tap **View Recovery Phrase**. Type **CONFIRM**, tap **Show Recovery Phrase**, and pass your phone's lock screen check.",
+            "Or tap **Account Protection**, then **Show My 12 Recovery Words**. Tap **Hide** when you are done."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "A second way back: a sign-in account"
+        },
+        {
+          "type": "p",
+          "text": "On the phone app you can also link a Google, Facebook or GitHub account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See \"Getting your account back\"."
+        },
+        {
+          "type": "p",
+          "text": "A linked sign-in account does not give you your 12 words back. Keep the paper as well."
+        },
+        {
+          "type": "h2",
+          "text": "In a web browser"
+        },
+        {
+          "type": "p",
+          "text": "The web app has no sign-in recovery. There, your 12 words are the only way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
+        }
+      ]
+    },
+    {
+      "slug": "your-profile",
+      "title": "Your profile",
+      "summary": "Your name, photo, a few words about you, and who can see your contact details.",
+      "section": "getting-started",
+      "related": [
+        "privacy",
+        "trust-badges",
+        "joining",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Change your name, photo or bio"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings** with the sliders button at the top of the screen.",
+            "On your card at the top, tap **Edit**, or tap your photo.",
+            "Change what you like:",
+            "**Callsign** is the name people see.",
+            "**Bio** is a few words about you, up to 200 characters.",
+            "Tap the photo to change it.",
+            "Tap **Save Profile**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, and the short tour of how BeanPool works."
+        },
+        {
+          "type": "h2",
+          "text": "A name and a photo come first"
+        },
+        {
+          "type": "p",
+          "text": "You need a name and a photo before you can post or accept a trade. If one is missing, the app says **Finish your profile first**. Tap **Set up profile** to add it."
+        },
+        {
+          "type": "h2",
+          "text": "Contact details"
+        },
+        {
+          "type": "p",
+          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to."
+        },
+        {
+          "type": "p",
+          "text": "Once you add one, choose **Who can see this?**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Hidden:** nobody.",
+            "**Trade Partners:** meant for people you trade with. For now it works like Community: every member can see it. To keep it private, choose Hidden or Friends.",
+            "**Friends:** people you have added as friends.",
+            "**Community:** every member of your community."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Today the web app can show your contact details on your posts. The phone app does not show other members' contact details yet."
+        },
+        {
+          "type": "h2",
+          "text": "What others see"
+        },
+        {
+          "type": "p",
+          "text": "Tap the round picture at the top right of the screen to see your own profile. Other members see much the same:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "your name, when you joined and your bio;",
+            "your trust badge, how many trades you have done, with how many people, and how many you finished;",
+            "star ratings and reviews from people you traded with;",
+            "your posts."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Your working style"
+        },
+        {
+          "type": "p",
+          "text": "On your profile there is a short, optional quiz, **Take 60s Quiz**. It describes how you like to work with others. On someone else's profile it shows how well your styles fit. It changes nothing else."
+        }
+      ]
+    },
+    {
+      "slug": "the-top-bar",
+      "title": "The top bar",
+      "summary": "The bean, the small icons that show when something needs you, and the buttons at the top right.",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "communities",
+        "my-deals",
+        "decisions",
+        "messages",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What is in it"
+        },
+        {
+          "type": "p",
+          "text": "The bar at the top of the screen is the same on every tab. From left to right:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The bean:** your community, and this guide.",
+            "**The \"needs you\" icons:** only while something is waiting for you.",
+            "**The invite icon, Settings and your picture.**"
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The bean"
+        },
+        {
+          "type": "p",
+          "text": "Tap the bean at the top left to open the **BeanPool** sheet. It shows:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your community:** its name, and whether it can be reached right now.",
+            "**Your communities:** tap one to switch to it, or tap **Add a community**.",
+            "**The guides:** this guide, with its search, and what is new."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The small dot on the bean tells you how things are:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Green:** connected, and you are a member here.",
+            "**Amber:** you are visiting as a guest.",
+            "**Red:** your community's server cannot be reached right now, or this phone is not connected to a community yet."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A single slow check does not turn the dot red. It only goes red after more than one check fails in a row."
+        },
+        {
+          "type": "h2",
+          "text": "The \"needs you\" icons"
+        },
+        {
+          "type": "p",
+          "text": "Between the bean and the buttons on the right, small icons appear only while something needs you. Each one is a kind of thing. Tap it to go straight there."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
+            "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
+            "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
+            "**A group of people:** new lines in your groups or event chats. Chats you have muted stay quiet here. The tap opens the chat, or the unread list in **Messages** if there are several.",
+            "**A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The icons stack from the right. The most important one sits next to the invite icon, and keeps its place as others come and go."
+        },
+        {
+          "type": "h3",
+          "text": "The number and the colour"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A small number on an icon means more than one of that kind: for example 3 people who wrote to you. It shows **9+** above 9.",
+            "An icon turns **amber** when it is more pressing: a deal waiting on you, admin work, or a vote that closes within 2 days. Nothing turns red."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "On a small screen"
+        },
+        {
+          "type": "p",
+          "text": "If there is not room for every icon, the last space shows **•••**. Tap it to see the whole list, **Needs you**, in words. Tap a line to go there."
+        },
+        {
+          "type": "h3",
+          "text": "A quiet bar is good news"
+        },
+        {
+          "type": "p",
+          "text": "When nothing needs you, there are no icons at all. You have not missed anything. The icons update as you move around the app and when you come back to it."
+        },
+        {
+          "type": "h2",
+          "text": "Join or Connect"
+        },
+        {
+          "type": "p",
+          "text": "Instead of the icons, you may see a button:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Join** (amber): you are visiting as a guest. Tap it to open **Invites**, where you can join with an invite.",
+            "**Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "While one of these shows, the invite icon is hidden."
+        },
+        {
+          "type": "h2",
+          "text": "The buttons on the right"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See \"Joining with an invite\".",
+            "**Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.",
+            "**Your picture:** opens your own profile, as others see it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Update messages"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes a green bar shows under the top bar:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Update available:** a newer version of the app is out. Tap **Upgrade** to get it, or the cross to close the message.",
+            "**Your app is too old for this community:** you need to update before the app works properly here. This one cannot be closed. Tap **Upgrade**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The tabs"
+        },
+        {
+          "type": "p",
+          "text": "Under the top bar are the tabs: **Market**, **Map**, **Talk**, **Pulse**, **Commons** and **Ledger**. The name of each tab sits above its icon."
+        },
+        {
+          "type": "p",
+          "text": "On a long page, tap the tab you are already on to jump back to the top. This works on every tab except **Map**."
+        }
+      ]
+    },
+    {
+      "slug": "the-bean",
+      "title": "This guide",
+      "summary": "Where to find this guide, how to search it, and how it stays up to date.",
+      "section": "getting-started",
+      "related": [
+        "getting-help",
+        "how-it-works",
+        "faq",
+        "whats-new",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Opening it"
+        },
+        {
+          "type": "p",
+          "text": "Tap the bean at the top left of the screen. Or:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings** with the sliders button at the top of the screen.",
+            "Under **BeanPool**, tap **Help & how it works**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In the web app, it is in the same place: **Settings**, then **Help & how it works** under **BeanPool**."
+        },
+        {
+          "type": "h2",
+          "text": "What is in it"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your community:** its name, and whether its server can be reached right now. Tap it to switch to another community or add one.",
+            "**Guides:** how BeanPool works, the rules and how decisions are made, and common questions.",
+            "**How to use the app:** one short page for each task, grouped the way the app is: Market, Map, Talk, Pulse, Commons, Ledger and Settings.",
+            "**The BeanPool project:** what is new in this version, and a link to the website beanpool.org, with a **Share** button to send it to a friend."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Searching"
+        },
+        {
+          "type": "p",
+          "text": "Type a word or two in **Search the guide** at the top. It shows every page with all of your words. It works without a connection."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Short words work: \"vot\" finds \"vote\" and \"voting\".",
+            "If nothing comes up, try one simpler word, like \"gift\", \"photo\" or \"block\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Always there, kept up to date"
+        },
+        {
+          "type": "p",
+          "text": "The guide is built into the app, so it works with no connection at all. When you are online, the app checks beanpool.org for a newer guide and uses it if there is one. The bottom of the guide shows which version you are reading."
+        },
+        {
+          "type": "p",
+          "text": "The same guide is on the website at beanpool.org/guide."
+        },
+        {
+          "type": "h2",
+          "text": "Videos"
+        },
+        {
+          "type": "p",
+          "text": "Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn**. Videos members add to Learn never show on a guide page. Every page is complete without the video."
+        }
+      ]
+    },
+    {
+      "slug": "getting-help",
+      "title": "Getting help",
+      "summary": "Where to look when you are stuck, and who to ask.",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "reporting",
+        "faq",
+        "blocking",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Look it up"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**This guide:** search it for a word, like \"gift\" or \"photo\".",
+            "**The ⓘ buttons:** many screens have a small ⓘ. Tap it for a short explanation of that screen. The Ledger has several.",
+            "**The pricing guide:** in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in beans."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Ask a person"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.",
+            "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
+            "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "When something is not right"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If a post is a scam, offensive or misleading, report it. See \"Reporting a problem\".",
+            "If someone is bothering you, block them. See \"Blocking someone\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Safety pages"
+        },
+        {
+          "type": "p",
+          "text": "In **Settings**, under **Legal & Privacy**, you can read the **Privacy Policy**, the **Terms of Service & EULA** and the **Child Safety Standards**. They open on beanpool.org."
+        }
+      ]
+    },
+    {
+      "slug": "communities",
+      "title": "More than one community",
+      "summary": "Belong to several communities with one account, and switch between them.",
+      "section": "getting-started",
+      "related": [
+        "joining",
+        "leaving-or-deleting",
+        "your-12-words",
+        "faq",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "One account, several communities"
+        },
+        {
+          "type": "p",
+          "text": "Your phone holds one account: one name, one key, one set of 12 words. You can use it to join more than one community. Each community keeps its own beans, trades and posts."
+        },
+        {
+          "type": "h2",
+          "text": "Joining another community"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You need an invite from a member of that community.",
+            "Tap the invite icon (a person with a plus) at the top right of the screen to open **Invites**.",
+            "Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.",
+            "Tap **Join Community**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Switching"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap the bean at the top left. The **BeanPool** sheet opens, with **Your communities** near the top.",
+            "Tap the one you want."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You can also switch in **Settings**, under **System**, then **Advanced / Subsystem**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to Town** on another one to move to it."
+        },
+        {
+          "type": "h2",
+          "text": "Forgetting a community on this phone"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Advanced / Subsystem**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.",
+            "In the **BeanPool** sheet, under **Your communities**, pressing and holding a community and tapping **Remove** only takes it off the list. Its data stays on the phone."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Neither deletes your account there, and your other communities are not affected."
+        },
+        {
+          "type": "h2",
+          "text": "Visiting as a guest"
+        },
+        {
+          "type": "p",
+          "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite."
+        }
+      ]
+    },
+    {
+      "slug": "web-app",
+      "title": "Using BeanPool in a web browser",
+      "summary": "The web app does most of what the phone app does. Where its buttons have different names.",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "your-12-words",
+        "joining",
+        "messages"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "The same account, a different screen"
+        },
+        {
+          "type": "p",
+          "text": "Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently."
+        },
+        {
+          "type": "h2",
+          "text": "Different names and places"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.",
+            "**Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.",
+            "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",
+            "**Appearance:** the choice is called **Same as device** instead of \"Same as phone\".",
+            "**Blocking:** Settings says **Manage Blocked Members**.",
+            "**Chats:** the web chat has **Report** and **Block** buttons at the top."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What the web app does not have"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Signing in with Google, Facebook, GitHub or Apple to get your account back. On the web, your 12 words are the only way back.",
+            "The Pulse's **Learn** lane.",
+            "The phone's app lock."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Using your phone account on a computer"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In the web app on the computer, choose to link with the mobile app. It shows a QR code.",
+            "On the phone, open **Settings** and tap **Link Another Device**.",
+            "Point the phone's camera at the QR code and tap **Confirm & Link Device**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Installing it"
+        },
+        {
+          "type": "p",
+          "text": "The web app may offer **Install BeanPool** so it opens from your home screen like an app. If your browser cannot do that, tap **How?** for steps."
+        },
+        {
+          "type": "h2",
+          "text": "Keep your 12 words"
+        },
+        {
+          "type": "p",
+          "text": "Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app's Settings shows a warning with **View & Save Recovery Phrase**. Do it, and write them down."
+        }
+      ]
+    },
+    {
+      "slug": "browsing-the-market",
+      "title": "Browsing the market",
+      "summary": "Find Offers and Needs with search, filters and distance.",
+      "section": "market",
+      "related": [
+        "posting",
+        "a-deal-step-by-step",
+        "near-you",
+        "trust-badges"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "The Market tab"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first."
+        },
+        {
+          "type": "p",
+          "text": "Pull the list down to refresh it."
+        },
+        {
+          "type": "h2",
+          "text": "Search"
+        },
+        {
+          "type": "p",
+          "text": "Type in **Search marketplace...** at the top. The search also finds related words: \"fruit\" finds \"lemon\". Without a connection, it searches what is already on your phone."
+        },
+        {
+          "type": "h2",
+          "text": "Filters"
+        },
+        {
+          "type": "p",
+          "text": "The row of buttons under the search chooses what you see:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**All**, **Offers** or **Needs**.",
+            "**For You:** only the categories you star under **Customize interests**.",
+            "**Events** and **Polls**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The second row narrows it down:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**All Categories:** pick one category, like Food, Tools or Garden.",
+            "**Distance:** only posts within a distance of a point. See \"Finding things near you\".",
+            "**Trust:** only posts by members who have not traded yet (**Founding**), by **Newcomers**, or by members with at least a certain trust badge.",
+            "**Beans only:** hides posts that also ask for some cash."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If you belong to groups, a row of group buttons appears too. **All Groups & Public** shows everything; a group's button shows only posts for that group."
+        },
+        {
+          "type": "p",
+          "text": "If nothing matches, tap **Clear All Filters**."
+        },
+        {
+          "type": "p",
+          "text": "The button next to **My Deals** changes how the list looks: a list, a grid, or compact."
+        },
+        {
+          "type": "h2",
+          "text": "What a post shows"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "a photo, or the category's picture;",
+            "**OFFER** or **NEED**;",
+            "the price in beans, with **/Hr** if it is priced by the hour;",
+            "**RECURRING** if it stays open after each deal;",
+            "**CASH TOO** if the person also needs some cash, for fuel or materials;",
+            "a lock and a group name if only that group can see it;",
+            "who posted it, with their trust badge and stars. A member who has not traded yet shows **FOUNDING**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap a post to open it."
+        },
+        {
+          "type": "h2",
+          "text": "On a post"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Message** and their name: ask a question before you commit.",
+            "Tap their name to see their profile, reviews and trust.",
+            "**Report Post** if it is a scam, offensive or misleading.",
+            "**Block User** to hide their posts and chats on your phone. It also tells your admins. See \"Blocking someone\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You cannot save or share a post yet."
+        }
+      ]
+    },
+    {
+      "slug": "posting",
+      "title": "Posting an Offer or a Need",
+      "summary": "Put up something you can do or give, or something you are looking for.",
+      "section": "market",
+      "related": [
+        "a-deal-step-by-step",
+        "my-deals",
+        "map-pins",
+        "credit-line"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Offer first"
+        },
+        {
+          "type": "p",
+          "text": "You must have posted at least one **Offer** before you can post a **Need** or take up someone's Offer. Everyone brings something. How many Offers you have up also decides how far below zero you can go. See \"Your credit line\"."
+        },
+        {
+          "type": "h2",
+          "text": "Before you start"
+        },
+        {
+          "type": "p",
+          "text": "You need a name and a profile photo. If one is missing, the app asks you to **Set up profile** first."
+        },
+        {
+          "type": "h2",
+          "text": "Posting"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **+ ADD POST** on the Market tab or the Map.",
+            "Choose **Offer** or **Need**. The form opens on the Map.",
+            "**Title:** a few words, up to 50 characters. \"Sourdough loaf\", \"Lift to town on Fridays\".",
+            "**Category:** pick the closest one.",
+            "**Description:** what, when, where, anything people should know.",
+            "**Photos:** at least one, up to five. Tap **Camera** or **Gallery**.",
+            "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
+            "**Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.",
+            "Tap **Post Offer** or **Post Need**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**."
+        },
+        {
+          "type": "h2",
+          "text": "Not sure what to charge?"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Not sure what to charge?** under the price. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for many everyday things. Tapping one fills in an Offer for you."
+        },
+        {
+          "type": "p",
+          "text": "Below the price you see what you will receive after the 1.5% market fee. Gifts have no fee."
+        },
+        {
+          "type": "h2",
+          "text": "Extra choices"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday.",
+            "**Cash also needed:** tick this if you also need some cash, for fuel or materials. The app never handles cash; you sort that out between you.",
+            "**Where does this travel?** Only if your community trades with other communities: keep the post here, or share it further."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The app keeps a draft as you type. If you leave and come back, it asks whether to **Continue** or **Start fresh**."
+        },
+        {
+          "type": "h2",
+          "text": "Posting only to a group"
+        },
+        {
+          "type": "p",
+          "text": "Open **Commons**, then **Groups**, then your group, and tap **Post to** and the group's name. Only that group sees it. This shorter form has no photos and no location."
+        },
+        {
+          "type": "h2",
+          "text": "Changing or removing a post"
+        },
+        {
+          "type": "p",
+          "text": "Open your post. If no deal is under way on it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Edit Post** changes the words, category, price and photos. Tap **Save**. The location cannot be changed; delete the post and post it again instead.",
+            "**Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.",
+            "**Delete Post** removes it. Anyone still asking for it sees their request marked declined."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Posts do not expire. Delete them when they are done."
+        }
+      ]
+    },
+    {
+      "slug": "my-deals",
+      "title": "My Deals",
+      "summary": "One place for every trade you are in, every post you have up, and your past trades.",
+      "section": "market",
+      "related": [
+        "a-deal-step-by-step",
+        "posting",
+        "your-balance",
+        "when-a-deal-goes-wrong",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Opening it"
+        },
+        {
+          "type": "p",
+          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress."
+        },
+        {
+          "type": "h2",
+          "text": "Three tabs"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).",
+            "**My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.",
+            "**History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days."
+        },
+        {
+          "type": "h2",
+          "text": "Reviews"
+        },
+        {
+          "type": "p",
+          "text": "A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars."
+        }
+      ]
+    },
+    {
+      "slug": "a-deal-step-by-step",
+      "title": "A deal, step by step",
+      "summary": "From asking to getting paid, for an Offer and for a Need, and leaving a review.",
+      "section": "market",
+      "related": [
+        "my-deals",
+        "when-a-deal-goes-wrong",
+        "posting",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "The idea"
+        },
+        {
+          "type": "p",
+          "text": "When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans \"credits\" in a few places; they mean the same thing."
+        },
+        {
+          "type": "h2",
+          "text": "Taking up someone's Offer"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open the Offer and tap **Accept Offer**.",
+            "If it is priced by the hour, say how many hours.",
+            "Tap **Confirm**. Your beans are held straight away, and the seller is told. There is no waiting for the seller to say yes.",
+            "A chat with the seller opens. Agree when and where."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You need to have posted an Offer of your own first. If you have not, the app offers **Create an Offer**."
+        },
+        {
+          "type": "h2",
+          "text": "Helping with someone's Need"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open the Need and tap **Offer to Fulfill**, then **Confirm**.",
+            "The person who posted it decides. Until then you can tap **Withdraw Request**. If they do not answer in 7 days, the request ends by itself and you are both told.",
+            "They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.",
+            "When they approve, their beans are held. Unless the post is Repeatable, anyone else who offered sees their request marked declined."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "While the beans are held"
+        },
+        {
+          "type": "p",
+          "text": "Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Do the job, or hand over the thing.",
+            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them.",
+            "The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder."
+        },
+        {
+          "type": "h2",
+          "text": "A Repeatable post"
+        },
+        {
+          "type": "p",
+          "text": "A Repeatable post goes back up after each deal, and several people can be in a deal on it at once. Any other post is marked finished."
+        },
+        {
+          "type": "h2",
+          "text": "Reviews"
+        },
+        {
+          "type": "p",
+          "text": "After releasing, the person paying is asked to rate the deal: 1 to 5 stars and a short, optional comment. Tap **Submit Rating**, or **Skip for now**."
+        },
+        {
+          "type": "p",
+          "text": "Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History. You can change your rating; the new one replaces the old."
+        },
+        {
+          "type": "p",
+          "text": "Stars matter. A low average reduces how much trust the other person earns from their trades. Be fair."
+        }
+      ]
+    },
+    {
+      "slug": "when-a-deal-goes-wrong",
+      "title": "When a deal goes wrong",
+      "summary": "Cancelling a deal, and what happens when you cannot agree.",
+      "section": "market",
+      "related": [
+        "a-deal-step-by-step",
+        "getting-help",
+        "reporting",
+        "rules"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Talk first"
+        },
+        {
+          "type": "p",
+          "text": "Most problems are a misunderstanding. Tap **Message** on the post and talk it through."
+        },
+        {
+          "type": "h2",
+          "text": "Cancelling"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message. A request nobody answers ends by itself after 7 days.",
+            "**While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Either person can cancel alone, at any time before the beans are released. That includes after the work is done. If that happens to you, talk to them, and then to your community's admins."
+        },
+        {
+          "type": "h2",
+          "text": "When you cannot agree"
+        },
+        {
+          "type": "p",
+          "text": "There is no \"dispute\" button in the app. Ask the admins of your community for help. They look after its server, and they can settle a stuck deal in one of three ways:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "pay the seller (the normal 1.5% fee applies);",
+            "give all the beans back to the buyer;",
+            "split them half and half."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "An admin cannot settle a deal they are part of, or one involving an enterprise they keep."
+        },
+        {
+          "type": "h2",
+          "text": "If someone is not honest"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Leave a fair review. Low stars reduce the trust they earn.",
+            "Report their post, or block them. See \"Reporting a problem\" and \"Blocking someone\"."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "map-pins",
+      "title": "What the map shows",
+      "summary": "The pins on the Map, what their colours mean, and the buttons around them.",
+      "section": "map",
+      "related": [
+        "pin-locations",
+        "near-you",
+        "events",
+        "posting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Pins"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Map** in the row of tabs. The map shows your community's posts:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Green pins:** Offers.",
+            "**Orange pins:** Needs.",
+            "**Purple pins with a calendar:** events that have not finished yet."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A pin shows the post's category picture. Where many Offers and Needs are close together, they join into a blue circle with a number. Zoom in to see them one by one. Events always show on their own."
+        },
+        {
+          "type": "p",
+          "text": "People, groups and enterprises are not on the map. Neither are polls."
+        },
+        {
+          "type": "h2",
+          "text": "Tapping a pin"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**An Offer or a Need:** a card shows the title and who posted it. Tap **View Details** to open it, or their name to see their profile. Tap the map or **✕** to close the card.",
+            "**An event:** a card shows when and where, and how many are going. Tap **View event**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Filters"
+        },
+        {
+          "type": "p",
+          "text": "At the top of the map:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**All**, **Offers**, **Needs** or **Events**. Tap **✕** to clear.",
+            "**All Categories** to show one category.",
+            "For events: **Today**, **This weekend** or **Next 7 days**. The map moves to fit them."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Buttons on the left"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The moon or sun: a dark or light map.",
+            "The target: show where you are. The first time, the app asks for permission to use your location.",
+            "**+** and **−**: zoom."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The amber circle shows the area your community serves."
+        },
+        {
+          "type": "h2",
+          "text": "Adding a post from the map"
+        },
+        {
+          "type": "p",
+          "text": "Tap **+ ADD POST**. See \"Posting an Offer or a Need\"."
+        }
+      ]
+    },
+    {
+      "slug": "pin-locations",
+      "title": "Where your pin goes",
+      "summary": "Who sees where your posts and events are, and how to keep your home private.",
+      "section": "map",
+      "related": [
+        "map-pins",
+        "posting",
+        "events",
+        "privacy"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "You choose the spot"
+        },
+        {
+          "type": "p",
+          "text": "Every Offer and Need has a place on the map. You choose it when you post:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**My location** uses where your phone is right now.",
+            "**Drop a pin** lets you tap any spot on the map."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Anyone who opens your community's map can see the pin at that spot, to within about 10 metres. That includes people who have not joined. The app does not blur it for you."
+        },
+        {
+          "type": "p",
+          "text": "**If you post from home and do not want people to know your address, use Drop a pin and put it somewhere nearby instead:** a corner, a park, the shops. You can tell the other person the exact place in a message once you have agreed."
+        },
+        {
+          "type": "p",
+          "text": "You cannot move the pin later. To change it, delete the post and post it again."
+        },
+        {
+          "type": "h2",
+          "text": "Events"
+        },
+        {
+          "type": "p",
+          "text": "When you create an event, place the pin first, then tap **Approximate (~100 m)**. The pin then shows only roughly where it is. If you move the pin afterwards, tap it again."
+        },
+        {
+          "type": "p",
+          "text": "Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**, which only the hosts and the people who tap **Going** can read."
+        },
+        {
+          "type": "h2",
+          "text": "What is never shown"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your own position. The blue dot that shows where you are is only on your phone.",
+            "Polls have no place on the map."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "near-you",
+      "title": "Finding things near you",
+      "summary": "Show only posts within a distance of you, or of any place you choose.",
+      "section": "map",
+      "related": [
+        "browsing-the-market",
+        "map-pins",
+        "pin-locations",
+        "events"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "On the Market tab"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Market**, then **Distance** in the second row of filters. It is not there while **Events** is chosen.",
+            "**Location & Radius** opens. To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.",
+            "Choose how far with **Search radius**: from 100 metres to 50 kilometres.",
+            "Tap **Apply**. The button then shows the distance, like **5km**.",
+            "To go back to everything, open it again and tap **Reset**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Posts with no location are always shown."
+        },
+        {
+          "type": "p",
+          "text": "The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap **Apply**."
+        },
+        {
+          "type": "h2",
+          "text": "On the Map"
+        },
+        {
+          "type": "p",
+          "text": "The map has no distance filter. Tap the target button on the left to see where you are, then look around and zoom."
+        },
+        {
+          "type": "h2",
+          "text": "Events near you"
+        },
+        {
+          "type": "p",
+          "text": "Event cards show how far away they are once you have let the app use your location."
+        }
+      ]
+    },
+    {
+      "slug": "messages",
+      "title": "Messages",
+      "summary": "Start a chat, send photos, reply and react, and what is private.",
+      "section": "talk",
+      "related": [
+        "people",
+        "blocking",
+        "event-chat",
+        "groups",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Your chats"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Search with **Search chats, posts, partners...**.",
+            "The filter button sorts by **Recent**, **Unread** or credits, and can show **Unread Only** or **Friends Only**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Starting a chat"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "From a post: tap **Message** and the person's name.",
+            "From **Talk**: tap the pencil button, then find the person by name.",
+            "From your friends: **Talk**, then **People**, then **Friends**, and tap the message button next to a name."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sending"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Type in **Message...** and tap the send button.",
+            "To send a photo, tap **+**, then **Camera** or **Gallery**. Photos can only be sent in chats between two people."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The ticks under your message:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "one tick: sent;",
+            "two blue ticks: read;",
+            "a clock: still sending;",
+            "**not delivered**: it failed. Tap it to **Resend** or **Discard** it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Reply, react, edit"
+        },
+        {
+          "type": "p",
+          "text": "Tap a message to **Reply**, **React** with an emoji, or **Edit**. You can edit your own messages for 15 minutes; they then show \"edited\"."
+        },
+        {
+          "type": "p",
+          "text": "Sent messages cannot be deleted. Think before you send."
+        },
+        {
+          "type": "h2",
+          "text": "What is private"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.",
+            "Chats about events are not encrypted. The people in them and the people who run your community's server can read them."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Blocking someone from a chat"
+        },
+        {
+          "type": "p",
+          "text": "Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. See \"Blocking someone\"."
+        }
+      ]
+    },
+    {
+      "slug": "people",
+      "title": "People and friends",
+      "summary": "Find members of your community, add friends, and vouch for someone.",
+      "section": "talk",
+      "related": [
+        "messages",
+        "your-profile",
+        "joining",
+        "blocking"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Finding people"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Talk**, then **People**. There are three buttons:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Friends:** people you have added.",
+            "**Community:** every member. Search by name, and sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**.",
+            "**Invites:** invite someone new. See \"Joining with an invite\". If you have not joined yet, this button says **Register**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap a person to see their profile: their trust badge, trades, reviews and posts."
+        },
+        {
+          "type": "h2",
+          "text": "Friends"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Community**, tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again.",
+            "In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Friends are a shortcut for you. If you choose **Friends** for your contact details, only they can see them. See \"Your profile\"."
+        },
+        {
+          "type": "h2",
+          "text": "Vouching for someone"
+        },
+        {
+          "type": "p",
+          "text": "Some members are chosen by the community to welcome newcomers. They can vouch for a new member, which gives that person a small credit line to start with. On the person's profile, they tap **Vouch for Member** and choose **Light** (25), **Standard** (50) or **Deep** (100). No beans leave the voucher's own wallet."
+        },
+        {
+          "type": "p",
+          "text": "Who may vouch is decided by an admin or by a community Decision, never by a badge. See \"Rules and how decisions work\"."
+        }
+      ]
+    },
+    {
+      "slug": "groups",
+      "title": "Groups",
+      "summary": "Create or join a group, post to it, and look after it as a convenor.",
+      "section": "talk",
+      "related": [
+        "posting",
+        "rules",
+        "mentions",
+        "people"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What a group is"
+        },
+        {
+          "type": "p",
+          "text": "A group is a place for some people rather than everyone: a working group, a project team, a guild or a social circle. Groups do not hold beans. Being in one does not change your trust or your vote."
+        },
+        {
+          "type": "p",
+          "text": "Groups are in **Commons**, under **Groups**. Choose **My Groups** to see yours, or a kind of group to browse."
+        },
+        {
+          "type": "h2",
+          "text": "Joining"
+        },
+        {
+          "type": "p",
+          "text": "Open a group, then:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Join Group** if it is open to anyone;",
+            "**Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do;",
+            "an **Invite Only** group is hidden from everyone who is not in it, and takes new members only by invitation. The screen for invitations is coming soon."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If a convenor removed you from a group, you cannot join it again by yourself."
+        },
+        {
+          "type": "p",
+          "text": "To leave, open the group and tap **Leave Group**."
+        },
+        {
+          "type": "h2",
+          "text": "Posting to a group"
+        },
+        {
+          "type": "p",
+          "text": "Open the group and tap **Post to** and its name. Only the group's members see the post. It shows in the Market with a lock and the group's name. On the Market, the group buttons show only that group's posts."
+        },
+        {
+          "type": "h2",
+          "text": "Starting a group"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Groups**, tap the round **+** button (or **+ Create a Group** if there are no groups yet).",
+            "Give it a **Group Name** and a **Purpose / Description**.",
+            "Choose a **Category**.",
+            "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
+            "Tap **Create Group**. You become its **convenor**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Convenors"
+        },
+        {
+          "type": "p",
+          "text": "A convenor looks after the group. Under **Convenor Tools** they can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "change the join policy;",
+            "**Approve** or **Decline** requests to join;",
+            "change a member's role to convenor, member or observer;",
+            "remove a member."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The last convenor cannot step down or leave while anyone else is still in the group."
+        },
+        {
+          "type": "h2",
+          "text": "Coming soon"
+        },
+        {
+          "type": "p",
+          "text": "These are being built. The screens for them are not in the app yet:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Group chat**, with @mentions.",
+            "Inviting someone to an Invite Only group.",
+            "Choosing a new convenor when the old one has gone quiet. The rules for it are in \"Rules and how decisions work\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The old group chats in Talk were removed in version 1.2.38."
+        }
+      ]
+    },
+    {
+      "slug": "event-chat",
+      "title": "Event chat",
+      "summary": "Talk with the host and everyone going to an event.",
+      "section": "talk",
+      "related": [
+        "events",
+        "messages",
+        "pin-locations",
+        "reporting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Who is in it"
+        },
+        {
+          "type": "p",
+          "text": "Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested**, or tap **Going** again to clear it, you leave the chat. The host is always in it."
+        },
+        {
+          "type": "h2",
+          "text": "Opening it"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open the event and tap **Open event chat**.",
+            "Or find it in **Talk**, under **Messages**, with your other chats."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap **View event** to go back to the event."
+        },
+        {
+          "type": "h2",
+          "text": "Writing"
+        },
+        {
+          "type": "p",
+          "text": "Type in **Message everyone going…** and tap **Send**. You can send up to 30 messages a minute."
+        },
+        {
+          "type": "h2",
+          "text": "Good to know"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so at the bottom.",
+            "The host can remove any message. It then says \"removed by the host\".",
+            "Messages cannot be edited, and there are no reactions.",
+            "When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "mute",
+      "title": "Muting a chat",
+      "summary": "Coming soon. What you can do today to get fewer alerts.",
+      "section": "talk",
+      "related": [
+        "notifications",
+        "blocking",
+        "messages",
+        "mentions"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Coming soon"
+        },
+        {
+          "type": "p",
+          "text": "Muting a single chat is being built. When it arrives, you will be able to silence a chat's alerts for 8 hours, a week, or for good. Muting will only stop the alerts: the chat will still show new messages, and someone who @mentions you will still reach you."
+        },
+        {
+          "type": "p",
+          "text": "There is no mute button in the app yet."
+        },
+        {
+          "type": "h2",
+          "text": "What you can do today"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Turn off whole kinds of alerts in **Settings**, under **Notification Preferences**. See \"Notifications\".",
+            "If one person is bothering you, block them. See \"Blocking someone\"."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "mentions",
+      "title": "Mentions (@name)",
+      "summary": "Coming soon with group chat.",
+      "section": "talk",
+      "related": [
+        "groups",
+        "mute",
+        "messages",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Coming soon"
+        },
+        {
+          "type": "p",
+          "text": "@mentions come with group chat, which is being built. In a group chat, writing @ and someone's name will alert them, even if they have muted the chat."
+        },
+        {
+          "type": "p",
+          "text": "Group chat is not in the app yet, so @mentions do nothing today. Posts and chats between two people do not use them."
+        }
+      ]
+    },
+    {
+      "slug": "the-pulse",
+      "title": "The Pulse",
+      "summary": "What your neighbours make and share elsewhere, in one feed.",
+      "section": "pulse",
+      "related": [
+        "learn",
+        "your-channels",
+        "reporting",
+        "the-bean"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it is"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Pulse** in the row of tabs. The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Neighbours:** posts from members' channels. The buttons along the top pick a subject, like Food & growing or Repair & reuse. **All** shows everything.",
+            "**Learn:** videos about how BeanPool works, and a short daily reflection. See \"The Learn lane\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Pull down to refresh."
+        },
+        {
+          "type": "h2",
+          "text": "Opening a post"
+        },
+        {
+          "type": "p",
+          "text": "Tap the picture or the title. It opens in your browser or in that site's own app, such as YouTube. Nothing plays inside BeanPool."
+        },
+        {
+          "type": "h2",
+          "text": "Something wrong with a post"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**) and tap **Submit report**. The people who run your community's server look at it.",
+            "**Your own post:** tap **Hide**, then **Hide from feed**. It comes off the Pulse for everyone."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You cannot hide someone else's post just for yourself."
+        },
+        {
+          "type": "h2",
+          "text": "Adding your own"
+        },
+        {
+          "type": "p",
+          "text": "Tap **+ Channels** at the top. See \"Sharing your channels\"."
+        }
+      ]
+    },
+    {
+      "slug": "learn",
+      "title": "The Learn lane",
+      "summary": "Short videos about BeanPool, and the guide pages they go with.",
+      "section": "pulse",
+      "related": [
+        "the-pulse",
+        "the-bean",
+        "how-it-works",
+        "your-channels"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What is in it"
+        },
+        {
+          "type": "p",
+          "text": "In the **Pulse**, tap **Learn**. It holds:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "videos from BeanPool about how it works;",
+            "the **Daily Reflection**, a short thought that changes every morning. It is just a heading; there is nothing to open."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Members can add their own how-to channels to Learn too, by choosing the subject **How it works** when they add a channel. Those videos are the members' own, not BeanPool's: check who posted a video before you follow its advice."
+        },
+        {
+          "type": "h2",
+          "text": "Videos are extra"
+        },
+        {
+          "type": "p",
+          "text": "Everything you need is written in this guide. The videos are there if you would rather watch."
+        },
+        {
+          "type": "p",
+          "text": "When BeanPool has made a video for a guide page, and it is in your community's Learn lane, the page shows **Watch:** and the video's name at the top. Tap it to open the video on YouTube. If there is no video for that page, or you are offline, the link simply does not show."
+        },
+        {
+          "type": "p",
+          "text": "Only BeanPool's own videos ever appear on a guide page. A video a member adds to Learn never shows there, whatever it is called."
+        },
+        {
+          "type": "h2",
+          "text": "Why a video might not show"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your phone is offline, or cannot reach your community's server.",
+            "A new BeanPool video only appears on guide pages after your community's server is updated.",
+            "There is no video for that page yet."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "your-channels",
+      "title": "Sharing your channels",
+      "summary": "Put your YouTube, blog, Instagram and other channels on the Pulse.",
+      "section": "pulse",
+      "related": [
+        "the-pulse",
+        "learn",
+        "your-profile",
+        "privacy"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Add a channel"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In the **Pulse**, tap **+ Channels**. Or open **Settings** and tap **Channels & Showcase**.",
+            "Tap **+ Add a channel**.",
+            "Under **Where do you post?**, choose the site.",
+            "Type or paste **Your link or handle**.",
+            "Under **What's it about?**, choose a subject.",
+            "Tap **Add channel**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Each site works a little differently. The screen says which:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Updates itself** (YouTube, SoundCloud, a blog): new posts appear on the Pulse by themselves.",
+            "**A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead.",
+            "**Shows as a card** (a website)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "On each channel"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Show on the local feed:** switch it off to keep this channel's posts off the Pulse.",
+            "**+ Share post:** add one post by hand.",
+            "**Make main:** choose your main video channel.",
+            "**Remove:** take the channel off."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sharing one post"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Share a post to Pulse**. Paste the **Post URL**, check which channel and subject it belongs to, and tap **Share to Pulse**."
+        },
+        {
+          "type": "h2",
+          "text": "Remember"
+        },
+        {
+          "type": "p",
+          "text": "Whatever you share to the Pulse is shown with your name and photo. Anyone who opens your community's Pulse can see it, including people who have not joined."
+        }
+      ]
+    },
+    {
+      "slug": "decisions",
+      "title": "Voting on a Decision",
+      "summary": "Find open Decisions, vote, change your vote, and see results.",
+      "section": "commons",
+      "related": [
+        "proposing-a-decision",
+        "rules",
+        "polls",
+        "commons-fund",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Where"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**."
+        },
+        {
+          "type": "p",
+          "text": "A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in \"Rules and how decisions work\"."
+        },
+        {
+          "type": "h2",
+          "text": "Reading a Decision"
+        },
+        {
+          "type": "p",
+          "text": "Each Decision shows:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "what it is about, and what will happen if it passes;",
+            "how the votes count: one member one vote, or voice credits for decisions about the Commons' beans;",
+            "how long is left. Voting runs for 7 days;",
+            "**Turnout:** how many votes it needs, and whether it has them yet;",
+            "**Tally:** the Yes and No so far, and how much Yes it needs."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Voting"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Vote YES** or **Vote NO**. The app says **Vote Recorded**.",
+            "The card then says what you voted, like \"You voted Yes\".",
+            "To change your mind before it closes, tap the other button, such as **Change to No**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Every Decision is a **secret ballot**. Members see the totals, never who voted how. Your own vote is shown only to you."
+        },
+        {
+          "type": "h2",
+          "text": "Decisions about the Commons' beans"
+        },
+        {
+          "type": "p",
+          "text": "These use **voice credits**. You get voice credits from your completed trades, fresh for each Decision. Use **−** and **+** to choose how many votes to give. More votes cost more: 2 votes cost 4 credits, 3 votes cost 9."
+        },
+        {
+          "type": "p",
+          "text": "If you have not completed a trade yet, you cannot vote on these. You can still vote on the other Decisions, as long as you joined before they opened and your credit is not frozen."
+        },
+        {
+          "type": "h2",
+          "text": "Results"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Decisions History**. Choose **All**, **Executed**, **Failed** or **Void**. Each shows the final turnout and tally, and what happened, for example that too few people voted."
+        },
+        {
+          "type": "h2",
+          "text": "More"
+        },
+        {
+          "type": "p",
+          "text": "Tap the **ⓘ** next to The Commons for how the Commons' beans and voting work."
+        }
+      ]
+    },
+    {
+      "slug": "proposing-a-decision",
+      "title": "Proposing a Decision",
+      "summary": "Ask the community to decide something binding.",
+      "section": "commons",
+      "related": [
+        "decisions",
+        "rules",
+        "polls",
+        "enterprises"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Before you start"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
+            "You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.",
+            "You can have one open Decision at a time."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Proposing"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Commons**, then **Decide**, then **+ Propose a Decision**.",
+            "Choose what it is about: **Member** or **Commons Pool**.",
+            "**Title:** one line, like \"Grant 200 beans to the Tool Library\".",
+            "**Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.",
+            "From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Grant to Enterprise, Hardship Grant or Write Off Deficit.",
+            "Fill in who it is for, and how many beans if there are any.",
+            "Tap **Submit Community Decision**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Voting opens at once and runs for 7 days."
+        },
+        {
+          "type": "h2",
+          "text": "If the app says no"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Complete a Trade First:** you cannot propose yet.",
+            "**Limit Reached:** you already have an open Decision. Wait for it to close.",
+            "**Error:** check your description is at least 10 characters long."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "polls",
+      "title": "Polls",
+      "summary": "Ask the community a quick question. Polls show opinion; they change nothing by themselves.",
+      "section": "commons",
+      "related": [
+        "decisions",
+        "proposing-a-decision",
+        "events",
+        "rules"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Poll or Decision?"
+        },
+        {
+          "type": "p",
+          "text": "A **Poll** asks what people think: \"Market on Sunday or Saturday?\". It changes nothing by itself. For something binding, propose a Decision."
+        },
+        {
+          "type": "h2",
+          "text": "Starting a poll"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **+ ADD POST** on the Market tab or the Map.",
+            "Choose **Community Poll**.",
+            "Write the **Question**.",
+            "Add **Context / Notes** if it helps. This is optional.",
+            "Write 2 to 4 **Options**. Tap **+ Add Option** for more.",
+            "Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.",
+            "Tap **Create**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You can have one poll open at a time, and a community can have 5 open at once. You need credit that is not frozen to start or answer a poll."
+        },
+        {
+          "type": "h2",
+          "text": "Finding and answering polls"
+        },
+        {
+          "type": "p",
+          "text": "Polls are in the Market. Tap **Polls** in the top row to see only polls."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap an answer to choose it. Tap another to change your mind, until the poll closes.",
+            "The card shows how many chose each answer."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Polls are not secret. **Your vote is visible to members**: tap **View voters** to see who chose what."
+        },
+        {
+          "type": "h2",
+          "text": "Closing a poll early"
+        },
+        {
+          "type": "p",
+          "text": "If you started it, tap **Close Poll**, then **Close Poll** again to confirm."
+        }
+      ]
+    },
+    {
+      "slug": "events",
+      "title": "Events",
+      "summary": "Create an event, say you are going, and run it as the host.",
+      "section": "commons",
+      "related": [
+        "event-chat",
+        "pin-locations",
+        "map-pins",
+        "polls"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Finding events"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In the **Market**, tap **Events**. Choose **Today**, **This weekend** or **Next 7 days**.",
+            "On the **Map**, tap **Events** to see them as purple pins."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Going"
+        },
+        {
+          "type": "p",
+          "text": "On an event, tap **Going** or **Interested**. Tap your choice again to clear it."
+        },
+        {
+          "type": "p",
+          "text": "When you are **Going**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "you can read the host's **Note for people who are going**;",
+            "you can open the **event chat**. See \"Event chat\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap the event to see everything, and **Show on map** to open the place in your phone's maps app."
+        },
+        {
+          "type": "h2",
+          "text": "Creating an event"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **+ ADD POST** on the Market tab or the Map, then **Event**.",
+            "**Title**, and when it **Starts**. **Ends** is optional; it is 2 hours later unless you change it.",
+            "**Place name**, like \"Town hall\".",
+            "Put the pin on the map: tap the map, search **Find an address**, or tap **Use my location**. Tap **Approximate (~100 m)** if you do not want the exact spot shown. See \"Where your pin goes\".",
+            "A **Description**, and a photo if you like.",
+            "**Note for people who are going:** only they will see it. A good place for the exact address or a gate code.",
+            "**Who can see it:** your whole community, or one group.",
+            "If you keep an enterprise or look after a group, **Post as** lets you post the event in its name.",
+            "Tap **Create**. Your event is in the Market and on the Map."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Running your event"
+        },
+        {
+          "type": "p",
+          "text": "Open your event. As the host you can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "see **Who's going**;",
+            "**Edit event**. If you change the time or the place, everyone going is told;",
+            "**Copy to a new date**, to run it again;",
+            "**Cancel event**, then **Cancel event** again to confirm. Everyone going can see it is cancelled, and its chat becomes read-only."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "enterprises",
+      "title": "Enterprises and projects",
+      "summary": "Shared ventures with their own beans: find one, back one, or start one.",
+      "section": "commons",
+      "related": [
+        "keepers",
+        "commons-fund",
+        "proposing-a-decision",
+        "rules"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What they are"
+        },
+        {
+          "type": "p",
+          "text": "An **enterprise** is something people run together for the community: a tool library, a market stall, a community garden. It has its own beans, its own Offers and Needs, and its own credit line. It is run by **keepers**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A **project** has a goal and usually a deadline, like raising 500 beans for a new roof.",
+            "An **ongoing** enterprise keeps going."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Finding them"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Commons**, then **Enterprises**. The **Community Treasuries** come first, then every enterprise with its status, purpose and balance. Tap one to open it."
+        },
+        {
+          "type": "h2",
+          "text": "What an enterprise page shows"
+        },
+        {
+          "type": "p",
+          "text": "Every member can see:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "its **Purpose**;",
+            "its **Balance**, credit line, live Offers and surplus;",
+            "**Income & Spend**: every bean in and out;",
+            "its keepers;",
+            "its **Listings**, **Recent activity** and a **Discussion** you can write in."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "At the bottom, **Report Enterprise** if something is wrong."
+        },
+        {
+          "type": "h2",
+          "text": "Backing an enterprise"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**.",
+            "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
+            "**Become a keeper:** see \"Keepers\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Starting one"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Commons**, then **Enterprises**, then the round **+** button.",
+            "Choose **Bounded Project** or **Ongoing**.",
+            "Give it a **Name** and a **Purpose statement**.",
+            "For a project, set a **Funding goal** and, if you like, a deadline.",
+            "Add a photo if you like.",
+            "Tap **Start Initiative**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "It starts straight away, and you are its lead keeper. There is no community vote to start one."
+        },
+        {
+          "type": "p",
+          "text": "The name, purpose and photo cannot be changed in the app yet."
+        }
+      ]
+    },
+    {
+      "slug": "keepers",
+      "title": "Keepers",
+      "summary": "The people who run an enterprise and stand behind it. How to join, object, and step down.",
+      "section": "commons",
+      "related": [
+        "enterprises",
+        "rules",
+        "credit-line",
+        "commons-fund"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What a keeper does"
+        },
+        {
+          "type": "p",
+          "text": "Keepers run an enterprise: they post its Offers and Needs, pay out its beans and look after it. One of them is the **lead keeper**."
+        },
+        {
+          "type": "p",
+          "text": "A keeper can back the enterprise with some of their own trust. That deepens the enterprise's credit line. It never takes beans from your own balance or your own credit line."
+        },
+        {
+          "type": "p",
+          "text": "The full rules, including what happens when a lead goes quiet, are in \"Rules and how decisions work\"."
+        },
+        {
+          "type": "h2",
+          "text": "Asking to join"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open the enterprise.",
+            "Under **Ask to join as a keeper**, enter how much of your trust to back it with. Zero is allowed.",
+            "Tap **Request to join as keeper**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The lead keeper approves or declines. If the enterprise already has more than one keeper, you become a keeper after 3 days, unless another keeper objects."
+        },
+        {
+          "type": "h2",
+          "text": "For keepers"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Approve** or **Decline** requests under **Pending keeper requests**.",
+            "Changes waiting under **Keeper changes waiting** show the objection window. Tap **Object** to stop one. **Object works on the first tap, with no second question.** One objection cancels the change.",
+            "The lead can remove a keeper with **Remove** and their name. Other keepers can object in the same way.",
+            "**Operator controls** let keepers post the enterprise's Offers and Needs."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Stepping down"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Step down as keeper**, then **Step down**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The only keeper cannot step down. They can wind the enterprise up instead.",
+            "If the enterprise is below zero and needs your backing to cover it, the app says **Not yet**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "When the lead goes quiet"
+        },
+        {
+          "type": "p",
+          "text": "If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. Votes on keepers cannot be changed."
+        }
+      ]
+    },
+    {
+      "slug": "commons-fund",
+      "title": "The Commons",
+      "summary": "Your community's shared beans: where they come from, and how they are spent.",
+      "section": "commons",
+      "related": [
+        "decisions",
+        "circulation-fee",
+        "enterprises",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it is"
+        },
+        {
+          "type": "p",
+          "text": "The **Commons** is your community's shared pool of beans. It belongs to everyone."
+        },
+        {
+          "type": "p",
+          "text": "Beans come into it from:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "the 1.5% market fee on every completed trade;",
+            "the circulation fee on large balances. See \"The circulation fee\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Seeing it"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. Tap the **ⓘ** next to The Commons for how it works: **How It Works**, **Circulation Fees** and **Voting**."
+        },
+        {
+          "type": "p",
+          "text": "**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. These accounts are open to every member."
+        },
+        {
+          "type": "h2",
+          "text": "Spending it"
+        },
+        {
+          "type": "p",
+          "text": "The Commons' beans are spent only by a community Decision: a grant to an enterprise, a hardship grant to a member, or writing off a debt. See \"Proposing a Decision\". Decisions about the Commons' beans are counted with voice credits, from completed trades."
+        },
+        {
+          "type": "p",
+          "text": "The Commons also covers a member's debt when they leave or are removed. See \"Leaving or deleting your account\"."
+        }
+      ]
+    },
+    {
+      "slug": "your-balance",
+      "title": "Your balance and history",
+      "summary": "How many beans you have, what is held, and every trade and gift.",
+      "section": "ledger",
+      "related": [
+        "credit-line",
+        "gifts",
+        "circulation-fee",
+        "my-deals"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Opening it"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Ledger** in the row of tabs. Your balance is at the top right, in **BEANS**. It can be below zero; see \"Your credit line\"."
+        },
+        {
+          "type": "p",
+          "text": "The Ledger has two tabs: **Levels** (your trust, see \"Trust badges\") and **Wallet**. Tap your balance to go straight to Wallet."
+        },
+        {
+          "type": "h2",
+          "text": "The Wallet tab"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your balance**, and roughly how many hours of help it is worth, at 40 beans an hour.",
+            "**Commons:** your community's shared pool.",
+            "**Credit Floor:** how far below zero you could go.",
+            "How many of your beans are held in deals that are under way, when there are some.",
+            "**Community Circulation:** shows when you hold beans. See \"The circulation fee\".",
+            "**Project pledges:** beans you have pledged to projects, if any.",
+            "**Send Credits:** send a gift. See \"Sending a gift\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Recent transactions"
+        },
+        {
+          "type": "p",
+          "text": "Every trade, gift and fee, newest first, with who it was with, a note, the time, and plus or minus. If a note mentions a post, tap **View Offer** to open it."
+        },
+        {
+          "type": "p",
+          "text": "The list has no search or filters yet."
+        },
+        {
+          "type": "h2",
+          "text": "ⓘ buttons"
+        },
+        {
+          "type": "p",
+          "text": "Tap the **ⓘ** next to Your balance for a short explanation of your balance and your floor."
+        }
+      ]
+    },
+    {
+      "slug": "credit-line",
+      "title": "Your credit line",
+      "summary": "How far below zero you can go, and how it grows.",
+      "section": "ledger",
+      "related": [
+        "trust-badges",
+        "trading-partner-limit",
+        "how-it-works",
+        "posting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it is"
+        },
+        {
+          "type": "p",
+          "text": "Your credit line lets you spend more beans than you have, and go below zero. It is a promise to help others later. Being below zero costs nothing: there is no interest."
+        },
+        {
+          "type": "h2",
+          "text": "Where to see it"
+        },
+        {
+          "type": "p",
+          "text": "On the **Ledger**, under your balance, a bar shows where you are:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "zero is in the middle;",
+            "the left end is **your limit**, the lowest you can go;",
+            "the marks on the left show how deep your Offers let you go;",
+            "past **+200** on the right is where the circulation fee starts."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap the bar for **Credit Slider Info**, which explains each part."
+        },
+        {
+          "type": "h2",
+          "text": "How it opens"
+        },
+        {
+          "type": "p",
+          "text": "It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold."
+        },
+        {
+          "type": "h2",
+          "text": "How it grows"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Trust:** completed trades build trust, especially with many different people. See \"The 500-bean partner limit\".",
+            "**Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.",
+            "The deepest any credit line goes is 2,000 beans."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Your Offers set how much you can use"
+        },
+        {
+          "type": "p",
+          "text": "You can only use as much of your credit line as your live Offers allow:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "no Offers: none;",
+            "1 Offer: down to −200;",
+            "2: −500;",
+            "3: −1,000;",
+            "4: −1,500;",
+            "5: −2,000."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The line under the bar tells you, for example \"Post an offer to open your credit line\"."
+        },
+        {
+          "type": "h2",
+          "text": "Spending paused"
+        },
+        {
+          "type": "p",
+          "text": "If you go below what your Offers allow, for example because you took an Offer down, the Ledger says **Spending paused**. You can still earn and sell. Post an Offer, or earn back up, and it lifts. Nothing is taken from you."
+        }
+      ]
+    },
+    {
+      "slug": "gifts",
+      "title": "Sending a gift",
+      "summary": "Send beans to someone, with no trade.",
+      "section": "ledger",
+      "related": [
+        "your-balance",
+        "credit-line",
+        "how-it-works",
+        "a-deal-step-by-step"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Before you can"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You need to have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.",
+            "You can only give beans you hold. A gift can never take you below zero."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Until then the button says what is missing, like **needs 1 completed trade** or **needs positive balance**."
+        },
+        {
+          "type": "p",
+          "text": "Your trust badge does not matter."
+        },
+        {
+          "type": "h2",
+          "text": "Sending"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Ledger**, then **Wallet**, then **Send Credits**.",
+            "Tap **Select recipient...**, search for their name and tap it.",
+            "Type the **Amount**. Add a **Memo** if you like, such as \"Thanks for the tomatoes\".",
+            "Check **Recipient receives**. Gifts have no fee, so they get it all.",
+            "Tap **Confirm Transfer**. You see **Sent!**"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A gift cannot be taken back. Check the name before you send."
+        },
+        {
+          "type": "h2",
+          "text": "Good to know"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Gifts do not build trust. Only completed trades do.",
+            "You can send gifts while on holiday."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "trust-badges",
+      "title": "Trust badges",
+      "summary": "Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.",
+      "section": "ledger",
+      "related": [
+        "credit-line",
+        "trading-partner-limit",
+        "your-profile",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What they are"
+        },
+        {
+          "type": "p",
+          "text": "Your trust badge shows how much trust you have built:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Newcomer:** starting out;",
+            "**Resident:** 200 trust;",
+            "**Steward:** 600 trust;",
+            "**Elder:** 1,400 trust."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A member who has not traded yet shows **FOUNDING** on their posts."
+        },
+        {
+          "type": "p",
+          "text": "Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted."
+        },
+        {
+          "type": "h2",
+          "text": "They unlock nothing"
+        },
+        {
+          "type": "p",
+          "text": "Badges are recognition, not permission. Every member can post, trade, invite and vote, whatever their badge."
+        },
+        {
+          "type": "p",
+          "text": "What your trust does change is how deep your credit line can go. See \"Your credit line\"."
+        },
+        {
+          "type": "h2",
+          "text": "Where to see them"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ledger**, then **Levels:** your badge, how much trust you have, and how much more to the next. **All levels** shows every badge; ones you have not reached yet are marked with a lock. That only means \"not yet\", not that something is locked away.",
+            "**What builds your trust:** how much you have traded, with how many people, and your rating.",
+            "On posts and profiles, next to each member's name."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In the **Market**, the **Trust** filter can show only posts from members with a certain badge or higher."
+        },
+        {
+          "type": "h2",
+          "text": "Admins and badges"
+        },
+        {
+          "type": "p",
+          "text": "A community's admins can give a member a badge. That deepens their credit line, like earned trust. It does not count as trades: it adds no voice credits and does not let them send gifts."
+        }
+      ]
+    },
+    {
+      "slug": "trading-partner-limit",
+      "title": "The 500-bean partner limit",
+      "summary": "Why trading with many people builds more trust than trading a lot with one.",
+      "section": "ledger",
+      "related": [
+        "credit-line",
+        "trust-badges",
+        "decisions",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What it limits"
+        },
+        {
+          "type": "p",
+          "text": "When your trust is worked out, trade with any one person counts **up to 500 beans**. Trade beyond that with the same person still happens and still pays. It just adds no more trust."
+        },
+        {
+          "type": "p",
+          "text": "The same limit applies to your voice credits for votes on the Commons' beans."
+        },
+        {
+          "type": "h2",
+          "text": "What it does not limit"
+        },
+        {
+          "type": "p",
+          "text": "It does not limit how much you can buy, sell, give or receive with anyone. You can trade with one person as much as you both like."
+        },
+        {
+          "type": "h2",
+          "text": "Why"
+        },
+        {
+          "type": "p",
+          "text": "Trust should show that many people found you good to deal with. Two friends swapping beans back and forth should not be able to build a deep credit line on their own. If two people trade a lot and the beans flow almost evenly both ways, their trades with each other count for nothing."
+        },
+        {
+          "type": "h2",
+          "text": "What to do"
+        },
+        {
+          "type": "p",
+          "text": "Trade with more people. Every new trading partner adds to your trust."
+        }
+      ]
+    },
+    {
+      "slug": "circulation-fee",
+      "title": "The circulation fee",
+      "summary": "A small monthly fee on large balances, so beans keep moving. The first 200 are free.",
+      "section": "ledger",
+      "related": [
+        "your-balance",
+        "commons-fund",
+        "credit-line",
+        "how-it-works"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Why"
+        },
+        {
+          "type": "p",
+          "text": "Beans are for using, not for piling up. A small fee on large balances keeps them moving around the community. It goes to the Commons, for everyone."
+        },
+        {
+          "type": "h2",
+          "text": "How much"
+        },
+        {
+          "type": "p",
+          "text": "Only beans you **hold** above 200 pay. Each part of your balance pays its own rate, per month:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "the first 200: nothing;",
+            "from 200 to 500: 1%;",
+            "from 500 to 1,000: 1.5%;",
+            "from 1,000 to 2,000: 2%;",
+            "above 2,000: 2.5%."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A balance below zero pays nothing. Nobody pays interest on debt."
+        },
+        {
+          "type": "p",
+          "text": "For example, holding 600 beans for a month costs about 4.5 beans: nothing on the first 200, 3 on the next 300, and 1.5 on the last 100."
+        },
+        {
+          "type": "h2",
+          "text": "When"
+        },
+        {
+          "type": "p",
+          "text": "The fee builds up day by day and is taken a little at a time, whenever your account is next used. You do not lose a lump on one day."
+        },
+        {
+          "type": "h2",
+          "text": "Seeing it"
+        },
+        {
+          "type": "p",
+          "text": "On the **Ledger**, **Wallet**, the **Community Circulation** box shows about how much you will pay this month. It only shows when you hold beans. Above 1,000 beans it turns amber and suggests spending some."
+        },
+        {
+          "type": "p",
+          "text": "Tap it for **System Circulation**, which explains the fee."
+        },
+        {
+          "type": "p",
+          "text": "Holiday Mode does not pause the fee."
+        }
+      ]
+    },
+    {
+      "slug": "privacy",
+      "title": "Your privacy",
+      "summary": "What others can see about you, and the settings that control it.",
+      "section": "settings",
+      "related": [
+        "your-profile",
+        "pin-locations",
+        "blocking",
+        "messages"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Opening Settings"
+        },
+        {
+          "type": "p",
+          "text": "Tap the sliders button at the top right of the screen. Settings is not one of the tabs."
+        },
+        {
+          "type": "h2",
+          "text": "What members of your community can see"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your name, photo, bio, when you joined and when you were last active.",
+            "Your trust badge, how many trades you have done, and your reviews.",
+            "Your posts, and where their pins are. See \"Where your pin goes\".",
+            "How you voted on a **Poll**. Votes on **Decisions** are secret.",
+            "Your balance and your trades. The app does not show these to others, but a member who knows how can read them from your community's server."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your posts and their pins, and anything you share to the Pulse, can also be seen by people who have not joined."
+        },
+        {
+          "type": "h2",
+          "text": "What you control"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
+            "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
+            "**App Lock:** asks for your phone's passcode or fingerprint each time the app opens.",
+            "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Who else can see things"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Chats between two people are usually end-to-end encrypted. See \"Messages\" for the one exception.",
+            "Your community's server keeps your trades, posts and votes. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Read more"
+        },
+        {
+          "type": "p",
+          "text": "In Settings, under **Legal & Privacy**, tap **Privacy Policy**."
+        }
+      ]
+    },
+    {
+      "slug": "blocking",
+      "title": "Blocking someone",
+      "summary": "Hide someone's posts and messages from you, and undo it later.",
+      "section": "settings",
+      "related": [
+        "reporting",
+        "messages",
+        "privacy",
+        "getting-help"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Blocking"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On their profile: tap **Block**, or **Block** and their name lower down.",
+            "On one of their posts: tap **Block User**.",
+            "From a chat: tap their name at the top to open their profile, then **Block**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Confirm with **Block User**."
+        },
+        {
+          "type": "h2",
+          "text": "What it does"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Their posts in the Market are hidden from you.",
+            "They disappear from your People list and your chats, and you cannot message each other.",
+            "Their pins on the Map, their Pulse posts, and their messages in event chats still show.",
+            "A report goes to your community's admins, who can look into it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What it does not do"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "They are not told.",
+            "They can still see your posts.",
+            "The block is kept on this phone. If you reinstall the app or use another device, block them again."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Unblocking"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings**. Under **Legal & Privacy**, tap **Manage Blocked Users**.",
+            "Tap **Unblock** next to a name, or **Unblock All**."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "reporting",
+      "title": "Reporting a problem",
+      "summary": "Tell your community's admins about a post, an event, a Pulse post or an enterprise.",
+      "section": "settings",
+      "related": [
+        "blocking",
+        "getting-help",
+        "when-a-deal-goes-wrong",
+        "the-pulse"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What you can report"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A post in the Market:** open it and tap **Report Post**.",
+            "**An event:** open it and tap **Report event**.",
+            "**A Pulse post:** tap the flag on it.",
+            "**An enterprise:** open it and tap **Report Enterprise** at the bottom."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Then:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**), add a few words if they help, and tap **Submit Report**.",
+            "**A Pulse post:** choose a reason and tap **Submit report**.",
+            "**An event:** tap **Report** to confirm.",
+            "**An enterprise:** type why, and tap **Submit Report**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "A person or a message"
+        },
+        {
+          "type": "p",
+          "text": "There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your admins. See \"Blocking someone\"."
+        },
+        {
+          "type": "p",
+          "text": "In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen."
+        },
+        {
+          "type": "h2",
+          "text": "What happens next"
+        },
+        {
+          "type": "p",
+          "text": "Your report goes to the people who run your community's server. They decide what to do. They can remove a post, or suspend a member while the community votes on it. You are not told the outcome in the app."
+        },
+        {
+          "type": "p",
+          "text": "If someone is in danger, contact your local emergency services first."
+        }
+      ]
+    },
+    {
+      "slug": "notifications",
+      "title": "Notifications",
+      "summary": "Choose which alerts reach your phone.",
+      "section": "settings",
+      "related": [
+        "mute",
+        "messages",
+        "my-deals",
+        "holiday-mode",
+        "the-top-bar"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Choosing your alerts"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings**. Under **App Settings**, tap **Notification Preferences**.",
+            "Switch each kind on or off:",
+            "**Direct Messages:** when someone messages you.",
+            "**Marketplace Activity:** requests, approvals and refusals on your deals.",
+            "**Held in Trust & System:** beans held, released or in question."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Changes save by themselves. They are kept by your community's server, so they follow your account."
+        },
+        {
+          "type": "p",
+          "text": "Alerts about someone trying to recover your account always come through. You cannot turn those off."
+        },
+        {
+          "type": "h2",
+          "text": "No alerts at all?"
+        },
+        {
+          "type": "p",
+          "text": "Check that your phone allows notifications for BeanPool, in your phone's own settings."
+        },
+        {
+          "type": "h2",
+          "text": "One chat at a time"
+        },
+        {
+          "type": "p",
+          "text": "Muting a single chat is coming soon. See \"Muting a chat\"."
+        }
+      ]
+    },
+    {
+      "slug": "appearance",
+      "title": "Light and dark",
+      "summary": "Make the app light or dark, or follow your phone.",
+      "section": "settings",
+      "related": [
+        "privacy",
+        "notifications",
+        "the-bean",
+        "web-app"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Choosing"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings**. Under **App Settings**, find **Appearance**.",
+            "Choose one:",
+            "**Same as phone:** the app is dark when your phone is set to dark, and light when it is light. This is how it starts.",
+            "**Light:** always light.",
+            "**Dark:** always dark."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "When the app is light, **Light Color Scheme** lets you choose **Classic**, **Earth** or **Slate**."
+        },
+        {
+          "type": "p",
+          "text": "The map has its own light and dark button, on the left of the map."
+        },
+        {
+          "type": "p",
+          "text": "In the web app, the first choice is called **Same as device**."
+        }
+      ]
+    },
+    {
+      "slug": "holiday-mode",
+      "title": "Going away",
+      "summary": "Holiday Mode hides your Offers and pauses new requests while you are away.",
+      "section": "settings",
+      "related": [
+        "my-deals",
+        "notifications",
+        "credit-line",
+        "leaving-or-deleting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Turning it on"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Finish or cancel any deals that are under way first. The app will not start Holiday Mode while you have one.",
+            "Open **Settings**. Under **App Settings**, switch on **Holiday Mode**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "While you are away"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your posts are hidden from the Market: Offers, Needs, events and polls.",
+            "Nobody can send you new requests.",
+            "You cannot post or start a deal yourself.",
+            "Your balance and your credit line stay as they are.",
+            "Gifts still work, and the circulation fee on large balances still applies."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Coming back"
+        },
+        {
+          "type": "p",
+          "text": "Switch **Holiday Mode** off. Your Offers are live again."
+        }
+      ]
+    },
+    {
+      "slug": "leaving-or-deleting",
+      "title": "Leaving or deleting your account",
+      "summary": "Sign out of this phone, or delete your account for good, and what happens to your beans.",
+      "section": "settings",
+      "related": [
+        "recovery",
+        "communities",
+        "holiday-mode",
+        "your-12-words"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Two choices"
+        },
+        {
+          "type": "p",
+          "text": "Open **Settings** and tap **Account Deletion & Sign Out**, at the bottom. You can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Remove from This Device Only:** sign this phone out. Your account stays in your community. You can come back with your 12 words.",
+            "**Permanently Delete Account:** delete your account in this community for good."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Going away for a while? Holiday Mode may be what you want. See \"Going away\"."
+        },
+        {
+          "type": "h2",
+          "text": "Signing out of this phone"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Sign Out (Device Only)**.",
+            "Type **WIPE** and tap **Confirm Sign Out**.",
+            "Pass your phone's lock screen check, then tap **Sign Out** to confirm."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first."
+        },
+        {
+          "type": "h2",
+          "text": "Deleting your account"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Permanently Delete Account**.",
+            "Type **DELETE** or your name and tap **Permanently Purge Account**.",
+            "Pass your phone's lock screen check, then tap **Permanently Purge** to confirm."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "This cannot be undone, even with your 12 words."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You cannot delete while you have a deal under way. Finish or cancel it first.",
+            "If you hold beans, they go to the Commons.",
+            "If you are below zero, the Commons covers the debt.",
+            "Your profile becomes \"Deleted Member\", and your posts come down.",
+            "It deletes your account only in the community you are using. Your accounts in other communities stay."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If you run your community's server and you are its only owner, you cannot delete your account until there is another owner."
+        }
+      ]
+    },
+    {
+      "slug": "recovery",
+      "title": "Getting your account back",
+      "summary": "Restore your account on a new phone, and protect it with a sign-in account.",
+      "section": "settings",
+      "related": [
+        "your-12-words",
+        "leaving-or-deleting",
+        "communities",
+        "faq"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "On a new phone"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Install BeanPool and open it.",
+            "Tap **Already a Member? Restore Account**.",
+            "Choose **Recover with 12 Words** or **Recover with Social**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "With your 12 words"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Type the 12 words in order, or tap **Paste**.",
+            "Type your community's name or address.",
+            "Tap **Recover Identity**. Your name and photo come back from your community."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "With a sign-in account"
+        },
+        {
+          "type": "p",
+          "text": "This works only if you linked one before (see below), and only while your community's server is running."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Type your name in the community. The app may suggest \"Is this you?\".",
+            "Type your community's name or address.",
+            "Tap **Recover with** and the account you linked: Google, Facebook or GitHub, or Apple on an iPhone."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Protecting your account now"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open **Settings** and tap **Account Protection**.",
+            "Under **Sign-In Recovery Providers**, tap **Protect with** and choose an account."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community."
+        },
+        {
+          "type": "p",
+          "text": "To remove it, tap **Disconnect**."
+        },
+        {
+          "type": "h2",
+          "text": "If someone else tries"
+        },
+        {
+          "type": "p",
+          "text": "If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password."
+        },
+        {
+          "type": "h2",
+          "text": "If the phone already has an account"
+        },
+        {
+          "type": "p",
+          "text": "Restoring a different account replaces the one on this phone. The app asks you to type **WIPE** first. Make sure you have the 12 words for the account you are replacing."
+        },
+        {
+          "type": "h2",
+          "text": "Lost everything?"
+        },
+        {
+          "type": "p",
+          "text": "Without your 12 words and without a linked sign-in account, only the admins of your community can help, by setting you up again."
         }
       ]
     }

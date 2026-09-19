@@ -7,16 +7,21 @@ import { useTheme } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, signedGet } from '../utils/db';
 import { createRefreshGate } from '../utils/refresh-gate';
+import { anchorUrl } from '../utils/node-post';
+import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
+import type { BeanPoolIdentity } from '../utils/identity';
 import {
     buildNeedsYou, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
+import { useManageNode } from './useManageNode';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
 // wording live in utils/needs-you.ts.
 
 const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
+    admin: 'shield-account-outline',
     deal: 'handshake-outline',
     vote: 'vote-outline',
     message: 'message-text-outline',
@@ -35,7 +40,8 @@ const SAFETY_POLL_MS = 120_000;
 // writes it there, so read a moment later rather than immediately.
 const WS_SETTLE_MS = 3_000;
 
-function go(target: NeedsYouTarget) {
+/** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). */
+function go(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
     switch (target.to) {
         case 'deal': return router.push({ pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } });
         case 'my-deals': return router.push({ pathname: '/(tabs)/', params: { tab: 'deals' } });
@@ -50,7 +56,7 @@ function go(target: NeedsYouTarget) {
 }
 
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
-type NodeParts = Pick<NeedsYouInputs, 'decisions' | 'groupChats'>;
+type NodeParts = Pick<NeedsYouInputs, 'decisions' | 'groupChats' | 'admin'> & { communityName: string | null };
 const settle = <T,>(p: Promise<T>) => p.catch(() => null);
 
 /** From the phone's own database: no request, nothing decrypted. */
@@ -62,22 +68,40 @@ async function loadLocal(me: string): Promise<LocalParts> {
     return { transactions, conversations };
 }
 
-/** Two signed requests to the node. */
-async function loadNode(): Promise<NodeParts> {
-    const [decisions, yourGroups] = await Promise.all([
+/**
+ * Owners and admins only: the role is remembered for ten minutes (utils/node-admin.ts), and the admin queue
+ * is asked for only when it says owner/admin. Everyone else sends no queue request at all.
+ */
+async function loadAdmin(identity: BeanPoolIdentity): Promise<Pick<NodeParts, 'admin' | 'communityName'>> {
+    const url = await anchorUrl();
+    if (!url) return { admin: null, communityName: null };
+    const mine = await cachedNodeRole(url, identity);
+    if (!canManageNode(mine.role)) return { admin: { role: mine.role, queue: null }, communityName: mine.communityName };
+    const queue = await fetchAdminQueue(url, identity);
+    // Refused or unanswered: a demotion looks like this, so ask the role afresh next time.
+    if (!queue) forgetNodeRole(url, identity.publicKey);
+    return { admin: { role: mine.role, queue }, communityName: mine.communityName };
+}
+
+/** Two signed requests to the node, plus the admin queue for owners and admins. */
+async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
+    const [decisions, yourGroups, admin] = await Promise.all([
         settle(getDecisions('open')),
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
+        settle(loadAdmin(identity)),
     ]);
     return {
         decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
+        admin: admin?.admin ?? null,
+        communityName: admin?.communityName ?? null,
     };
 }
 
-function NeedIcon({ e }: { e: NeedsYouEntry }) {
+function NeedIcon({ e, open }: { e: NeedsYouEntry; open: (t: NeedsYouTarget) => void }) {
     const color = e.accent ? ACCENT : NEUTRAL;
     return (
-        <Pressable onPress={() => go(e.target)} style={({ pressed }) => [s.slot, pressed && s.pressed]}
+        <Pressable onPress={() => open(e.target)} style={({ pressed }) => [s.slot, pressed && s.pressed]}
             accessibilityRole="button" accessibilityLabel={e.label}>
             <MaterialCommunityIcons name={ICON[e.kind]} size={24} color={color} style={s.iconShadow} />
             {e.count > 1 && (
@@ -98,9 +122,12 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const [sheet, setSheet] = useState(false);
     const [width, setWidth] = useState(0);
     const me = identity?.publicKey;
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const manage = useManageNode();
 
     const local = useRef<LocalParts>({ transactions: null, conversations: null });
-    const node = useRef<NodeParts>({ decisions: null, groupChats: null });
+    const node = useRef<NodeParts>({ decisions: null, groupChats: null, admin: null, communityName: null });
     const localBusy = useRef(false);
     const localAgain = useRef(false);
     const nodeBusy = useRef(false);
@@ -127,13 +154,14 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     // A new identity starts from nothing, and gets its own gate.
     useEffect(() => {
         local.current = { transactions: null, conversations: null };
-        node.current = { decisions: null, groupChats: null };
+        node.current = { decisions: null, groupChats: null, admin: null, communityName: null };
         setEntries([]);
         if (!me) return;
         const g = createRefreshGate(NODE_MIN_GAP_MS, async () => {
-            if (nodeBusy.current) return;
+            const id = identityRef.current;
+            if (nodeBusy.current || !id || id.publicKey !== me) return;
             nodeBusy.current = true;
-            try { node.current = await loadNode(); rebuild(); } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
+            try { node.current = await loadNode(id); rebuild(); } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
         });
         gate.current = g;
         return () => { g.cancel(); if (gate.current === g) gate.current = null; };
@@ -164,6 +192,12 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         return () => { stopPoll(); app.remove(); ws.remove(); if (settleTimer) clearTimeout(settleTimer); };
     }, [poke]);
 
+    // 🛡️ is the Settings "Manage" press, landing at the item's /settings section; the rest are app routes.
+    const open = (t: NeedsYouTarget) => {
+        if (t.to === 'admin') { manage.start(node.current.communityName || 'this community', t.section); return; }
+        go(t);
+    };
+
     const fit = fitNeedsYou(entries, width);
     const byKind = new Map(fit.shown.map(e => [e.kind, e]));
 
@@ -174,7 +208,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                     accessibilityRole="button" accessibilityLabel={moreLabel(fit.hidden)}>
                     <MaterialCommunityIcons name="dots-horizontal" size={24} color={NEUTRAL} style={s.iconShadow} />
                 </Pressable>
-            ) : <NeedIcon key={k} e={byKind.get(k)!} />)}
+            ) : <NeedIcon key={k} e={byKind.get(k)!} open={open} />)}
 
             <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
                 <Pressable style={s.sheetBg} onPress={() => setSheet(false)} accessibilityRole="button" accessibilityLabel="Close">
@@ -182,7 +216,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                         <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">Needs you</Text>
                         {entries.map(e => (
                             <Pressable key={e.kind} style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: colors.surface.subtle }]}
-                                onPress={() => { setSheet(false); go(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>
+                                onPress={() => { setSheet(false); open(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>
                                 <MaterialCommunityIcons name={ICON[e.kind]} size={22}
                                     color={e.accent ? palette.amber600 : colors.text.secondary} />
                                 <Text style={[s.sheetText, { color: colors.text.heading, fontWeight: e.accent ? '700' : '500' }]} numberOfLines={2}>
@@ -194,6 +228,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                     </View>
                 </Pressable>
             </Modal>
+            {manage.dialog}
         </View>
     );
 }

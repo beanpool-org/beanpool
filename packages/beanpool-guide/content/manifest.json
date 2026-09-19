@@ -1,4 +1,59 @@
 {
-  "version": 1,
-  "order": ["how-it-works", "rules", "faq", "whats-new"]
+  "version": 5,
+  "sections": [
+    {
+      "id": "about",
+      "title": "About BeanPool",
+      "summary": "How BeanPool works, the rules and how decisions are made, common questions, and what is new.",
+      "pages": ["how-it-works", "rules", "faq", "whats-new"]
+    },
+    {
+      "id": "getting-started",
+      "title": "Getting started",
+      "summary": "Joining, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "pages": ["joining", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
+    },
+    {
+      "id": "market",
+      "title": "Market",
+      "summary": "Finding and posting Offers and Needs, and how a deal works from start to finish.",
+      "pages": ["browsing-the-market", "posting", "my-deals", "a-deal-step-by-step", "when-a-deal-goes-wrong"]
+    },
+    {
+      "id": "map",
+      "title": "Map",
+      "summary": "What the pins are, where yours goes, and finding things near you.",
+      "pages": ["map-pins", "pin-locations", "near-you"]
+    },
+    {
+      "id": "talk",
+      "title": "Talk",
+      "summary": "Messages, people and friends, groups, and event chats.",
+      "pages": ["messages", "people", "groups", "event-chat", "mute", "mentions"]
+    },
+    {
+      "id": "pulse",
+      "title": "Pulse",
+      "summary": "What your neighbours share, the Learn videos, and adding your own channels.",
+      "pages": ["the-pulse", "learn", "your-channels"]
+    },
+    {
+      "id": "commons",
+      "title": "Commons",
+      "summary": "Decisions and voting, polls, events, enterprises and keepers, and the shared beans.",
+      "pages": ["decisions", "proposing-a-decision", "polls", "events", "enterprises", "keepers", "commons-fund"]
+    },
+    {
+      "id": "ledger",
+      "title": "Ledger",
+      "summary": "Your balance, your credit line, gifts, trust badges and the circulation fee.",
+      "pages": ["your-balance", "credit-line", "gifts", "trust-badges", "trading-partner-limit", "circulation-fee"]
+    },
+    {
+      "id": "settings",
+      "title": "Settings and safety",
+      "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, and getting your account back.",
+      "pages": ["privacy", "blocking", "reporting", "notifications", "appearance", "holiday-mode", "leaving-or-deleting", "recovery"]
+    }
+  ]
 }

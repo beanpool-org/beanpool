@@ -22,6 +22,12 @@
         .guide .guide-list li { margin: 0 0 0.75rem; }
         .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
         .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
         .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
         .guide-nav .nav-links { gap: 1.25rem; }
         /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
@@ -44,7 +50,7 @@
     </nav>
 
     <main class="legal-content glass-panel guide">
-        <p class="kicker"><a href="index.html">Members' guide</a></p>
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#about">About BeanPool</a></p>
         <h1>What's new</h1>
         <p class="lede">What changed in each version of the app, in plain words.</p>
         <h2>Version 1.2.38</h2>
@@ -87,7 +93,14 @@
             <li>The map has one locate button again.</li>
             <li>The Market feed is easier to read in dark mode.</li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version 1.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-bean.html"><strong>This guide</strong><span>Where to find this guide, how to search it, and how it stays up to date.</span></a></li>
+            <li><a href="how-it-works.html"><strong>How BeanPool works</strong><span>Beans, trading, offers and needs, and credit, in plain words.</span></a></li>
+            <li><a href="rules.html"><strong>Rules and how decisions work</strong><span>Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.</span></a></li>
+            <li><a href="faq.html"><strong>Questions</strong><span>Short answers to the questions members ask most.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 5.</p>
     </main>
 </body>
 </html>

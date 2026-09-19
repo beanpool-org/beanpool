@@ -31,7 +31,8 @@ import { protectionFrom } from '../../utils/protection-state';
 import type { KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
 import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
+import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 
@@ -1663,32 +1664,40 @@ export default function SettingsScreen() {
                 {/* ─── BeanPool: the members' sheet, Suggest a change (goes to beanpool.org, not this community's node), the website ─── */}
                 <Text style={styles.sectionHeader}>BEANPOOL</Text>
                 <View style={styles.menuGroup}>
-                    <Pressable style={styles.menuBtn} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
-                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🫘</Text></View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Help & how it works</Text>
-                            <Text style={styles.menuSub}>Guides, the rules, questions, what's new</Text>
-                        </View>
-                        <Text style={styles.menuChevron}>›</Text>
-                    </Pressable>
-                    {FEEDBACK_LIVE && (
-                        <Pressable style={styles.menuBtn} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
-                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.menuText}>Suggest a change to BeanPool</Text>
-                                <Text style={styles.menuSub}>Ideas and problems go to the project team</Text>
-                            </View>
-                            <Text style={styles.menuChevron}>›</Text>
-                        </Pressable>
-                    )}
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => Linking.openURL('https://beanpool.org')} accessibilityRole="link" accessibilityLabel="beanpool.org, opens in your browser">
-                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌐</Text></View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>beanpool.org</Text>
-                            <Text style={styles.menuSub}>The BeanPool project website</Text>
-                        </View>
-                        <Text style={styles.menuChevron}>›</Text>
-                    </Pressable>
+                    {beanPoolSettingsEntries(FEEDBACK_LIVE).map((entry, i, all) => {
+                        const last = i === all.length - 1 ? styles.menuBtnLast : null;
+                        if (entry === 'help') return (
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🫘</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>Help & how it works</Text>
+                                    <Text style={styles.menuSub}>How to use every part of the app, the rules, questions</Text>
+                                </View>
+                                <Text style={styles.menuChevron}>›</Text>
+                            </Pressable>
+                        );
+                        // Only while FEEDBACK_LIVE: the same suggest-change screen the BeanPool sheet opens.
+                        if (entry === 'suggest') return (
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>Suggest a change</Text>
+                                    <Text style={styles.menuSub}>Ideas and problems go to the BeanPool project team</Text>
+                                </View>
+                                <Text style={styles.menuChevron}>›</Text>
+                            </Pressable>
+                        );
+                        return (
+                            <Pressable key={entry} style={[styles.menuBtn, last]} onPress={() => { void openBeanPoolWebsite(); }} accessibilityRole="link" accessibilityLabel="beanpool.org, opens in your browser">
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌐</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>beanpool.org</Text>
+                                    <Text style={styles.menuSub}>The BeanPool project website</Text>
+                                </View>
+                                <Text style={styles.menuChevron}>›</Text>
+                            </Pressable>
+                        );
+                    })}
                 </View>
 
                 {/* ─── Legal & Privacy ─── */}

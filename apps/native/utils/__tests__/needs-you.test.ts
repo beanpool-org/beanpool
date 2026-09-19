@@ -12,7 +12,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 
 const quiet = (over: Partial<NeedsYouInputs> = {}): NeedsYouInputs => ({
     me: ME, now: NOW, transactions: [], decisions: { decisions: [], myPoolVoting: null, signed: true },
-    conversations: [], groupChats: [], ...over,
+    conversations: [], groupChats: [], admin: null, ...over,
 });
 const tx = (id: string, status: string, seller = ME, buyer = 'other') => ({ id, postId: `post-${id}`, status, sellerPublicKey: seller, buyerPublicKey: buyer });
 const vote = (closesInMs: number, over: Record<string, unknown> = {}) => ({
@@ -36,8 +36,8 @@ describe('What needs you: which kinds show', () => {
         expect(buildNeedsYou(quiet())).toEqual([]);
     });
 
-    it('orders by priority, highest first: deal, vote, message, group', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['deal', 'vote', 'message', 'group']);
+    it('orders by priority, highest first: admin, deal, vote, message, group', () => {
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'deal', 'vote', 'message', 'group']);
         expect(allFour().map(e => e.kind)).toEqual(['deal', 'vote', 'message', 'group']);
     });
 
@@ -211,5 +211,83 @@ describe('What needs you: fitting the slot (48dp each) and the row order', () =>
             const order = needsYouRowOrder(fitNeedsYou(all.slice(0, n), 208));
             expect(order[order.length - 1]).toBe('deal');
         }
+    });
+});
+
+describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
+    type Item = { kind: string; count: number; label: string; section: 'home' | 'moderation' | 'disputes' | 'decisions'; settingsPath: string };
+    const item = (kind: string, count: number, section: Item['section'], label = kind): Item =>
+        ({ kind, count, label, section, settingsPath: `/settings#section=${section}` });
+    const queue = (...items: Item[]) => ({ total: items.reduce((n, i) => n + i.count, 0), items });
+    const admin = (role: unknown, q: ReturnType<typeof queue> | null) => buildNeedsYou(quiet({ admin: { role, queue: q } }));
+    const withAll = (role: unknown) => buildNeedsYou(quiet({
+        transactions: [tx('a', 'requested')],
+        decisions: { decisions: [vote(20 * H) as any], myPoolVoting: null, signed: true },
+        conversations: [dm('c1', 1)],
+        groupChats: [group('g1', 2)],
+        admin: { role, queue: queue(item('reports', 2, 'moderation')) },
+    }));
+
+    it('shows for an owner and for an admin while the queue holds something', () => {
+        expect(admin('owner', queue(item('reports', 2, 'moderation')))).toHaveLength(1);
+        expect(admin('admin', queue(item('reports', 2, 'moderation')))[0]).toMatchObject({ kind: 'admin', count: 2 });
+    });
+
+    it('never for anyone else, whatever the queue says', () => {
+        for (const role of [null, undefined, 'member', 'moderator', 'Owner', true]) {
+            expect(admin(role, queue(item('reports', 2, 'moderation')))).toEqual([]);
+        }
+        expect(buildNeedsYou(quiet({ admin: null }))).toEqual([]);
+    });
+
+    it('not while the queue is empty, unknown, or holds only zeros', () => {
+        expect(admin('owner', queue())).toEqual([]);
+        expect(admin('owner', null)).toEqual([]);
+        expect(admin('owner', { total: 0, items: [item('reports', 0, 'moderation')] })).toEqual([]);
+    });
+
+    it('comes first, so it sits rightmost next to invite/Settings/avatar and is the last to fold into "•••"', () => {
+        const all = withAll('admin');
+        expect(all.map(e => e.kind)).toEqual(['admin', 'deal', 'vote', 'message', 'group']);
+        expect(needsYouRowOrder(fitNeedsYou(all, 1000))).toEqual(['group', 'message', 'vote', 'deal', 'admin']);
+        // 320dp + 1.3x: two slots, so admin plus "•••" for the other four.
+        const small = fitNeedsYou(all, 116);
+        expect(small.shown.map(e => e.kind)).toEqual(['admin']);
+        expect(small.hidden).toBe(4);
+        expect(needsYouRowOrder(small)).toEqual(['more', 'admin']);
+        expect(fitNeedsYou(all, 50)).toEqual({ shown: [], hidden: 5 });
+    });
+
+    it('a member who is not an admin sees the same four as before', () => {
+        expect(withAll('member').map(e => e.kind)).toEqual(['deal', 'vote', 'message', 'group']);
+    });
+
+    it('always gets the accent', () => {
+        expect(admin('owner', queue(item('removals', 1, 'decisions')))[0].accent).toBe(true);
+    });
+
+    it('lands on /settings at the section of the first (most pressing) item', () => {
+        expect(admin('owner', queue(item('reports', 2, 'moderation'), item('disputes', 1, 'disputes')))[0].target)
+            .toEqual({ to: 'admin', section: 'moderation' });
+        expect(admin('owner', queue(item('disputes', 1, 'disputes')))[0].target).toEqual({ to: 'admin', section: 'disputes' });
+        expect(admin('owner', queue(item('reports', 0, 'moderation'), item('suspensions', 1, 'decisions')))[0].target)
+            .toEqual({ to: 'admin', section: 'decisions' });
+    });
+
+    it('says what is waiting, in words', () => {
+        const label = (...items: Item[]) => admin('owner', queue(...items))[0].label;
+        expect(label(item('reports', 2, 'moderation'))).toBe('2 reports to review');
+        expect(label(item('reports', 1, 'moderation'))).toBe('1 report to review');
+        expect(label(item('disputes', 3, 'disputes'))).toBe('3 stalled trades awaiting a ruling');
+        expect(label(item('suspensions', 1, 'decisions'))).toBe('1 emergency suspension the community is voting on');
+        expect(label(item('removals', 1, 'decisions'))).toBe('1 removal in its 7-day grace period');
+        expect(label(item('removals', 2, 'decisions'))).toBe('2 removals in their 7-day grace period');
+        expect(label(item('unclean_shutdown', 1, 'home'))).toBe('The node restarted after an unclean shutdown');
+        expect(label(item('reports', 2, 'moderation'), item('disputes', 1, 'disputes')))
+            .toBe('2 reports to review and 1 stalled trade awaiting a ruling');
+        expect(label(item('reports', 1, 'moderation'), item('disputes', 1, 'disputes'), item('suspensions', 2, 'decisions')))
+            .toBe('1 report to review, 1 stalled trade awaiting a ruling and 2 emergency suspensions the community is voting on');
+        // A kind a newer node added still reads as words, with its count.
+        expect(label(item('appeals', 4, 'moderation', 'Appeals to hear'))).toBe('Appeals to hear: 4');
     });
 });

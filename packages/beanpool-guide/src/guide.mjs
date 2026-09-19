@@ -5,7 +5,8 @@
 //
 // The Markdown is a deliberately tiny subset, because the app renders it with plain <Text> (no web view)
 // and a copy fetched from the website must never be able to smuggle in anything richer:
-//   ---            front matter: slug, title, summary (one line each)
+//   ---            front matter: slug, title, summary, related (one line each; related is a comma-separated list
+//                  of other pages' slugs), and optionally video (a YouTube id from the Learn lane)
 //   ## Heading     section heading          ### Heading   sub-heading
 //   - item         bullet (one line each)   blank line    ends a paragraph or list
 //   **bold**       the only inline style
@@ -17,9 +18,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** Bump when the JSON shape changes in a way an older app could not read. The app refuses other schemas. */
-export const GUIDE_SCHEMA = 1;
+export const GUIDE_SCHEMA = 2;
 
 const SLUG_RE = /^[a-z0-9-]{1,40}$/;
+const VIDEO_RE = /^[A-Za-z0-9_-]{6,20}$/;
+/** The section that holds the four concept guides; every other section is the how-to manual. */
+export const ABOUT_SECTION = 'about';
 
 function fail(file, line, message) {
     throw new Error(`${file}${line ? `:${line}` : ''}: ${message}`);
@@ -45,12 +49,23 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
         meta[m[1]] = m[2].trim();
     }
     if (i >= lines.length) fail(file, null, 'front matter is not closed with ---');
-    for (const key of ['slug', 'title', 'summary']) {
+    for (const key of ['slug', 'title', 'summary', 'related']) {
         if (!meta[key]) fail(file, null, `front matter needs "${key}"`);
+    }
+    for (const key of Object.keys(meta)) {
+        if (!['slug', 'title', 'summary', 'related', 'video'].includes(key)) fail(file, null, `unknown front matter "${key}"`);
     }
     if (!SLUG_RE.test(meta.slug)) fail(file, null, `slug "${meta.slug}" must be lowercase letters, digits and dashes`);
     checkInline(file, null, meta.title);
     checkInline(file, null, meta.summary);
+    const related = meta.related.split(',').map(r => r.trim()).filter(Boolean);
+    if (related.length === 0 || related.length > 8) fail(file, null, 'related lists 1 to 8 other pages');
+    for (const r of related) {
+        if (!SLUG_RE.test(r)) fail(file, null, `related "${r}" is not a page slug`);
+        if (r === meta.slug) fail(file, null, 'a page cannot be related to itself');
+    }
+    if (new Set(related).size !== related.length) fail(file, null, 'related lists a page twice');
+    if (meta.video !== undefined && !VIDEO_RE.test(meta.video)) fail(file, null, `video "${meta.video}" must be a YouTube video id`);
 
     const blocks = [];
     let para = null;
@@ -90,31 +105,65 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
     }
     flush();
     if (blocks.length === 0) fail(file, null, 'has no content');
-    return { slug: meta.slug, title: meta.title, summary: meta.summary, blocks };
+    const page = { slug: meta.slug, title: meta.title, summary: meta.summary, related };
+    if (meta.video) page.video = meta.video;
+    page.blocks = blocks;
+    return page;
 }
 
 /** Hash of the guide text only (not the version), so a content change without a version bump is caught. */
-export function contentHash(guides) {
-    return crypto.createHash('sha256').update(JSON.stringify(guides)).digest('hex');
+export function contentHash(content) {
+    return crypto.createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
-/** Read content/manifest.json and every guide it lists, in its order. */
+/**
+ * Read content/manifest.json and every page it lists. Each section is a folder, content/<section id>/, holding
+ * exactly the pages the manifest lists for it, one file per page named <slug>.md.
+ */
 export function loadGuide(contentDir) {
     const manifest = JSON.parse(fs.readFileSync(path.join(contentDir, 'manifest.json'), 'utf8'));
     if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error('manifest.json: "version" must be a whole number, 1 or more');
-    if (!Array.isArray(manifest.order) || manifest.order.length === 0) throw new Error('manifest.json: "order" lists the guides');
-    const onDisk = fs.readdirSync(contentDir).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).sort();
-    const listed = [...manifest.order].sort();
-    if (JSON.stringify(onDisk) !== JSON.stringify(listed)) {
-        throw new Error(`manifest.json "order" (${listed.join(', ')}) must list exactly the .md files (${onDisk.join(', ')})`);
+    if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
+    const folders = fs.readdirSync(contentDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
+    const listedFolders = manifest.sections.map(s => s.id).sort();
+    if (JSON.stringify(folders) !== JSON.stringify(listedFolders)) {
+        throw new Error(`manifest.json "sections" (${listedFolders.join(', ')}) must match the folders in content/ (${folders.join(', ')})`);
     }
-    const guides = manifest.order.map(slug => {
-        const file = `${slug}.md`;
-        const g = parseGuideMarkdown(fs.readFileSync(path.join(contentDir, file), 'utf8'), file);
-        if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
-        return g;
-    });
-    return { schema: GUIDE_SCHEMA, version: manifest.version, hash: contentHash(guides), guides };
+    if (!manifest.sections.some(s => s.id === ABOUT_SECTION)) throw new Error(`manifest.json needs the "${ABOUT_SECTION}" section`);
+    const sections = [];
+    const guides = [];
+    for (const sec of manifest.sections) {
+        if (!SLUG_RE.test(sec.id)) throw new Error(`manifest.json: section id "${sec.id}" must be lowercase letters, digits and dashes`);
+        if (typeof sec.title !== 'string' || !sec.title || typeof sec.summary !== 'string' || !sec.summary) {
+            throw new Error(`manifest.json: section "${sec.id}" needs a title and a summary`);
+        }
+        checkInline('manifest.json', null, sec.title);
+        checkInline('manifest.json', null, sec.summary);
+        if (!Array.isArray(sec.pages) || sec.pages.length === 0) throw new Error(`manifest.json: section "${sec.id}" lists its pages`);
+        const dir = path.join(contentDir, sec.id);
+        const onDisk = fs.readdirSync(dir).filter(f => f.endsWith('.md')).map(f => f.slice(0, -3)).sort();
+        const listed = [...sec.pages].sort();
+        if (JSON.stringify(onDisk) !== JSON.stringify(listed)) {
+            throw new Error(`manifest.json section "${sec.id}" (${listed.join(', ')}) must list exactly the .md files in content/${sec.id}/ (${onDisk.join(', ')})`);
+        }
+        for (const slug of sec.pages) {
+            const file = `${sec.id}/${slug}.md`;
+            const g = parseGuideMarkdown(fs.readFileSync(path.join(dir, `${slug}.md`), 'utf8'), file);
+            if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
+            if (guides.some(x => x.slug === slug)) throw new Error(`${file}: another page already uses the slug "${slug}"`);
+            // Keep the key order stable: it is part of the bytes both apps and the website carry.
+            const { blocks, video, related, ...head } = g;
+            guides.push({ ...head, section: sec.id, related, ...(video ? { video } : {}), blocks });
+        }
+        sections.push({ id: sec.id, title: sec.title, summary: sec.summary, slugs: [...sec.pages] });
+    }
+    const slugs = new Set(guides.map(g => g.slug));
+    for (const g of guides) {
+        for (const r of g.related) {
+            if (!slugs.has(r)) throw new Error(`${g.section}/${g.slug}.md: related page "${r}" does not exist`);
+        }
+    }
+    return { schema: GUIDE_SCHEMA, version: manifest.version, hash: contentHash({ sections, guides }), sections, guides };
 }
 
 /** The exact bytes of guide.json — the same file in the app bundle and on the website. */
@@ -163,6 +212,12 @@ function page({ title, description, body }) {
         .guide .guide-list li { margin: 0 0 0.75rem; }
         .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
         .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
         .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
         .guide-nav .nav-links { gap: 1.25rem; }
         /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
@@ -192,32 +247,59 @@ ${body}
 `;
 }
 
+const linkItem = g => `            <li><a href="${g.slug}.html"><strong>${inline(g.title)}</strong><span>${inline(g.summary)}</span></a></li>`;
+
 /** Every file under apps/website/guide/, keyed by file name. */
 export function renderWebsite(guide) {
-    const foot = `        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version ${guide.version}.</p>`;
+    const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version ${guide.version}.</p>`;
+    const bySlug = new Map(guide.guides.map(g => [g.slug, g]));
+    const about = guide.sections.find(s => s.id === ABOUT_SECTION);
+    const manual = guide.sections.filter(s => s.id !== ABOUT_SECTION);
     const files = {};
     files['index.html'] = page({
         title: "Members' guide — BeanPool",
-        description: 'How BeanPool works, the rules and how decisions are made, common questions, and what is new. For members of a BeanPool community.',
+        description: 'How BeanPool works, the rules, common questions, and a how-to for every part of the app. For members of a BeanPool community.',
         body: [
             `        <p class="kicker">For members</p>`,
             `        <h1>Members' guide</h1>`,
             `        <p class="lede">For people who already belong to a BeanPool community. New here? Start on the <a href="../index.html">home page</a>.</p>`,
+            `        <nav class="guide-toc" aria-label="Contents">`,
+            `            <h2>Contents</h2>`,
+            `            <ul>`,
+            ...guide.sections.map(s => `                <li><a href="#${s.id}">${inline(s.title)}</a></li>`),
+            `            </ul>`,
+            `        </nav>`,
+            `        <h2 id="${about.id}">${inline(about.title)}</h2>`,
+            `        <p>${inline(about.summary)}</p>`,
             `        <ul class="guide-list">`,
-            ...guide.guides.map(g => `            <li><a href="${g.slug}.html"><strong>${inline(g.title)}</strong><span>${inline(g.summary)}</span></a></li>`),
+            ...about.slugs.map(slug => linkItem(bySlug.get(slug))),
             `        </ul>`,
+            `        <h2 class="guide-manual">How to use the app</h2>`,
+            ...manual.flatMap(s => [
+                `        <h3 id="${s.id}">${inline(s.title)}</h3>`,
+                `        <p>${inline(s.summary)}</p>`,
+                `        <ul class="guide-list">`,
+                ...s.slugs.map(slug => linkItem(bySlug.get(slug))),
+                `        </ul>`,
+            ]),
             foot,
         ].join('\n'),
     });
     for (const g of guide.guides) {
+        const section = guide.sections.find(s => s.id === g.section);
+        const related = g.related.map(slug => bySlug.get(slug));
         files[`${g.slug}.html`] = page({
             title: `${g.title} — BeanPool members' guide`,
             description: g.summary,
             body: [
-                `        <p class="kicker"><a href="index.html">Members' guide</a></p>`,
+                `        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#${section.id}">${inline(section.title)}</a></p>`,
                 `        <h1>${inline(g.title)}</h1>`,
                 `        <p class="lede">${inline(g.summary)}</p>`,
                 ...g.blocks.map(b => `        ${blockHtml(b)}`),
+                `        <h2 class="guide-related">Related</h2>`,
+                `        <ul class="guide-list">`,
+                ...related.map(linkItem),
+                `        </ul>`,
                 foot,
             ].join('\n'),
         });

@@ -23,7 +23,7 @@ vi.mock('../crypto', () => ({
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
     canManageNode, fetchMyNodeRole, fetchAdminQueue, requireDeviceUnlock, requestSettingsLink,
-    buildSettingsHandoffUrl, manageNode,
+    buildSettingsHandoffUrl, manageNode, cachedNodeRole, forgetNodeRole, rememberNodeRole, ROLE_CACHE_MS,
 } from '../node-admin';
 
 const identity = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'me', createdAt: '' };
@@ -92,6 +92,61 @@ describe('role gating — only owners and admins see Manage', () => {
         expect(q?.items.map(i => i.kind)).toEqual(['reports']);
         mockFetch({ '/api/node-admin/queue': { status: 403, body: { error: 'no' } } });
         expect(await fetchAdminQueue(NODE, identity)).toBeNull();
+    });
+});
+
+describe("the header's remembered role (so non-admins never ask for the queue)", () => {
+    const T = 1_000_000;
+    const me = (role: unknown): Reply => ({ status: 200, body: { role, communityName: 'Mullum' } });
+
+    it('asks once, then answers from memory for ten minutes, for owners and non-admins alike', async () => {
+        const calls = mockFetch({ '/api/node-admin/me': me('member') });
+        const url = 'https://cache-a.example';
+        expect((await cachedNodeRole(url, identity, T)).role).toBeNull();
+        expect((await cachedNodeRole(url, identity, T + ROLE_CACHE_MS - 1)).role).toBeNull();
+        expect(calls).toHaveLength(1);
+        mockFetch({ '/api/node-admin/me': me('admin') });
+        expect((await cachedNodeRole(url, identity, T + ROLE_CACHE_MS)).role).toBe('admin');
+    });
+
+    it('one answer per node and per key', async () => {
+        const calls = mockFetch({ '/api/node-admin/me': me('owner') });
+        await cachedNodeRole('https://cache-b.example', identity, T);
+        await cachedNodeRole('https://cache-b.example/', identity, T);
+        await cachedNodeRole('https://cache-c.example', identity, T);
+        await cachedNodeRole('https://cache-b.example', { ...identity, publicKey: 'ef'.repeat(32) }, T);
+        expect(calls).toHaveLength(3);
+    });
+
+    it('no answer (offline, a 5xx) is not remembered; a refusal is', async () => {
+        const url = 'https://cache-d.example';
+        (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
+        expect((await cachedNodeRole(url, identity, T)).role).toBeNull();
+        mockFetch({ '/api/node-admin/me': { status: 503, body: {} } });
+        expect((await cachedNodeRole(url, identity, T + 1)).role).toBeNull();
+        let calls = mockFetch({ '/api/node-admin/me': me('owner') });
+        expect((await cachedNodeRole(url, identity, T + 2)).role).toBe('owner');
+        expect(calls).toHaveLength(1);
+
+        const refused = 'https://cache-e.example';
+        calls = mockFetch({ '/api/node-admin/me': { status: 403, body: { error: 'not a member' } } });
+        await cachedNodeRole(refused, identity, T);
+        await cachedNodeRole(refused, identity, T + 1);
+        expect(calls).toHaveLength(1);
+    });
+
+    it('forgetting asks again at once (a refused queue looks like a demotion); Settings can hand over a fresh answer', async () => {
+        const url = 'https://cache-f.example';
+        mockFetch({ '/api/node-admin/me': me('admin') });
+        await cachedNodeRole(url, identity, T);
+        forgetNodeRole(url, identity.publicKey);
+        const calls = mockFetch({ '/api/node-admin/me': me(null) });
+        expect((await cachedNodeRole(url, identity, T + 1)).role).toBeNull();
+        expect(calls).toHaveLength(1);
+
+        rememberNodeRole(url, identity.publicKey, { role: 'owner', communityName: 'Mullum' }, T + 2);
+        expect((await cachedNodeRole(url, identity, T + 3)).role).toBe('owner');
+        expect(calls).toHaveLength(1);
     });
 });
 

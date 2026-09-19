@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { hexToBytes, encodeUtf8, encodeBase64, signData, buildSignedHeaders } fr
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useTabRetapScrollTop } from '../../components/PageTitle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 
@@ -41,6 +42,9 @@ function formatJoinDate(dateStr: string | null) {
 
 export default function PeopleScreen() {
     const { theme, colors } = useTheme();
+    // Mounted inside Talk, so a re-tap on Talk scrolls whichever list People is showing back to the top.
+    const listRef = useRef<any>(null);
+    useTabRetapScrollTop(listRef);
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -690,6 +694,7 @@ export default function PeopleScreen() {
                     </View>
                 ) : (
                     <FlatList
+                        ref={listRef}
                         data={friends}
                         keyExtractor={(item, index) => `${item.publicKey}_${index}`}
                         contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}
@@ -789,6 +794,7 @@ export default function PeopleScreen() {
                         ))}
                     </View>
                     <FlatList
+                        ref={listRef}
                         data={members}
                         keyExtractor={item => item.public_key}
                         contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}
@@ -883,7 +889,7 @@ export default function PeopleScreen() {
             {view === 'invites' && (
                 // "Invite URL or token" sits low on this page: KeyboardAwareScrollView scrolls the focused field above
                 // the keyboard and adds the keyboard's height as bottom space itself.
-                <KeyboardAwareScrollView contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
+                <KeyboardAwareScrollView ref={listRef} contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
                             <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>

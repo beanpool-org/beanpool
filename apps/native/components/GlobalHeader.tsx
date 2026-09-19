@@ -36,17 +36,20 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
     }
 };
 
-// MOCK (mock/header-slim): the whole header is one 48dp row below the status bar.
+// The whole header is one 48dp row below the status bar.
 export const HEADER_ROW_HEIGHT = 48;
 const BEAN_SIZE = 38;
 const AVATAR_SIZE = 32;
 
-// The community's name, shown at the top of the bean's sheet (MOCK v4). Saved alias first, then the node's host, so something readable shows before the
-// first health ping lands.
-function communityLabel(url: string | null, alias?: string | null): string {
-    if (alias && alias.trim()) return alias.trim();
+// The community's name, which heads the bean's sheet: the name the node gives itself, else the saved
+// alias, else the node's host, so something readable shows before the first health ping lands.
+// 'Local Discovery' is the node's placeholder when it has no directory entry, not a name.
+const NODE_NAME_PLACEHOLDER = 'Local Discovery';
+function communityLabel(url: string | null, name?: string | null): string {
+    const n = name?.trim();
+    if (n && n !== NODE_NAME_PLACEHOLDER) return n;
     if (!url) return 'BeanPool';
-    try { return new URL(url).hostname.split('.')[0] || 'BeanPool'; } catch { return 'BeanPool'; }
+    try { return new URL(url).host || 'BeanPool'; } catch { return 'BeanPool'; }
 }
 
 /**
@@ -166,6 +169,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     }>({ latestLoaded: false, latest: null, minKey: null, minimum: null, dismissed: new Map(), attemptAt: 0 });
     // Consecutive failed health pings — see the ping effect below (debounce + recent-sync grace).
     const healthFailuresRef = useRef(0);
+    const nodeNameRef = useRef<{ url: string; name: string } | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -301,18 +305,25 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 return;
             }
             if (isMounted) setHasAnchorUrl(true);
-            try {
-                const saved = (await getSavedNodes()).find(n => n.url === active);
-                if (isMounted) setCommunityName(communityLabel(active, saved?.alias));
-            } catch { /* storage unavailable — keep the last name shown */ }
+            // Until this node has told us its own name, show the saved alias (or its host). Once it has, the
+            // alias never replaces it again, so an open sheet doesn't flick between the two on every ping.
+            if (nodeNameRef.current?.url !== active) {
+                try {
+                    const saved = (await getSavedNodes()).find(n => n.url === active);
+                    if (isMounted) setCommunityName(communityLabel(active, saved?.alias));
+                } catch { /* storage unavailable — keep the last name shown */ }
+            }
             try {
                 const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 8000 });
                 if (r.ok) {
                     healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
-                    const remoteName = data?.nodeName || data?.name;
-                    if (isMounted && remoteName) setCommunityName(communityLabel(active, remoteName));
+                    const remoteName = typeof data?.nodeName === 'string' ? data.nodeName.trim() : '';
+                    if (remoteName && remoteName !== NODE_NAME_PLACEHOLDER) {
+                        nodeNameRef.current = { url: active, name: remoteName };
+                        if (isMounted) setCommunityName(remoteName);
+                    }
                     await updateVersionBanner(active, data);
                 } else {
                     await markHealthFailure(active);
@@ -512,9 +523,8 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
             </View>
 
-            {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
-                old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
-                it visible against the electric bean's dark rim. v4: beside it, an icon per kind of thing that needs you (NeedsYouIcons); invite, settings and avatar are plain 48dp icons on the right. */}
+            {/* One 48dp row: the bean (opens the community sheet; wears the connection dot, whose white
+                ring keeps it visible against the bean's dark rim) | what needs you | invite, Settings, avatar. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
@@ -531,8 +541,8 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
                 </TouchableOpacity>
 
-                {/* MOCK v4: small icons for what needs you, only while something does; the community's name moved into the bean's sheet. */}
-                <NeedsYouIcons />
+                {/* Small icons for what needs you, only while something does, stacked from the right. */}
+                <NeedsYouIcons guest={isGuestOnActive} sheetTop={headerHeight + 4} />
 
                 <View style={styles.headerRightIcons}>
                     <TouchableOpacity
@@ -642,11 +652,11 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 </View>
             )}
 
-            <Modal visible={dropdownVisible} transparent animationType="fade">
+            <Modal visible={dropdownVisible} transparent animationType="fade" onRequestClose={() => setDropdownVisible(false)}>
                 <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalBg} onPress={() => setDropdownVisible(false)}>
-                    <View style={[styles.modalContent, { marginTop: insets.top + 80 }]}>
+                    <View style={[styles.modalContent, { marginTop: headerHeight + 4 }]}>
                         <Text style={styles.modalVersion}>v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode})</Text>
-                        {/* MOCK v4: the community's name left the header line, so it heads this sheet instead. */}
+                        {/* The community's name is not in the header row; it heads this sheet. */}
                         {hasAnchorUrl && (
                             <View style={styles.sheetCommunity}>
                                 <Text style={styles.sheetCommunityName} numberOfLines={2} accessibilityRole="header">{communityName}</Text>
@@ -735,6 +745,8 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                                 </TouchableOpacity>
                             );
                         })}
+                        {/* Seam for the members' guide (feat/member-hub, not on main yet): its sections join
+                            this sheet here, below the communities, so the bean opens ONE sheet. */}
                     </View>
                 </Pressable>
             </Modal>

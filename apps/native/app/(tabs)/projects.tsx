@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -29,6 +29,15 @@ export default function ProjectsScreen() {
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>('decide');
+    // The header's vote icon lands here with section=decide. Commons may already be open on another section,
+    // so switch to Decide and show it from the top, then clear the param so a later visit keeps its place.
+    const sectionParam = useLocalSearchParams<{ section?: string }>().section;
+    useEffect(() => {
+        if (sectionParam !== 'decide') return;
+        setActiveSection('decide');
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        router.setParams({ section: '' });
+    }, [sectionParam]);
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     // The signer's voice credits for votes on community money — the number the node checks (answer H).
     const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
@@ -500,8 +509,8 @@ export default function ProjectsScreen() {
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>
-                            {/* MOCK v3: the page's one large title, first thing in the list, so it scrolls away with it.
-                                v4: the shared PageTitle, so its spacing matches every other page (the list pads the sides). */}
+                            {/* The page's one large title, first thing in the list, so it scrolls away with it.
+                                The list pads the sides, hence inset 0. */}
                             <PageTitle title="Commons" inset={0} right={
                                 <Pressable
                                     accessibilityRole="button"

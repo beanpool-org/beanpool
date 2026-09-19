@@ -3,13 +3,13 @@ import { View, Text, LayoutAnimation, type NativeSyntheticEvent, type NativeScro
 import { useNavigation } from 'expo-router';
 import { useTheme } from '../app/ThemeContext';
 
-// MOCK v3 (mock/header-slim): the header row names the community, so each tabbed page (not the
-// map) opens with its own large title, as iOS large titles do. Capped at 1.3x so "Commons" still
-// fits one line at 320dp with the largest text setting.
+// The header row no longer names the page, so each tabbed page (not the map) opens with its own large
+// title, as iOS large titles do. Capped at 1.3x so "Commons" still fits one line at 320dp with the
+// largest text setting.
 export const PAGE_TITLE_SIZE = 30;
-// MOCK v4: ONE spacing for every large title (Market, Talk, Pulse, Commons, Ledger). The title owns
-// the gap above it and the gap to the first content row; pages add nothing of their own above that
-// row while the title shows. v3 measured 10.7-18.7dp above and 6-22dp below, page by page.
+// ONE spacing for every large title (Market, Talk, Pulse, Commons, Ledger). The title owns the gap
+// above it and the gap to the first content row; pages add nothing of their own above that row while
+// the title shows.
 export const PAGE_TITLE_TOP = 4;
 export const PAGE_TITLE_BOTTOM = 8;
 const PAGE_TITLE_LINE = 36;

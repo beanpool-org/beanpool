@@ -19,7 +19,7 @@ export default function ChatsScreen() {
     // Talk = Messages + People. People is rendered inline rather than as its own route so the
     // Talk tab stays highlighted; /people survives for the deep links that pass a `view` param,
     // and PeopleScreen reads that param off whichever route it is mounted on.
-    const talkParams = useLocalSearchParams<{ view?: string }>();
+    const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
     const [talkView, setTalkView] = useState<'messages' | 'people'>(talkParams.view ? 'people' : 'messages');
 
     React.useEffect(() => {
@@ -39,6 +39,13 @@ export default function ChatsScreen() {
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
+    // The header's message and group icons land here with filter=unread, when there is more than one chat
+    // to show. Cleared after use so the filter stays the member's own choice from then on.
+    React.useEffect(() => {
+        if (talkParams.filter !== 'unread') return;
+        setReadFilter('unread');
+        router.setParams({ filter: '' });
+    }, [talkParams.filter]);
     const [peopleFilter, setPeopleFilter] = useState<'all' | 'friends'>('all');
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());
     const [showOptions, setShowOptions] = useState(false);
@@ -48,7 +55,7 @@ export default function ChatsScreen() {
         talkBar: {
             flexDirection: 'row',
             marginHorizontal: 16,
-            // MOCK v4: the gap above comes from PageTitle (or a spacer while it is folded away).
+            // The gap above comes from PageTitle (or a spacer while it is folded away).
             backgroundColor: colors.surface.subtle,
             borderRadius: 12,
             padding: 3,
@@ -553,7 +560,7 @@ export default function ChatsScreen() {
 
     return (
         <View style={styles.safeArea}>
-            {/* MOCK v3: the large "Talk" title replaces the old "Inbox" heading (one title per page)
+            {/* The large "Talk" title replaces the old "Inbox" heading (one title per page)
                 and folds away once the list scrolls. The compose button moved into the search row
                 so it never folds away with the title. */}
             <PageTitle title="Talk" collapsed={pageTitle.collapsed} />

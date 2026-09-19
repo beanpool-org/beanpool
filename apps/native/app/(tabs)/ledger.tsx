@@ -41,7 +41,7 @@ function valueForEarned(target: number): number {
 }
 
 export default function LedgerScreen() {
-    // MOCK v3: large "Ledger" title above the pinned balance bar and Levels/Wallet switch; folds
+    // Large "Ledger" title above the pinned balance bar and Levels/Wallet switch; folds
     // away once either tab's list scrolls. One ref, pointed at whichever list is showing.
     const pageTitle = useCollapsingTitle();
     const listRef = useRef<any>(null);

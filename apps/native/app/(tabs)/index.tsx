@@ -466,7 +466,7 @@ export default function MarketScreen() {
     // Fresh listings banner dismissal and scroll tracking states
     const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
     const [showFreshBannerOnScroll, setShowFreshBannerOnScroll] = useState(true);
-    // MOCK v3: large "Market" title above the pinned search/filters; folds away once the feed scrolls.
+    // Large "Market" title above the pinned search/filters; folds away once the feed scrolls.
     const pageTitle = useCollapsingTitle();
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef);
@@ -537,7 +537,7 @@ export default function MarketScreen() {
     const [screenH, setScreenH] = useState(0);
     const [filterBlockY, setFilterBlockY] = useState(0);
     const [filterRowsBottom, setFilterRowsBottom] = useState(0);
-    // MOCK v4: the large title brings its own top gap, so the block's padding applies only while it is folded away.
+    // The large title brings its own top gap, so the block's padding applies only while it is folded away.
     const headerPadTop = pageTitle.collapsed ? HEADER_PAD_TOP : 0;
     const rowsBottom = headerPadTop + filterBlockY + filterRowsBottom;
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;

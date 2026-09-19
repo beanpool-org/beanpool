@@ -44,7 +44,7 @@ export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-    // MOCK v3: large "Pulse" title above the pinned lane/category controls; folds away once the feed scrolls.
+    // Large "Pulse" title above the pinned lane/category controls; folds away once the feed scrolls.
     const pageTitle = useCollapsingTitle();
     const listRef = useRef<FlatList>(null);
     useTabRetapScrollTop(listRef);
@@ -278,7 +278,7 @@ export default function PulseScreen() {
     // the header, tab bar and gap stack up before any content gets a chance.
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
-            {/* + Channels rides on the title's line (MOCK v3) rather than costing a row of its own. */}
+            {/* + Channels rides on the title's line rather than costing a row of its own. */}
             <PageTitle title="Pulse" collapsed={pageTitle.collapsed} right={
                 <Pressable
                     onPress={() => router.push('/channels')}
@@ -308,7 +308,7 @@ export default function PulseScreen() {
                 </View>
                 )}
 
-                {/* The page's one title is the large "Pulse" above (MOCK v3); this is only its subtitle. */}
+                {/* The page's one title is the large "Pulse" above; this is only its subtitle. */}
                 <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
                     <Text style={styles.subtitle}>
                         {activeLane === 'learn'

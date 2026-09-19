@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
 import { withJitter } from '../../utils/jitter';
 
-// MOCK v3 (mock/header-slim): a small label sits ABOVE each icon again, as in today's app,
+// A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
 // would add the status-bar inset a second time (GlobalHeader already consumes it).
 const TAB_BAR_HEIGHT = 52;

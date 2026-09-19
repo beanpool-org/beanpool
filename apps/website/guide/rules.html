@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rules and how decisions work — BeanPool members' guide</title>
+    <meta name="description" content="Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a></p>
+        <h1>Rules and how decisions work</h1>
+        <p class="lede">Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.</p>
+        <h2>Two ways to ask the community</h2>
+        <ul>
+            <li>A <strong>Poll</strong> is a question in the feed, like &quot;Market on Sunday?&quot;. It shows what people think. It never changes anything by itself.</li>
+            <li>A <strong>Decision</strong> is binding. If it passes, your community's server carries it out by itself. Nobody has to press a button, and nobody can quietly ignore it.</li>
+        </ul>
+        <h2>What a Decision can do</h2>
+        <p>About a member:</p>
+        <ul>
+            <li>Suspend a member, or lift a suspension.</li>
+            <li>Freeze a member's credit, or unfreeze it.</li>
+            <li>Give a member the right to vouch for newcomers, or take it away.</li>
+            <li>Remove a lead keeper from an enterprise.</li>
+            <li>Remove a member from the community, or reinstate them.</li>
+        </ul>
+        <p>About the Commons:</p>
+        <ul>
+            <li>Give beans from the Commons to an enterprise.</li>
+            <li>Give a hardship grant from the Commons to a member.</li>
+            <li>Pay off an enterprise's debt from the Commons.</li>
+        </ul>
+        <h2>Who can start a Decision</h2>
+        <p>Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.</p>
+        <h2>Who can vote</h2>
+        <p>Any active member whose credit is not frozen, and who joined <strong>before</strong> the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.</p>
+        <h2>How votes count</h2>
+        <ul>
+            <li>Decisions about a member: <strong>one member, one vote</strong>. Yes or No.</li>
+            <li>Decisions about Commons beans: votes are weighted by trading. You can cast more than one vote, but it gets expensive: 1 vote costs 1 voice credit, 2 votes cost 4, 3 votes cost 9. Your voice credits come from your completed trades, counted up to 500 beans per trading partner. You get your full voice credits again on every Decision. They are never used up.</li>
+            <li>If you have never completed a trade, you cannot vote on Commons beans yet.</li>
+            <li>You can change your vote at any time until the vote closes.</li>
+        </ul>
+        <h2>Secret ballots</h2>
+        <p>The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. The owners and admins who run the server can take a copy of its files, and could look up your vote there.</p>
+        <p>Polls are different: a Poll is an open show of hands, and everyone can see who picked what.</p>
+        <h2>How long a vote runs</h2>
+        <p>Every Decision runs for exactly 7 days. Voting opens at once. When the 7 days are up, your community's server counts the votes and acts on the result.</p>
+        <h2>Turnout</h2>
+        <p>A vote only counts if enough people take part.</p>
+        <ul>
+            <li>Enough people means 30% of the members who could vote and were active in the last 30 days. It is never fewer than 3 people.</li>
+            <li>For removing a member it is 25%.</li>
+            <li>&quot;Active&quot; means you did something in the app in those 30 days: posted, traded, voted, sent a message. Only opening the app to look does not count.</li>
+            <li>Turnout counts people, not the weight of their votes.</li>
+        </ul>
+        <p>If too few people vote, nothing happens. The Decision closes as &quot;unresolved&quot;.</p>
+        <h2>How much Yes is needed</h2>
+        <ul>
+            <li>Most Decisions: 60% Yes.</li>
+            <li>Removing a member: 66% Yes.</li>
+            <li>Undoing something (lifting a suspension, unfreezing credit, reinstating a member): more than half.</li>
+            <li>A tie always fails.</li>
+        </ul>
+        <h2>When a Decision passes</h2>
+        <ul>
+            <li>Your community's server checks that it still makes sense: the member still exists, the Commons has enough beans. Then it acts.</li>
+            <li>If the Commons is short of beans for a grant, the grant waits until there is enough. It gives up after 90 days.</li>
+            <li>Only one grant can wait at a time. If a second grant passes while the Commons is still short, it does not wait: it closes for good, and the community must vote again.</li>
+            <li>If the person or enterprise is already gone, the Decision closes without doing anything.</li>
+        </ul>
+        <h2>Removing a member</h2>
+        <ul>
+            <li>If a removal passes, the member is suspended and their credit frozen at once.</li>
+            <li>After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.</li>
+            <li>When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.</li>
+            <li>The community can vote to remove anyone except the only owner of your community's server.</li>
+        </ul>
+        <h2>Emergency suspension</h2>
+        <p>An admin can suspend a member at once, for example to stop harm. They must give a reason that members can read.</p>
+        <ul>
+            <li>At the same moment, a 7-day Decision opens: &quot;Keep this suspension?&quot;.</li>
+            <li>It needs the usual turnout and 60% Yes.</li>
+            <li>If it does not pass, or too few people vote, the suspension lifts by itself.</li>
+            <li>An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.</li>
+        </ul>
+        <h2>What admins can and cannot do</h2>
+        <p>Your community's server has owners and admins. They look after it.</p>
+        <ul>
+            <li>An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.</li>
+            <li>If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away. If the member being removed is an owner or admin of the server, only an owner can do either.</li>
+            <li>Admins can give members the right to vouch for newcomers.</li>
+            <li>Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.</li>
+            <li>Admins sort out stuck trades, but never one they are part of.</li>
+        </ul>
+        <h2>Polls</h2>
+        <ul>
+            <li>Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.</li>
+            <li>You can have one open Poll at a time. Your community can have 5 open Polls at once.</li>
+            <li>A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.</li>
+            <li>Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.</li>
+        </ul>
+        <h2>Enterprises and keepers</h2>
+        <p>An enterprise is run by its keepers. One of them is the lead keeper.</p>
+        <ul>
+            <li><strong>Joining:</strong> you ask to become a keeper and say how much of your earned trust you pledge (it can be 0). You cannot pledge more trust than you have earned by trading, across all your enterprises. The lead keeper approves or declines.</li>
+            <li><strong>Objection window:</strong> when an enterprise already has more than one keeper, the lead's approval waits 3 days. Any other keeper can object in that time, and one objection cancels it.</li>
+            <li><strong>Removing a keeper:</strong> the lead can remove an ordinary keeper. The same 3-day window applies, and any other keeper can object.</li>
+            <li><strong>Community admins:</strong> an admin of your community who is not a keeper of the enterprise can approve a keeper, or remove an ordinary keeper, at once, with no 3-day window. This is so a stuck enterprise can be helped.</li>
+            <li><strong>Stepping down:</strong> any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.</li>
+            <li><strong>Your pledge</strong> backs the enterprise's credit line. It is never taken from your own balance or your own credit line.</li>
+            <li><strong>A quiet lead:</strong> if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. Keeper votes cannot be changed.</li>
+            <li><strong>If the lead leaves or is removed,</strong> the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.</li>
+            <li><strong>Winding up:</strong> the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons.</li>
+        </ul>
+        <h2>Groups and convenors</h2>
+        <p>A group is run by its convenors.</p>
+        <ul>
+            <li>Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.</li>
+            <li>A convenor can approve and invite members, change people's roles, remove members, remove posts and edit the group.</li>
+            <li>The last convenor cannot step down or be removed while the group still has other members.</li>
+            <li>Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.</li>
+            <li><strong>A quiet convenor:</strong> if a group's only convenor has done nothing in the app for 30 days, any member can propose a new convenor. The members vote Yes or No for up to 14 days, in secret. It passes when more than half of those who answer say Yes. If the convenor comes back, the vote is cancelled. The screens for this are coming in a later update.</li>
+        </ul>
+        <h2>Vouching</h2>
+        <p>Only members chosen by an admin, or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version 1.</p>
+    </main>
+</body>
+</html>

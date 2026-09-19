@@ -1,0 +1,633 @@
+{
+  "schema": 1,
+  "version": 1,
+  "hash": "59615b0012a3cd0d40faf7cdb06bc1da961290e4ed733c8dc5a61f91a0e03203",
+  "guides": [
+    {
+      "slug": "how-it-works",
+      "title": "How BeanPool works",
+      "summary": "Beans, trading, offers and needs, and credit, in plain words.",
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Beans"
+        },
+        {
+          "type": "p",
+          "text": "Your community trades in **beans**. Beans are not money from a bank. They are a record of who has helped whom."
+        },
+        {
+          "type": "p",
+          "text": "Everyone starts at zero. When you help someone, you earn beans. When someone helps you, you spend beans."
+        },
+        {
+          "type": "p",
+          "text": "A rough guide: 40 beans is about one hour of someone's time. You and the other person agree the real price."
+        },
+        {
+          "type": "h2",
+          "text": "Offers and Needs"
+        },
+        {
+          "type": "p",
+          "text": "An **Offer** is something you can do or give: bread, a lift, an hour of gardening, a repair."
+        },
+        {
+          "type": "p",
+          "text": "A **Need** is something you are looking for."
+        },
+        {
+          "type": "p",
+          "text": "Before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something."
+        },
+        {
+          "type": "h2",
+          "text": "How a trade works"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You find an Offer you want and ask for it, or someone takes up your Need.",
+            "When the trade is agreed, the buyer's beans are held safely. Nobody can spend them while the trade is going on.",
+            "The job gets done.",
+            "The buyer confirms it is done. Then the beans go to the seller."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If a trade gets stuck, an admin of your community can step in. They can pay the seller, give the beans back to the buyer, or split them. An admin cannot decide a trade they are part of."
+        },
+        {
+          "type": "h2",
+          "text": "Gifts"
+        },
+        {
+          "type": "p",
+          "text": "You can also send beans to someone as a gift, with no trade."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A gift can only come from beans you have. It can never take you below zero.",
+            "You can send gifts once you have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.",
+            "Gifts have no fee."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Going below zero: your credit line"
+        },
+        {
+          "type": "p",
+          "text": "You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later."
+        },
+        {
+          "type": "p",
+          "text": "Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans."
+        },
+        {
+          "type": "p",
+          "text": "Your credit line grows with your **trust**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You earn trust by completing trades in the market. Gifts do not earn trust.",
+            "Trading with many different people builds more trust. Trade with any one person counts up to 500 beans.",
+            "Trust grows quickly at first, then more slowly.",
+            "Star ratings matter. If people rate you, your average rating scales the trust your trades earn: 5 stars keeps all of it, 1 star keeps 60%.",
+            "The deepest any credit line can go is 2,000 beans below zero."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Your Offers unlock your credit"
+        },
+        {
+          "type": "p",
+          "text": "Trust sets how deep you **could** go. Your live Offers set how deep you **may** go right now. You get the smaller of the two."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "No live Offers: you cannot go below zero.",
+            "1 Offer: down to 200 below zero.",
+            "2 Offers: down to 500.",
+            "3 Offers: down to 1,000.",
+            "4 Offers: down to 1,500.",
+            "5 Offers: down to 2,000."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If you take Offers down while you are below zero, you may owe more than your Offers now cover. Then you cannot spend more until you are back within your limit. You can still earn beans, and nothing is taken from you."
+        },
+        {
+          "type": "h2",
+          "text": "Trust badges"
+        },
+        {
+          "type": "p",
+          "text": "Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Resident from 200 trust.",
+            "Steward from 600 trust.",
+            "Elder from 1,400 trust."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A badge is recognition, nothing more. It does not unlock anything. Everyone can trade, invite and vote, whatever their badge."
+        },
+        {
+          "type": "h2",
+          "text": "Fees and the Commons"
+        },
+        {
+          "type": "p",
+          "text": "Your community has a shared pool of beans called the **Commons**. Fees go into it. Members decide together how it is spent."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Market fee:** 1.5% of every market payment goes to the Commons. It comes out of what the seller receives.",
+            "**Circulation fee:** beans are meant to move, not sit still. The first 200 beans you hold are always free. Above that, a small monthly fee goes to the Commons: 1% a month on beans between 200 and 500, 1.5% between 500 and 1,000, 2% between 1,000 and 2,000, and 2.5% above 2,000.",
+            "Balances below zero never pay the circulation fee. Gifts never pay a fee."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Enterprises and groups"
+        },
+        {
+          "type": "p",
+          "text": "An **enterprise** is a shared project that trades in its own name: a community garden, a bakery, a tool library. It is run by **keepers**, led by a **lead keeper**. Keepers can pledge some of their own trust to give the enterprise a credit line."
+        },
+        {
+          "type": "p",
+          "text": "A **group** is a circle of members with its own chat and posts, run by one or more **convenors**."
+        },
+        {
+          "type": "p",
+          "text": "You can read how keepers and convenors are chosen in \"Rules and how decisions work\"."
+        }
+      ]
+    },
+    {
+      "slug": "rules",
+      "title": "Rules and how decisions work",
+      "summary": "Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.",
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Two ways to ask the community"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A **Poll** is a question in the feed, like \"Market on Sunday?\". It shows what people think. It never changes anything by itself.",
+            "A **Decision** is binding. If it passes, your community's server carries it out by itself. Nobody has to press a button, and nobody can quietly ignore it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What a Decision can do"
+        },
+        {
+          "type": "p",
+          "text": "About a member:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Suspend a member, or lift a suspension.",
+            "Freeze a member's credit, or unfreeze it.",
+            "Give a member the right to vouch for newcomers, or take it away.",
+            "Remove a lead keeper from an enterprise.",
+            "Remove a member from the community, or reinstate them."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "About the Commons:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Give beans from the Commons to an enterprise.",
+            "Give a hardship grant from the Commons to a member.",
+            "Pay off an enterprise's debt from the Commons."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Who can start a Decision"
+        },
+        {
+          "type": "p",
+          "text": "Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters."
+        },
+        {
+          "type": "h2",
+          "text": "Who can vote"
+        },
+        {
+          "type": "p",
+          "text": "Any active member whose credit is not frozen, and who joined **before** the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote."
+        },
+        {
+          "type": "h2",
+          "text": "How votes count"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Decisions about a member: **one member, one vote**. Yes or No.",
+            "Decisions about Commons beans: votes are weighted by trading. You can cast more than one vote, but it gets expensive: 1 vote costs 1 voice credit, 2 votes cost 4, 3 votes cost 9. Your voice credits come from your completed trades, counted up to 500 beans per trading partner. You get your full voice credits again on every Decision. They are never used up.",
+            "If you have never completed a trade, you cannot vote on Commons beans yet.",
+            "You can change your vote at any time until the vote closes."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Secret ballots"
+        },
+        {
+          "type": "p",
+          "text": "The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. The owners and admins who run the server can take a copy of its files, and could look up your vote there."
+        },
+        {
+          "type": "p",
+          "text": "Polls are different: a Poll is an open show of hands, and everyone can see who picked what."
+        },
+        {
+          "type": "h2",
+          "text": "How long a vote runs"
+        },
+        {
+          "type": "p",
+          "text": "Every Decision runs for exactly 7 days. Voting opens at once. When the 7 days are up, your community's server counts the votes and acts on the result."
+        },
+        {
+          "type": "h2",
+          "text": "Turnout"
+        },
+        {
+          "type": "p",
+          "text": "A vote only counts if enough people take part."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Enough people means 30% of the members who could vote and were active in the last 30 days. It is never fewer than 3 people.",
+            "For removing a member it is 25%.",
+            "\"Active\" means you did something in the app in those 30 days: posted, traded, voted, sent a message. Only opening the app to look does not count.",
+            "Turnout counts people, not the weight of their votes."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If too few people vote, nothing happens. The Decision closes as \"unresolved\"."
+        },
+        {
+          "type": "h2",
+          "text": "How much Yes is needed"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Most Decisions: 60% Yes.",
+            "Removing a member: 66% Yes.",
+            "Undoing something (lifting a suspension, unfreezing credit, reinstating a member): more than half.",
+            "A tie always fails."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "When a Decision passes"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Your community's server checks that it still makes sense: the member still exists, the Commons has enough beans. Then it acts.",
+            "If the Commons is short of beans for a grant, the grant waits until there is enough. It gives up after 90 days.",
+            "Only one grant can wait at a time. If a second grant passes while the Commons is still short, it does not wait: it closes for good, and the community must vote again.",
+            "If the person or enterprise is already gone, the Decision closes without doing anything."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Removing a member"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If a removal passes, the member is suspended and their credit frozen at once.",
+            "After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.",
+            "When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.",
+            "The community can vote to remove anyone except the only owner of your community's server."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Emergency suspension"
+        },
+        {
+          "type": "p",
+          "text": "An admin can suspend a member at once, for example to stop harm. They must give a reason that members can read."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "At the same moment, a 7-day Decision opens: \"Keep this suspension?\".",
+            "It needs the usual turnout and 60% Yes.",
+            "If it does not pass, or too few people vote, the suspension lifts by itself.",
+            "An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What admins can and cannot do"
+        },
+        {
+          "type": "p",
+          "text": "Your community's server has owners and admins. They look after it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.",
+            "If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away. If the member being removed is an owner or admin of the server, only an owner can do either.",
+            "Admins can give members the right to vouch for newcomers.",
+            "Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.",
+            "Admins sort out stuck trades, but never one they are part of."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Polls"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.",
+            "You can have one open Poll at a time. Your community can have 5 open Polls at once.",
+            "A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.",
+            "Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Enterprises and keepers"
+        },
+        {
+          "type": "p",
+          "text": "An enterprise is run by its keepers. One of them is the lead keeper."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Joining:** you ask to become a keeper and say how much of your earned trust you pledge (it can be 0). You cannot pledge more trust than you have earned by trading, across all your enterprises. The lead keeper approves or declines.",
+            "**Objection window:** when an enterprise already has more than one keeper, the lead's approval waits 3 days. Any other keeper can object in that time, and one objection cancels it.",
+            "**Removing a keeper:** the lead can remove an ordinary keeper. The same 3-day window applies, and any other keeper can object.",
+            "**Community admins:** an admin of your community who is not a keeper of the enterprise can approve a keeper, or remove an ordinary keeper, at once, with no 3-day window. This is so a stuck enterprise can be helped.",
+            "**Stepping down:** any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.",
+            "**Your pledge** backs the enterprise's credit line. It is never taken from your own balance or your own credit line.",
+            "**A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. Keeper votes cannot be changed.",
+            "**If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.",
+            "**Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Groups and convenors"
+        },
+        {
+          "type": "p",
+          "text": "A group is run by its convenors."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.",
+            "A convenor can approve and invite members, change people's roles, remove members, remove posts and edit the group.",
+            "The last convenor cannot step down or be removed while the group still has other members.",
+            "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
+            "**A quiet convenor:** if a group's only convenor has done nothing in the app for 30 days, any member can propose a new convenor. The members vote Yes or No for up to 14 days, in secret. It passes when more than half of those who answer say Yes. If the convenor comes back, the vote is cancelled. The screens for this are coming in a later update."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Vouching"
+        },
+        {
+          "type": "p",
+          "text": "Only members chosen by an admin, or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right."
+        }
+      ]
+    },
+    {
+      "slug": "faq",
+      "title": "Questions",
+      "summary": "Short answers to the questions members ask most.",
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Who runs my community?"
+        },
+        {
+          "type": "p",
+          "text": "Your community runs itself. Its server is looked after by people your community chose: its owners and admins. Your trades, posts and votes are kept on that server. The BeanPool project writes the app, and anyone can use it to start a community."
+        },
+        {
+          "type": "h2",
+          "text": "Is there interest on debt?"
+        },
+        {
+          "type": "p",
+          "text": "No. Being below zero costs nothing. Only beans you hold above 200 pay the small circulation fee."
+        },
+        {
+          "type": "h2",
+          "text": "Can I buy or sell beans for money?"
+        },
+        {
+          "type": "p",
+          "text": "The app has no way to buy or sell beans for money. Beans are earned by helping people."
+        },
+        {
+          "type": "h2",
+          "text": "Why can't I send a gift?"
+        },
+        {
+          "type": "p",
+          "text": "A gift needs two things. You must have completed a trade in the market (1 or 2 beans is too small to count), and you can only give beans you have. A gift can never take you below zero."
+        },
+        {
+          "type": "h2",
+          "text": "Why can't I spend below zero?"
+        },
+        {
+          "type": "p",
+          "text": "Two things set how far below zero you can go. Your trust from trading sets the most you could ever go. Your live Offers set how much of that you may use right now. With no live Offers, you cannot go below zero at all. Most people start by selling: post an Offer, and when someone takes it up, you earn beans and your first trust."
+        },
+        {
+          "type": "h2",
+          "text": "My badge says Steward. Why can I spend so little?"
+        },
+        {
+          "type": "p",
+          "text": "Your badge shows your trust. What you can spend right now also depends on how many live Offers you have. Badges never unlock anything on their own."
+        },
+        {
+          "type": "h2",
+          "text": "Can I change my vote?"
+        },
+        {
+          "type": "p",
+          "text": "On a Decision or a Poll, yes, until the vote closes. On a keeper or convenor vote, no."
+        },
+        {
+          "type": "h2",
+          "text": "Can anyone see how I voted?"
+        },
+        {
+          "type": "p",
+          "text": "On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. On a Poll: yes, everyone can see. Polls are an open show of hands."
+        },
+        {
+          "type": "h2",
+          "text": "I lost my phone. Is my account gone?"
+        },
+        {
+          "type": "p",
+          "text": "No, if you kept your 12-word recovery phrase. Install the app and restore your account with those 12 words. If you linked a sign-in account in Account Protection, you can also use that. Keep your 12 words somewhere safe and private. Anyone who has them can use your account."
+        },
+        {
+          "type": "h2",
+          "text": "Can I belong to more than one community?"
+        },
+        {
+          "type": "p",
+          "text": "Yes. You can save several communities in the app and switch between them. You use the same identity in each. Each community has its own beans, rules and members."
+        },
+        {
+          "type": "h2",
+          "text": "I am going away. What should I do?"
+        },
+        {
+          "type": "p",
+          "text": "Turn on Holiday Mode in Settings. Your Offers are hidden and nobody can send you new requests. Finish or cancel any open trades first, because Holiday Mode cannot start while a trade is open."
+        },
+        {
+          "type": "h2",
+          "text": "How do I leave?"
+        },
+        {
+          "type": "p",
+          "text": "You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words."
+        },
+        {
+          "type": "h2",
+          "text": "Something is wrong or could be better. Who do I tell?"
+        },
+        {
+          "type": "p",
+          "text": "For problems with a person or a trade, talk to the admins of your community. For ideas about the app itself, visit beanpool.org."
+        }
+      ]
+    },
+    {
+      "slug": "whats-new",
+      "title": "What's new",
+      "summary": "What changed in each version of the app, in plain words.",
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Version 1.2.38"
+        },
+        {
+          "type": "p",
+          "text": "Some of these changes live on your community's server. You get them when your community's server is updated."
+        },
+        {
+          "type": "h3",
+          "text": "New"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**This BeanPool sheet.** Guides to how BeanPool works, the rules, common questions and what's new. They work without a connection. Open it from Settings → BeanPool.",
+            "**Light or dark.** The app now follows your phone's light or dark setting. To choose for yourself, go to Settings → Appearance: Same as phone, Light or Dark.",
+            "**Badges.** Every screen now uses the same trust levels as your community's server: Resident from 200 trust, Steward from 600, Elder from 1,400. Some screens used to show the wrong badge. The Newcomer badge is easier to read."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Voting"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Secret ballots.** The app no longer shows anyone how you voted on a Decision, admins included. You can see your own vote.",
+            "**Who may vote.** Only members who joined before a Decision opened can vote on it.",
+            "**Turnout.** Turnout now counts members who did something in the app in the last 30 days.",
+            "**Emergency suspension.** When an admin suspends someone, a 7-day vote opens at once: \"Keep this suspension?\". If it does not pass, the suspension lifts by itself.",
+            "**Voice credits.** The voice credits shown for votes on Commons beans are the ones that count. You get them in full on every such vote.",
+            "**Fewer kinds of Decision.** Decisions can no longer change trust badges. The old \"voting rounds\" are gone."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Enterprises"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "When the lead keeper adds or removes a keeper, the other keepers have 3 days to object.",
+            "A keeper can step down, unless they are the only keeper.",
+            "Choosing a new lead now has a 14-day limit, and keepers can vote No.",
+            "If the lead leaves, the longest-serving keeper takes over at once."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Groups"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The old group chats in Chats have been removed, with their messages.",
+            "If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Safety"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Only an owner can give back or take away an owner's or admin's role.",
+            "An admin cannot settle a stuck trade they are part of.",
+            "Group and event chats limit how fast one person can post."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Fixes"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The map has one locate button again.",
+            "The Market feed is easier to read in dark mode."
+          ]
+        }
+      ]
+    }
+  ]
+}

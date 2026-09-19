@@ -360,7 +360,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setTotpError(null);
         try {
             // Find the profile to get the admin password
-            const profile = profiles.find(p => p.id === totpPromptNode.profileId);
+            // The single-node view's profile ('local-node') is built in place, not kept in `profiles`.
+            const profile = profiles.find(p => p.id === totpPromptNode.profileId)
+                || (activeNode?.id === totpPromptNode.profileId ? activeNode : undefined);
             if (!profile || !profile.adminPassword) {
                 setTotpError('No admin password configured for this node');
                 return;
@@ -1032,6 +1034,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                     setActiveTab('home');
                                                 }}
                                                 onCancel={() => setShowColdStart(false)}
+                                                onRequestTfaCode={() => promptForTotp(activeNode.id, activeNode.name, activeNode.url)}
                                                 onOpenAccessSecurity={() => {
                                                     setShowColdStart(false);
                                                     setNavSubTab('access');

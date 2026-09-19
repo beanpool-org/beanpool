@@ -23,6 +23,11 @@ export interface ColdStartWizardProps {
     onCancel?: () => void;
     /** Leaves the wizard for Appliance & Data → Access & Security, where 2FA can be finished. */
     onOpenAccessSecurity?: () => void;
+    /**
+     * Asks the operator for a code from their authenticator (the manager's own 2FA prompt) and resolves with the 2FA
+     * session the node issued for it. Rejects when they cancel.
+     */
+    onRequestTfaCode?: () => Promise<string>;
 }
 
 interface GeneratedCard {
@@ -77,6 +82,8 @@ type TfaState = 'checking' | 'unknown' | 'off' | 'starting' | 'awaiting-code' | 
 
 type Step1Outcome = { reachable: boolean; reachError: string | null; saved: boolean; saveError: string | null };
 
+type Step3Errors = { create?: string; keeper?: string; offer?: string };
+
 async function errorFrom(res: Response | null): Promise<string> {
     if (!res) return 'no answer';
     const body = await res.json().catch(() => ({} as { error?: string }));
@@ -91,6 +98,7 @@ export function ColdStartWizard({
     onComplete,
     onCancel,
     onOpenAccessSecurity,
+    onRequestTfaCode,
 }: ColdStartWizardProps) {
     // A 2FA session issued by turning 2FA on in step 2 outranks whatever the wizard was opened with: once 2FA is on,
     // every later admin call needs it.
@@ -109,10 +117,16 @@ export function ColdStartWizard({
     const [saveError, setSaveError] = useState<string | null>(null);
     const [savingStep1, setSavingStep1] = useState(false);
     const [step1Problem, setStep1Problem] = useState(false);
+    // The node refused the save because 2FA is on and this session has no code yet.
+    const [step1NeedsTfa, setStep1NeedsTfa] = useState(false);
 
     // Step 2: 2FA, confirmed in place.
     const [tfaState, setTfaState] = useState<TfaState>('checking');
-    const [tfaWasAlreadyOn, setTfaWasAlreadyOn] = useState(false);
+    // True only when a code was confirmed in this wizard. The status read that follows (the new 2FA session re-runs
+    // it) then reports 2FA on too, but that must not turn "turned on here" into "already on": the backup codes and
+    // the kit exist only for 2FA turned on here, and the node keeps only their hashes.
+    const [tfaTurnedOnHere, setTfaTurnedOnHere] = useState(false);
+    const [tfaStatusAttempt, setTfaStatusAttempt] = useState(0);
     const [tfaError, setTfaError] = useState<string | null>(null);
     const [tfaSetup, setTfaSetup] = useState<{ qrDataUrl?: string; formattedSecret: string; backupCodes: string[] } | null>(null);
     const [tfaCode, setTfaCode] = useState('');
@@ -130,12 +144,11 @@ export function ColdStartWizard({
                 if (cancelled) return;
                 const data = await res.json().catch(() => ({} as Record<string, unknown>));
                 if (cancelled) return;
+                // Only a state still waiting on this answer takes it; one the operator has moved on keeps its own.
                 if (res.ok && data && typeof data.totpEnabled === 'boolean') {
-                    setTfaWasAlreadyOn(data.totpEnabled);
                     setTfaState((s) => (s === 'checking' || s === 'unknown' ? (data.totpEnabled ? 'on' : 'off') : s));
                 } else if (res.status === 401 && data?.totpRequired) {
                     // The node refused the password alone because 2FA is on: that is its answer.
-                    setTfaWasAlreadyOn(true);
                     setTfaState((s) => (s === 'checking' || s === 'unknown' ? 'on' : s));
                 } else {
                     setTfaState((s) => (s === 'checking' ? 'unknown' : s));
@@ -146,7 +159,12 @@ export function ColdStartWizard({
         };
         loadTfaStatus();
         return () => { cancelled = true; };
-    }, [activeNode?.id, activeNode?.url, activeNode?.adminPassword, effectiveTfaToken]);
+    }, [activeNode?.id, activeNode?.url, activeNode?.adminPassword, effectiveTfaToken, tfaStatusAttempt]);
+
+    const handleRetryTfaStatus = () => {
+        setTfaState('checking');
+        setTfaStatusAttempt((n) => n + 1);
+    };
 
     // Step 3: First Enterprise & First Offer
     const [selectedPresetId, setSelectedPresetId] = useState<'food' | 'tools' | 'machinery'>('food');
@@ -157,6 +175,20 @@ export function ColdStartWizard({
     const [firstOfferPrice, setFirstOfferPrice] = useState(String(FIRST_ENTERPRISE_PRESETS[0].firstOfferCredits));
     const [creatingEnterprise, setCreatingEnterprise] = useState(false);
     const [createdEnterprisePk, setCreatedEnterprisePk] = useState<string | null>(null);
+    const [keeperAssigned, setKeeperAssigned] = useState(false);
+    const [offerPosted, setOfferPosted] = useState(false);
+    const [step3Errors, setStep3Errors] = useState<Step3Errors | null>(null);
+
+    // The first keeper is a member the node lists as an owner. On a new server nobody has joined yet, so usually
+    // there is none, and the wizard says so rather than appointing a key that is not a member. The genesis "Admin"
+    // the server seeds for the first invites is an owner too, but nobody holds its key, so it is never the keeper.
+    const keeperMember = (nodeData?.members || []).find(
+        (m) => m.nodeRole === 'owner' && !m.isTreasury && m.invitedBy !== 'genesis' && (m.publicKey || m.pubkey)
+    );
+    const keeperPubkey = keeperMember ? String(keeperMember.publicKey || keeperMember.pubkey) : null;
+    const keeperName = keeperMember
+        ? String(keeperMember.name || keeperMember.callsign || `${(keeperPubkey || '').slice(0, 12)}…`)
+        : null;
 
     // Step 4 is an explanation only: the commons fills from fees, never by hand, and this wizard moves no beans.
     const [commonsRead, setCommonsRead] = useState(false);
@@ -192,12 +224,12 @@ export function ColdStartWizard({
         await checkReachability();
     };
 
-    const saveName = async (): Promise<{ ok: boolean; error: string | null }> => {
+    const saveName = async (tfa: string | undefined): Promise<{ ok: boolean; error: string | null }> => {
         let res: Response | null = null;
         try {
             res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/update-identity'), {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(activeNode.adminPassword, tfa),
                 body: JSON.stringify({
                     password: activeNode.adminPassword,
                     communityName: communityName.trim(),
@@ -210,19 +242,26 @@ export function ColdStartWizard({
         if (res && res.ok) {
             setNameSaved(true);
             setSaveError(null);
+            setStep1NeedsTfa(false);
             return { ok: true, error: null };
         }
-        const error = await errorFrom(res);
+        const body = res ? await res.json().catch(() => null) : null;
+        setStep1NeedsTfa(!!res && res.status === 401 && !!body?.totpRequired);
+        const error = !res ? 'no answer' : (body && typeof body.error === 'string' && body.error) || `HTTP ${res.status}`;
         setNameSaved(false);
         setSaveError(error);
         return { ok: false, error };
     };
 
-    const runStep1 = async (): Promise<Step1Outcome> => {
+    // `recheck` asks the node again even when an earlier check passed; Retry always does, so the step's status comes
+    // from this attempt and never from a value read before it.
+    const runStep1 = async (opts: { recheck?: boolean; tfa?: string } = {}): Promise<Step1Outcome> => {
         setSavingStep1(true);
         try {
-            const reach = reachabilityStatus === 'reachable' ? { ok: true, error: null } : await checkReachability();
-            const save = await saveName();
+            const reach = reachabilityStatus === 'reachable' && !opts.recheck
+                ? { ok: true, error: null }
+                : await checkReachability();
+            const save = await saveName(opts.tfa ?? effectiveTfaToken);
             return { reachable: reach.ok, reachError: reach.error, saved: save.ok, saveError: save.error };
         } finally {
             setSavingStep1(false);
@@ -242,13 +281,30 @@ export function ColdStartWizard({
         }
     };
 
-    const handleRetryStep1 = async () => {
-        setReachabilityStatus('unchecked');
-        const outcome = await runStep1();
+    const finishStep1Attempt = (outcome: Step1Outcome) => {
         if (outcome.reachable && outcome.saved) {
             setStep1Problem(false);
             setCurrentStep(2);
         }
+    };
+
+    const handleRetryStep1 = async () => {
+        finishStep1Attempt(await runStep1({ recheck: true }));
+    };
+
+    // 2FA is on and this session has no code: ask for one with the manager's 2FA prompt, then save again with the
+    // session the node issued.
+    const handleStep1TfaCode = async () => {
+        if (!onRequestTfaCode) return;
+        let token: string;
+        try {
+            token = await onRequestTfaCode();
+        } catch {
+            return; // cancelled: the step stays as it was
+        }
+        if (!token) return;
+        setFreshTfaToken(token);
+        finishStep1Attempt(await runStep1({ recheck: true, tfa: token }));
     };
 
     const step1Done = reachabilityStatus === 'reachable' && nameSaved;
@@ -307,6 +363,7 @@ export function ColdStartWizard({
                 setFreshTfaToken(token);
             }
             setTfaCode('');
+            setTfaTurnedOnHere(true);
             setTfaState('on');
             return;
         }
@@ -314,7 +371,7 @@ export function ColdStartWizard({
         setTfaState('awaiting-code');
     };
 
-    const tfaOnHere = tfaState === 'on' && !tfaWasAlreadyOn;
+    const tfaOnHere = tfaState === 'on' && tfaTurnedOnHere;
     const kitBackupCodes = tfaOnHere && tfaSetup ? tfaSetup.backupCodes : [];
 
     // Step 2: the recovery kit lists only things that work: this server's address, and — when 2FA was turned on
@@ -367,66 +424,78 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
         setFirstOfferPrice(String(p.firstOfferCredits));
     };
 
-    // Step 3: Create enterprise & initial keeper & first offer
+    // Step 3: create the enterprise, appoint its first keeper (when an owner has joined) and post its first offer.
+    // Each part is reported as the node answered it. Retry repeats only the parts that failed, so it never makes a
+    // second enterprise.
     const handleCreateFirstEnterprise = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreatingEnterprise(true);
+        const errors: Step3Errors = {};
+        const reason = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
         try {
-            // 1. Create treasury
-            const res = await createNodeTreasury(
-                activeNode.url,
-                {
-                    name: enterpriseName.trim(),
-                    avatar: enterpriseAvatar.trim(),
-                    workingCapitalCeiling: 250,
-                    purpose: enterprisePurpose.trim() || undefined,
-                },
-                activeNode.adminPassword,
-                effectiveTfaToken
-            );
-
-            const treasuryPk = res.publicKey;
-            setCreatedEnterprisePk(treasuryPk);
-
-            // 2. Appoint operator as first keeper
-            const adminPubkey = nodeData?.members?.[0]?.publicKey || 'operator_key';
-            try {
-                await assignTreasuryKeeper(
-                    activeNode.url,
-                    treasuryPk,
-                    adminPubkey,
-                    activeNode.adminPassword,
-                    effectiveTfaToken
-                );
-            } catch {
-                // Non-blocking in test environment
+            let treasuryPk = createdEnterprisePk;
+            if (!treasuryPk) {
+                try {
+                    const res = await createNodeTreasury(
+                        activeNode.url,
+                        {
+                            name: enterpriseName.trim(),
+                            avatar: enterpriseAvatar.trim(),
+                            workingCapitalCeiling: 250,
+                            purpose: enterprisePurpose.trim() || undefined,
+                        },
+                        activeNode.adminPassword,
+                        effectiveTfaToken
+                    );
+                    if (!res || !res.publicKey) throw new Error('The node did not return the new enterprise');
+                    treasuryPk = res.publicKey;
+                    setCreatedEnterprisePk(treasuryPk);
+                } catch (err: unknown) {
+                    errors.create = reason(err, 'The node could not be reached');
+                }
             }
 
-            // 3. Post initial offer to satisfy covenant
-            try {
-                await seedTreasuryOffer(
-                    activeNode.url,
-                    treasuryPk,
-                    {
-                        title: firstOfferTitle.trim(),
-                        category: selectedPresetId === 'food' ? 'food' : 'tools',
-                        credits: Number(firstOfferPrice) || 15,
-                        description: `First community offer for ${enterpriseName}`,
-                    },
-                    activeNode.adminPassword,
-                    effectiveTfaToken
-                );
-            } catch {
-                // Non-blocking
+            if (treasuryPk && keeperPubkey && !keeperAssigned) {
+                try {
+                    await assignTreasuryKeeper(activeNode.url, treasuryPk, keeperPubkey, activeNode.adminPassword, effectiveTfaToken);
+                    setKeeperAssigned(true);
+                } catch (err: unknown) {
+                    errors.keeper = reason(err, 'The node could not be reached');
+                }
             }
 
-            setCurrentStep(4);
-        } catch (err: unknown) {
-            alert(err instanceof Error ? err.message : 'Failed to establish enterprise');
+            if (treasuryPk && !offerPosted) {
+                try {
+                    await seedTreasuryOffer(
+                        activeNode.url,
+                        treasuryPk,
+                        {
+                            title: firstOfferTitle.trim(),
+                            category: selectedPresetId === 'food' ? 'food' : 'tools',
+                            credits: Number(firstOfferPrice) || 15,
+                            description: `First community offer for ${enterpriseName}`,
+                        },
+                        activeNode.adminPassword,
+                        effectiveTfaToken
+                    );
+                    setOfferPosted(true);
+                } catch (err: unknown) {
+                    errors.offer = reason(err, 'The node could not be reached');
+                }
+            }
+
+            if (errors.create || errors.keeper || errors.offer) {
+                setStep3Errors(errors);
+            } else {
+                setStep3Errors(null);
+                setCurrentStep(4);
+            }
         } finally {
             setCreatingEnterprise(false);
         }
     };
+
+    const step3Done = !!createdEnterprisePk && offerPosted && (!keeperPubkey || keeperAssigned);
 
     // Step 5: Generate 3 founding invites with printable QR cards. Every card carries a code the node issued; when
     // the node refuses we stop and show its reason — a made-up code would be printed and fail at the door.
@@ -472,7 +541,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
     const stepDone: Record<number, boolean> = {
         1: step1Done,
         2: tfaState === 'on',
-        3: !!createdEnterprisePk,
+        3: step3Done,
         4: commonsRead,
         5: false,
     };
@@ -624,8 +693,23 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                         Your community name was not saved. The node said: <strong>{saveError}</strong>
                                     </p>
                                 )}
+                                {step1Problem && step1NeedsTfa && (
+                                    <p className="text-xs text-red-100 m-0 break-words">
+                                        2FA is on for this server, so saving needs a code from your authenticator app.
+                                    </p>
+                                )}
                                 {step1Problem && (
                                     <div className="flex flex-wrap gap-3">
+                                        {step1NeedsTfa && onRequestTfaCode && (
+                                            <button
+                                                type="button"
+                                                onClick={handleStep1TfaCode}
+                                                disabled={savingStep1}
+                                                className="min-h-[48px] px-5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                            >
+                                                Enter 2FA code
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={handleRetryStep1}
@@ -683,17 +767,33 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
 
                             {tfaState === 'on' ? (
                                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-xs text-emerald-300 font-semibold">
-                                    ✓ 2FA is on. {tfaWasAlreadyOn
-                                        ? 'The node says it was already on.'
-                                        : 'Signing in to these settings now needs a code from your authenticator app.'}
+                                    ✓ 2FA is on. {tfaTurnedOnHere
+                                        ? 'You turned it on here: signing in to these settings now needs a code from your authenticator app.'
+                                        : 'The node says it was already on.'}
                                 </div>
                             ) : (
                                 <>
-                                    <p className="text-xs text-amber-300 m-0 font-semibold">
-                                        2FA is not on yet.
-                                    </p>
-                                    {tfaState === 'checking' && (
-                                        <p className="text-[11px] text-nature-400 m-0">Asking the node...</p>
+                                    {tfaState === 'checking' ? (
+                                        <p className="text-xs text-nature-300 m-0 font-semibold">
+                                            Checking whether 2FA is on...
+                                        </p>
+                                    ) : tfaState === 'unknown' ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-amber-300 m-0 font-semibold">
+                                                Couldn't check whether 2FA is on.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={handleRetryTfaStatus}
+                                                className="w-full min-h-[48px] rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+                                            >
+                                                Retry
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-amber-300 m-0 font-semibold">
+                                            2FA is not on yet.
+                                        </p>
                                     )}
                                     {(tfaState === 'off' || tfaState === 'unknown' || tfaState === 'starting') && (
                                         <>
@@ -853,7 +953,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     key={p.id}
                                     type="button"
                                     onClick={() => handleSelectPreset(p.id as 'food' | 'tools' | 'machinery')}
-                                    className={`p-4 rounded-2xl border text-left transition-all ${
+                                    disabled={!!createdEnterprisePk}
+                                    className={`min-h-[48px] p-4 rounded-2xl border text-left transition-all ${
                                         isSelected
                                             ? 'bg-terra-500/20 border-terra-500/50 shadow-md'
                                             : 'bg-nature-950 border-nature-800 hover:border-nature-700'
@@ -887,6 +988,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                         type="text"
                                         value={enterpriseAvatar}
                                         onChange={(e) => setEnterpriseAvatar(e.target.value)}
+                                        disabled={!!createdEnterprisePk}
                                         placeholder="🌾"
                                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white focus:outline-none focus:border-terra-500"
                                     />
@@ -898,6 +1000,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     type="text"
                                     value={enterpriseName}
                                     onChange={(e) => setEnterpriseName(e.target.value)}
+                                    disabled={!!createdEnterprisePk}
                                     required
                                     className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
                                 />
@@ -905,15 +1008,23 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-nature-300 mb-1">
-                                Initial Lead Keeper Appointee
-                            </label>
-                            <div className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between text-xs">
-                                <span className="font-semibold text-white">@node-owner (Your Paired Admin Key)</span>
-                                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
-                                    Lead Keeper
-                                </span>
-                            </div>
+                            <span className="block text-xs font-bold text-nature-300 mb-1">First keeper</span>
+                            {keeperName ? (
+                                <div
+                                    data-testid="cold-start-keeper"
+                                    className="p-3 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap items-center justify-between gap-2 text-xs"
+                                >
+                                    <span className="font-semibold text-white break-all min-w-0">{keeperName}</span>
+                                    <span className="px-2 py-0.5 rounded bg-nature-800 text-nature-300 text-[10px] font-bold">
+                                        {keeperAssigned ? '✓ Keeper' : 'Owner, will be made keeper'}
+                                    </span>
+                                </div>
+                            ) : (
+                                <p data-testid="cold-start-keeper" className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-nature-300 m-0 leading-relaxed">
+                                    No keeper will be set. Nobody on this server is an owner yet. Once you have joined
+                                    and made yourself an owner (step 2), add yourself as its keeper in Shared Projects &amp; Economy.
+                                </p>
+                            )}
                         </div>
 
                         {/* First Offer */}
@@ -945,21 +1056,64 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             </div>
                         </div>
 
-                        <div className="pt-4 flex items-center justify-between border-t border-nature-800">
+                        {step3Errors && (
+                            <div role="alert" className="p-4 rounded-2xl bg-red-950/60 border border-red-800 space-y-2 text-xs text-red-100">
+                                {step3Errors.create && (
+                                    <p className="m-0 break-words">
+                                        The enterprise was not created. The node said: <strong>{step3Errors.create}</strong>
+                                    </p>
+                                )}
+                                {createdEnterprisePk && (
+                                    <p className="m-0 break-words text-nature-200">
+                                        The enterprise {enterpriseName.trim()} was created.
+                                    </p>
+                                )}
+                                {step3Errors.keeper && (
+                                    <p className="m-0 break-words">
+                                        {keeperName} was not made its keeper. The node said: <strong>{step3Errors.keeper}</strong>
+                                    </p>
+                                )}
+                                {step3Errors.offer && (
+                                    <p className="m-0 break-words">
+                                        The first offer was not posted. The node said: <strong>{step3Errors.offer}</strong>
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap gap-3 pt-1">
+                                    <button
+                                        type="submit"
+                                        disabled={creatingEnterprise}
+                                        className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                    >
+                                        {creatingEnterprise ? 'Trying...' : 'Retry'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCurrentStep(4)}
+                                        className="min-h-[48px] px-5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+                                    >
+                                        Continue anyway →
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-4 flex items-center justify-between gap-3 border-t border-nature-800">
                             <button
                                 type="button"
                                 onClick={() => setCurrentStep(2)}
-                                className="px-4 py-2 rounded-xl bg-nature-800 text-xs font-bold text-nature-300 hover:text-white"
+                                className="min-h-[48px] px-4 rounded-xl bg-nature-800 text-xs font-bold text-nature-300 hover:text-white"
                             >
                                 ← Back
                             </button>
-                            <button
-                                type="submit"
-                                disabled={creatingEnterprise || !enterpriseName.trim()}
-                                className="px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
-                            >
-                                {creatingEnterprise ? 'Creating...' : 'Next: The Commons →'}
-                            </button>
+                            {!step3Errors && (
+                                <button
+                                    type="submit"
+                                    disabled={creatingEnterprise || !enterpriseName.trim()}
+                                    className="min-h-[48px] px-6 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                >
+                                    {creatingEnterprise ? 'Creating...' : 'Next: The Commons →'}
+                                </button>
+                            )}
                         </div>
                     </form>
                 </div>

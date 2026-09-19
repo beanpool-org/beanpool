@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 9,
-  "hash": "17a7250f8a13beddea66100d7e68c3db30b348c5ae2db20c7aec207f1ee038e1",
+  "hash": "cb1ec15375124c420e6ee003119568836ae1babda21e4f14c8cf63b175e65791",
   "sections": [
     {
       "id": "setup",
@@ -140,10 +140,10 @@
         {
           "type": "ul",
           "items": [
-            "**Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓.",
-            "**Step 2** turns on two-factor sign-in, if you want it now. Tap **Set up 2FA**, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA; if the server refuses, the wizard shows why, and you can finish it later in Access & Security.",
+            "**Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓. If two-factor sign-in is already on and you have not typed a code this session, it asks for one with **Enter 2FA code**, then saves.",
+            "**Step 2** turns on two-factor sign-in, if you want it now. Tap **Set up 2FA**, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. Save them before you leave the step: the server keeps only a scrambled copy, so they cannot be shown again. If two-factor was already on, the wizard says so and has no codes to show. While it is asking the server, it says **Checking whether 2FA is on**; if it could not find out, it says so, with **Retry**. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA; if the server refuses, the wizard shows why, and you can finish it later in Access & Security.",
             "**Step 2** also explains how your phone becomes an owner. See The first owner below.",
-            "**Step 3** can create your first enterprise and post its first offer.",
+            "**Step 3** can create your first enterprise and post its first offer. If a member is already an owner, it makes them the enterprise's first keeper. On a new server nobody is, so it says no keeper will be set; add one later under Shared Projects & Economy. If any part fails, it shows the server's reason, with **Retry** (which repeats only the parts that failed) and **Continue anyway**.",
             "**Step 4** explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.",
             "**Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety."
           ]
@@ -159,8 +159,7 @@
         {
           "type": "ul",
           "items": [
-            "It does not save a region or a map location. Set those later under Node Identity.",
-            "In step 3, if appointing you as keeper or posting the first offer fails, the wizard still moves on without saying so. Check the enterprise under Shared Projects & Economy."
+            "It does not save a region or a map location. Set those later under Node Identity."
           ]
         },
         {

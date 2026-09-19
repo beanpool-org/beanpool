@@ -29,6 +29,9 @@ const mockDiag = {
 
 type Reply = { status: number; body?: unknown } | null;
 
+/** A member the node lists as an owner: the only kind the wizard makes the first keeper. */
+const ownerNodeData = { members: [{ publicKey: 'owner_pk_1', name: 'Robin', nodeRole: 'owner' as const }] };
+
 function reply(r: Reply) {
     if (!r) return Promise.reject(new TypeError('Failed to fetch'));
     return Promise.resolve({
@@ -114,7 +117,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
     it('navigates through all 5 steps of the cold-start wizard and enforces invariants', async () => {
         const handleComplete = vi.fn();
-        await renderWizard({ onComplete: handleComplete });
+        await renderWizard({ onComplete: handleComplete, nodeData: ownerNodeData });
 
         // Step 1: Name & check
         expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
@@ -144,10 +147,13 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText('Tools & Infrastructure')).toBeInTheDocument();
         expect(screen.getByText('Machinery & Transport')).toBeInTheDocument();
         await click(screen.getByRole('button', { name: /Tools & Infrastructure/i }));
+        expect(screen.getByTestId('cold-start-keeper')).toHaveTextContent('Robin');
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
 
         expect(nodeClient.createNodeTreasury).toHaveBeenCalled();
-        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalled();
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
+            mockProfile.url, 'treasury_pk_first', 'owner_pk_1', mockProfile.adminPassword, undefined
+        );
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalled();
 
         // Step 4: an explanation (Guard: NO Demurrage Slider per §6)
@@ -319,13 +325,22 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
     it('step 2: 2FA shows "on" only after the node accepts a code, then the kit holds the real backup codes', async () => {
         let verifyCalls = 0;
+        // Like a real node: 2FA status reads off until a code is confirmed, and on from then on.
+        let nodeTfaOn = false;
+        const statusAnswers: boolean[] = [];
         stubNode({
+            '/api/local/admin/2fa/status': () => {
+                statusAnswers.push(nodeTfaOn);
+                return { status: 200, body: { success: true, totpEnabled: nodeTfaOn } };
+            },
             '/api/local/admin/2fa/verify': (init) => {
                 verifyCalls++;
                 const { code } = JSON.parse(String(init?.body));
-                return code === '654321'
-                    ? { status: 200, body: { success: true, totpEnabled: true, tfaSessionToken: 'tfa-fresh' } }
-                    : { status: 400, body: { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' } };
+                if (code !== '654321') {
+                    return { status: 400, body: { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' } };
+                }
+                nodeTfaOn = true;
+                return { status: 200, body: { success: true, totpEnabled: true, tfaSessionToken: 'tfa-fresh' } };
             },
         });
         vi.spyOn(nodeClient, 'setTfaSessionToken');
@@ -354,8 +369,14 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await click(screen.getByRole('button', { name: 'Turn on 2FA' }));
         expect(screen.getByText(/✓ 2FA is on/)).toBeInTheDocument();
         expect(nodeClient.setTfaSessionToken).toHaveBeenCalledWith('test-node', 'tfa-fresh');
+        // The new 2FA session re-read the status, and the node now says on. That must not make it "already on"
+        // or hide the codes, which the node cannot show again.
+        expect(statusAnswers).toEqual([false, true]);
+        expect(screen.getByText(/You turned it on here/)).toBeInTheDocument();
+        expect(screen.queryByText(/already on/)).not.toBeInTheDocument();
         expect(screen.getByText('aaaa-1111')).toBeInTheDocument();
         expect(screen.getByText('bbbb-2222')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Download Recovery Kit/i })).toBeInTheDocument();
 
         // The kit lists only real things: the address and the node's backup codes.
         let kitText = '';
@@ -403,7 +424,41 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
 
         expect(screen.getByText(/✓ 2FA is on/)).toBeInTheDocument();
+        expect(screen.getByText(/already on/)).toBeInTheDocument();
+        // No codes were made here, so there is no kit.
+        expect(screen.queryByRole('button', { name: /Recovery Kit/i })).not.toBeInTheDocument();
         expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/2fa/setup'), expect.anything());
+    });
+
+    it('step 2: while the status is being read it says so, never "not on yet"', async () => {
+        stubNode();
+        vi.mocked(global.fetch).mockImplementation(((url: string) =>
+            url.includes('/2fa/status')
+                ? new Promise(() => {})
+                : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) })) as typeof fetch);
+        await renderWizard();
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+
+        expect(screen.getByText('Checking whether 2FA is on...')).toBeInTheDocument();
+        expect(screen.queryByText('2FA is not on yet.')).not.toBeInTheDocument();
+    });
+
+    it("step 2: a status read that failed says it couldn't check, and Retry asks again", async () => {
+        let statusOk = false;
+        stubNode({
+            '/api/local/admin/2fa/status': () =>
+                statusOk ? { status: 200, body: { success: true, totpEnabled: false } } : { status: 502, body: {} },
+        });
+        await renderWizard();
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+
+        expect(screen.getByText("Couldn't check whether 2FA is on.")).toBeInTheDocument();
+        expect(screen.queryByText('2FA is not on yet.')).not.toBeInTheDocument();
+
+        statusOk = true;
+        await click(screen.getByRole('button', { name: 'Retry' }));
+        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
+        expect(screen.queryByText("Couldn't check whether 2FA is on.")).not.toBeInTheDocument();
     });
 
     it('step 4 never claims a transfer: it moves no beans, asks for no amount, and calls nothing on the node', async () => {
@@ -426,7 +481,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
     });
 
     it('forwards 2FA session token to identity, treasury, keeper, offer, and invite calls when tfaToken is provided', async () => {
-        await renderWizard({ tfaToken: 'tfa-wizard-token' });
+        await renderWizard({ tfaToken: 'tfa-wizard-token', nodeData: ownerNodeData });
 
         await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
         expect(global.fetch).toHaveBeenCalledWith(
@@ -451,7 +506,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
-            expect.any(String),
+            'owner_pk_1',
             mockProfile.adminPassword,
             'tfa-wizard-token'
         );
@@ -518,5 +573,129 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
                 }),
             })
         );
+    });
+
+    it('step 1: Retry after a refused save, with the server reachable, finishes the step with ✓', async () => {
+        let saves = 0;
+        stubNode({
+            '/api/local/update-identity': () => (++saves === 1
+                ? { status: 500, body: { error: 'database is locked' } }
+                : { status: 200, body: { success: true } }),
+        });
+        await renderWizard();
+
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        expect(screen.getByRole('alert')).toHaveTextContent('database is locked');
+        expect(screen.getByText(/Your server answered/)).toBeInTheDocument();
+
+        await click(screen.getByRole('button', { name: 'Retry' }));
+        expect(saves).toBe(2);
+        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
+        expect(screen.getByTestId('wizard-step-1')).not.toHaveTextContent('⚠');
+    });
+
+    it('step 1: with 2FA on and no 2FA session, asks for a code with the manager prompt and saves with it', async () => {
+        stubNode({
+            '/api/local/update-identity': (init) => {
+                const headers = (init?.headers || {}) as Record<string, string>;
+                return headers['X-Admin-2FA-Session'] === 'tfa-from-prompt'
+                    ? { status: 200, body: { success: true } }
+                    : { status: 401, body: { error: '2FA code required', totpRequired: true } };
+            },
+        });
+        const onRequestTfaCode = vi.fn().mockResolvedValue('tfa-from-prompt');
+        await renderWizard({ onRequestTfaCode });
+
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        expect(screen.getByRole('alert')).toHaveTextContent('saving needs a code from your authenticator app');
+
+        await click(screen.getByRole('button', { name: 'Enter 2FA code' }));
+        expect(onRequestTfaCode).toHaveBeenCalledTimes(1);
+        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
+    });
+
+    it('step 1: cancelling the 2FA prompt leaves the step unfinished', async () => {
+        stubNode({ '/api/local/update-identity': { status: 401, body: { error: '2FA code required', totpRequired: true } } });
+        const onRequestTfaCode = vi.fn().mockRejectedValue(new Error('2FA_CANCELLED'));
+        await renderWizard({ onRequestTfaCode });
+
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: 'Enter 2FA code' }));
+        expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('Your community name was not saved');
+    });
+
+    async function goToStep3(props: Partial<React.ComponentProps<typeof ColdStartWizard>> = {}) {
+        await renderWizard(props);
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        expect(screen.getByText(/Step 3: Establish First Community Enterprise/i)).toBeInTheDocument();
+    }
+
+    it('step 3: with no owner on the node, says no keeper will be set and appoints nobody', async () => {
+        // The genesis "Admin" the server seeds is an owner nobody holds the key for: not a keeper.
+        await goToStep3({
+            nodeData: { members: [{ publicKey: 'genesis_pk', callsign: 'Admin', invitedBy: 'genesis', nodeRole: 'owner' }] },
+        });
+
+        expect(screen.getByTestId('cold-start-keeper')).toHaveTextContent('No keeper will be set');
+        expect(document.body.textContent).not.toMatch(/Paired Admin Key|@node-owner/);
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+
+        expect(nodeClient.assignTreasuryKeeper).not.toHaveBeenCalled();
+        expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('✓');
+    });
+
+    it('step 3: a refused first offer shows the node\'s reason and Retry, never a ✓, and Retry makes no second enterprise', async () => {
+        vi.mocked(nodeClient.seedTreasuryOffer)
+            .mockRejectedValueOnce(new Error('title and category are required'))
+            .mockResolvedValueOnce({ success: true, post: {} });
+        await goToStep3({ nodeData: ownerNodeData });
+
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+        expect(screen.getByText(/Step 3: Establish First Community Enterprise/i)).toBeInTheDocument();
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('The first offer was not posted. The node said: title and category are required');
+        expect(alert).toHaveTextContent('was created');
+        expect(screen.getByTestId('cold-start-keeper')).toHaveTextContent('✓ Keeper');
+
+        await click(screen.getByRole('button', { name: 'Retry' }));
+        expect(nodeClient.createNodeTreasury).toHaveBeenCalledTimes(1);
+        expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledTimes(1);
+        expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledTimes(2);
+        expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('✓');
+    });
+
+    it('step 3: a refused keeper shows the reason; Continue anyway marks the step unfinished', async () => {
+        vi.mocked(nodeClient.assignTreasuryKeeper).mockRejectedValue(new Error('Member not found'));
+        await goToStep3({ nodeData: ownerNodeData });
+
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+        expect(screen.getByRole('alert')).toHaveTextContent('Robin was not made its keeper. The node said: Member not found');
+
+        await click(screen.getByRole('button', { name: /Continue anyway/i }));
+        expect(screen.getByText(/Step 4: How the Commons Fills/i)).toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-3')).toHaveTextContent('⚠');
+        expect(screen.getByTestId('wizard-step-3')).not.toHaveTextContent('✓');
+    });
+
+    it('step 3: a refused enterprise posts nothing else and shows the reason', async () => {
+        vi.mocked(nodeClient.createNodeTreasury).mockRejectedValue(new Error('name and avatar are required'));
+        await goToStep3({ nodeData: ownerNodeData });
+
+        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
+        expect(screen.getByRole('alert')).toHaveTextContent('The enterprise was not created. The node said: name and avatar are required');
+        expect(nodeClient.assignTreasuryKeeper).not.toHaveBeenCalled();
+        expect(nodeClient.seedTreasuryOffer).not.toHaveBeenCalled();
+    });
+
+    it('the wizard source has no made-up keeper fallback', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, 'ColdStartWizard.tsx'), 'utf8');
+        expect(src).not.toMatch(/operator_key/);
+        expect(src).not.toMatch(/Paired Admin Key/);
     });
 });

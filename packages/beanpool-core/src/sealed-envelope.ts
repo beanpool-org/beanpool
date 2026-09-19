@@ -283,11 +283,21 @@ function isoNow(): string {
 // ── Canonical JSON ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * How deep canonical JSON will nest. A real header is four levels deep; a hostile one under the
+ * 256 KiB header cap could otherwise nest far enough to overflow the stack with a RangeError
+ * instead of this module's error.
+ */
+const MAX_JSON_DEPTH = 32;
+
+/**
  * Canonical JSON: object keys sorted, no whitespace, integers only. The header is signed and
  * hashed in this form, and an opener refuses a header whose bytes are not already canonical, so
  * there is exactly one byte string for any header.
  */
-export function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown, depth = 0): string {
+    if (depth > MAX_JSON_DEPTH) {
+        throw new SealedEnvelopeError(`Canonical JSON nests deeper than ${MAX_JSON_DEPTH} levels.`);
+    }
     if (value === null) return 'null';
     if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
     if (typeof value === 'number') {
@@ -296,11 +306,11 @@ export function canonicalJson(value: unknown): string {
         }
         return JSON.stringify(value);
     }
-    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    if (Array.isArray(value)) return `[${value.map((v) => canonicalJson(v, depth + 1)).join(',')}]`;
     if (typeof value === 'object') {
         const obj = value as Record<string, unknown>;
         const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
-        return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`;
+        return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k], depth + 1)}`).join(',')}}`;
     }
     throw new SealedEnvelopeError(`Canonical JSON cannot encode a ${typeof value}.`);
 }
@@ -374,7 +384,11 @@ export function parseRecoveryCode(input: string): ParsedRecoveryCode {
             throw new RecoveryCodeError('The code number after BPRC is not a number.');
         }
         codeId = Number(idPart);
-        requireCodeId(codeId);
+        // A typed number of 0 is a typo like any other: the same class, so "check what you
+        // typed" handlers catch it.
+        if (!Number.isSafeInteger(codeId) || codeId < 1) {
+            throw new RecoveryCodeError(`There is no recovery code #${idPart}: check what you typed.`);
+        }
         s = s.slice(s.length - CODE_CHARS);
     }
     s = s.replace(/[IL]/g, '1').replace(/O/g, '0');
@@ -524,6 +538,12 @@ export interface SealOptions {
     chunkSize?: number;
     /** ISO 8601; default now. */
     createdAt?: string;
+    /**
+     * Receives the data key once it is drawn — for a sealer that must prove the round trip before
+     * it deletes the plaintext it sealed (the harvester's seal-old pass, §6.4), and holds no owner
+     * key or code to prove it with. Keep it in memory only, and only for that check.
+     */
+    onDataKey?: (dataKey: Uint8Array) => void;
 }
 
 function requireKind(kind: unknown): asserts kind is SealedEnvelopeKind {
@@ -583,6 +603,7 @@ function prepareSeal(opts: SealOptions): Sealer {
     assertRecoveryCsprngAvailable();
 
     const dek = randomBytes(KEY_LEN);
+    opts.onDataKey?.(dek.slice());
     const envelopeId = randomBytes(ENVELOPE_ID_LEN);
     const recipients: RecipientStanza[] = [];
     const seenOwners = new Set<string>();
@@ -790,7 +811,9 @@ export function verifySealedHeader(header: SealedEnvelopeHeader, signerPublicKey
 /** How the opener proves it is a recipient: an owner's member key, or the printed code. */
 export type SealedEnvelopeKey =
     | { type: 'owner'; privateKey: string | Uint8Array }
-    | { type: 'code'; code: string };
+    | { type: 'code'; code: string }
+    /** The data key itself, from {@link SealOptions.onDataKey}: re-opening what this process just sealed. */
+    | { type: 'dataKey'; dataKey: Uint8Array };
 
 export interface OpenOptions {
     /** The kind the caller expects. An envelope of the other kind is refused. */
@@ -800,11 +823,18 @@ export interface OpenOptions {
 /** Validate the key before touching the envelope, so a typo in the code costs nothing. */
 function preflightKey(key: SealedEnvelopeKey): void {
     if (key?.type === 'code') parseRecoveryCode(key.code);
+    else if (key?.type === 'dataKey') {
+        if (!(key.dataKey instanceof Uint8Array) || key.dataKey.length !== KEY_LEN) {
+            throw new SealedEnvelopeError(`A data key is ${KEY_LEN} bytes.`);
+        }
+    }
     else if (key?.type === 'owner') privateSeed(key.privateKey, 'privateKey');
-    else throw new SealedEnvelopeError("The key must be { type: 'owner' } or { type: 'code' }.");
+    else throw new SealedEnvelopeError("The key must be { type: 'owner' }, { type: 'code' } or { type: 'dataKey' }.");
 }
 
 async function unwrapDek(header: SealedEnvelopeHeader, key: SealedEnvelopeKey): Promise<Uint8Array> {
+    // No stanza to open: the body's AEAD tags are what prove it is the right key.
+    if (key.type === 'dataKey') return key.dataKey.slice();
     const envelopeId = hexToBytes(header.envelopeId);
     let stanza: RecipientStanza | undefined;
     let mySecret: Uint8Array;
@@ -865,6 +895,12 @@ export interface OpenedStream {
      * finishes without throwing.
      */
     chunks: AsyncGenerator<Uint8Array>;
+    /**
+     * Close the source without reading the body. Safe to call more than once, and after `chunks` has
+     * finished. `chunks.return()` does the same, even before the first read: a generator that never
+     * started runs no `finally`, so the source would otherwise stay open.
+     */
+    close(): Promise<void>;
 }
 
 /**
@@ -890,41 +926,72 @@ export async function openEnvelopeStream(
         return queue.length >= n;
     };
 
-    if (!(await fill(HEADER_LEN_PREFIX))) throw new SealedEnvelopeError('The envelope is truncated before its header.');
-    const lenBytes = queue.take(HEADER_LEN_PREFIX);
-    const len = new DataView(lenBytes.buffer, lenBytes.byteOffset, 4).getUint32(0, false);
-    if (len === 0 || len > MAX_HEADER_BYTES) {
-        throw new SealedEnvelopeError(`The envelope header claims ${len} bytes, outside 1–${MAX_HEADER_BYTES}.`);
+    // Whenever this stops early — a throw here, a throw in the chunk iterator, or a caller that
+    // breaks out — the source is closed, so a file-backed source does not leak its handle.
+    const release = async (): Promise<void> => {
+        if (done) return;
+        done = true;
+        try { await it.return?.(); } catch { /* the original error matters more */ }
+    };
+
+    let header: SealedEnvelopeHeader;
+    let headerJson: Uint8Array;
+    let dek: Uint8Array;
+    try {
+        if (!(await fill(HEADER_LEN_PREFIX))) throw new SealedEnvelopeError('The envelope is truncated before its header.');
+        const lenBytes = queue.take(HEADER_LEN_PREFIX);
+        const len = new DataView(lenBytes.buffer, lenBytes.byteOffset, 4).getUint32(0, false);
+        if (len === 0 || len > MAX_HEADER_BYTES) {
+            throw new SealedEnvelopeError(`The envelope header claims ${len} bytes, outside 1–${MAX_HEADER_BYTES}.`);
+        }
+        if (!(await fill(len))) throw new SealedEnvelopeError('The envelope is truncated inside its header.');
+        headerJson = queue.take(len);
+        header = parseHeaderJson(headerJson);
+        if (header.kind !== opts.kind) {
+            throw new SealedEnvelopeError(`This is a '${header.kind}' envelope, not a '${opts.kind}' one.`);
+        }
+        dek = await unwrapDek(header, key);
+    } catch (e) {
+        await release();
+        throw e;
     }
-    if (!(await fill(len))) throw new SealedEnvelopeError('The envelope is truncated inside its header.');
-    const headerJson = queue.take(len);
-    const header = parseHeaderJson(headerJson);
-    if (header.kind !== opts.kind) {
-        throw new SealedEnvelopeError(`This is a '${header.kind}' envelope, not a '${opts.kind}' one.`);
-    }
-    const dek = await unwrapDek(header, key);
     const envelopeId = hexToBytes(header.envelopeId);
     const bodyAad = sha256(headerJson);
     const segment = header.chunkSize + TAG_LEN;
 
     async function* chunks(): AsyncGenerator<Uint8Array> {
         let index = 0;
-        for (;;) {
-            // Read one byte past a full segment: if it is there, this segment is not the last.
-            const more = await fill(segment + 1);
-            if (more) {
-                yield decryptChunk(dek, envelopeId, bodyAad, index++, false, queue.take(segment));
-                await yieldToEventLoop();
-                continue;
+        try {
+            for (;;) {
+                // Read one byte past a full segment: if it is there, this segment is not the last.
+                const more = await fill(segment + 1);
+                if (more) {
+                    yield decryptChunk(dek, envelopeId, bodyAad, index++, false, queue.take(segment));
+                    await yieldToEventLoop();
+                    continue;
+                }
+                if (queue.length < TAG_LEN) {
+                    throw new SealedEnvelopeError('The envelope is cut short: its last chunk is missing.');
+                }
+                yield decryptChunk(dek, envelopeId, bodyAad, index, true, queue.take(queue.length));
+                return;
             }
-            if (queue.length < TAG_LEN) {
-                throw new SealedEnvelopeError('The envelope is cut short: its last chunk is missing.');
-            }
-            yield decryptChunk(dek, envelopeId, bodyAad, index, true, queue.take(queue.length));
-            return;
+        } finally {
+            await release();
         }
     }
-    return { header, chunks: chunks() };
+    const body = chunks();
+    const guarded: AsyncGenerator<Uint8Array> = {
+        next: (...args) => body.next(...args),
+        return: async (value) => {
+            try { return await body.return(value); } finally { await release(); }
+        },
+        throw: async (err) => {
+            try { return await body.throw(err); } finally { await release(); }
+        },
+        [Symbol.asyncIterator]() { return this; },
+    } as AsyncGenerator<Uint8Array>;
+    return { header, chunks: guarded, close: release };
 }
 
 /** Open a whole envelope in memory. */
@@ -939,7 +1006,7 @@ export async function openEnvelope(
 
 // ── Byte queue ──────────────────────────────────────────────────────────────────────────────
 
-/** A FIFO of byte pieces, so re-cutting a stream into chunks does not re-copy everything held. */
+/** A FIFO of byte pieces. Each piece is copied once on the way in (see push), never again. */
 class ByteQueue {
     private pieces: Uint8Array[] = [];
     private head = 0;
@@ -950,7 +1017,10 @@ class ByteQueue {
             throw new SealedEnvelopeError('A stream piece must be a byte array.');
         }
         if (piece.length === 0) return;
-        this.pieces.push(piece);
+        // Copy: sealing and opening hold bytes across an `await`, and a source may reuse its
+        // buffer for the next piece (a read loop into one scratch buffer). Holding the caller's
+        // view would seal or open whatever the buffer holds later, silently.
+        this.pieces.push(new Uint8Array(piece));
         this.length += piece.length;
     }
 

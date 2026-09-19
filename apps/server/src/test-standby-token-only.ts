@@ -12,10 +12,11 @@
  *      With token-only on as well, the banner says it is NOT copying, and the pull does fail.
  *   4. Warning path: two-factor sign-in on the main server, or a stored password it refuses —
  *      no token made, and the banner says the standby is NOT copying (the pull really fails).
- *   5. Backup files and /api responses never carry the stored password.
+ *   5. Backup files and /api responses never carry the stored password (the sealed backup is opened with a
+ *      recovery code and every file inside it checked); the plain identity bundle is gone (404).
  *   6. Auto-swap: a legacy standby whose main server has no token mints one with the password,
  *      stores only the token, and the password is nowhere in the data dir (grep, incl. state.db).
- *   7. Copying works end to end with the token, also with token-only switched on.
+ *   7. Copying works end to end with the token, also with token-only switched on; the token's /backup is sealed.
  *   8. A token already present: a stored password is wiped; an env password is warned about.
  *   9. Race: a token replaced by another standby's swap during the re-check keeps the password;
  *      two swaps at once leave exactly one working token.
@@ -69,6 +70,8 @@ const { resetPasswordBrake } = await import('./password-brake.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { migrateStandbyPassword, requestResync, getBackupStatus } = await import('./services/backup-puller.js');
 const { db } = await import('./db/db.js');
+const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
+const { openEnvelope, readSealedHeader } = await import('@beanpool/core');
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -231,18 +234,28 @@ async function main() {
         fs.writeFileSync(path.join(DATA_DIR!, 'genesis.json'), JSON.stringify({ communityId: 'standby-test' }));
         if (!fs.existsSync(path.join(DATA_DIR!, 'community.key'))) fs.writeFileSync(path.join(DATA_DIR!, 'community.key'), 'test-key');
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'standby-bundles-'));
-        for (const [route, name] of [['/api/local/admin/identity-bundle', 'identity'], ['/api/local/admin/backup', 'db']] as const) {
+        // Backups are sealed (sealed-keys slice 3): the node needs someone to lock them to, and this check opens the
+        // file to look inside it — the database, node_config.json and the take-over bundle with the node keys.
+        const recovery = await makeRecoveryCode({ replace: true });
+        {
             resetBrakes();
-            const res = await fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
-            assert(res.status === 200, `5. ${route} answers 200`);
-            const tarPath = path.join(tmp, `${name}.tar.gz`);
-            fs.writeFileSync(tarPath, Buffer.from(await res.arrayBuffer()));
-            const out = path.join(tmp, name);
+            const res = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
+            assert(res.status === 200, '5. /api/local/admin/backup answers 200');
+            const sealed = Buffer.from(await res.arrayBuffer());
+            assert(!(sealed[0] === 0x1f && sealed[1] === 0x8b), '5. …with a sealed file, not a plain archive');
+            const tarPath = path.join(tmp, 'db.tar.gz');
+            fs.writeFileSync(tarPath, (await openEnvelope(new Uint8Array(sealed), { type: 'code', code: recovery.code }, { kind: 'backup' })).payload);
+            const out = path.join(tmp, 'db');
             fs.mkdirSync(out);
             execFileSync('tar', ['-xzf', tarPath, '-C', out]);
-            assert(filesContaining(out, ADMIN_PW).length === 0, `5. the ${name} backup file does not contain the stored password`);
-            assert(!fs.readFileSync(tarPath).includes(Buffer.from(ADMIN_PW)), `5. nor does the ${name} archive itself`);
+            assert(fs.existsSync(path.join(out, 'takeover-bundle.json')), '5. the opened backup carries the take-over bundle (the node keys)');
+            assert(filesContaining(out, ADMIN_PW).length === 0, '5. the db backup file does not contain the stored password (every file in it, the bundle included)');
+            assert(!fs.readFileSync(tarPath).includes(Buffer.from(ADMIN_PW)), '5. nor does the db archive itself');
+            assert(!sealed.includes(Buffer.from(ADMIN_PW)), '5. nor the sealed file');
         }
+        resetBrakes();
+        const idGone = await fetch(base + '/api/local/admin/identity-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
+        assert(idGone.status === 404, `5. the plain identity bundle is gone: 404 even with the admin password (got ${idGone.status})`);
         fs.rmSync(tmp, { recursive: true, force: true });
         for (const p of ['/api/local/admin/replication-config/get', '/api/local/admin/backup-status', '/api/local/admin/replication-token/status', '/api/local/admin/replication-access']) {
             const r = await post(p, { password: ADMIN_PW });
@@ -275,15 +288,18 @@ async function main() {
         assert(pulledTokenOnly.ok, '7. copying still works once the main server is token-only');
         // The standby's token copies the database, never the node keys (sealed-keys slice 0).
         const standbyToken = getLocalConfig().backupReplicationToken as string;
+        // Since sealed backups (slice 3) the plain identity bundle is gone for every credential, and what the token
+        // downloads is the sealed backup: ciphertext, with the keys inside only the owners and the code can open.
         resetBrakes();
         const idByToken = await fetch(base + '/api/local/admin/identity-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': standbyToken }, body: '{}' });
-        const idByTokenBody = await idByToken.text();
-        assert(idByToken.status === 401 && !idByToken.headers.get('x-identity-files'), `7. the token is refused the identity bundle (got ${idByToken.status})`);
-        assert(/cannot fetch the node keys/.test(idByTokenBody), '7. …and the refusal says why');
+        const idByTokenBody = Buffer.from(await idByToken.arrayBuffer());
+        assert(idByToken.status === 404 && !idByToken.headers.get('x-identity-files'), `7. the token gets no identity bundle: the route is gone (got ${idByToken.status})`);
+        assert(!(idByTokenBody[0] === 0x1f && idByTokenBody[1] === 0x8b), '7. …and nothing gzip comes back');
         resetBrakes();
         const dbByToken = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': standbyToken }, body: '{}' });
-        await dbByToken.arrayBuffer();
-        assert(dbByToken.status === 200 && dbByToken.headers.get('content-type') === 'application/gzip', `7. the token still downloads the database backup (got ${dbByToken.status})`);
+        const dbByTokenBytes = Buffer.from(await dbByToken.arrayBuffer());
+        assert(dbByToken.status === 200 && dbByToken.headers.get('content-type') === 'application/octet-stream', `7. the token still downloads the database backup (got ${dbByToken.status})`);
+        assert(!(dbByTokenBytes[0] === 0x1f && dbByTokenBytes[1] === 0x8b) && readSealedHeader(new Uint8Array(dbByTokenBytes)).kind === 'backup', '7. …sealed, never a plain archive');
 
         // ---------- 8. Token already present ----------
         updateLocalConfig({ backupAdminPassword: ADMIN_PW });

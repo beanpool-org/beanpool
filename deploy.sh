@@ -15,6 +15,20 @@ set -e
 #   Pushes to main are tagged with their short-sha (e.g. DEPLOY_TAG=3fb6e72).
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# disk_preflight / docker_free_kb (shipped to each host) and wait_node_healthy (run here).
+source "$SCRIPT_DIR/scripts/deploy-lib.sh"
+
+# Free space a node needs on its host's docker filesystem before we touch it: the new image plus 2 GB of
+# headroom for the node's own data, WAL and logs. The image is 1.21 GB, so a pull needs 3.5 GB. A source
+# build also holds the builder stage's cache until the post-deploy builder prune — measured at 2.2 GB on
+# qld 2026-09-19 — so it needs 1.21 + 2.2 + 2 = 5.4 GB; 6 GB leaves room for the base-image pull.
+PULL_NEED_MB=3584
+BUILD_NEED_MB=6144
+# After the pull, before the old container stops: the image is already on disk, so only the headroom.
+RUN_HEADROOM_MB=2048
+# A cheap route that answers without touching the ledger. 401 counts as answering (read auth is on).
+HEALTH_PATH="${HEALTH_PATH:-/api/version}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 
 if [ -n "${DEPLOY_TAG:-}" ] && ! [[ "$DEPLOY_TAG" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
   echo "🛑 FATAL: Invalid DEPLOY_TAG: '$DEPLOY_TAG'"
@@ -61,6 +75,9 @@ else
 fi
 
 echo ""
+if [ $# -eq 0 ]; then
+  echo "⚠️  No node numbers given — this deploys EVERY node in deploy-targets.conf."
+fi
 echo "🌍 Deploying to ${#TARGETS[@]} node(s):"
 if [ -n "${DEPLOY_TAG:-}" ]; then
   echo "🏷️  Deploy tag: $DEPLOY_TAG"
@@ -129,10 +146,31 @@ tar -czf "$PKG_PATH" \
     --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
     --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
     --exclude='.deploy-package.tar.gz' \
+    --exclude='ios' --exclude='.expo' --exclude='scratch' \
     -C "$SCRIPT_DIR" .
 echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
 
-# Deploy each node
+# A pull-mode node takes the GHCR image; a build-mode node builds from the tarball on its host.
+is_build_node() {
+  case "$1" in
+    test|review|mullum1|melb|castlemaine|bris|mullum|gippsland|eastgippy|bindarrabi|yarravalley) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# "<status> <restart count>" of the current node's container, over ssh. Reads the loop's globals.
+remote_node_state() {
+  local out
+  out=$(ssh $SSH_OPTS $USER@$IP "C=\$(sudo docker ps -aq --filter label=com.docker.compose.project=$PROJ_NAME --filter label=com.docker.compose.service=beanpool-node | head -n1); [ -n \"\$C\" ] && sudo docker inspect -f '{{.State.Status}} {{.RestartCount}}' \"\$C\" 2>/dev/null || echo 'missing -'" 2>/dev/null) || true
+  echo "${out:-unreachable -}"
+}
+
+FAILED_NODES=()
+FAILED_HOSTS=()
+OK_NODES=()
+
+# Deploy each node. A failure on one node is recorded and the loop moves on; the exit code and the summary
+# at the end report it.
 for NODE in "${TARGETS[@]}"; do
   NAME=$(echo "$NODE" | cut -d: -f2)
   IP=$(echo "$NODE" | cut -d: -f3)
@@ -164,11 +202,43 @@ for NODE in "${TARGETS[@]}"; do
   fi
   echo "====================================="
 
-  # Upload
-  scp $SSH_OPTS "$PKG_PATH" $USER@$IP:$HOME_DIR/beanpool-deploy.tar.gz
+  if [ "${DEPLOY_PULL:-}" = "1" ] || ! is_build_node "$NAME"; then
+    PULL_FIRST=1; NEED_MB=$PULL_NEED_MB
+  else
+    PULL_FIRST=0; NEED_MB=$BUILD_NEED_MB
+  fi
 
-  # Stop, preserve data, extract, pull image, start
-  ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
+  # Upload
+  if ! scp $SSH_OPTS "$PKG_PATH" $USER@$IP:$HOME_DIR/beanpool-deploy.tar.gz; then
+    echo "❌ $NAME: upload failed — nothing on the node was touched."
+    FAILED_NODES+=("$NAME (upload failed)"); FAILED_HOSTS+=("$USER@$IP")
+    continue
+  fi
+
+  # Check disk, pull, stop, preserve data, extract, start.
+  # Remote exit 3 = aborted BEFORE the running container was touched.
+  REMOTE_RC=0
+  ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF || REMOTE_RC=$?
+    $(declare -f docker_free_kb disk_preflight)
+    if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
+    disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || {
+      echo "🛑 ABORT $NAME: not enough free disk even after pruning unused images. The running container is untouched."
+      df -h / | sed 's/^/   /'
+      exit 3
+    }
+    if [ "$PULL_FIRST" = "1" ]; then
+      # Pull while the old container is still serving: a failed pull or a full disk then costs no downtime,
+      # and compose cannot fall back to a surprise source build.
+      echo "📥 Pulling $IMAGE (the running $NAME container is untouched until this succeeds)..."
+      sudo docker pull "$IMAGE" || {
+        echo "🛑 ABORT $NAME: docker pull $IMAGE failed. The running container is untouched."
+        exit 3
+      }
+      disk_preflight $RUN_HEADROOM_MB "$NAME, after pull" no-prune || {
+        echo "🛑 ABORT $NAME: the pull left too little free disk to run safely. The running container is untouched."
+        exit 3
+      }
+    fi
     cd $PROJECT_DIR 2>/dev/null && (
       sudo docker rm -f $PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-$PROJ_NAME-beanpool-node-1 2>/dev/null || true
@@ -365,7 +435,29 @@ for NODE in "${TARGETS[@]}"; do
     fi
 EOF
 
-  echo "✅ $NAME deployed!"
+  if [ "$REMOTE_RC" -eq 3 ]; then
+    echo "❌ $NAME: aborted before touching the running container (see above)."
+    FAILED_NODES+=("$NAME (aborted, old container still running)"); FAILED_HOSTS+=("$USER@$IP")
+    echo ""
+    continue
+  fi
+  # The image label says what was started, not that it runs. Only a node that answers counts as deployed.
+  HEALTH_URL="https://$DNS$HEALTH_PATH"
+  if [ "$REMOTE_RC" -eq 0 ] && wait_node_healthy "$NAME" "$HEALTH_URL" "$HEALTH_TIMEOUT" remote_node_state; then
+    echo "✅ $NAME deployed! (container $HEALTH_STATUS, restarts $HEALTH_RESTARTS, $HEALTH_URL → $HEALTH_CODE)"
+    OK_NODES+=("$NAME")
+  else
+    if [ "$REMOTE_RC" -ne 0 ]; then
+      echo "   The remote deploy step exited $REMOTE_RC after the old container was stopped."
+      STATE=$(remote_node_state); HEALTH_STATUS=${STATE%% *}; HEALTH_RESTARTS=${STATE##* }
+      HEALTH_CODE=$(http_status "$HEALTH_URL")
+    fi
+    echo "❌ $NAME is NOT healthy: container ${HEALTH_STATUS:-unknown}, restarts ${HEALTH_RESTARTS:-?}, $HEALTH_URL → ${HEALTH_CODE:-000}"
+    echo "   Last 30 log lines:"
+    ssh $SSH_OPTS $USER@$IP "C=\$(sudo docker ps -aq --filter label=com.docker.compose.project=$PROJ_NAME --filter label=com.docker.compose.service=beanpool-node | head -n1); [ -n \"\$C\" ] && sudo docker logs --tail 30 \"\$C\" 2>&1" 2>/dev/null | sed 's/^/   | /' || true
+    echo "   Skipping the image prune on $USER@$IP so the previous image stays local for a rollback."
+    FAILED_NODES+=("$NAME (unhealthy)"); FAILED_HOSTS+=("$USER@$IP")
+  fi
   echo ""
 done
 
@@ -385,8 +477,26 @@ for HOST in $UNIQUE_HOSTS; do
   else
     SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=30 -o TCPKeepAlive=yes"
   fi
-  echo "   Cleaning up caches on $HOST..."
-  ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF
+  # Every DEPLOY_TAG pull leaves a TAGGED 1.2 GB image, and image prune -f / system prune -f only remove
+  # dangling ones — 30 of them filled qld's 40 GB disk on 2026-09-19. prune -a removes every image no
+  # container uses and keeps every image a container does, other nodes' on this host included. It is skipped
+  # on a host where any node failed, so that node's previous image stays local; otherwise a rollback is a
+  # re-pull of its tag from ghcr.
+  PRUNE_IMAGES=1
+  for F in "${FAILED_HOSTS[@]+"${FAILED_HOSTS[@]}"}"; do
+    [ "$F" = "$HOST" ] && PRUNE_IMAGES=0
+  done
+  if [ "$PRUNE_IMAGES" = "1" ]; then
+    echo "   Cleaning up caches and unused images on $HOST..."
+  else
+    echo "   Cleaning up caches on $HOST (NOT pruning images: a node on this host failed, its rollback image stays)..."
+  fi
+  ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF || echo "   ⚠️  cleanup on $HOST did not finish cleanly"
+    if [ "$PRUNE_IMAGES" = "1" ]; then
+      echo "   Disk before image prune: \$(df -h / | awk 'NR==2 {print \$4" free of "\$2}')"
+      echo "   🧹 docker image prune -a -f: \$(sudo docker image prune -a -f 2>&1 | grep -i 'reclaimed' || echo 'nothing to remove')"
+      echo "   Disk after image prune:  \$(df -h / | awk 'NR==2 {print \$4" free of "\$2}')"
+    fi
     sudo docker builder prune -a -f 2>/dev/null || true
     sudo docker system prune -f 2>/dev/null || true
     sudo journalctl --vacuum-time=1d 2>/dev/null || true
@@ -395,5 +505,15 @@ EOF
 done
 
 rm -f /tmp/beanpool-deploy.tar.gz
-echo "🎉 All ${#TARGETS[@]} node(s) deployed!"
+echo ""
+if [ ${#FAILED_NODES[@]} -eq 0 ]; then
+  echo "🎉 All ${#TARGETS[@]} node(s) deployed and answering!"
+  exit 0
+fi
+echo "❌ ${#FAILED_NODES[@]} of ${#TARGETS[@]} node(s) failed:"
+for F in "${FAILED_NODES[@]}"; do echo "   - $F"; done
+if [ ${#OK_NODES[@]} -gt 0 ]; then
+  echo "✅ Deployed and answering: ${OK_NODES[*]}"
+fi
+exit 1
 

@@ -107,6 +107,11 @@ run_check "suite_registration" bash scripts/check-suite-registration.sh
 # shell against a temp dir, so it costs nothing to keep honest.
 run_check "deploy_preserve" bash scripts/test-deploy-preserve.sh
 
+# deploy.sh called a crash-looping node "✅ deployed" and let tagged images fill qld's disk (2026-09-19).
+# Its health wait and disk preflight live in scripts/deploy-lib.sh; this runs them against a URL nothing
+# answers and stubbed container/disk state. Local only, a few seconds.
+run_check "deploy_health" bash scripts/test-deploy-health.sh
+
 # Undeclared imports & dependency boundary guard. Ensures every bare module import in apps/manager
 # is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
 run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs

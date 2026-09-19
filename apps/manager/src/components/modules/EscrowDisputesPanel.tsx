@@ -27,6 +27,8 @@ export function EscrowDisputesPanel({
     const [filterStatus, setFilterStatus] = useState<'pending' | 'resolved' | 'all'>('pending');
     const [page, setPage] = useState<number>(0);
     const [totalCount, setTotalCount] = useState<number>(0);
+    // Tab counts as the server reports them; null when the server predates `counts`.
+    const [tabCounts, setTabCounts] = useState<{ pending: number; resolved: number; all: number } | null>(null);
     const PAGE_SIZE = 50;
 
     // Resolution modal state
@@ -55,6 +57,7 @@ export function EscrowDisputesPanel({
             const list = data.disputes || [];
             setDisputes(list);
             setTotalCount(typeof data.total === 'number' ? data.total : list.length);
+            setTabCounts(data.counts ?? null);
         } catch (err: any) {
             setError(err.message || 'Failed to load escrow disputes');
         } finally {
@@ -76,10 +79,18 @@ export function EscrowDisputesPanel({
         return true;
     });
 
-    const pendingCount = disputes.filter((d) => d.status === 'pending').length;
-    const resolvedCount = disputes.filter(isResolved).length;
-    const allRealCount = realDisputes.length;
-    const displayTotal = totalCount > 0 ? totalCount : allRealCount;
+    // Counts come from the server, never from this one filtered page. An older server
+    // without `counts` only tells us the open tab's total, so the other tabs show no number.
+    const tabCount = (tab: 'pending' | 'resolved' | 'all'): number | null => {
+        if (tabCounts) return tabCounts[tab];
+        return tab === filterStatus ? totalCount : null;
+    };
+    const tabLabel = (label: string, tab: 'pending' | 'resolved' | 'all') => {
+        const n = tabCount(tab);
+        return n === null ? label : `${label} (${n})`;
+    };
+    const pendingCount = tabCount('pending');
+    const displayTotal = totalCount > 0 ? totalCount : filteredDisputes.length;
     const totalPages = Math.ceil(displayTotal / PAGE_SIZE) || 1;
 
     const toggleChat = (id: string) => {
@@ -203,9 +214,11 @@ export function EscrowDisputesPanel({
                             <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>⚖️</span> Escrow Dispute Resolution
                             </h2>
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold">
-                                {pendingCount} Pending (&gt;{minDays}d)
-                            </span>
+                            {pendingCount !== null && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                                    {pendingCount} Pending (&gt;{minDays}d)
+                                </span>
+                            )}
                         </div>
                         <p className="text-xs text-nature-400 m-0 max-w-2xl mt-1 leading-relaxed">
                             Marketplace deals held in escrow over 7 days with seller or buyer unable to complete.
@@ -258,7 +271,7 @@ export function EscrowDisputesPanel({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Pending Actions ({pendingCount})
+                        {tabLabel('Pending Actions', 'pending')}
                     </button>
                     <button
                         onClick={() => {
@@ -271,7 +284,7 @@ export function EscrowDisputesPanel({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Resolved History ({resolvedCount})
+                        {tabLabel('Resolved History', 'resolved')}
                     </button>
                     <button
                         onClick={() => {
@@ -284,7 +297,7 @@ export function EscrowDisputesPanel({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        All ({allRealCount})
+                        {tabLabel('All', 'all')}
                     </button>
                 </div>
             </div>

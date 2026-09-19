@@ -4777,6 +4777,18 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
     return rows.map(mapDisputeRow);
 }
 
+/** How many disputes each Escrow Disputes tab holds; same filters as getEscrowDisputes. */
+export function countEscrowDisputes(minDays = 7): { pending: number; resolved: number; all: number } {
+    const row = db.prepare(`
+        SELECT COALESCE(SUM(mt.status = 'pending'), 0) AS pending,
+               COALESCE(SUM(mt.dispute_resolution IS NOT NULL), 0) AS resolved,
+               COALESCE(SUM(mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL), 0) AS all_count
+        FROM marketplace_transactions mt
+        WHERE (? <= 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).get(minDays, minDays) as any;
+    return { pending: row.pending, resolved: row.resolved, all: row.all_count };
+}
+
 export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
     const row = db.prepare(`
         SELECT mt.*,

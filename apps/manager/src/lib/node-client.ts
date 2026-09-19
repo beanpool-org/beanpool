@@ -1778,6 +1778,8 @@ export function formatResolverName(signer?: string | null): string {
 export interface EscrowDisputesResponse {
     disputes: EscrowDisputeItem[];
     total: number;
+    /** Every tab's count, whichever status was asked for. Absent on servers older than PR #977. */
+    counts?: { pending: number; resolved: number; all: number };
     count?: number;
     minDays: number;
     limit?: number;

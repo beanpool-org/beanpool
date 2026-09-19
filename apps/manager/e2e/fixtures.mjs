@@ -795,9 +795,15 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
             return d.status === 'pending' || isResolved(d);
         });
         const paged = filtered.slice(offset, offset + limit);
+        const counts = {
+            pending: DISPUTES.filter((d) => d.status === 'pending').length,
+            resolved: DISPUTES.filter(isResolved).length,
+            all: DISPUTES.filter((d) => d.status === 'pending' || isResolved(d)).length,
+        };
         return ok({
             disputes: paged,
             total: filtered.length,
+            counts,
             count: paged.length,
             minDays,
             limit,

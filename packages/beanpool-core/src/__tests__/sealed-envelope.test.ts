@@ -500,3 +500,98 @@ describe('canonical JSON', () => {
         expect(bytesToHex(sha256(utf8ToBytes(canonicalJson(header))))).toHaveLength(64);
     });
 });
+
+describe('slice 3 follow-ups from #966', () => {
+    it('a source that reuses one buffer for every piece seals exactly what it yielded', async () => {
+        // The measured #966 case: every piece is a view of the same scratch buffer, refilled after
+        // each yield. Before copy-on-push the envelope sealed later bytes than were yielded.
+        const input = randomBytes(5000);
+        const scratch = new Uint8Array(300);
+        async function* reusing() {
+            for (let off = 0; off < input.length; off += scratch.length) {
+                const n = Math.min(scratch.length, input.length - off);
+                scratch.set(input.subarray(off, off + n));
+                yield scratch.subarray(0, n);
+            }
+        }
+        const out: Uint8Array[] = [];
+        for await (const part of sealEnvelopeStream(reusing(), opts())) out.push(part);
+        const env = concatBytes(...out);
+        expect((await openEnvelope(env, asAlice, { kind: 'backup' })).payload).toEqual(input);
+
+        // And the opening side, with the same trick on the ciphertext.
+        const scratch2 = new Uint8Array(333);
+        async function* reusingEnv() {
+            for (let off = 0; off < env.length; off += scratch2.length) {
+                const n = Math.min(scratch2.length, env.length - off);
+                scratch2.set(env.subarray(off, off + n));
+                yield scratch2.subarray(0, n);
+            }
+        }
+        const { chunks } = await openEnvelopeStream(reusingEnv(), asAlice, { kind: 'backup' });
+        const got: Uint8Array[] = [];
+        for await (const c of chunks) got.push(c);
+        expect(concatBytes(...got)).toEqual(input);
+    });
+
+    /** A source that records whether it was closed. */
+    function trackedSource(bytes: Uint8Array, piece = 100) {
+        const state = { closed: false, finished: false };
+        const gen = (async function* () {
+            try {
+                for (let off = 0; off < bytes.length; off += piece) yield bytes.subarray(off, off + piece);
+                state.finished = true;
+            } finally {
+                state.closed = true;
+            }
+        })();
+        return { gen, state };
+    }
+
+    it('closes the source when the key is wrong, the kind is wrong, or a chunk is bad', async () => {
+        const env = await sealEnvelope(payload3, opts());
+
+        const wrongKey = trackedSource(env);
+        await expect(openEnvelopeStream(wrongKey.gen, { type: 'owner', privateKey: mallory.seed }, { kind: 'backup' }))
+            .rejects.toThrow(SealedEnvelopeError);
+        expect(wrongKey.state.closed).toBe(true);
+
+        const wrongKind = trackedSource(env);
+        await expect(openEnvelopeStream(wrongKind.gen, asAlice, { kind: 'takeover' })).rejects.toThrow(SealedEnvelopeError);
+        expect(wrongKind.state.closed).toBe(true);
+
+        const bad = env.slice();
+        bad[bad.length - 1100] ^= 1; // inside a middle chunk
+        const badChunk = trackedSource(bad);
+        const { chunks } = await openEnvelopeStream(badChunk.gen, asAlice, { kind: 'backup' });
+        await expect((async () => { for await (const _ of chunks) { /* drain */ } })()).rejects.toThrow(SealedEnvelopeError);
+        expect(badChunk.state.closed).toBe(true);
+        expect(badChunk.state.finished).toBe(false);
+
+        const early = trackedSource(env);
+        const opened = await openEnvelopeStream(early.gen, asAlice, { kind: 'backup' });
+        for await (const _ of opened.chunks) break;
+        expect(early.state.closed).toBe(true);
+    });
+
+    it('code number 0 is a RecoveryCodeError, like any other typo', () => {
+        const body = SEALED_ENVELOPE_VECTORS.recoveryCode.printed.split(/\s+/)[1];
+        expect(() => parseRecoveryCode(`BPRC-0 ${body}`)).toThrow(RecoveryCodeError);
+        expect(() => parseRecoveryCode(`BPRC-00 ${body}`)).toThrow(RecoveryCodeError);
+    });
+
+    it("a deeply nested header is refused with this module's error, not a stack overflow", () => {
+        let deep: unknown = 1;
+        for (let i = 0; i < 100_000; i++) deep = [deep];
+        expect(() => canonicalJson(deep)).toThrow(SealedEnvelopeError);
+
+        // Through the reader: a real header plus a nested extra field, under the 256 KiB cap.
+        const env = hexToBytes(SEALED_ENVELOPE_VECTORS.takeover.envelopeHex);
+        const { header, segments } = dissect(env);
+        const json = `{"a":${'['.repeat(50_000)}${']'.repeat(50_000)},${canonicalJson(header).slice(1)}`;
+        const bytes = utf8ToBytes(json);
+        const len = new Uint8Array(4);
+        new DataView(len.buffer).setUint32(0, bytes.length, false);
+        expect(() => readSealedHeader(concatBytes(len, bytes, ...segments))).toThrow(SealedEnvelopeError);
+    });
+});

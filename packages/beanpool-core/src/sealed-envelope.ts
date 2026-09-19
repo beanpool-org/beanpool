@@ -283,11 +283,21 @@ function isoNow(): string {
 // ── Canonical JSON ──────────────────────────────────────────────────────────────────────────
 
 /**
+ * How deep canonical JSON will nest. A real header is four levels deep; a hostile one under the
+ * 256 KiB header cap could otherwise nest far enough to overflow the stack with a RangeError
+ * instead of this module's error.
+ */
+const MAX_JSON_DEPTH = 32;
+
+/**
  * Canonical JSON: object keys sorted, no whitespace, integers only. The header is signed and
  * hashed in this form, and an opener refuses a header whose bytes are not already canonical, so
  * there is exactly one byte string for any header.
  */
-export function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown, depth = 0): string {
+    if (depth > MAX_JSON_DEPTH) {
+        throw new SealedEnvelopeError(`Canonical JSON nests deeper than ${MAX_JSON_DEPTH} levels.`);
+    }
     if (value === null) return 'null';
     if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
     if (typeof value === 'number') {
@@ -296,11 +306,11 @@ export function canonicalJson(value: unknown): string {
         }
         return JSON.stringify(value);
     }
-    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    if (Array.isArray(value)) return `[${value.map((v) => canonicalJson(v, depth + 1)).join(',')}]`;
     if (typeof value === 'object') {
         const obj = value as Record<string, unknown>;
         const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
-        return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(',')}}`;
+        return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k], depth + 1)}`).join(',')}}`;
     }
     throw new SealedEnvelopeError(`Canonical JSON cannot encode a ${typeof value}.`);
 }
@@ -374,7 +384,11 @@ export function parseRecoveryCode(input: string): ParsedRecoveryCode {
             throw new RecoveryCodeError('The code number after BPRC is not a number.');
         }
         codeId = Number(idPart);
-        requireCodeId(codeId);
+        // A typed number of 0 is a typo like any other: the same class, so "check what you
+        // typed" handlers catch it.
+        if (!Number.isSafeInteger(codeId) || codeId < 1) {
+            throw new RecoveryCodeError(`There is no recovery code #${idPart}: check what you typed.`);
+        }
         s = s.slice(s.length - CODE_CHARS);
     }
     s = s.replace(/[IL]/g, '1').replace(/O/g, '0');
@@ -890,38 +904,58 @@ export async function openEnvelopeStream(
         return queue.length >= n;
     };
 
-    if (!(await fill(HEADER_LEN_PREFIX))) throw new SealedEnvelopeError('The envelope is truncated before its header.');
-    const lenBytes = queue.take(HEADER_LEN_PREFIX);
-    const len = new DataView(lenBytes.buffer, lenBytes.byteOffset, 4).getUint32(0, false);
-    if (len === 0 || len > MAX_HEADER_BYTES) {
-        throw new SealedEnvelopeError(`The envelope header claims ${len} bytes, outside 1–${MAX_HEADER_BYTES}.`);
+    // Whenever this stops early — a throw here, a throw in the chunk iterator, or a caller that
+    // breaks out — the source is closed, so a file-backed source does not leak its handle.
+    const release = async (): Promise<void> => {
+        if (done) return;
+        done = true;
+        try { await it.return?.(); } catch { /* the original error matters more */ }
+    };
+
+    let header: SealedEnvelopeHeader;
+    let headerJson: Uint8Array;
+    let dek: Uint8Array;
+    try {
+        if (!(await fill(HEADER_LEN_PREFIX))) throw new SealedEnvelopeError('The envelope is truncated before its header.');
+        const lenBytes = queue.take(HEADER_LEN_PREFIX);
+        const len = new DataView(lenBytes.buffer, lenBytes.byteOffset, 4).getUint32(0, false);
+        if (len === 0 || len > MAX_HEADER_BYTES) {
+            throw new SealedEnvelopeError(`The envelope header claims ${len} bytes, outside 1–${MAX_HEADER_BYTES}.`);
+        }
+        if (!(await fill(len))) throw new SealedEnvelopeError('The envelope is truncated inside its header.');
+        headerJson = queue.take(len);
+        header = parseHeaderJson(headerJson);
+        if (header.kind !== opts.kind) {
+            throw new SealedEnvelopeError(`This is a '${header.kind}' envelope, not a '${opts.kind}' one.`);
+        }
+        dek = await unwrapDek(header, key);
+    } catch (e) {
+        await release();
+        throw e;
     }
-    if (!(await fill(len))) throw new SealedEnvelopeError('The envelope is truncated inside its header.');
-    const headerJson = queue.take(len);
-    const header = parseHeaderJson(headerJson);
-    if (header.kind !== opts.kind) {
-        throw new SealedEnvelopeError(`This is a '${header.kind}' envelope, not a '${opts.kind}' one.`);
-    }
-    const dek = await unwrapDek(header, key);
     const envelopeId = hexToBytes(header.envelopeId);
     const bodyAad = sha256(headerJson);
     const segment = header.chunkSize + TAG_LEN;
 
     async function* chunks(): AsyncGenerator<Uint8Array> {
         let index = 0;
-        for (;;) {
-            // Read one byte past a full segment: if it is there, this segment is not the last.
-            const more = await fill(segment + 1);
-            if (more) {
-                yield decryptChunk(dek, envelopeId, bodyAad, index++, false, queue.take(segment));
-                await yieldToEventLoop();
-                continue;
+        try {
+            for (;;) {
+                // Read one byte past a full segment: if it is there, this segment is not the last.
+                const more = await fill(segment + 1);
+                if (more) {
+                    yield decryptChunk(dek, envelopeId, bodyAad, index++, false, queue.take(segment));
+                    await yieldToEventLoop();
+                    continue;
+                }
+                if (queue.length < TAG_LEN) {
+                    throw new SealedEnvelopeError('The envelope is cut short: its last chunk is missing.');
+                }
+                yield decryptChunk(dek, envelopeId, bodyAad, index, true, queue.take(queue.length));
+                return;
             }
-            if (queue.length < TAG_LEN) {
-                throw new SealedEnvelopeError('The envelope is cut short: its last chunk is missing.');
-            }
-            yield decryptChunk(dek, envelopeId, bodyAad, index, true, queue.take(queue.length));
-            return;
+        } finally {
+            await release();
         }
     }
     return { header, chunks: chunks() };
@@ -939,7 +973,7 @@ export async function openEnvelope(
 
 // ── Byte queue ──────────────────────────────────────────────────────────────────────────────
 
-/** A FIFO of byte pieces, so re-cutting a stream into chunks does not re-copy everything held. */
+/** A FIFO of byte pieces. Each piece is copied once on the way in (see push), never again. */
 class ByteQueue {
     private pieces: Uint8Array[] = [];
     private head = 0;
@@ -950,7 +984,10 @@ class ByteQueue {
             throw new SealedEnvelopeError('A stream piece must be a byte array.');
         }
         if (piece.length === 0) return;
-        this.pieces.push(piece);
+        // Copy: sealing and opening hold bytes across an `await`, and a source may reuse its
+        // buffer for the next piece (a read loop into one scratch buffer). Holding the caller's
+        // view would seal or open whatever the buffer holds later, silently.
+        this.pieces.push(new Uint8Array(piece));
         this.length += piece.length;
     }
 

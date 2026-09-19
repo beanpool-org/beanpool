@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../app/ThemeContext';
 import {
-    INITIAL_QUICK_RETURN, quickReturnControlsHidden, quickReturnStep, type QuickReturnState,
+    ACTIVE_FILTER_CHIP, INITIAL_QUICK_RETURN, quickReturnControlsHidden, quickReturnListInset, quickReturnStep,
+    type QuickReturnState,
 } from '../utils/quick-return';
 
 /** A system accessibility setting, kept current by its change event. */
@@ -32,10 +33,14 @@ export interface QuickReturn {
         onLayout: (e: LayoutChangeEvent) => void;
         onContentSizeChange: (w: number, h: number) => void;
     };
-    /** Room the list leaves at its top for the block (title + controls): add to its paddingTop. */
+    /** The block's measured height (title + controls). */
     blockHeight: number;
+    /** Room the list leaves at its top for the block: add to its paddingTop (and the refresh spinner's offset). 0 when docked. */
+    listInset: number;
+    /** Screen reader on: the block sits above the list in the layout instead of over it, so no row is ever under it. */
+    docked: boolean;
     titleHeight: number;
-    translateY: Animated.AnimatedInterpolation<number> | Animated.AnimatedAddition<number>;
+    translateY: Animated.AnimatedInterpolation<number> | Animated.AnimatedAddition<number> | Animated.Value;
     onTitleLayout: (e: LayoutChangeEvent) => void;
     onControlsLayout: (e: LayoutChangeEvent) => void;
     /** The controls are fully off screen (a page may show its active-filter chip). */
@@ -54,7 +59,8 @@ export interface QuickReturn {
  * only JS-side decision (pinned or riding with the page) flips a 0..1 value with a native timing — so
  * nothing re-lays-out while scrolling and a slow phone does not drop frames on it.
  *
- * - A screen reader keeps the controls fixed: they never hide.
+ * - A screen reader keeps the controls fixed: they never hide, and the block docks above the list rather
+ *   than over it, so focus can never land on a row hidden under the controls.
  * - Reduce motion: they appear and disappear without the slide.
  * - `pinned`: the page is using them (a panel open, the search field focused), so they stay.
  * - `resetKey`: change it whenever the list is remounted (a different layout, a loader in between), so a
@@ -67,6 +73,7 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
 
     const scrollY = useRef(new Animated.Value(0)).current;
     const reveal = useRef(new Animated.Value(0)).current;
+    const still = useRef(new Animated.Value(0)).current;
     const [titleH, setTitleH] = useState(0);
     const [controlsH, setControlsH] = useState(0);
     const [hidden, setHidden] = useState(false);
@@ -133,23 +140,24 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
     }, [apply]);
 
     const translateY = useMemo(() => {
+        if (screenReader) return still;
         const T = titleH;
         const H = Math.max(1, controlsH);
         // translateY = -clamp(y, 0, T + H) + clamp(y - T, 0, H) × reveal (utils/quick-return.ts)
         const follow = scrollY.interpolate({ inputRange: [0, T + H], outputRange: [0, -(T + H)], extrapolate: 'clamp' });
         const pin = scrollY.interpolate({ inputRange: [T, T + H], outputRange: [0, H], extrapolate: 'clamp' });
         return Animated.add(follow, Animated.multiply(pin, reveal));
-    }, [titleH, controlsH, scrollY, reveal]);
+    }, [screenReader, still, titleH, controlsH, scrollY, reveal]);
 
     const onTitleLayout = useCallback((e: LayoutChangeEvent) => setTitleH(Math.round(e.nativeEvent.layout.height)), []);
     const onControlsLayout = useCallback((e: LayoutChangeEvent) => setControlsH(Math.round(e.nativeEvent.layout.height)), []);
 
-    return { listProps: { onScroll, scrollEventThrottle: 16, onLayout, onContentSizeChange }, blockHeight: titleH + controlsH, titleHeight: titleH, translateY, onTitleLayout, onControlsLayout, hidden: hidden && !fixed, fixed, show };
+    return { listProps: { onScroll, scrollEventThrottle: 16, onLayout, onContentSizeChange }, blockHeight: titleH + controlsH, listInset: quickReturnListInset(titleH + controlsH, screenReader), docked: screenReader, titleHeight: titleH, translateY, onTitleLayout, onControlsLayout, hidden: hidden && !fixed, fixed, show };
 }
 
 /**
  * The block that rides over the top of the list. Place it inside a `{ flex: 1, overflow: 'hidden' }`
- * container together with the list (which spreads `qr.listProps` and adds `qr.blockHeight` to its
+ * container together with the list (which spreads `qr.listProps` and adds `qr.listInset` to its
  * paddingTop), so what slides up goes under the tab bar rather than over it. Put it BEFORE the list in
  * that container: its zIndex draws it on top, and a screen reader then reads the controls first.
  *
@@ -166,7 +174,7 @@ export function QuickReturnBlock({ qr, title, children, below, style }: {
     const { colors } = useTheme();
     return (
         <Animated.View
-            style={[styles.block, { backgroundColor: colors.surface.app, transform: [{ translateY: qr.translateY }] }, style]}
+            style={[styles.block, qr.docked && styles.blockDocked, { backgroundColor: colors.surface.app, transform: [{ translateY: qr.translateY }] }, style]}
             // Off screen it cannot be reached by touch; keep it out of the accessibility tree too. (With a
             // screen reader on it is never off screen.)
             importantForAccessibility={qr.hidden ? 'no-hide-descendants' : 'auto'}
@@ -185,27 +193,32 @@ export function QuickReturnBlock({ qr, title, children, below, style }: {
  */
 export function ActiveFilterChip({ label, onPress, onClear }: { label: string; onPress: () => void; onClear: () => void }) {
     const { colors } = useTheme();
+    const pill = [styles.pill, { backgroundColor: colors.surface.card, borderColor: colors.border.default }];
+    // Each Pressable is the full 48dp target; the 36dp pill is drawn inside it. (hitSlop would not do:
+    // on Android a touch outside the parent's bounds never reaches the child.)
     return (
         <View style={styles.chipWrap} pointerEvents="box-none">
-            <View style={[styles.chip, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}>
+            <View style={styles.chipRow} pointerEvents="box-none">
                 <Pressable
                     onPress={onPress}
                     style={styles.chipMain}
-                    hitSlop={{ top: 6, bottom: 6 }}
                     accessibilityRole="button"
                     accessibilityLabel={`Filtered: ${label}`}
                     accessibilityHint="Shows the search and filters"
                 >
-                    <Text style={[styles.chipText, { color: colors.text.body }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>{label}</Text>
+                    <View style={[pill, styles.pillLabel]}>
+                        <Text style={[styles.chipText, { color: colors.text.body }]} numberOfLines={1} maxFontSizeMultiplier={1.3}>{label}</Text>
+                    </View>
                 </Pressable>
                 <Pressable
                     onPress={onClear}
                     style={styles.chipClear}
-                    hitSlop={{ top: 6, bottom: 6, right: 6 }}
                     accessibilityRole="button"
                     accessibilityLabel="Clear search and filters"
                 >
-                    <Text style={[styles.chipClearText, { color: colors.text.secondary }]} maxFontSizeMultiplier={1.3}>✕</Text>
+                    <View style={[pill, styles.pillClear]}>
+                        <Text style={[styles.chipClearText, { color: colors.text.secondary }]} maxFontSizeMultiplier={1.3}>✕</Text>
+                    </View>
                 </Pressable>
             </View>
         </View>
@@ -214,13 +227,17 @@ export function ActiveFilterChip({ label, onPress, onClear }: { label: string; o
 
 const styles = StyleSheet.create({
     block: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
-    chipWrap: { position: 'absolute', top: 6, left: 16, right: 16, zIndex: 2, alignItems: 'center' },
-    chip: {
-        flexDirection: 'row', alignItems: 'center', maxWidth: '100%', minHeight: 36, borderRadius: 18, borderWidth: 1,
+    blockDocked: { position: 'relative' },
+    chipWrap: { position: 'absolute', top: 0, left: 16, right: 16, zIndex: 2, alignItems: 'center' },
+    chipRow: { flexDirection: 'row', alignItems: 'center', maxWidth: '100%', gap: ACTIVE_FILTER_CHIP.gap },
+    chipMain: { flexShrink: 1, minHeight: ACTIVE_FILTER_CHIP.target, justifyContent: 'center' },
+    chipClear: { width: ACTIVE_FILTER_CHIP.clearWidth, minHeight: ACTIVE_FILTER_CHIP.target, alignItems: 'center', justifyContent: 'center' },
+    pill: {
+        minHeight: ACTIVE_FILTER_CHIP.pill, borderRadius: ACTIVE_FILTER_CHIP.pill / 2, borderWidth: 1, justifyContent: 'center',
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 6,
     },
-    chipMain: { flexShrink: 1, minHeight: 36, justifyContent: 'center', paddingLeft: 14, paddingRight: 4 },
+    pillLabel: { paddingHorizontal: 14 },
+    pillClear: { width: ACTIVE_FILTER_CHIP.pill, alignItems: 'center' },
     chipText: { fontSize: 13, fontWeight: '700' },
-    chipClear: { width: 40, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
     chipClearText: { fontSize: 15, fontWeight: '800' },
 });

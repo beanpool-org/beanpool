@@ -1537,7 +1537,7 @@ export default function MarketScreen() {
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                contentContainerStyle={[styles.listContent, { paddingTop: qr.blockHeight }]}
+                contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
                 columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                 showsVerticalScrollIndicator={false}
                 {...qr.listProps}
@@ -1551,7 +1551,7 @@ export default function MarketScreen() {
                         colors={[colors.brand.primary]}
                         tintColor={colors.brand.primary}
                         // Below the controls, not behind them.
-                        progressViewOffset={qr.blockHeight}
+                        progressViewOffset={qr.listInset}
                     />
                 }
                 ListEmptyComponent={

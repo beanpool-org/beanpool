@@ -440,7 +440,7 @@ export default function PulseScreen() {
             </QuickReturnBlock>
             {/* Feed List */}
             {loading && !refreshing ? (
-                <View style={[styles.centerLoader, { paddingTop: qr.blockHeight }]}>
+                <View style={[styles.centerLoader, { paddingTop: qr.listInset }]}>
                     <ActivityIndicator size="large" color={colors.brand.primary} />
                     <Text style={styles.loaderText}>Loading community feed…</Text>
                 </View>
@@ -459,7 +459,7 @@ export default function PulseScreen() {
                             nodeUrl={nodeUrl}
                         />
                     )}
-                    contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.blockHeight }]}
+                    contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.listInset }]}
                     ListHeaderComponent={errorBox}
                     refreshControl={
                         <RefreshControl
@@ -467,7 +467,7 @@ export default function PulseScreen() {
                             onRefresh={handleRefresh}
                             tintColor={colors.brand.primary}
                             colors={[colors.brand.primary]}
-                            progressViewOffset={qr.blockHeight}
+                            progressViewOffset={qr.listInset}
                         />
                     }
                     onEndReached={handleLoadMore}

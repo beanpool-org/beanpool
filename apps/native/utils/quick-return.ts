@@ -77,3 +77,26 @@ export function quickReturnOffset(y: number, reveal: number, titleH: number, con
     const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
     return -clamp(y, 0, titleH + controlsH) + clamp(y - titleH, 0, controlsH) * reveal;
 }
+
+/**
+ * Where the list starts. Normally the block rides OVER the list, so the list leaves `blockHeight` of
+ * padding at its top and scrolls under the block. With a screen reader on the controls never hide, and
+ * rows scrolled under them could take focus while out of sight — so the block is docked above the list
+ * instead (in the layout, not over it) and the list needs no inset: nothing is ever under the controls.
+ */
+export function quickReturnListInset(blockHeight: number, docked: boolean): number {
+    return docked ? 0 : blockHeight;
+}
+
+/**
+ * The active-filter chip (components/QuickReturn.tsx ActiveFilterChip). Each tap target is 48dp even
+ * though the pill drawn inside it is 36dp: hitSlop outside the parent's bounds never reaches the child
+ * on Android, so the target itself must be the size. ✕ sits `gap` apart from the label, so a thumb
+ * aimed at "show the filters" does not clear them all.
+ */
+export const ACTIVE_FILTER_CHIP = {
+    target: 48,
+    pill: 36,
+    clearWidth: 48,
+    gap: 8,
+} as const;

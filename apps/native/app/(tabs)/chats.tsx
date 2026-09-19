@@ -745,7 +745,7 @@ export default function ChatsScreen() {
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={listHeader}
-                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.blockHeight }]}
+                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.listInset }]}
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={listEmpty}
             />

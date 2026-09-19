@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     INITIAL_QUICK_RETURN, QUICK_RETURN_THRESHOLD, quickReturnStep, quickReturnControlsHidden, quickReturnOffset,
+    quickReturnListInset, ACTIVE_FILTER_CHIP,
     type QuickReturnState, type QuickReturnInput,
 } from '../quick-return';
 
@@ -108,5 +109,25 @@ describe('quick return: block offset', () => {
         expect(quickReturnOffset(30, 1, T, H)).toBe(-30); // title still leaving
         expect(quickReturnOffset(T, 1, T, H)).toBe(-T);
         expect(quickReturnOffset(5000, 1, T, H)).toBe(-T);
+    });
+});
+
+describe('quick return: screen reader docks the block above the list', () => {
+    it('the list scrolls under the block normally, so it leaves the block\'s height at its top', () => {
+        expect(quickReturnListInset(252, false)).toBe(252);
+    });
+    it('with a screen reader the list starts below the controls and needs no inset', () => {
+        expect(quickReturnListInset(252, true)).toBe(0);
+    });
+});
+
+describe('active-filter chip targets', () => {
+    it('both taps are at least 48dp, with the 36dp pill drawn inside', () => {
+        expect(ACTIVE_FILTER_CHIP.target).toBeGreaterThanOrEqual(48);
+        expect(ACTIVE_FILTER_CHIP.clearWidth).toBeGreaterThanOrEqual(48);
+        expect(ACTIVE_FILTER_CHIP.pill).toBeLessThanOrEqual(ACTIVE_FILTER_CHIP.target);
+    });
+    it('✕ is set apart from the label by a visible gap', () => {
+        expect(ACTIVE_FILTER_CHIP.gap).toBeGreaterThan(0);
     });
 });

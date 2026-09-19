@@ -11,6 +11,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme, useStyles } from '../app/ThemeContext';
+import { NeedsYouIcons } from './NeedsYouIcons';
 import Constants from 'expo-constants';
 import appConfig from '../app.json';
 import { evaluateUpdate, normaliseVersion, pickStoreVersion } from '../utils/app-version';
@@ -35,9 +36,18 @@ const fetchWithTimeout = async (resource: RequestInfo, options: RequestInit & { 
     }
 };
 
-// Deliberately larger than the 32pt pill so the avatar spills past its edge. The pill's own
-// height and width are unchanged — only its clipping, which had to become visible.
-const AVATAR_PILL_SIZE = 43;
+// MOCK (mock/header-slim): the whole header is one 48dp row below the status bar.
+export const HEADER_ROW_HEIGHT = 48;
+const BEAN_SIZE = 38;
+const AVATAR_SIZE = 32;
+
+// The community's name, shown at the top of the bean's sheet (MOCK v4). Saved alias first, then the node's host, so something readable shows before the
+// first health ping lands.
+function communityLabel(url: string | null, alias?: string | null): string {
+    if (alias && alias.trim()) return alias.trim();
+    if (!url) return 'BeanPool';
+    try { return new URL(url).hostname.split('.')[0] || 'BeanPool'; } catch { return 'BeanPool'; }
+}
 
 /**
  * `onMeasure` reports the header's real rendered height — including the update banner,
@@ -70,29 +80,19 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         headerContainer: {
             flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
+            paddingLeft: 8,
+            paddingRight: 4,
         },
-        headerLeft: { flex: 1, alignItems: 'flex-start' },
-        headerCenter: { flex: 2, alignItems: 'center', justifyContent: 'center' },
-        headerRight: { flex: 1, alignItems: 'flex-end' },
-        headerTitle: {
-            color: '#ffffff',
-            fontSize: 22,
-            fontWeight: '900',
-            letterSpacing: 0.5,
-            textShadowColor: 'rgba(0,0,0,0.75)',
-            textShadowOffset: { width: 0, height: 2 },
-            textShadowRadius: 6,
-        },
-        headerLeftControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : 'rgba(16, 185, 129, 0.3)', height: 32, width: 80, overflow: 'hidden' },
-        headerLeftControlsGuest: { borderColor: colors.feedback.warning.border, backgroundColor: colors.feedback.warning.bg },
-        headerLeftControlsDisconnected: { borderColor: colors.feedback.danger.border, backgroundColor: colors.feedback.danger.bg },
-        headerRightControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.card, borderRadius: 20, borderWidth: 1, borderColor: colors.border.default, height: 32, width: 72, overflow: 'visible' },
-        controlPillBtn: { flex: 1, height: '100%', justifyContent: 'center', alignItems: 'center' },
+        beanBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+        statusBadge: { position: 'absolute', right: 5, bottom: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#ffffff' },
+        headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
+        iconBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
         modalVersion: { fontSize: 14, fontWeight: '900', color: colors.text.muted, letterSpacing: 1, textAlign: 'right', marginBottom: 4 },
+        sheetCommunity: { paddingHorizontal: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+        sheetCommunityName: { fontSize: 22, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
+        sheetCommunitySub: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
         modalHeader: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
         nodeBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4 },
         activeNodeBtn: { backgroundColor: colors.accent.tint },
@@ -151,6 +151,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     const [isGuestOnActive, setIsGuestOnActive] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [hasAnchorUrl, setHasAnchorUrl] = useState(true);
+    const [communityName, setCommunityName] = useState<string>('BeanPool');
     // In-memory mirror of the version facts already on disk. Storage is read once and written
     // only when something actually changes. The node refreshes its store lookup every 6 hours
     // and the app's own version cannot change while it is running, so the 30-second ping was
@@ -301,11 +302,17 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
             }
             if (isMounted) setHasAnchorUrl(true);
             try {
+                const saved = (await getSavedNodes()).find(n => n.url === active);
+                if (isMounted) setCommunityName(communityLabel(active, saved?.alias));
+            } catch { /* storage unavailable — keep the last name shown */ }
+            try {
                 const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 8000 });
                 if (r.ok) {
                     healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
+                    const remoteName = data?.nodeName || data?.name;
+                    if (isMounted && remoteName) setCommunityName(communityLabel(active, remoteName));
                     await updateVersionBanner(active, data);
                 } else {
                     await markHealthFailure(active);
@@ -486,7 +493,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     // is `overflow: hidden`, so pinning it to this height clipped the update banner out of
     // existence — the banner rendered, on both platforms, and could never be seen. The
     // wrapper now sizes to its children (header row + banner, when there is one).
-    const headerHeight = Math.max(insets.top + 10, 40) + 56;
+    const headerHeight = insets.top + HEADER_ROW_HEIGHT;
     const isMapScreen = pathname === '/map';
 
     return (
@@ -505,12 +512,33 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
             </View>
 
-            <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 10, 40), height: headerHeight }]} pointerEvents="box-none">
-                <View style={styles.headerLeft}>
+            {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
+                old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
+                it visible against the electric bean's dark rim. v4: beside it, an icon per kind of thing that needs you (NeedsYouIcons); invite, settings and avatar are plain 48dp icons on the right. */}
+            <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Switch community, ${isOffline ? 'offline' : isGuestOnActive ? 'guest' : 'connected'}`}
+                    style={styles.beanBtn}
+                    activeOpacity={0.7}
+                    onPress={openDropdown}
+                >
+                    <Image
+                        source={require('../assets/images/header-electric-bean.png')}
+                        style={{ width: BEAN_SIZE, height: BEAN_SIZE }}
+                        resizeMode="contain"
+                    />
+                    <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
+                </TouchableOpacity>
+
+                {/* MOCK v4: small icons for what needs you, only while something does; the community's name moved into the bean's sheet. */}
+                <NeedsYouIcons />
+
+                <View style={styles.headerRightIcons}>
                     <TouchableOpacity
                         accessibilityRole="button"
                         accessibilityLabel={!hasAnchorUrl ? 'Connect to community' : isGuestOnActive ? 'Join community' : 'Invite friends'}
-                        style={[styles.headerLeftControls, !hasAnchorUrl ? styles.headerLeftControlsDisconnected : isGuestOnActive ? styles.headerLeftControlsGuest : undefined]}
+                        style={styles.iconBtn}
                         onPress={() => {
                             if (!hasAnchorUrl) {
                                 router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
@@ -520,97 +548,42 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                             }
                         }}
                     >
-                        <MaterialCommunityIcons 
-                            name={!hasAnchorUrl ? 'link-off' : isGuestOnActive ? 'account-alert-outline' : 'account-plus-outline'} 
-                            size={16} 
-                            color={!hasAnchorUrl ? colors.feedback.danger.fg : isGuestOnActive ? colors.feedback.warning.fg : colors.feedback.success.fg} 
+                        <MaterialCommunityIcons
+                            name={!hasAnchorUrl ? 'link-off' : isGuestOnActive ? 'account-alert-outline' : 'account-plus-outline'}
+                            size={24}
+                            color={!hasAnchorUrl ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : '#ffffff'}
                         />
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: !hasAnchorUrl ? colors.feedback.danger.fg : isGuestOnActive ? colors.feedback.warning.fg : colors.feedback.success.fg, marginLeft: 4 }}>
-                            {!hasAnchorUrl ? 'Connect' : isGuestOnActive ? 'Join' : 'Invite'}
-                        </Text>
                     </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Switch community"
-                    style={[styles.headerCenter, { zIndex: 10 }]}
-                    activeOpacity={0.7}
-                    onPress={openDropdown}
-                >
-                    <View style={{ flexDirection: 'column', alignItems: 'center', position: 'relative', transform: [{ translateX: isMapScreen ? -12 : -6 }, { translateY: isMapScreen ? -12 : 0 }] }}>
-                        {isMapScreen ? (
-                            <View style={{ position: 'relative' }}>
-                                <Image 
-                                    source={require('../assets/images/logo.png')} 
-                                    style={{ width: 280, height: 76, marginTop: -8, marginBottom: -12 }} 
-                                    resizeMode="contain" 
-                                />
-                                <View style={{ position: 'absolute', bottom: -10, right: 90, flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />
-                                    <MaterialCommunityIcons 
-                                        name="chevron-down" 
-                                        size={20} 
-                                        color="#ffffff" 
-                                        style={{ opacity: 0.9 }} 
-                                    />
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text 
-                                    style={[styles.headerTitle, { fontSize: 20, marginBottom: 0 }]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                >
-                                    {pathname === '/' || pathname === '/market' ? 'Marketplace' :
-                                     pathname === '/projects' ? 'Projects' :
-                                     pathname === '/chats' ? 'Talk' :
-                                     pathname === '/people' ? 'People' :
-                                     pathname === '/ledger' ? 'Ledger' :
-                                     pathname === '/pulse' ? 'The Pulse' :
-                                     pathname === '/settings' ? 'Settings' : 'BeanPool'}
-                                </Text>
-                                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid, borderWidth: 1, borderColor: '#fff' }} />
-                                <MaterialCommunityIcons name="chevron-down" size={20} color="#ffffff" style={{ opacity: 0.8, marginTop: 2 }} />
-                            </View>
-                        )}
-                    </View>
-                </TouchableOpacity>
- 
-                <View style={styles.headerRight}>
-                    <View style={styles.headerRightControls}>
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Settings"
-                            style={[styles.controlPillBtn, { borderRightWidth: 1, borderColor: colors.border.default }]}
-                            onPress={() => {
-                                if (pathname === '/settings') {
-                                    if (router.canGoBack()) {
-                                        router.back();
-                                    } else {
-                                        router.replace('/(tabs)/');
-                                    }
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Settings"
+                        style={styles.iconBtn}
+                        onPress={() => {
+                            if (pathname === '/settings') {
+                                if (router.canGoBack()) {
+                                    router.back();
                                 } else {
-                                    router.push('/(tabs)/settings');
+                                    router.replace('/(tabs)/');
                                 }
-                            }}
-                        >
-                            <MaterialCommunityIcons name="tune" size={17} color={pathname === '/settings' ? colors.accent.primary : colors.text.secondary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel="Open profile"
-                            style={styles.controlPillBtn}
-                            onPress={() => {
-                                if (identity?.publicKey) {
-                                    router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
-                                }
-                            }}
-                        >
-                            <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_PILL_SIZE} />
-                        </TouchableOpacity>
-                    </View>
+                            } else {
+                                router.push('/(tabs)/settings');
+                            }
+                        }}
+                    >
+                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.accent.primary : '#ffffff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Open profile"
+                        style={styles.iconBtn}
+                        onPress={() => {
+                            if (identity?.publicKey) {
+                                router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
+                            }
+                        }}
+                    >
+                        <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_SIZE} />
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -673,7 +646,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalBg} onPress={() => setDropdownVisible(false)}>
                     <View style={[styles.modalContent, { marginTop: insets.top + 80 }]}>
                         <Text style={styles.modalVersion}>v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode})</Text>
-                        <Text style={styles.modalHeader}>Select Community</Text>
+                        {/* MOCK v4: the community's name left the header line, so it heads this sheet instead. */}
+                        {hasAnchorUrl && (
+                            <View style={styles.sheetCommunity}>
+                                <Text style={styles.sheetCommunityName} numberOfLines={2} accessibilityRole="header">{communityName}</Text>
+                                <Text style={styles.sheetCommunitySub}>
+                                    {isOffline ? 'Offline' : isGuestOnActive ? 'Visiting as a guest' : 'You are a member here'}
+                                </Text>
+                            </View>
+                        )}
+                        <Text style={styles.modalHeader}>Your communities</Text>
                         {savedNodes.length === 0 && (
                             <View style={{ padding: 14 }}>
                                 <Text style={{ fontSize: 14, color: colors.text.body, lineHeight: 20 }}>

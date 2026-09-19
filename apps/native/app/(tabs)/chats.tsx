@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { useLocalSearchParams } from 'expo-router';
 import PeopleScreen from './people';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -32,6 +33,9 @@ export default function ChatsScreen() {
     const [conversations, setConversations] = useState<any[]>([]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const pageTitle = useCollapsingTitle();
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef);
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
@@ -44,7 +48,7 @@ export default function ChatsScreen() {
         talkBar: {
             flexDirection: 'row',
             marginHorizontal: 16,
-            marginTop: 10,
+            // MOCK v4: the gap above comes from PageTitle (or a spacer while it is folded away).
             backgroundColor: colors.surface.subtle,
             borderRadius: 12,
             padding: 3,
@@ -540,6 +544,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
+                <PageTitle title="Talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -548,21 +553,12 @@ export default function ChatsScreen() {
 
     return (
         <View style={styles.safeArea}>
+            {/* MOCK v3: the large "Talk" title replaces the old "Inbox" heading (one title per page)
+                and folds away once the list scrolls. The compose button moved into the search row
+                so it never folds away with the title. */}
+            <PageTitle title="Talk" collapsed={pageTitle.collapsed} />
+            {pageTitle.collapsed ? <View style={{ height: 10 }} /> : null}
             {talkSwitch}
-            <View style={[styles.header, { borderBottomWidth: 0, paddingBottom: 8 }]}>
-                <Text style={styles.title}>Inbox</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="New message" style={styles.newChatBtn} onPress={() => {
-                    if (Platform.OS === 'web') {
-                        const val = window.prompt("Enter PubKey or Callsign:");
-                        if (val) router.push(`/chat/${val}`);
-                    } else {
-                        router.push('/new-message');
-                    }
-                }}>
-                    <MaterialCommunityIcons name="pencil-outline" size={24} color={colors.accent.primary} />
-                </Pressable>
-            </View>
-
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>
                 <View style={styles.searchContainer}>
@@ -594,6 +590,16 @@ export default function ChatsScreen() {
                             <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>
                         </View>
                     )}
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="New message" style={[styles.optionsToggleBtn, { backgroundColor: colors.accent.tint }]} onPress={() => {
+                    if (Platform.OS === 'web') {
+                        const val = window.prompt("Enter PubKey or Callsign:");
+                        if (val) router.push(`/chat/${val}`);
+                    } else {
+                        router.push('/new-message');
+                    }
+                }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
 
@@ -700,6 +706,9 @@ export default function ChatsScreen() {
             )}
 
             <FlatList
+                ref={listRef}
+                onScroll={pageTitle.onScroll}
+                scrollEventThrottle={16}
                 data={regularConversations}
                 keyExtractor={item => item.id}
                 renderItem={renderItem}

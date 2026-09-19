@@ -7,7 +7,7 @@ import {
     REMOVAL_REASONS,
     actionNodeReport,
     dismissNodeReport,
-    fetchNodeReports,
+    fetchReports,
     type ListedReport,
     type ReportStatusFilter,
 } from '../../lib/node-client';
@@ -57,7 +57,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
         setLoading(true);
         setError(null);
         try {
-            const res = await fetchNodeReports(nodeUrl, filter);
+            const res = await fetchReports(nodeUrl, filter, 200);
             setReports(res.reports);
             setPendingCount(res.pendingCount);
         } catch (e: unknown) {

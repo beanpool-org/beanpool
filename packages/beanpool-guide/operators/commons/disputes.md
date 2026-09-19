@@ -13,7 +13,7 @@ When a member buys something, their beans are held until they confirm they got i
 
 ![The Escrow Disputes screen in Settings](images/economy-disputes.webp)
 
-The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held.
+Only real disputes that needed an admin ruling appear in the Resolved history; ordinary finished deals do not. The list pages through disputes 50 at a time, so you can reach every dispute on the node.
 
 Nothing is decided by the server on its own. Held beans are never released automatically. The buyer is reminded every 7 days while beans are held.
 

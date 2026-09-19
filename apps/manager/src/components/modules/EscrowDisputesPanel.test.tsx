@@ -85,14 +85,37 @@ const mockDisputes: nodeClient.EscrowDisputeItem[] = [
     },
 ];
 
+// Behaves like GET /api/local/admin/disputes: filters by `status` (default 'all'), pages with
+// limit/offset, and reports every tab's count whichever status was asked for.
+function routeLike(rows: nodeClient.EscrowDisputeItem[]) {
+    const isHeld = (d: nodeClient.EscrowDisputeItem) => d.status === 'pending';
+    const isRuled = (d: nodeClient.EscrowDisputeItem) => Boolean(d.resolution);
+    return async (
+        _url: string,
+        minDays = 7,
+        _pw?: string,
+        _tfa?: string,
+        options?: nodeClient.EscrowDisputesOptions
+    ): Promise<nodeClient.EscrowDisputesResponse> => {
+        const status = options?.status ?? 'all';
+        const match = rows.filter((d) =>
+            status === 'pending' ? isHeld(d) : status === 'resolved' ? isRuled(d) : isHeld(d) || isRuled(d)
+        );
+        const offset = options?.offset ?? 0;
+        const limit = options?.limit ?? 50;
+        const counts = {
+            pending: rows.filter(isHeld).length,
+            resolved: rows.filter(isRuled).length,
+            all: rows.filter((d) => isHeld(d) || isRuled(d)).length,
+        };
+        return { disputes: match.slice(offset, offset + limit), total: counts[status], counts, minDays };
+    };
+}
+
 describe('EscrowDisputesPanel Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockResolvedValue({
-            disputes: mockDisputes,
-            total: 2,
-            minDays: 7,
-        });
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockImplementation(routeLike(mockDisputes));
         vi.spyOn(nodeClient, 'resolveEscrowDisputeApi').mockResolvedValue({
             success: true,
             transactionId: 'tx-1',
@@ -259,7 +282,9 @@ describe('EscrowDisputesPanel Component', () => {
         expect(screen.queryByText('Split Ironbark Firewood 1 Trailer')).not.toBeInTheDocument();
         expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
         expect(screen.getByText(/Public Provenance Stamp/i)).toBeInTheDocument();
-        expect(screen.getByText(/owner:password/i)).toBeInTheDocument();
+        // #945: resolution never shows raw key or owner:password
+        expect(screen.getByText(/a community admin/i)).toBeInTheDocument();
+        expect(screen.queryByText(/owner:password/i)).not.toBeInTheDocument();
 
         // Switch to all
         const allTab = screen.getByRole('button', { name: /^All/i });
@@ -269,6 +294,156 @@ describe('EscrowDisputesPanel Component', () => {
 
         expect(screen.getByText('Split Ironbark Firewood 1 Trailer')).toBeInTheDocument();
         expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
+    });
+
+    it('shows the server\'s tab counts on every tab, not counts of the one page it loaded', async () => {
+        const held = (n: number): nodeClient.EscrowDisputeItem => ({
+            ...mockDisputes[0],
+            id: `tx_held_${n}`,
+            post: { ...mockDisputes[0].post!, id: `post_held_${n}`, title: `Held deal ${n}` },
+        });
+        const ruled = (n: number): nodeClient.EscrowDisputeItem => ({
+            ...mockDisputes[1],
+            id: `tx_ruled_${n}`,
+            post: { ...mockDisputes[1].post!, id: `post_ruled_${n}`, title: `Ruled deal ${n}` },
+        });
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockImplementation(
+            routeLike([held(1), held(2), held(3), ruled(1), ruled(2)])
+        );
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+
+        const expectCounts = () => {
+            expect(screen.getByRole('button', { name: 'Pending Actions (3)' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Resolved History (2)' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'All (5)' })).toBeInTheDocument();
+            expect(screen.getByText(/3 Pending \(>7d\)/)).toBeInTheDocument();
+        };
+
+        expectCounts();
+        expect(screen.getAllByText(/^Held deal/)).toHaveLength(3);
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Resolved History/i }));
+        });
+        expect(screen.getAllByText(/^Ruled deal/)).toHaveLength(2);
+        expect(screen.queryByText(/^Held deal/)).not.toBeInTheDocument();
+        expectCounts();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /^All/i }));
+        });
+        expect(screen.getAllByText(/^(Held|Ruled) deal/)).toHaveLength(5);
+        expectCounts();
+    });
+
+    it('on a server without tab counts, shows a number only on the open tab', async () => {
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockImplementation(async (...args) => {
+            const { counts: _omit, ...rest } = await routeLike(mockDisputes)(...args);
+            return rest;
+        });
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+        expect(screen.getByRole('button', { name: 'Pending Actions (1)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Resolved History' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Resolved History/i }));
+        });
+        expect(screen.getByRole('button', { name: 'Pending Actions' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Resolved History (1)' })).toBeInTheDocument();
+        expect(screen.queryByText(/Pending \(>7d\)/)).not.toBeInTheDocument();
+    });
+
+    it('excludes finished ordinary deals without dispute resolution from resolved history and all', async () => {
+        const ordinaryDeal: nodeClient.EscrowDisputeItem = {
+            id: 'tx_ordinary_completed',
+            postId: 'post_bread',
+            buyerPubkey: 'pk_buyer_alice',
+            sellerPubkey: 'pk_seller_bob',
+            credits: 10,
+            status: 'completed',
+            createdAt: Date.now() - 20 * 86400 * 1000,
+            daysStuck: 20,
+            post: {
+                id: 'post_bread',
+                title: 'Sourdough Loaf',
+                description: 'Fresh bread',
+                authorPubkey: 'pk_seller_bob',
+                priceCredits: 10,
+                unitPrice: 10,
+                category: 'goods',
+            },
+            chatContext: [],
+            resolution: null,
+            resolvedAt: null,
+            resolvedBy: null,
+        };
+
+        vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockResolvedValue({
+            disputes: [...mockDisputes, ordinaryDeal],
+            total: 3,
+            minDays: 7,
+        });
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+
+        // Switch to resolved
+        const resolvedTab = screen.getByRole('button', { name: /Resolved History/i });
+        await act(async () => {
+            fireEvent.click(resolvedTab);
+        });
+
+        expect(screen.getByText('Farm Fresh Pastured Eggs 5 Dozen')).toBeInTheDocument();
+        expect(screen.queryByText('Sourdough Loaf')).not.toBeInTheDocument();
+
+        // Switch to all
+        const allTab = screen.getByRole('button', { name: /^All/i });
+        await act(async () => {
+            fireEvent.click(allTab);
+        });
+
+        expect(screen.queryByText('Sourdough Loaf')).not.toBeInTheDocument();
+    });
+
+    it('renders pagination controls and fetches next page when total > 50', async () => {
+        const fetchSpy = vi.spyOn(nodeClient, 'fetchEscrowDisputes').mockResolvedValue({
+            disputes: mockDisputes,
+            total: 60,
+            minDays: 7,
+            limit: 50,
+            offset: 0,
+        });
+
+        await act(async () => {
+            render(<EscrowDisputesPanel activeNode={mockProfile} />);
+        });
+
+        expect(screen.getByText(/Page 1 of 2/i)).toBeInTheDocument();
+        const prevBtn = screen.getByRole('button', { name: /Previous/i });
+        const nextBtn = screen.getByRole('button', { name: /Next/i });
+
+        expect(prevBtn).toBeDisabled();
+        expect(nextBtn).toBeEnabled();
+
+        await act(async () => {
+            fireEvent.click(nextBtn);
+        });
+
+        expect(fetchSpy).toHaveBeenCalledWith(
+            mockProfile.url,
+            7,
+            mockProfile.adminPassword,
+            undefined,
+            expect.objectContaining({ limit: 50, offset: 50 })
+        );
     });
 
     it('renders empty state when no disputes found', async () => {

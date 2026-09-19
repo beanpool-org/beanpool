@@ -4712,10 +4712,10 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
         sellerCallsign: r.seller_callsign || 'Anonymous',
         resolution: r.dispute_resolution || null,
         resolvedAt: r.dispute_resolved_at ? new Date(r.dispute_resolved_at).getTime() : null,
-        resolvedBy: r.dispute_resolved_by || null,
+        resolvedBy: r.dispute_resolved_by ? adminActorName(r.dispute_resolved_by) : null,
         disputeResolution: r.dispute_resolution || null,
         disputeResolvedAt: r.dispute_resolved_at || null,
-        disputeResolvedBy: r.dispute_resolved_by || null,
+        disputeResolvedBy: r.dispute_resolved_by ? adminActorName(r.dispute_resolved_by) : null,
         post: (r.post_title || r.post_id) ? {
             id: r.post_id,
             title: r.post_title || 'Untitled Post',
@@ -4762,7 +4762,7 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
-        WHERE (? = 'all'
+        WHERE ((? = 'all' AND (mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL))
            OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
            OR (? = 'pending' AND mt.status = 'pending'))
     `;
@@ -4776,6 +4776,18 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
 
     const rows = db.prepare(query).all(...params) as any[];
     return rows.map(mapDisputeRow);
+}
+
+/** How many disputes each Escrow Disputes tab holds; same filters as getEscrowDisputes. */
+export function countEscrowDisputes(minDays = 7): { pending: number; resolved: number; all: number } {
+    const row = db.prepare(`
+        SELECT COALESCE(SUM(mt.status = 'pending'), 0) AS pending,
+               COALESCE(SUM(mt.dispute_resolution IS NOT NULL), 0) AS resolved,
+               COALESCE(SUM(mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL), 0) AS all_count
+        FROM marketplace_transactions mt
+        WHERE (? <= 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
+    `).get(minDays, minDays) as any;
+    return { pending: row.pending, resolved: row.resolved, all: row.all_count };
 }
 
 export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
@@ -5125,6 +5137,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
         targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
         postTitle: r.post_title || null,
+        title: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
         // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
         postId: r.post_row_id || null,

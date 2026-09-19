@@ -244,6 +244,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         // ctx.state to hand off the token without fighting the response).
         if (!ctx.state) ctx.state = {};
         ctx.state.tfaSessionToken = newSessionToken;
+        // This request carried a code that was right just now (not a session from earlier). Turning 2FA off
+        // asks for exactly that (requireCurrentSecondFactor), and a backup code is already spent by here.
+        ctx.state.secondFactorJustVerified = true;
         if (admitted) notePasswordSuccess(brakeKey);
         } // end of else block (no valid 2FA session token)
     }
@@ -251,6 +254,64 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     // #135 CR2: Reset tarpit failure count on successful authentication
     if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
 
+    return true;
+}
+
+export type AdminRole = 'owner' | 'admin';
+
+/**
+ * The role gate that follows checkAdminAuth on every admin route. checkAdminAuth has already set
+ * ctx.state.adminRole: the member's live node_roles role under a key session, 'owner' under the node password
+ * (only owners hold it) or a break-glass code. A key session never carries 'moderator': admin-key-auth.ts refuses
+ * one. Answers 403 with `error` and returns false when the role is not in `allowed`.
+ */
+export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error: string): boolean {
+    const role = ctx.state?.adminRole;
+    if (allowed.includes(role)) return true;
+    ctx.status = 403;
+    ctx.body = { error };
+    return false;
+}
+
+/**
+ * Proof, in this request, that the caller holds the node's second factor now: a code from the authenticator, or
+ * one unused backup code (spent here). A 2FA session from an earlier sign-in, or a key session, is not enough: this
+ * guards turning 2FA off, which is what someone holding a stolen session would want to do. A backup code counts so
+ * that an owner who has lost the phone can still turn 2FA off.
+ *
+ * When checkAdminAuth took this request's code inline it has already checked it (and spent a backup code), so that
+ * counts. A wrong code costs the password brake for a password caller (so it cannot be used to guess codes around
+ * the sign-in's own count) and the tarpit for everyone. Answers 401 and returns false on failure.
+ */
+export async function requireCurrentSecondFactor(ctx: any, code: unknown): Promise<boolean> {
+    if (ctx.state?.secondFactorJustVerified) return true;
+    const config = getLocalConfig();
+    if (!config.totpEnabled || !config.totpSecret) return true;
+    const clean = code === undefined || code === null ? '' : String(code).trim();
+    if (!clean) {
+        ctx.status = 401;
+        ctx.body = { error: 'Enter a current code from your authenticator app (or a backup code) to turn 2FA off', totpRequired: true };
+        return false;
+    }
+    let ok = verifyTotpCode(clean, config.totpSecret);
+    if (!ok) {
+        const hashes = config.totpBackupCodesHashes || [];
+        const i = hashes.length > 0 ? verifyAndFindBackupCodeHash(clean, hashes) : -1;
+        if (i !== -1) {
+            const updated = [...hashes];
+            updated.splice(i, 1);
+            updateLocalConfig({ totpBackupCodesHashes: updated });
+            ok = true;
+        }
+    }
+    if (!ok) {
+        if (!ctx.state?.isKeySession) notePasswordFailure(clientLimiterKey(ctx));
+        adminAuthFailures++;
+        await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+        return false;
+    }
     return true;
 }
 

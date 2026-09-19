@@ -607,10 +607,9 @@
 
         document.getElementById('btn-totp-start-setup')?.addEventListener('click', async () => {
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/setup`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password }
+                    headers: adminHeaders({ 'Content-Type': 'application/json' })
                 });
                 if (!res.ok) {
                     const err = await res.json();
@@ -654,10 +653,9 @@
             const code = document.getElementById('totp-setup-code')?.value?.trim();
             if (!code) { showStatus('totp-setup-status', 'Enter 6-digit code from your app', 'error'); return; }
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/verify`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ code })
                 });
                 const data = await res.json();
@@ -709,10 +707,9 @@
             if (!code) { showStatus('totp-disable-status', 'Enter current 2FA or backup code to confirm', 'error'); return; }
             if (!confirm('Are you sure you want to disable 2FA for this node?')) return;
             try {
-                const password = sessionStorage.getItem('bp-admin-token') || authToken || '';
                 const res = await fetch(`${API}/admin/2fa/disable`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': password, 'X-Admin-TOTP': code },
+                    headers: adminHeaders({ 'Content-Type': 'application/json', 'X-Admin-TOTP': code }),
                     body: JSON.stringify({ code })
                 });
                 const data = await res.json();
@@ -857,7 +854,7 @@
             try {
                 await fetch(`${API}/connectors/connect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -868,7 +865,7 @@
             try {
                 await fetch(`${API}/connectors/disconnect`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -880,7 +877,7 @@
             try {
                 await fetch(`${API}/connectors/remove`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, address })
                 });
                 await refreshConnectors();
@@ -891,7 +888,7 @@
             try {
                 await fetch(`${API}/connectors`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         address,
@@ -914,7 +911,7 @@
             try {
                 const res = await fetch(`${API}/connectors`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         address,
@@ -940,7 +937,7 @@
             try {
                 const res = await fetch(`${API}/update-identity`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         password: authToken,
                         callsign: document.getElementById('cfg-callsign').value,
@@ -999,7 +996,7 @@
                 showStatus('seed-invite-status', 'Generating...', 'info');
                 const res = await fetch('/api/admin/seed-invite', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken, type: selectedType })
                 });
                 const data = await res.json();
@@ -1080,7 +1077,7 @@
             try {
                 const res = await fetch(`${API}/change-password`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ currentPassword: authToken, newPassword: np })
                 });
                 if (res.ok) {
@@ -1127,7 +1124,7 @@
             try {
                 const res = await fetch(`${API}/reset`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const d = await res.json();
@@ -1286,7 +1283,7 @@
             try {
                 const res = await fetch('/api/admin/thresholds', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(updates)
                 });
                 if (res.ok) {
@@ -1330,7 +1327,7 @@
             try {
                 const res = await fetch('/api/admin/check-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ password: authToken })
                 });
                 const data = await res.json();

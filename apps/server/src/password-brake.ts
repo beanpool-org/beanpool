@@ -362,10 +362,13 @@ export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: numb
  *   'ok'     — correct (the source's record is cleared);
  *   'wrong'  — missing or incorrect (counted), the caller answers 401 as before;
  *   'braked' — not checked; 429 is already set on ctx.
- * A missing password is 'wrong' without being counted: nothing was guessed. `opts.reset: false` leaves the
- * record as it is on a right password (see settlePasswordAttempt).
+ * A missing password is 'wrong' without being counted: nothing was guessed.
+ *
+ * Under 2FA a right password alone never clears the record: only a right 2FA code does (the caller reports it with
+ * notePasswordSuccess). Otherwise anyone who knows the password could wipe their source's count of wrong codes
+ * between guesses by sending the password somewhere that takes it alone (#937 review, finding 1).
  */
-export async function checkAdminPassword(ctx: Koa.Context | any, password: unknown, opts: { reset?: boolean } = {}): Promise<'ok' | 'wrong' | 'braked'> {
+export async function checkAdminPassword(ctx: Koa.Context | any, password: unknown): Promise<'ok' | 'wrong' | 'braked'> {
     const config = getLocalConfig();
     if (!password || !config.adminHash || !config.salt) return 'wrong';
     const key = clientLimiterKey(ctx);
@@ -378,9 +381,15 @@ export async function checkAdminPassword(ctx: Koa.Context | any, password: unkno
     try {
         ok = await verifyPasswordAsync(String(password), config.adminHash, config.salt);
     } finally {
-        settlePasswordAttempt(key, ok, opts.reset !== false);
+        settlePasswordAttempt(key, ok, !twoFactorOn());
     }
     return ok ? 'ok' : 'wrong';
+}
+
+/** Whether the node asks for a 2FA code after the password; while it does, a right password alone clears nothing. */
+export function twoFactorOn(): boolean {
+    const c = getLocalConfig();
+    return !!(c.totpEnabled && c.totpSecret);
 }
 
 /** Tests only. */

@@ -19,8 +19,7 @@ import {
 } from '../config/local-config.js';
 import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken } from '../admin-auth.js';
-import { checkAdminPassword } from '../password-brake.js';
+import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -39,7 +38,10 @@ const PUBLIC_DIR = resolveServerPath('public');
 
 export function createSettingsRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { checkAdminAuth } = deps;
+    const { checkAdminAuth, rateLimit } = deps;
+    // Who may do what: see OWNER_ONLY in routes/community.ts. Owner-only here: turning 2FA on or off.
+    const OWNER_ONLY: readonly AdminRole[] = ['owner'];
+    const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
 
 // ===================== UNIVERSAL DEEP LINKS (AASA / ASSETLINKS) =====================
 // Apple App Site Association
@@ -361,15 +363,9 @@ router.get('/api/version', (ctx) => {
 // ===================== THRESHOLDS API =====================
 
 router.post('/api/admin/thresholds', async (ctx) => {
-    const config = getLocalConfig();
-    const { password, ...updates } = (ctx as any).requestBody || {};
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    const { password, totpCode, ...updates } = (ctx as any).requestBody || {};
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its thresholds')) return;
     // Only allow known threshold keys
     const allowed = Object.keys(DEFAULT_THRESHOLDS);
     const filtered: Record<string, number> = {};
@@ -398,15 +394,8 @@ function semverGreater(a: string, b: string): boolean {
 }
 
 router.post('/api/admin/check-update', async (ctx) => {
-    const config = getLocalConfig();
-    const { password } = (ctx as any).requestBody || {};
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can check for updates')) return;
     try {
         const response = await fetch(
             'https://api.github.com/repos/beanpool-org/beanpool/releases/latest',
@@ -470,25 +459,14 @@ router.post('/api/admin/check-update', async (ctx) => {
 
 /**
  * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
- * Uses password-only auth (no 2FA enforcement) to avoid a chicken-and-egg problem:
- * the UI needs to know if 2FA is enabled BEFORE the user can provide a TOTP code.
+ * Same auth as every admin route. This used to take the password alone, so the UI could learn whether 2FA was on
+ * before it had a code; it no longer needs to: with 2FA on, the password alone gets 401 { totpRequired: true },
+ * which says exactly that. The password alone also let a caller clear the password brake between wrong codes.
  */
 router.get('/api/local/admin/2fa/status', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can read its 2FA status')) return;
     const config = getLocalConfig();
-    // A key session (the app's one-time sign-in link) already passed the node's 2FA when it was issued,
-    // so there is no chicken-and-egg for it: a live one may read the status too.
-    const keySessionId = ctx.cookies?.get('admin_session');
-    const keySessionOk = !!keySessionId && validateAdminSession(keySessionId).valid;
-    const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
-        || ctx.request?.headers?.['x-admin-password']
-        || (ctx as any).headers?.['x-admin-password'];
-    const pwCheck = keySessionOk ? 'ok' : await checkAdminPassword(ctx, headerPass);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
     ctx.body = {
         success: true,
         totpEnabled: !!config.totpEnabled,
@@ -504,6 +482,7 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
  */
 router.post('/api/local/admin/2fa/setup', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can set up 2FA')) return;
     const config = getLocalConfig();
     const secret = generateTotpSecret();
     const backupCodes = generateBackupCodes(8);
@@ -541,6 +520,7 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
  */
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA on')) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const code = body.code || body.totpCode;
     if (!code) {
@@ -591,10 +571,18 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
 });
 
 /**
- * POST /api/local/admin/2fa/disable — Disables 2FA (requires valid password + 2FA code).
+ * POST /api/local/admin/2fa/disable — Disables 2FA. Owner only, and only with a code that is right NOW (from the
+ * authenticator, or a backup code) in `code`, `totpCode` or X-Admin-TOTP: a 2FA session from earlier, or a key
+ * session, is not enough (requireCurrentSecondFactor says why).
  */
 router.post('/api/local/admin/2fa/disable', async (ctx) => {
+    if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA off')) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const code = body.code || body.totpCode
+        || (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-totp') : null);
+    if (!(await requireCurrentSecondFactor(ctx, code))) return;
     updateLocalConfig({
         totpEnabled: false,
         totpSecret: null,

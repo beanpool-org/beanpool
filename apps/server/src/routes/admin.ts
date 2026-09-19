@@ -1609,7 +1609,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
             operator: effectiveActor,
         };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to issue re-enrolment code' };
     }
 });
@@ -1638,7 +1638,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
         const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
         ctx.body = result;
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.status || (e?.message?.includes('not found') || e?.message?.includes('unrecognised') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to complete re-keying' };
     }
 });

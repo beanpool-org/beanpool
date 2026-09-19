@@ -42,6 +42,10 @@ export interface LocalConfig {
     currencyType?: 'text' | 'image';
     currencyValue?: string;
     backupPrimaryUrl?: string | null;
+    // LEGACY, never written any more. Older standbys stored the main server's admin password
+    // here in plain text. On start a standby swaps it for a replication token and wipes it
+    // (services/backup-puller.ts migrateStandbyPassword); where it can't, it keeps copying with
+    // it and warns. It is stripped from every backup file this node writes (redactLocalConfig).
     backupAdminPassword?: string | null;
     // --- Replication credential (live backup) ---
     // Primary side: scrypt hash of a dedicated replication token. The snapshot-pull
@@ -52,8 +56,9 @@ export interface LocalConfig {
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
     // When true, the snapshot endpoint refuses admin-password auth and REQUIRES the
-    // token. Left false during rollout so existing backups keep working until the
-    // token is provisioned on both ends, then flipped on for token-only enforcement.
+    // token. A NEW install starts with it on (initAdminPassword). An install from before
+    // that has it unset, which reads as off, so a standby still copying with the admin
+    // password keeps working; Settings tells the owner to switch it on.
     replicationTokenOnly?: boolean;
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
@@ -292,6 +297,10 @@ export function initAdminPassword(): void {
         adminHash: hash,
         salt: salt,
         joinedAt: Date.now(),
+        // First boot of a new install: standbys copy with a replication token only, never
+        // the admin password. Existing installs never reach this line (isLocked above), so
+        // their setting is left as it is.
+        replicationTokenOnly: config.replicationTokenOnly ?? true,
     });
 
     console.log('🔒 Admin password configured and saved.');
@@ -314,14 +323,27 @@ export function setReplicationToken(token: string): void {
     saveLocalConfig(config);
 }
 
-/** Remove the replication token and revert to admin-password auth on the snapshot endpoint. */
+/**
+ * Remove the replication token. Token-only mode is left as it is: clearing the token on a
+ * token-only server stops all copying until a new token is made, rather than quietly
+ * letting the admin password back in.
+ */
 export function clearReplicationToken(): void {
     const config = getLocalConfig();
     config.replicationTokenHash = null;
     config.replicationTokenSalt = null;
     config.replicationTokenCreatedAt = null;
-    config.replicationTokenOnly = false;
     saveLocalConfig(config);
+}
+
+/**
+ * A copy of the local config that is safe to put in a backup file: without the legacy
+ * plain-text admin password a standby may still hold (backupAdminPassword).
+ */
+export function redactLocalConfig(config: LocalConfig): LocalConfig {
+    const { backupAdminPassword: _dropped, ...rest } = config;
+    void _dropped;
+    return rest as LocalConfig;
 }
 
 export function hasReplicationToken(): boolean {

@@ -26,8 +26,13 @@
  * Config (env):
  *   NODE_ROLE=backup              required — gates this loop AND the import guard
  *   BACKUP_PRIMARY_URL            required — e.g. https://test.beanpool.org
- *   BACKUP_ADMIN_PASSWORD         required — the primary's admin password (shared
- *                                 operator secret); sent in X-Admin-Password
+ *   BACKUP_REPLICATION_TOKEN      the primary's replication token (or set it under Live
+ *                                 Backup Server, which stores it in local-config.json);
+ *                                 sent in X-Replication-Token
+ *   BACKUP_ADMIN_PASSWORD         LEGACY — the primary's admin password. Still honoured so an
+ *                                 old standby keeps copying, but on start the standby swaps it
+ *                                 for a token when it safely can (migrateStandbyPassword) and
+ *                                 warns every start while it can't.
  *   BACKUP_PULL_INTERVAL_MS       optional — default 60000 (60s)
  *
  * The backup must ALSO have the primary configured as a single passive `mirror`
@@ -40,7 +45,7 @@
 
 import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
 import { logger } from '../logger.js';
-import { getLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
 const DELTA_PATH = '/api/local/admin/sync-delta';
@@ -141,8 +146,8 @@ async function pullOnce(mode: PullMode = 'delta'): Promise<{ ok: boolean; error?
         return { ok: false, error: 'Primary URL must be https:// (or http://localhost).' };
     }
 
-    // Prefer the scoped replication token; fall back to the admin password during
-    // rollout (before a token is provisioned on both ends).
+    // Prefer the scoped replication token. The admin password is only a fallback for a
+    // legacy standby that migrateStandbyPassword could not swap yet (it warns every start).
     const authHeader: Record<string, string> = replicationToken
         ? { 'X-Replication-Token': replicationToken }
         : { 'X-Admin-Password': adminPassword as string };
@@ -333,6 +338,175 @@ function nextMode(): PullMode {
     return 'delta';
 }
 
+// ===================== LEGACY ADMIN-PASSWORD STANDBYS =====================
+//
+// A standby used to be set up with the main server's admin password, which it kept in plain
+// text (local-config.json `backupAdminPassword`, or BACKUP_ADMIN_PASSWORD in .env). Anyone with
+// that disk, or a backup of it, then had the main server's admin password. A standby now
+// copies with a replication token only. One that still holds the password swaps it on start:
+//
+//   1. It already has a token too → the token is what it copies with; the password is wiped.
+//   2. The main server has NO replication token yet → the standby uses the password once to
+//      mint one, checks the new token works, stores only the token and wipes the password.
+//   3. Otherwise it keeps copying with the password (never silently break copying) and warns
+//      loudly every start; Settings shows a banner saying what to do.
+//
+// Case 3 covers a main server that already has a token (minting another would REPLACE it and
+// cut off whichever standby is using it — the server keeps a single token), a main server
+// with two-factor sign-in on (the password alone can't reach the token routes), an older
+// server without them, and a main server that can't be reached right now (retried on a later
+// pull, at most hourly).
+//
+// A password that came from BACKUP_ADMIN_PASSWORD in .env can't be wiped by the node (the file
+// is outside the container); once a token is stored it is never used, and the warning asks the
+// operator to delete the line.
+
+export type StandbyCredentialState = {
+    /** What the next pull authenticates with. */
+    using: 'token' | 'password' | 'none';
+    /** The legacy admin password is still in local-config.json. */
+    passwordStored: boolean;
+    /** BACKUP_ADMIN_PASSWORD is set in the environment. */
+    passwordInEnv: boolean;
+    /** Operator-facing warning, or null when all is well. Never contains a secret. */
+    warning: string | null;
+    /** What the last swap attempt did. */
+    lastSwap: 'not-needed' | 'wiped-unused-password' | 'minted-token' | 'failed' | null;
+};
+
+const MIGRATE_TIMEOUT_MS = 15_000;
+const MIGRATE_RETRY_MS = 60 * 60_000;
+let credentialState: StandbyCredentialState = { using: 'none', passwordStored: false, passwordInEnv: false, warning: null, lastSwap: null };
+let lastMigrateAttemptAt = 0;
+let migrateRetryable = false;
+
+function readCredentials() {
+    const config = getLocalConfig();
+    return {
+        storedPw: config.backupAdminPassword || null,
+        envPw: process.env.BACKUP_ADMIN_PASSWORD || null,
+        token: config.backupReplicationToken || process.env.BACKUP_REPLICATION_TOKEN || null,
+        primaryUrl: config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL || null,
+    };
+}
+
+function refreshCredentialState(warning: string | null, lastSwap: StandbyCredentialState['lastSwap']): StandbyCredentialState {
+    const { storedPw, envPw, token } = readCredentials();
+    credentialState = {
+        using: token ? 'token' : (storedPw || envPw) ? 'password' : 'none',
+        passwordStored: !!storedPw,
+        passwordInEnv: !!envPw,
+        warning,
+        lastSwap,
+    };
+    return credentialState;
+}
+
+/** The standby's credential state for Settings. Recomputed from config so a token saved since is reflected. */
+export function getStandbyCredentialState(): StandbyCredentialState {
+    const { storedPw, envPw, token } = readCredentials();
+    // A token saved under Live Backup Server since the last swap attempt clears its warning.
+    const warning = token
+        ? (envPw ? ENV_PASSWORD_NOTE : null)
+        : (storedPw || envPw) ? (credentialState.warning || PASSWORD_PENDING_NOTE) : null;
+    return refreshCredentialState(warning, credentialState.lastSwap);
+}
+
+/** A failure reason that never echoes a secret. */
+class SwapError extends Error {
+    constructor(message: string, readonly retryable: boolean) { super(message); }
+}
+
+async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<string, string>, body: Record<string, unknown>): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), MIGRATE_TIMEOUT_MS);
+    try {
+        return await fetch(primaryUrl.replace(/\/$/, '') + apiPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...headers },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+    } catch (e: any) {
+        throw new SwapError(e?.name === 'AbortError' ? 'the main server did not answer in time' : 'the main server could not be reached', true);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function mintTokenWithPassword(primaryUrl: string, password: string): Promise<string> {
+    const pwHeaders = { 'X-Admin-Password': password };
+    const statusRes = await primaryPost(primaryUrl, '/api/local/admin/replication-token/status', pwHeaders, { password });
+    if (!statusRes.ok) {
+        const body = await statusRes.json().catch(() => ({} as any));
+        if (body?.totpRequired) throw new SwapError('the main server has two-factor sign-in on, so the password alone cannot make a token', false);
+        if (statusRes.status === 401 || statusRes.status === 403) throw new SwapError(`the main server refused the stored password (HTTP ${statusRes.status})`, false);
+        if (statusRes.status === 404) throw new SwapError('the main server is too old to make replication tokens', false);
+        throw new SwapError(`the main server answered HTTP ${statusRes.status}`, statusRes.status >= 500);
+    }
+    const status = await statusRes.json().catch(() => ({} as any));
+    if (status?.hasToken) {
+        throw new SwapError('the main server already has a replication token, and making a new one would cut off any standby using it', false);
+    }
+    const genRes = await primaryPost(primaryUrl, '/api/local/admin/replication-token/generate', pwHeaders, { password });
+    const gen = await genRes.json().catch(() => ({} as any));
+    if (!genRes.ok || typeof gen?.token !== 'string' || !gen.token) {
+        throw new SwapError(`the main server did not make a token (HTTP ${genRes.status})`, genRes.status >= 500);
+    }
+    // Prove the new token opens the replication door before trusting copying to it.
+    const checkRes = await primaryPost(primaryUrl, '/api/local/admin/replication-access', { 'X-Replication-Token': gen.token }, {});
+    if (!checkRes.ok) throw new SwapError(`the new token did not work (HTTP ${checkRes.status})`, false);
+    return gen.token;
+}
+
+const PASSWORD_PENDING_NOTE = "This server holds the main server's admin password to copy with. It swaps it for a replication token when it starts as a standby; if it can't, this says why.";
+const ENV_PASSWORD_NOTE ="BACKUP_ADMIN_PASSWORD is still set in this server's .env. It holds the main server's admin password in plain text and is no longer used: delete that line and restart.";
+
+/**
+ * Swap a legacy stored/env admin password for a replication token (see the block comment
+ * above). Never throws and never logs a secret. Returns the resulting credential state.
+ */
+export async function migrateStandbyPassword(): Promise<StandbyCredentialState> {
+    lastMigrateAttemptAt = Date.now();
+    migrateRetryable = false;
+    const { storedPw, envPw, token, primaryUrl } = readCredentials();
+
+    // 1. A token is already in use: the stored password is dead weight. Wipe it.
+    if (token) {
+        if (storedPw) {
+            updateLocalConfig({ backupAdminPassword: null });
+            logger.info('P2P', "[Backup] 🔐 Removed the main server's admin password from this standby. It copies with its replication token.");
+        }
+        if (envPw) logger.security('P2P', `[Backup] ⚠️ ${ENV_PASSWORD_NOTE}`);
+        return refreshCredentialState(envPw ? ENV_PASSWORD_NOTE : null, storedPw ? 'wiped-unused-password' : 'not-needed');
+    }
+
+    const password = storedPw || envPw;
+    if (!password) return refreshCredentialState(null, 'not-needed');
+
+    // 2. Password only: use it once to mint a token.
+    try {
+        if (!primaryUrl || !isAllowedPrimaryUrl(primaryUrl)) throw new SwapError('the main server address is missing or not https', false);
+        const minted = await mintTokenWithPassword(primaryUrl, password);
+        updateLocalConfig({ backupReplicationToken: minted, backupAdminPassword: null });
+        logger.info('P2P', "[Backup] 🔐 Swapped the main server's admin password for a replication token. The password is no longer stored on this standby.");
+        if (envPw) logger.security('P2P', `[Backup] ⚠️ ${ENV_PASSWORD_NOTE}`);
+        return refreshCredentialState(envPw ? ENV_PASSWORD_NOTE : null, 'minted-token');
+    } catch (e: any) {
+        // 3. Could not swap safely: keep copying with the password, and say so loudly.
+        migrateRetryable = e instanceof SwapError ? e.retryable : true;
+        const why = e instanceof SwapError ? e.message : 'an unexpected error';
+        const where = storedPw ? 'in plain text in local-config.json' : 'in plain text in BACKUP_ADMIN_PASSWORD in .env';
+        const warning = `This standby still copies with the main server's admin password, which is kept ${where}. ` +
+            `It could not swap it for a replication token automatically: ${why}. ` +
+            'To fix: on the main server open Replication Access and copy its replication token (make one if there is none), ' +
+            'then paste it here under Live Backup Server and save. The stored password is then wiped' +
+            (storedPw ? '.' : '; also delete BACKUP_ADMIN_PASSWORD from .env and restart.');
+        logger.security('P2P', `[Backup] ⚠️ ${warning}`);
+        return refreshCredentialState(warning, 'failed');
+    }
+}
+
 /**
  * Start the backup pull loop if this node is configured as a backup. No-op
  * (with a clear log) on a primary or when required config is missing, so the
@@ -357,8 +531,14 @@ export function initBackupPuller(): void {
     // takes effect on the next tick without restarting the node. The pull interval is
     // re-read each time from getPullMs().
     stopped = false;
+    refreshCredentialState(null, null);
     const loop = async () => {
         if (stopped) return;
+        // Swap a legacy admin password for a token before the first pull, and retry a swap
+        // that failed for a passing reason (main server unreachable) at most hourly.
+        if (lastMigrateAttemptAt === 0 || (migrateRetryable && Date.now() - lastMigrateAttemptAt >= MIGRATE_RETRY_MS)) {
+            await migrateStandbyPassword().catch(() => {});
+        }
         await pullOnce(nextMode()).catch(() => {});
         if (stopped) return;
         pullTimer = setTimeout(loop, getPullMs());

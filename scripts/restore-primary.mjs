@@ -214,6 +214,7 @@ async function main() {
         NODE_ROLE: 'primary',
         BACKUP_PRIMARY_URL: '',
         BACKUP_ADMIN_PASSWORD: '',
+        BACKUP_REPLICATION_TOKEN: '',
     });
     console.log(`  • updated ${envPath} (NODE_ROLE=primary, cleared backup configs)\n`);
 

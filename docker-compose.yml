@@ -25,6 +25,9 @@ services:
       # deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
       - NODE_ROLE=${NODE_ROLE:-}
       - BACKUP_PRIMARY_URL=${BACKUP_PRIMARY_URL:-}
+      # A standby copies with BACKUP_REPLICATION_TOKEN. BACKUP_ADMIN_PASSWORD is legacy: a standby
+      # that still has it swaps it for a token on start where it safely can, and warns otherwise.
+      - BACKUP_REPLICATION_TOKEN=${BACKUP_REPLICATION_TOKEN:-}
       - BACKUP_ADMIN_PASSWORD=${BACKUP_ADMIN_PASSWORD:-}
       - BACKUP_PULL_INTERVAL_MS=${BACKUP_PULL_INTERVAL_MS:-}
       - PROMOTED_FROM_BACKUP=${PROMOTED_FROM_BACKUP:-}

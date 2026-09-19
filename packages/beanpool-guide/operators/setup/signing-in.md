@@ -24,11 +24,13 @@ Owners and admins see **Manage** followed by the community's name in the phone a
 - asks for the 6-digit code if your server has two-factor sign-in on;
 - opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings.
 
+When you are done, **← Back to the BeanPool app** (at the top right, and at the top of the **☰** menu) takes you back to the app, and **View my profile** opens your own profile there.
+
 This sign-in belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button, and cannot sign in to Settings at all.
 
 A sign-in from the app ends after **2 hours** without use, and after **12 hours** at most. It also ends when an owner changes or removes your role, and when the server restarts.
 
-The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password.
+The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password. Settings opened from the web app offers **← Back to BeanPool**, which returns you to the web app.
 
 ## If you are locked out
 

@@ -1,7 +1,7 @@
 ---
 slug: the-settings-screens
 title: Finding your way around Settings
-summary: The five screens in Settings, what each is for, how to get around on a phone, and how to get help on any of them.
+summary: The five screens in Settings, what each is for, how to get around on a phone or a laptop, how to get back to BeanPool, and how to get help on any of them.
 related: first-time-setup, signing-in, roles, troubleshooting
 ---
 
@@ -15,12 +15,28 @@ Settings is where owners and admins run the community's server. Members never se
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.
 - **Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security.
 
+## Getting back to BeanPool
+
+The top of the side bar (on a phone, the **☰** menu and the right of the top bar) always has a way out of Settings. It says where it goes:
+
+- **← Back to the BeanPool app** when you came from the phone app's Manage button. It brings the app back, on the screen you left.
+- **← Back to BeanPool** when you came from the web app's Manage link. It opens the web app on this server.
+- **Open the BeanPool web app** when Settings cannot tell where you came from, for example when you typed the address yourself. It opens the web app on this server.
+
+Settings remembers where you came from until you close the tab, so it still says the right thing after a reload.
+
+**View my profile** sits under it when you signed in from the app, and opens your own profile in the same place. After a password sign-in there is no person to show, so it is not there.
+
+## On a laptop
+
+The **«** button at the top of the side bar folds it to a strip of icons. Point at an icon, or move to it with the Tab key, to see its name. Press **«** again to hide the strip; the **☰** at the top left brings the full side bar back. Settings remembers your choice on this computer. The page widens to use the space.
+
 ## On a phone
 
 Settings opened from the app's Manage button is laid out for the phone. So is any window narrower than a laptop screen.
 
 - The side bar folds away. The bar across the top always names the screen you are on, for example "People & Safety › Owners & admins".
-- Press **☰** at the top left for the menu: the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.
+- Press **☰** at the top left for the menu: the way back to BeanPool, the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.
 - A screen's tabs sit in one row under its title. Slide the row sideways to see them all.
 - Tables become one card per row. Long keys and addresses are shortened to fit. A member's page shows their whole key, with a button to copy it.
 - The phone's Back button goes back through the screens and tabs you opened. It closes the menu or the manual first, and only leaves Settings from the first screen.

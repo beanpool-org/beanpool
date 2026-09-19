@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 14,
-  "hash": "4de767f3b41782eb28b19469e38a41d2cd12dde7ef66862c6e47ca5f8e6dc15c",
+  "version": 15,
+  "hash": "3932cd3a90416804b386ff0328458b78d959bfb2822d2bc13fdf58d42b64e1ae",
   "sections": [
     {
       "id": "setup",
@@ -239,6 +239,10 @@
         },
         {
           "type": "p",
+          "text": "When you are done, **← Back to the BeanPool app** (at the top right, and at the top of the **☰** menu) takes you back to the app, and **View my profile** opens your own profile there."
+        },
+        {
+          "type": "p",
           "text": "This sign-in belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button, and cannot sign in to Settings at all."
         },
         {
@@ -247,7 +251,7 @@
         },
         {
           "type": "p",
-          "text": "The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password."
+          "text": "The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password. Settings opened from the web app offers **← Back to BeanPool**, which returns you to the web app."
         },
         {
           "type": "h2",
@@ -265,7 +269,7 @@
     {
       "slug": "the-settings-screens",
       "title": "Finding your way around Settings",
-      "summary": "The five screens in Settings, what each is for, how to get around on a phone, and how to get help on any of them.",
+      "summary": "The five screens in Settings, what each is for, how to get around on a phone or a laptop, how to get back to BeanPool, and how to get help on any of them.",
       "section": "setup",
       "related": [
         "first-time-setup",
@@ -294,6 +298,38 @@
         },
         {
           "type": "h2",
+          "text": "Getting back to BeanPool"
+        },
+        {
+          "type": "p",
+          "text": "The top of the side bar (on a phone, the **☰** menu and the right of the top bar) always has a way out of Settings. It says where it goes:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**← Back to the BeanPool app** when you came from the phone app's Manage button. It brings the app back, on the screen you left.",
+            "**← Back to BeanPool** when you came from the web app's Manage link. It opens the web app on this server.",
+            "**Open the BeanPool web app** when Settings cannot tell where you came from, for example when you typed the address yourself. It opens the web app on this server."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Settings remembers where you came from until you close the tab, so it still says the right thing after a reload."
+        },
+        {
+          "type": "p",
+          "text": "**View my profile** sits under it when you signed in from the app, and opens your own profile in the same place. After a password sign-in there is no person to show, so it is not there."
+        },
+        {
+          "type": "h2",
+          "text": "On a laptop"
+        },
+        {
+          "type": "p",
+          "text": "The **«** button at the top of the side bar folds it to a strip of icons. Point at an icon, or move to it with the Tab key, to see its name. Press **«** again to hide the strip; the **☰** at the top left brings the full side bar back. Settings remembers your choice on this computer. The page widens to use the space."
+        },
+        {
+          "type": "h2",
           "text": "On a phone"
         },
         {
@@ -304,7 +340,7 @@
           "type": "ul",
           "items": [
             "The side bar folds away. The bar across the top always names the screen you are on, for example \"People & Safety › Owners & admins\".",
-            "Press **☰** at the top left for the menu: the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.",
+            "Press **☰** at the top left for the menu: the way back to BeanPool, the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.",
             "A screen's tabs sit in one row under its title. Slide the row sideways to see them all.",
             "Tables become one card per row. Long keys and addresses are shortened to fit. A member's page shows their whole key, with a button to copy it.",
             "The phone's Back button goes back through the screens and tabs you opened. It closes the menu or the manual first, and only leaves Settings from the first screen."

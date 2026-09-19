@@ -44,7 +44,9 @@ export function HomeScreen({
     // Action required counts
     const reports = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
-    const pendingReportsCount = reports.length;
+    const pendingReportsCount = typeof nodeData?.reportCount === 'number'
+        ? nodeData.reportCount
+        : reports.filter((r: any) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
     
     // Calculate unclaimed invites from nodeData or invites count
     const membersCount = members.filter((m: MemberItem) => m && !m.isTreasury).length;

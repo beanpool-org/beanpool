@@ -53,10 +53,13 @@ describe('ThreatReviewModal', () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
-    it('dispatches freeze action and calls onFreezePubkeys and onDismiss', async () => {
+    // This test used to expect onDismiss after freezing a report. That was the bug: freezing is not an
+    // outcome for a report, and onDismiss made the Manager treat it as handled with no server call.
+    it('freezing a reported member closes the modal without dismissing the report', async () => {
         vi.useFakeTimers();
-        const handleFreeze = vi.fn();
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
         const handleDismiss = vi.fn();
+        const handleClose = vi.fn();
         const reportThreat: ThreatItem = {
             isReport: true,
             targetPubkey: 'wash1-1784649014864123',
@@ -64,27 +67,89 @@ describe('ThreatReviewModal', () => {
             reason: 'User reported abuse',
         };
 
-        render(
-            <ThreatReviewModal
-                threat={reportThreat}
-                members={mockMembers}
-                onClose={vi.fn()}
-                onFreezePubkeys={handleFreeze}
-                onDismiss={handleDismiss}
-            />
-        );
+        try {
+            render(
+                <ThreatReviewModal
+                    threat={reportThreat}
+                    members={mockMembers}
+                    onClose={handleClose}
+                    onFreezePubkeys={handleFreeze}
+                    onDismiss={handleDismiss}
+                />
+            );
 
-        expect(screen.getByText('USER REPORTED ABUSE')).toBeInTheDocument();
+            expect(screen.getByText('USER REPORTED ABUSE')).toBeInTheDocument();
 
-        fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
-        expect(handleFreeze).toHaveBeenCalledWith(['wash1-1784649014864123']);
+            await act(async () => {
+                fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+            });
+            expect(handleFreeze).toHaveBeenCalledWith(['wash1-1784649014864123']);
 
-        act(() => {
-            vi.advanceTimersByTime(1200);
-        });
+            act(() => {
+                vi.advanceTimersByTime(1200);
+            });
 
-        expect(handleDismiss).toHaveBeenCalledWith(reportThreat);
-        vi.useRealTimers();
+            expect(handleClose).toHaveBeenCalledTimes(1);
+            expect(handleDismiss).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a failed freeze shows the error, stays open and neither closes nor dismisses', async () => {
+        vi.useFakeTimers();
+        const handleFreeze = vi.fn().mockRejectedValue(new Error('HTTP 500: Internal Server Error'));
+        const handleDismiss = vi.fn();
+        const handleClose = vi.fn();
+        try {
+            render(
+                <ThreatReviewModal
+                    threat={{ id: 'r1', isReport: true, targetPubkey: 'wash1-1784649014864123', reason: 'spam' }}
+                    members={mockMembers}
+                    onClose={handleClose}
+                    onFreezePubkeys={handleFreeze}
+                    onDismiss={handleDismiss}
+                />
+            );
+            await act(async () => {
+                fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+            });
+            expect(screen.getByRole('alert')).toHaveTextContent('HTTP 500');
+            expect(screen.queryByText(/Member access rights frozen/)).not.toBeInTheDocument();
+            act(() => {
+                vi.advanceTimersByTime(5000);
+            });
+            expect(handleClose).not.toHaveBeenCalled();
+            expect(handleDismiss).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('freezing for a security alert (not a report) still dismisses the alert', async () => {
+        vi.useFakeTimers();
+        const handleDismiss = vi.fn();
+        const alert: ThreatItem = { type: 'WASH TRADING', description: 'Suspicious activity for wash1-1784649014864123' };
+        try {
+            render(
+                <ThreatReviewModal
+                    threat={alert}
+                    members={mockMembers}
+                    onClose={vi.fn()}
+                    onFreezePubkeys={vi.fn().mockResolvedValue(undefined)}
+                    onDismiss={handleDismiss}
+                />
+            );
+            await act(async () => {
+                fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+            });
+            act(() => {
+                vi.advanceTimersByTime(1200);
+            });
+            expect(handleDismiss).toHaveBeenCalledWith(alert);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('triggers onInspectMember when clicking a targeted member', async () => {

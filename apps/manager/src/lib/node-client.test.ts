@@ -30,6 +30,7 @@ import {
     normalizeKeeperPubkey,
     pruneInviteBranch,
     deleteNodePost,
+    fetchReports,
 } from './node-client';
 
 describe('normalizeNodeUrl', () => {
@@ -894,3 +895,54 @@ describe('deleteNodePost', () => {
     });
 });
 
+
+describe('report normalisation keeps enterprise reports off the post line', () => {
+    // The phone app files an enterprise report with the enterprise's key in targetPostId; the server
+    // sends postId: null for it on purpose. Falling back to targetPostId made it render as "Post: Untitled Post".
+    const enterpriseKey = 'ab'.repeat(32);
+    const enterpriseReport = { id: 'r_ent', targetPubkey: 'cd'.repeat(32), targetPostId: enterpriseKey, postId: null, reason: 'Fake shop' };
+    const postReport = { id: 'r_post', targetPubkey: 'cd'.repeat(32), targetPostId: 'post_1', postId: 'post_1', reason: 'Spam' };
+
+    it('normalizeNodeData', () => {
+        const data = normalizeNodeData({ reports: [enterpriseReport, postReport] } as any);
+        expect(data.reports?.[0].postId).toBeNull();
+        expect(data.reports?.[1].postId).toBe('post_1');
+    });
+
+    it('fetchReports', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ reports: [enterpriseReport, postReport], total: 2, pendingCount: 2 }),
+        }));
+        const res = await fetchReports('https://node.example', 'open', 50, 0, 'pw');
+        expect(res.reports[0].postId).toBeNull();
+        expect(res.reports[1].postId).toBe('post_1');
+        vi.unstubAllGlobals();
+    });
+
+    it('fetchReports serves a moderator: filter and paging in the query, the session cookie sent, the server count kept', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ reports: [{ id: 7, reason: 'x', status: 'actioned' }], total: 1, pendingCount: 4 }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const res = await fetchReports('https://node.example', 'actioned', 200);
+        const [url, init] = fetchMock.mock.calls[0];
+        const q = new URL(String(url), 'http://x').searchParams;
+        expect([q.get('status'), q.get('limit'), q.get('offset')]).toEqual(['actioned', '200', '0']);
+        expect(init.credentials).toBe('same-origin');
+        expect(res.reports[0]).toMatchObject({ id: '7', outcome: 'actioned' });
+        // The Open count is the server's, not the length of the filtered page.
+        expect(res.pendingCount).toBe(4);
+        vi.unstubAllGlobals();
+    });
+
+    it("fetchReports shows the node's own refusal", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: false, status: 403, statusText: 'Forbidden',
+            json: async () => ({ error: 'Moderators can review reports and remove reported posts only' }),
+        }));
+        await expect(fetchReports('https://node.example', 'open')).rejects.toThrow('Moderators can review reports');
+        vi.unstubAllGlobals();
+    });
+});

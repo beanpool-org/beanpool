@@ -26,7 +26,7 @@ import {
     getAllDecisions, tallyDecision,
     getCommonsBalance,
     runLedgerAudit,
-    getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
+    getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
 } from '../state-engine.js';
 import {
@@ -1507,18 +1507,15 @@ router.get('/api/local/admin/disputes', async (ctx) => {
         ? (ctx.query.status as 'all' | 'pending' | 'resolved')
         : 'all';
 
-    const total = (db.prepare(`
-        SELECT COUNT(*) FROM marketplace_transactions mt
-        WHERE (? = 'all'
-           OR (? = 'resolved' AND mt.dispute_resolution IS NOT NULL)
-           OR (? = 'pending' AND mt.status = 'pending'))
-          AND (? = 0 OR (julianday('now') - julianday(mt.created_at)) >= ?)
-    `).pluck().get(status, status, status, minDays, minDays) as number) || 0;
+    // Counts for every tab, so the Manager's tab labels agree whichever tab is open.
+    const counts = countEscrowDisputes(minDays);
+    const total = counts[status];
 
     const disputes = getEscrowDisputes(minDays, limit, offset, status);
     ctx.body = {
         disputes,
         total,
+        counts,
         count: disputes.length,
         minDays,
         limit,

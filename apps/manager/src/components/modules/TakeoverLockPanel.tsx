@@ -60,7 +60,7 @@ function CodeBlock({ code, light = false }: { code: string; light?: boolean }) {
     return (
         <div data-testid="recovery-code" className={`font-mono font-bold tracking-wider text-center select-all ${light ? 'text-black' : 'text-white'}`}>
             {prefix && <div className={`text-lg ${light ? 'text-gray-700' : 'text-amber-300'}`}>{prefix}</div>}
-            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-2xl leading-snug">
+            <div className="flex flex-wrap justify-center gap-y-1 text-2xl leading-snug">
                 {groups.map((g, i) => (
                     <span key={i} className="whitespace-nowrap">{g}{i < groups.length - 1 ? '-' : ''}</span>
                 ))}
@@ -73,7 +73,7 @@ function CodeBlock({ code, light = false }: { code: string; light?: boolean }) {
 export function printInstructions(codeId: number, madeOn: string): string[] {
     return [
         `This is recovery code #${codeId} for your community's BeanPool server. Any one of the community's owners, or this paper, can unlock the server's take-over keys and its locked backups.`,
-        'You need it only if every owner has lost their phone and their 12 words. It opens the community\'s locked backups and its take-over keys.',
+        'You need it only if every owner has lost their phone and their 12 words.',
         'Type it where the server asks for "the recovery code". Capitals or small letters both work, and the dashes are optional.',
         'To check this paper later: Settings → Appliance & Data → Backups & Restore → Check a code.',
         `Keep it somewhere safe that is not next to the server. Anyone holding it can open your backups. If a new code is made, keep this one until every backup made before then is destroyed: those still open with code #${codeId}, made ${madeOn}.`,
@@ -220,7 +220,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
     return (
         <div className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="takeover-lock-panel">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-[12rem] flex-1">
                     <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                         <span>🔐</span>
                         <span>Who can unlock this community</span>

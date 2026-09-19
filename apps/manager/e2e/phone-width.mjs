@@ -14,7 +14,8 @@
  * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no controls
  * overlap each other, no text runs under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
- * each close it too, and Back does not leave Settings.
+ * each close it too, and Back does not leave Settings — except a card marked `holdsOpen` (one showing a one-time
+ * secret, such as the recovery code), which all three must leave open.
  *
  * Text is set in a bundled Verdana-width font (see HARNESS_FONT in harness.mjs), so a Mac and CI measure the same.
  *
@@ -383,7 +384,14 @@ try {
                                 // Back must close the modal and stay on the same screen, not go to the one before.
                                 const stillSettings = p.url().includes('/settings') && await p.locator('main').count() > 0
                                     && await p.locator('header').first().innerText().catch(() => '') === where;
-                                const closed = stillSettings && await p.locator('.fixed.inset-0').count() === n - 1;
+                                const left = await p.locator('.fixed.inset-0').count();
+                                if (modal.holdsOpen) {
+                                    // A card showing a one-time secret: a stray tap, Escape or Back must not throw it away.
+                                    if (!stillSettings || left !== n) fail(`${how} closed a card that holds a one-time secret${stillSettings ? '' : ' (Back left the screen)'}`);
+                                    else console.log(`  ✓ ${modal.name} ${at}: ${how} leaves it open (it holds a one-time secret)`);
+                                    continue;
+                                }
+                                const closed = stillSettings && left === n - 1;
                                 if (!closed) fail(`${how} does not close it${stillSettings ? '' : ' (Back left the screen)'}`);
                                 else console.log(`  ✓ ${modal.name} ${at}: ${how} closes it`);
                             } finally {

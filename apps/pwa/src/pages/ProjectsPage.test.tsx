@@ -5,7 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -324,6 +324,21 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
         expect(within(card).queryByText('12')).toBeNull();
         expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+    });
+
+    it('gates Propose on the node\'s rule: a node admin with no earned credit may propose', async () => {
+        vi.mocked(getBalance).mockResolvedValueOnce({ ...mockBalance, earnedCredit: 0 });
+        vi.mocked(getDecisions).mockResolvedValueOnce({ decisions: [], myPoolVoting: null, canPropose: true });
+        render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
+        await waitFor(() => expect(getDecisions).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByText(/Open to members with a completed trade or earned standing, and to node admins\./)).toBeInTheDocument());
+        expect(screen.queryByText(/You can propose once you have completed a trade\./)).toBeNull();
+    });
+
+    it('and a member the node says may not propose is told so, whatever their earned credit', async () => {
+        vi.mocked(getDecisions).mockResolvedValueOnce({ decisions: [], myPoolVoting: null, canPropose: false });
+        render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
+        await waitFor(() => expect(screen.getByText(/You can propose once you have completed a trade\./)).toBeInTheDocument());
     });
 
     it('fits the section tabs in a 320px row and never lets the page scroll sideways', async () => {

@@ -2352,7 +2352,7 @@
                                         <strong style="color:${isPruned ? '#64748b' : isActive ? '#f8fafc' : '#f59e0b'}">${isPruned ? '🗑️ ' : !isActive ? '⏸️ ' : ''}${esc(member.callsign)} <span class="member-id">(${pubkey.substring(0,8)})</span></strong>
                                         ${flagPill}${reportPill}${elderPill}${voucherPill}${chipHtml}
                                     </div>
-                                    <div class="member-active">Active: ${profile?.lastActiveAt ? new Date(profile.lastActiveAt).toLocaleString() : 'Never'}</div>
+                                    <div class="member-active">Active: ${member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleDateString(undefined, { timeZone: 'UTC' }) : 'Never'}</div>
                                     <div class="member-actions">
                                         ${statsBtn}
                                         <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); viewMemberPosts('${pubkey}')" title="View posts by this member">📦 Posts</button>

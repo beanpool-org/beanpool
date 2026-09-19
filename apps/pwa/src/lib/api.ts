@@ -1457,7 +1457,6 @@ export interface Decision {
     executionError: string | null;
     executionReason: string | null;
     adminHaltedAt: string | null;
-    adminHaltedBy: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
 }
@@ -1495,7 +1494,8 @@ export interface MyPoolVoting {
     hasCompletedTrade: boolean;
 }
 
-export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null }> {
+/** canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule. */
+export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose?: boolean | null }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }
 

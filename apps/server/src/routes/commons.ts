@@ -8,9 +8,10 @@ import {
     getProjects, getAllProjects,
     getCommonsBalance,
     adminRejectProject,
-    createDecision, getDecision, getAllDecisions, getOpenDecisions,
+    createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision, tickDecisions,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
+    checkProposalStanding,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -126,11 +127,14 @@ router.get('/api/commons/decisions', async (ctx) => {
     const ownVotes = actor ? getOwnDecisionVotes(actor) : null;
     ctx.body = {
         decisions: decisions.map(d => ({
-            ...d,
+            ...publicDecision(d),
             tally: tallyDecision(d.id),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         myPoolVoting: myPoolVoting(actor),
+        // Whether the signer may propose (earned standing, or a node admin). The one-open-Decision limit is
+        // left to the apps, which already know the signer's open Decisions.
+        canPropose: actor ? checkProposalStanding(actor).ok : false,
     };
 });
 
@@ -142,7 +146,7 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
-    ctx.body = { decision, tally, voiceCredits, myVote };
+    ctx.body = { decision: publicDecision(decision), tally, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
@@ -175,7 +179,7 @@ router.post('/api/commons/decisions', async (ctx) => {
             params,
             closesAt: closesAtOverride,
         });
-        ctx.body = { success: true, decision };
+        ctx.body = { success: true, decision: publicDecision(decision) };
     } catch (err: any) {
         ctx.status = 400;
         ctx.body = { error: err.message };

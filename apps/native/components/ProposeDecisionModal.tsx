@@ -573,7 +573,7 @@ export function ProposeDecisionModal({
                         <View style={styles.noBondNotice}>
                             <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                             <Text style={styles.noBondText}>
-                                <Text style={{ fontWeight: '700' }}>No bond required.</Text> Open to anyone who has completed a trade. Open for 7 days. Closes and executes automatically.
+                                <Text style={{ fontWeight: '700' }}>No bond required.</Text> Open to members with a completed trade or earned standing, and to node admins. Open for 7 days. Closes and executes automatically.
                             </Text>
                         </View>
 

@@ -27,6 +27,7 @@ import {
     getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
+    lastActiveForViewer,
 } from '../state-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
@@ -580,6 +581,8 @@ router.post('/api/local/admin/data', async (ctx) => {
             }
             return {
                 ...m,
+                // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
+                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                 tier,
                 standing: tier,
                 canVouch: isVoucher,

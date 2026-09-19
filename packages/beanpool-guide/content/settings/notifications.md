@@ -2,7 +2,7 @@
 slug: notifications
 title: Notifications
 summary: Choose which alerts reach your phone.
-related: mute, messages, my-deals, holiday-mode
+related: mute, messages, my-deals, holiday-mode, the-top-bar
 ---
 
 ## Choosing your alerts

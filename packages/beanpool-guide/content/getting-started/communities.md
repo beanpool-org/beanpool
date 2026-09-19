@@ -2,7 +2,7 @@
 slug: communities
 title: More than one community
 summary: Belong to several communities with one account, and switch between them.
-related: joining, leaving-or-deleting, your-12-words, faq
+related: joining, leaving-or-deleting, your-12-words, faq, the-top-bar
 ---
 
 ## One account, several communities

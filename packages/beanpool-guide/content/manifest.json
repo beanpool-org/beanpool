@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "sections": [
     {
       "id": "about",
@@ -10,8 +10,8 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, your 12 words, your profile, this guide, and getting help.",
-      "pages": ["joining", "your-12-words", "your-profile", "the-bean", "getting-help", "communities", "web-app"]
+      "summary": "Joining, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "pages": ["joining", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
     },
     {
       "id": "market",

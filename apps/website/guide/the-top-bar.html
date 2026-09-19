@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The top bar — BeanPool members' guide</title>
+    <meta name="description" content="The bean, the small icons that show when something needs you, and the buttons at the top right.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#getting-started">Getting started</a></p>
+        <h1>The top bar</h1>
+        <p class="lede">The bean, the small icons that show when something needs you, and the buttons at the top right.</p>
+        <h2>What is in it</h2>
+        <p>The bar at the top of the screen is the same on every tab. From left to right:</p>
+        <ul>
+            <li><strong>The bean:</strong> your community, and this guide.</li>
+            <li><strong>The &quot;needs you&quot; icons:</strong> only while something is waiting for you.</li>
+            <li><strong>The invite icon, Settings and your picture.</strong></li>
+        </ul>
+        <h2>The bean</h2>
+        <p>Tap the bean at the top left to open the <strong>BeanPool</strong> sheet. It shows:</p>
+        <ul>
+            <li><strong>Your community:</strong> its name, and whether it can be reached right now.</li>
+            <li><strong>Your communities:</strong> tap one to switch to it, or tap <strong>Add a community</strong>.</li>
+            <li><strong>The guides:</strong> this guide, with its search, and what is new.</li>
+        </ul>
+        <p>The small dot on the bean tells you how things are:</p>
+        <ul>
+            <li><strong>Green:</strong> connected, and you are a member here.</li>
+            <li><strong>Amber:</strong> you are visiting as a guest.</li>
+            <li><strong>Red:</strong> your community's server cannot be reached right now, or this phone is not connected to a community yet.</li>
+        </ul>
+        <p>A single slow check does not turn the dot red. It only goes red after more than one check fails in a row.</p>
+        <h2>The &quot;needs you&quot; icons</h2>
+        <p>Between the bean and the buttons on the right, small icons appear only while something needs you. Each one is a kind of thing. Tap it to go straight there.</p>
+        <ul>
+            <li><strong>A handshake:</strong> a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens <strong>My Deals</strong>.</li>
+            <li><strong>A ballot box:</strong> a vote you have not cast yet. The tap opens <strong>Commons</strong>, at <strong>Decide</strong>. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.</li>
+            <li><strong>A speech bubble:</strong> an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens <strong>Talk</strong>, at <strong>Messages</strong>, showing only the unread ones.</li>
+            <li><strong>A group of people:</strong> new lines in your groups or event chats. Chats you have muted stay quiet here. The tap opens the chat, or the unread list in <strong>Messages</strong> if there are several.</li>
+            <li><strong>A shield:</strong> only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too.</li>
+        </ul>
+        <p>The icons stack from the right. The most important one sits next to the invite icon, and keeps its place as others come and go.</p>
+        <h3>The number and the colour</h3>
+        <ul>
+            <li>A small number on an icon means more than one of that kind: for example 3 people who wrote to you. It shows <strong>9+</strong> above 9.</li>
+            <li>An icon turns <strong>amber</strong> when it is more pressing: a deal waiting on you, admin work, or a vote that closes within 2 days. Nothing turns red.</li>
+        </ul>
+        <h3>On a small screen</h3>
+        <p>If there is not room for every icon, the last space shows <strong>•••</strong>. Tap it to see the whole list, <strong>Needs you</strong>, in words. Tap a line to go there.</p>
+        <h3>A quiet bar is good news</h3>
+        <p>When nothing needs you, there are no icons at all. You have not missed anything. The icons update as you move around the app and when you come back to it.</p>
+        <h2>Join or Connect</h2>
+        <p>Instead of the icons, you may see a button:</p>
+        <ul>
+            <li><strong>Join</strong> (amber): you are visiting as a guest. Tap it to open <strong>Invites</strong>, where you can join with an invite.</li>
+            <li><strong>Connect</strong> (red): this phone is not connected to a community. Tap it to open <strong>Settings</strong>, where you can add one.</li>
+        </ul>
+        <p>While one of these shows, the invite icon is hidden.</p>
+        <h2>The buttons on the right</h2>
+        <ul>
+            <li><strong>The invite icon</strong> (a person with a plus): opens <strong>Invites</strong>, to invite someone or join another community. See &quot;Joining with an invite&quot;.</li>
+            <li><strong>Settings</strong> (the sliders): opens <strong>Settings</strong>. Tap it again to go back to where you were.</li>
+            <li><strong>Your picture:</strong> opens your own profile, as others see it.</li>
+        </ul>
+        <h2>Update messages</h2>
+        <p>Sometimes a green bar shows under the top bar:</p>
+        <ul>
+            <li><strong>Update available:</strong> a newer version of the app is out. Tap <strong>Upgrade</strong> to get it, or the cross to close the message.</li>
+            <li><strong>Your app is too old for this community:</strong> you need to update before the app works properly here. This one cannot be closed. Tap <strong>Upgrade</strong>.</li>
+        </ul>
+        <h2>The tabs</h2>
+        <p>Under the top bar are the tabs: <strong>Market</strong>, <strong>Map</strong>, <strong>Talk</strong>, <strong>Pulse</strong>, <strong>Commons</strong> and <strong>Ledger</strong>. The name of each tab sits above its icon.</p>
+        <p>On a long page, tap the tab you are already on to jump back to the top. This works on every tab except <strong>Map</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-bean.html"><strong>This guide</strong><span>Where to find this guide, how to search it, and how it stays up to date.</span></a></li>
+            <li><a href="communities.html"><strong>More than one community</strong><span>Belong to several communities with one account, and switch between them.</span></a></li>
+            <li><a href="my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply and react, and what is private.</span></a></li>
+            <li><a href="notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 5.</p>
+    </main>
+</body>
+</html>

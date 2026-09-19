@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 4,
-  "hash": "d764baa91ee449b4661a5daa3ac0228e094b89f0a2a8fe796e02b514195cf527",
+  "version": 5,
+  "hash": "9509ecaaa61e64d8de17a5708bcbd91a239e1136b163e16acb23ad89eb08c589",
   "sections": [
     {
       "id": "about",
@@ -17,11 +17,12 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, your 12 words, your profile, this guide, and getting help.",
+      "summary": "Joining, your 12 words, your profile, the top bar, this guide, and getting help.",
       "slugs": [
         "joining",
         "your-12-words",
         "your-profile",
+        "the-top-bar",
         "the-bean",
         "getting-help",
         "communities",
@@ -1044,6 +1045,177 @@
       ]
     },
     {
+      "slug": "the-top-bar",
+      "title": "The top bar",
+      "summary": "The bean, the small icons that show when something needs you, and the buttons at the top right.",
+      "section": "getting-started",
+      "related": [
+        "the-bean",
+        "communities",
+        "my-deals",
+        "decisions",
+        "messages",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What is in it"
+        },
+        {
+          "type": "p",
+          "text": "The bar at the top of the screen is the same on every tab. From left to right:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The bean:** your community, and this guide.",
+            "**The \"needs you\" icons:** only while something is waiting for you.",
+            "**The invite icon, Settings and your picture.**"
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The bean"
+        },
+        {
+          "type": "p",
+          "text": "Tap the bean at the top left to open the **BeanPool** sheet. It shows:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your community:** its name, and whether it can be reached right now.",
+            "**Your communities:** tap one to switch to it, or tap **Add a community**.",
+            "**The guides:** this guide, with its search, and what is new."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The small dot on the bean tells you how things are:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Green:** connected, and you are a member here.",
+            "**Amber:** you are visiting as a guest.",
+            "**Red:** your community's server cannot be reached right now, or this phone is not connected to a community yet."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A single slow check does not turn the dot red. It only goes red after more than one check fails in a row."
+        },
+        {
+          "type": "h2",
+          "text": "The \"needs you\" icons"
+        },
+        {
+          "type": "p",
+          "text": "Between the bean and the buttons on the right, small icons appear only while something needs you. Each one is a kind of thing. Tap it to go straight there."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A handshake:** a deal is waiting for you. Someone is waiting for you to accept their request, or a deal you are in is not finished yet. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
+            "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
+            "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
+            "**A group of people:** new lines in your groups or event chats. Chats you have muted stay quiet here. The tap opens the chat, or the unread list in **Messages** if there are several.",
+            "**A shield:** only for people who help run your community. It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The icons stack from the right. The most important one sits next to the invite icon, and keeps its place as others come and go."
+        },
+        {
+          "type": "h3",
+          "text": "The number and the colour"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A small number on an icon means more than one of that kind: for example 3 people who wrote to you. It shows **9+** above 9.",
+            "An icon turns **amber** when it is more pressing: a deal waiting on you, admin work, or a vote that closes within 2 days. Nothing turns red."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "On a small screen"
+        },
+        {
+          "type": "p",
+          "text": "If there is not room for every icon, the last space shows **•••**. Tap it to see the whole list, **Needs you**, in words. Tap a line to go there."
+        },
+        {
+          "type": "h3",
+          "text": "A quiet bar is good news"
+        },
+        {
+          "type": "p",
+          "text": "When nothing needs you, there are no icons at all. You have not missed anything. The icons update as you move around the app and when you come back to it."
+        },
+        {
+          "type": "h2",
+          "text": "Join or Connect"
+        },
+        {
+          "type": "p",
+          "text": "Instead of the icons, you may see a button:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Join** (amber): you are visiting as a guest. Tap it to open **Invites**, where you can join with an invite.",
+            "**Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "While one of these shows, the invite icon is hidden."
+        },
+        {
+          "type": "h2",
+          "text": "The buttons on the right"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The invite icon** (a person with a plus): opens **Invites**, to invite someone or join another community. See \"Joining with an invite\".",
+            "**Settings** (the sliders): opens **Settings**. Tap it again to go back to where you were.",
+            "**Your picture:** opens your own profile, as others see it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Update messages"
+        },
+        {
+          "type": "p",
+          "text": "Sometimes a green bar shows under the top bar:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Update available:** a newer version of the app is out. Tap **Upgrade** to get it, or the cross to close the message.",
+            "**Your app is too old for this community:** you need to update before the app works properly here. This one cannot be closed. Tap **Upgrade**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The tabs"
+        },
+        {
+          "type": "p",
+          "text": "Under the top bar are the tabs: **Market**, **Map**, **Talk**, **Pulse**, **Commons** and **Ledger**. The name of each tab sits above its icon."
+        },
+        {
+          "type": "p",
+          "text": "On a long page, tap the tab you are already on to jump back to the top. This works on every tab except **Map**."
+        }
+      ]
+    },
+    {
       "slug": "the-bean",
       "title": "This guide",
       "summary": "Where to find this guide, how to search it, and how it stays up to date.",
@@ -1052,12 +1224,17 @@
         "getting-help",
         "how-it-works",
         "faq",
-        "whats-new"
+        "whats-new",
+        "the-top-bar"
       ],
       "blocks": [
         {
           "type": "h2",
           "text": "Opening it"
+        },
+        {
+          "type": "p",
+          "text": "Tap the bean at the top left of the screen. Or:"
         },
         {
           "type": "ul",
@@ -1129,7 +1306,8 @@
         "the-bean",
         "reporting",
         "faq",
-        "blocking"
+        "blocking",
+        "the-top-bar"
       ],
       "blocks": [
         {
@@ -1186,7 +1364,8 @@
         "joining",
         "leaving-or-deleting",
         "your-12-words",
-        "faq"
+        "faq",
+        "the-top-bar"
       ],
       "blocks": [
         {
@@ -1556,7 +1735,8 @@
         "a-deal-step-by-step",
         "posting",
         "your-balance",
-        "when-a-deal-goes-wrong"
+        "when-a-deal-goes-wrong",
+        "the-top-bar"
       ],
       "blocks": [
         {
@@ -1971,7 +2151,8 @@
         "people",
         "blocking",
         "event-chat",
-        "groups"
+        "groups",
+        "the-top-bar"
       ],
       "blocks": [
         {
@@ -2557,7 +2738,8 @@
         "proposing-a-decision",
         "rules",
         "polls",
-        "commons-fund"
+        "commons-fund",
+        "the-top-bar"
       ],
       "blocks": [
         {
@@ -3705,7 +3887,8 @@
         "mute",
         "messages",
         "my-deals",
-        "holiday-mode"
+        "holiday-mode",
+        "the-top-bar"
       ],
       "blocks": [
         {

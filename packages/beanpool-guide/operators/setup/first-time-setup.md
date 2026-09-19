@@ -37,9 +37,9 @@ What it really does:
 
 What it does not do yet:
 
-- **Step 2** shows an owner-pairing QR, an authenticator secret and an "emergency seed". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access & Security.
+- **Step 2** shows an owner-pairing QR, an authenticator secret and an "emergency seed". The authenticator secret comes from the server, but the wizard never asks for a code, so two-factor sign-in is not switched on until you finish it in Access & Security. The emergency seed is made up on this screen and is not a working recovery code, and scanning the QR does nothing.
 - **Step 4** says it seeds the commons, but it does not move any beans.
-- If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People & Safety.
+- If the server refuses or cannot be reached, step 5 stops and shows the reason, with no code. Try again, or make invites later under People & Safety.
 
 ## The first owner
 

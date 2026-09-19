@@ -1826,6 +1826,12 @@
                     </div>
                     <p id="backup-health-note" style="font-size:0.72rem;color:#64748b;margin:0.6rem 0 0;"></p>
 
+                    <!-- The main server's take-over keys this standby holds, locked (filled by loadBackupStatus) -->
+                    <div id="backup-takeover-keys" style="display:none;margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid #1e293b;">
+                        <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Take-over keys (locked)</div>
+                        <p id="backup-takeover-keys-text" style="font-size:0.75rem;color:#cbd5e1;margin:0;line-height:1.5;overflow-wrap:anywhere;"></p>
+                    </div>
+
                     <!-- Replica consistency: does this backup hold the same data the primary sent? -->
                     <div id="backup-consistency" style="margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid #1e293b;display:none;">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
@@ -1893,6 +1899,8 @@
                         </div>
                     </div>
                     <div id="rep-recent" style="margin-top:0.75rem;font-size:0.7rem;color:#94a3b8;"></div>
+                    <!-- Which standby holds which take-over envelope (filled by loadReplicationAccess) -->
+                    <div id="rep-envelope-holders" style="display:none;margin-top:0.75rem;font-size:0.72rem;color:#cbd5e1;line-height:1.5;overflow-wrap:anywhere;"></div>
                     <p style="font-size:0.68rem;color:#64748b;margin:0.6rem 0 0;">Rejected attempts are pulls with a bad/missing credential. A nonzero count from an unexpected source is worth investigating.</p>
                 </div>
             </div>

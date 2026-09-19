@@ -256,6 +256,7 @@ run_federation_suites() {
       test-takeover-envelope
       test-backup-topology
       test-standby-token-only
+      test-standby-envelopes
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync

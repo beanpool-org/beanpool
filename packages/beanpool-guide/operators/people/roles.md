@@ -41,7 +41,8 @@ Owners and admins open Settings from the BeanPool app with their own key: **Sett
 
 ## Adding someone
 
-- Under **Add someone**, type part of their callsign, or paste their full public key.
+- Under **Add someone**, type part of their callsign, or paste their full public key. Typing the first six or more characters of a key also finds them.
+- Every member who matches is listed, with a count above the list. A long list scrolls inside its own box. Callsigns that start with what you typed come first, then ones that contain it; among those, the most recently active come first. Each row shows the short form of the member's key, so two people with the same name can be told apart. If nobody matches, it says "No one matches".
 - Pick them, then choose **Owner**, **Admin** or **Moderator**.
 - **Continue** shows what they will be able to do, in plain words. Nothing changes until you press the **Yes, make …** button.
 

@@ -1351,6 +1351,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         auditState={auditState}
                                         initialSubTab={(navSubTab as any) || 'diagnostics'}
                                         onSubTabChange={setNavSubTab}
+                                        rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                     />
                                 </SectionErrorBoundary>
                             )}

@@ -437,7 +437,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
                 : null,
             // Keeper additions and removals waiting out the other keepers' 3-day objection window (answers A, M).
-            keeperChanges: getKeeperChanges(treasury, 'pending'),
+            // Only the keepers (who may object) and node admins see them: they name an applicant and their pledge,
+            // or a keeper being removed, and this route is public-read. An applicant sees their own change through
+            // myPendingRequest.pendingChange.
+            keeperChanges: actor && (isKeeperOfEnterprise(actor, treasury) || isAdminPubkey(actor))
+                ? getKeeperChanges(treasury, 'pending')
+                : [],
             leadInactivity: getLeadInactivity(treasury),
             succession: getSuccessionProposals(treasury),
             // #143 step 3 — see the note in /api/treasuries. Null for an ordinary enterprise.

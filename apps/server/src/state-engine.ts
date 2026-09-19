@@ -2704,33 +2704,45 @@ function keeperBindingCount(enterprisePubkey: string): number {
 }
 
 /**
+ * A keeper change that can no longer be made for a business reason (the pledge is no longer available, the applicant
+ * or keeper is no longer eligible, the lead has changed). The scheduler closes such a change as 'failed'; any other
+ * error (a busy or broken database) leaves the change pending so the next tick retries it.
+ */
+export class KeeperChangeRefused extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'KeeperChangeRefused';
+    }
+}
+
+/**
  * Validate that an approved applicant may still become a keeper, then bind them with their pledge. Runs inside the
  * caller's transaction. Used by an immediate approval and by the scheduler when an objection window closes, so the
  * pledge is re-checked against the applicant's available backing at the moment the binding is made.
  */
 function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: string, pledged: number): void {
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
-    if (ent.status === 'completed') throw new Error('Completed enterprise accepts no requests');
-    if (ent.status === 'disabled' || ent.status === 'pruned') throw new Error('This enterprise has been closed');
+    if (!ent || !ent.is_treasury) throw new KeeperChangeRefused('Not an enterprise');
+    if (ent.status === 'completed') throw new KeeperChangeRefused('Completed enterprise accepts no requests');
+    if (ent.status === 'disabled' || ent.status === 'pruned') throw new KeeperChangeRefused('This enterprise has been closed');
 
     const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
     if (!km || km.status !== 'active') {
-        throw new Error('Applicant account is not active, so they cannot be approved as a keeper');
+        throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
     }
     if (km.credit_frozen === 1) {
-        throw new Error('Applicant credit is frozen, so they cannot be approved as a keeper');
+        throw new KeeperChangeRefused('Applicant credit is frozen, so they cannot be approved as a keeper');
     }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
     if (isOperatorSwitchedOff(memberPubkey)) {
-        throw new Error("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
+        throw new KeeperChangeRefused("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
     }
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, memberPubkey)) {
-        throw new Error('Already a keeper of this enterprise');
+        throw new KeeperChangeRefused('Already a keeper of this enterprise');
     }
     const available = getAvailableBacking(memberPubkey);
     if (pledged > available) {
-        throw new Error(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
+        throw new KeeperChangeRefused(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
     }
 }
 
@@ -3033,14 +3045,15 @@ export function objectToKeeperChange(changeId: string, actorPubkey: string): { o
 /**
  * Apply one pending change whose window has ended. Everything is re-checked now: the lead who made it must still
  * be the lead, an applicant must still be eligible with their pledge still available, a keeper being removed must
- * still be an ordinary keeper. Anything that no longer holds closes the change as 'failed' with the reason.
+ * still be an ordinary keeper. Anything that no longer holds (a KeeperChangeRefused) closes the change as 'failed'
+ * with the reason. Any other error is logged and the change stays pending for the next tick.
  */
-function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' {
+function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retry' {
     let outcome: 'applied' | 'failed' = 'applied';
     let failReason: string | null = null;
     try {
         db.transaction(() => {
-            if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new Error('The keeper who made this change is no longer the lead');
+            if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new KeeperChangeRefused('The keeper who made this change is no longer the lead');
 
             if (c.kind === 'add') {
                 assertApplicantStillEligible(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0));
@@ -3052,8 +3065,8 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' {
             } else {
                 const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
                     .get(c.enterprise_pubkey, c.member_pubkey) as any;
-                if (!target) throw new Error('They are no longer a keeper of this enterprise');
-                if (target.role === 'lead') throw new Error('They have since become the lead keeper');
+                if (!target) throw new KeeperChangeRefused('They are no longer a keeper of this enterprise');
+                if (target.role === 'lead') throw new KeeperChangeRefused('They have since become the lead keeper');
                 // Mark this change applied first: unbindKeeper closes whatever else is still pending for this member.
                 db.prepare("UPDATE enterprise_keeper_changes SET status = 'applied', resolved_at = ? WHERE id = ?").run(nowIso, c.id);
                 unbindKeeper(c.enterprise_pubkey, c.member_pubkey);
@@ -3061,6 +3074,12 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' {
             db.prepare("UPDATE enterprise_keeper_changes SET status = 'applied', resolved_at = ? WHERE id = ?").run(nowIso, c.id);
         })();
     } catch (e: any) {
+        if (!(e instanceof KeeperChangeRefused)) {
+            // Not a reason to refuse the change — most likely a transient database error. The transaction rolled
+            // back, so the change is still pending and the next scheduler tick tries again.
+            console.error(`[keepers] Could not apply keeper change ${c.id}; will retry:`, e?.message || e);
+            return 'retry';
+        }
         outcome = 'failed';
         failReason = e?.message || String(e);
         db.transaction(() => {
@@ -3088,19 +3107,20 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' {
 }
 
 /** Apply every change whose objection window has ended (optionally for one enterprise). */
-export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: number): { applied: number; failed: number } {
+export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: number): { applied: number; failed: number; retrying: number } {
     const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
     const rows = (enterprisePubkey
         ? db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? AND enterprise_pubkey = ? ORDER BY applies_at ASC").all(nowIso, enterprisePubkey)
         : db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? ORDER BY applies_at ASC").all(nowIso)) as any[];
-    let applied = 0, failed = 0;
+    let applied = 0, failed = 0, retrying = 0;
     for (const c of rows) {
         // An earlier change in this batch may have closed this one (e.g. its lead was removed).
         const still = db.prepare("SELECT status FROM enterprise_keeper_changes WHERE id = ?").get(c.id) as any;
         if (still?.status !== 'pending') continue;
-        if (applyKeeperChange(c, nowIso) === 'applied') applied++; else failed++;
+        const r = applyKeeperChange(c, nowIso);
+        if (r === 'applied') applied++; else if (r === 'failed') failed++; else retrying++;
     }
-    return { applied, failed };
+    return { applied, failed, retrying };
 }
 
 /**
@@ -3256,9 +3276,21 @@ function leadReturnedSince(prop: any): boolean {
     return !!leadRow?.last_active_at && new Date(leadRow.last_active_at).getTime() > new Date(prop.created_at).getTime();
 }
 
+/**
+ * An automatic promotion (answer G) opens the door to one succession vote, not an endless run of them. Once the
+ * first proposal against the promoted lead has been decided — passed, rejected or run out of time — they are an
+ * ordinary lead: the 30-day inactivity rule applies again and their own activity cancels a later proposal.
+ * Every open proposal is cancelled when a lead is promoted, so any proposal against them came after the promotion.
+ */
+function endAutoPromotion(prop: any): void {
+    db.prepare("UPDATE treasury_operators SET auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ? AND role = 'lead'")
+        .run(prop.enterprise_pubkey, prop.lead_pubkey);
+}
+
 function closeSuccession(prop: any, reason: SuccessionClosedReason): void {
-    db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = ? WHERE id = ? AND status = 'active'")
+    const res = db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = ? WHERE id = ? AND status = 'active'")
         .run(reason, prop.id);
+    if (reason === 'expired' && res.changes > 0) endAutoPromotion(prop);
     broadcast({ type: 'enterprise_succession_cancelled', proposalId: prop.id, enterprisePubkey: prop.enterprise_pubkey, leadPubkey: prop.lead_pubkey, reason });
 }
 
@@ -3364,6 +3396,7 @@ function settleSuccession(prop: any, nowIso: string): 'passed' | 'rejected' | 'c
     }
     if (no > eligible.length - required) {
         db.prepare("UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'rejected' WHERE id = ?").run(prop.id);
+        endAutoPromotion(prop);
         return 'rejected';
     }
     return 'open';

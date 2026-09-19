@@ -17,7 +17,8 @@ import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme'
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
+import { MemberGuide } from '../components/MemberGuide';
 import { getBlockedUsers, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 
@@ -75,7 +76,7 @@ function ToggleSwitch({
 }
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest'>(initialMode || 'menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
 
     useEffect(() => {
         if (initialMode) {
@@ -413,6 +414,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     }
 
+    if (mode === 'guide') {
+        // The members' sheet and manual, full screen. Its Suggest a change opens the same form as the Settings row.
+        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} />;
+    }
+
     return (
         <div className="flex justify-center p-4 min-h-screen bg-oat-50 dark:bg-nature-950 transition-colors">
             <div className="max-w-3xl w-full mt-2 pb-32">
@@ -740,24 +746,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </div>
                         </div>
 
-                        {/* ─── BEANPOOL PROJECT (goes to beanpool.org, not to this community's node) ─── */}
-                        {FEEDBACK_LIVE && <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
-                                BEANPOOL PROJECT
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setMode('suggest')}
-                                className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
-                            >
-                                <span className="text-xl" aria-hidden="true">💬</span>
-                                <div className="flex-1">
-                                    <div className="text-[15px] font-bold">Suggest a change to BeanPool</div>
-                                    <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the project team</div>
-                                </div>
-                                <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
-                            </button>
-                        </div>}
+                        {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
+                             not this community's node), the website. The same rows as the member app's Settings. ─── */}
+                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} />
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
@@ -1402,6 +1393,55 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                     onClose={() => setShowQuizModal(false)}
                     onComplete={handleQuizComplete}
                 />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Settings → BeanPool: Help & how it works, Suggest a change (hidden while FEEDBACK_LIVE is false), beanpool.org.
+ * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
+ */
+export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE }: { onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean }) {
+    const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
+    return (
+        <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                BEANPOOL
+            </div>
+            <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
+                {beanPoolSettingsEntries(feedbackLive).map(entry => {
+                    if (entry === 'help') return (
+                        <button key={entry} type="button" onClick={onHelp} className={rowClass} aria-label="BeanPool: help and how it works">
+                            <span className="text-xl" aria-hidden="true">🫘</span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block">Help & how it works</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">How to use every part of the app, the rules, questions</span>
+                            </span>
+                            <span className="text-nature-400" aria-hidden="true">›</span>
+                        </button>
+                    );
+                    if (entry === 'suggest') return (
+                        <button key={entry} type="button" onClick={onSuggest} className={rowClass}>
+                            <span className="text-xl" aria-hidden="true">💬</span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block">Suggest a change</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the BeanPool project team</span>
+                            </span>
+                            <span className="text-nature-400" aria-hidden="true">›</span>
+                        </button>
+                    );
+                    return (
+                        <a key={entry} href={BEANPOOL_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className={rowClass} aria-label="beanpool.org, opens in a new tab">
+                            <span className="text-xl" aria-hidden="true">🌐</span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block">beanpool.org</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">The BeanPool project website</span>
+                            </span>
+                            <span className="text-nature-400" aria-hidden="true">↗</span>
+                        </a>
+                    );
+                })}
             </div>
         </div>
     );

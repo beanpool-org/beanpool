@@ -16,6 +16,7 @@ import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
+import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
@@ -33,6 +34,8 @@ interface Props {
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
+    /** Open the owners' "Check your 12 words" card (from the home prompt's "Check now"). */
+    openOwnerWordsCheck?: boolean;
 }
 
 function ToggleSwitch({
@@ -76,7 +79,7 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion }: Props) {
+export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion, openOwnerWordsCheck }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
 
     useEffect(() => {
@@ -489,6 +492,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <RecoveryAlertBanner identity={identity} />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
+                        {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
+                        <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">

@@ -636,9 +636,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         </span>
                                                     )}
                                                     {state?.identityStatus === 'partial' && (
-                                                        <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold text-[10px]">
-                                                            Partial
-                                                        </span>
+                                                        <div className="space-y-1">
+                                                            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold text-[10px]">
+                                                                Partial: database, no keys
+                                                            </span>
+                                                            {state.identityNote && (
+                                                                <p className="text-[10px] text-amber-300/80 max-w-[16rem] leading-snug">{state.identityNote}</p>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {(!state || state.identityStatus === 'missing') && (
                                                         <span className="px-2 py-0.5 rounded bg-nature-900 text-nature-400 border border-nature-700 font-bold text-[10px]">
@@ -906,6 +911,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <div className="font-bold text-sky-400 text-sm">Step 1: Download Node Backups from Manager</div>
                             <p className="text-nature-400">
                                 Click <strong className="text-white">⬇ DB</strong> and <strong className="text-white">🔑 Identity</strong> on the Harvested Fleet Backups tab to download the latest SQLite database (<code className="text-amber-400">state.db</code>) and cryptographic keys (<code className="text-emerald-400">identity-bundle.tar.gz</code>).
+                                The keys are collected only for nodes whose admin password is saved here: a replication token copies the database but never the keys, so a token-only node shows <strong className="text-amber-400">Partial</strong>.
                             </p>
                         </div>
 

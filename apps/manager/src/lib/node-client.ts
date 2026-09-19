@@ -1195,6 +1195,8 @@ export interface HarvesterNodeState {
     memberCount: number;
     postCount: number;
     identityStatus: 'secured' | 'partial' | 'missing';
+    /** Why the keys are not secured, in words (e.g. a token-only node: database only). */
+    identityNote?: string | null;
     identityFiles: string[];
     historyCount: number;
 }

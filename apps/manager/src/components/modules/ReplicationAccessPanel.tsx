@@ -131,13 +131,14 @@ export function ReplicationAccessPanel({
             setShowClearConfirm(false);
             setRevealedToken(null);
             setStatusMsg({
-                text: 'Replication token cleared. Replicas now require admin password.',
+                text: 'Replication token cleared. Standbys cannot copy until you make a new token and paste it into each one.',
                 isError: false,
             });
+            // Token-only mode is left as it was: clearing the token no longer lets the
+            // admin password back in.
             setAccessData((prev) => ({
                 ...prev,
                 hasToken: false,
-                tokenOnly: false,
             }));
             onRefreshDiag?.();
         } catch (err: unknown) {
@@ -579,7 +580,7 @@ export function ReplicationAccessPanel({
                             </button>
                         </div>
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
-                            Removing the token turns off token authentication. Replicas will only be able to authenticate using the master admin password if token-only mode is disabled.
+                            Removing the token stops every standby that copies with it. With token-only mode on, nothing can copy until you make a new token; with it off, only a standby using the admin password still can.
                         </p>
                         <div className="flex items-center justify-end gap-3 pt-2">
                             <button

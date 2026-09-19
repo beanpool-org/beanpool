@@ -829,7 +829,7 @@ function preflightKey(key: SealedEnvelopeKey): void {
         }
     }
     else if (key?.type === 'owner') privateSeed(key.privateKey, 'privateKey');
-    else throw new SealedEnvelopeError("The key must be { type: 'owner' } or { type: 'code' }.");
+    else throw new SealedEnvelopeError("The key must be { type: 'owner' }, { type: 'code' } or { type: 'dataKey' }.");
 }
 
 async function unwrapDek(header: SealedEnvelopeHeader, key: SealedEnvelopeKey): Promise<Uint8Array> {
@@ -895,6 +895,12 @@ export interface OpenedStream {
      * finishes without throwing.
      */
     chunks: AsyncGenerator<Uint8Array>;
+    /**
+     * Close the source without reading the body. Safe to call more than once, and after `chunks` has
+     * finished. `chunks.return()` does the same, even before the first read: a generator that never
+     * started runs no `finally`, so the source would otherwise stay open.
+     */
+    close(): Promise<void>;
 }
 
 /**
@@ -974,7 +980,18 @@ export async function openEnvelopeStream(
             await release();
         }
     }
-    return { header, chunks: chunks() };
+    const body = chunks();
+    const guarded: AsyncGenerator<Uint8Array> = {
+        next: (...args) => body.next(...args),
+        return: async (value) => {
+            try { return await body.return(value); } finally { await release(); }
+        },
+        throw: async (err) => {
+            try { return await body.throw(err); } finally { await release(); }
+        },
+        [Symbol.asyncIterator]() { return this; },
+    } as AsyncGenerator<Uint8Array>;
+    return { header, chunks: guarded, close: release };
 }
 
 /** Open a whole envelope in memory. */

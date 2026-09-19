@@ -574,6 +574,37 @@ describe('slice 3 follow-ups from #966', () => {
         expect(early.state.closed).toBe(true);
     });
 
+    it('closes the source when the body is never read: close(), or chunks.return() before the first read', async () => {
+        // Seal review round 1, #5: a generator that never started runs no finally, so its source stayed open.
+        const env = await sealEnvelope(payload3, opts());
+
+        const viaClose = trackedSource(env);
+        const a = await openEnvelopeStream(viaClose.gen, asAlice, { kind: 'backup' });
+        expect(viaClose.state.closed).toBe(false);
+        await a.close();
+        expect(viaClose.state.closed).toBe(true);
+        await a.close(); // twice is harmless
+
+        const viaReturn = trackedSource(env);
+        const b = await openEnvelopeStream(viaReturn.gen, asAlice, { kind: 'backup' });
+        await b.chunks.return(undefined);
+        expect(viaReturn.state.closed).toBe(true);
+
+        // After a full read, close() is a no-op and the payload was whole.
+        const full = trackedSource(env);
+        const c = await openEnvelopeStream(full.gen, asAlice, { kind: 'backup' });
+        const parts: Uint8Array[] = [];
+        for await (const part of c.chunks) parts.push(part);
+        await c.close();
+        expect(concatBytes(...parts)).toEqual(payload3);
+        expect(full.state.finished).toBe(true);
+    });
+
+    it("an unknown key type is refused with an error that names every opener, dataKey included", async () => {
+        const env = await sealEnvelope(payload3, opts());
+        await expect(openEnvelope(env, { type: 'nope' } as any, { kind: 'backup' })).rejects.toThrow(/dataKey/);
+    });
+
     it('the sealer can re-open what it just sealed with the data key, and only that envelope', async () => {
         let dataKey: Uint8Array | null = null;
         const env = await sealEnvelope(payload3, opts({ onDataKey: (k) => { dataKey = k; } }));

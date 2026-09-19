@@ -28,12 +28,15 @@
  *          0 of 1078 of the owner's retries over 6 h got through). What the owner waits is NOT bounded by a
  *          minute, though. 'typo' sources are not held back by each other, so an attacker who fills 11 checks a
  *          minute from a dirty prefix and spends one 'typo' check on the 12th keeps the owner out for that minute.
- *          Each clean /48 or /24 yields at most 2 such checks a day (TYPO_PREFIX_FAILURES), so measured
- *          (test-password-brake-fairness.ts, part 1b) the owner waits about (1 + 2N) minutes against N clean
- *          prefixes plus any number of dirty ones: 59 s against a single /48, 3 min with one clean /48 more,
- *          11 min with five. A clean source is never held up at all (2), so another network always works.
+ *          Each clean /48 or /24 yields 2 such checks on the attacker's first day, and up to 4 a day if it
+ *          primed sources the day before (a prefix's window runs from its first failure, a source's from its
+ *          last), so the owner waits about (1 + 2N) to (1 + 4N) minutes against N clean prefixes plus any number
+ *          of dirty ones. Measured (test-password-brake-fairness.ts, part 1b, first day): 59 s against a single
+ *          /48, 3 min with one clean /48 more, 11 min with five; primed, 21 min with five (Fable's delta review
+ *          of #948, O1). A clean source is never held up at all (2), so another network always works.
  *          After 3 or more mistypes the source is 'few', and an attacker's filler can keep it out indefinitely:
- *          use another network or key sign-in.
+ *          use another network or key sign-in. Someone on the owner's own /24 or /48 can take the held check
+ *          away with 3 wrong passwords (the prefix passes TYPO_PREFIX_FAILURES); the way out is the same.
  *        - 'few': up to SOURCE_FREE_FAILURES failures and not 'typo' (so also a fresh source in a dirty prefix).
  *          The whole allowance, less the checks held for waiting 'typo' sources.
  *        - 'backoff': a source already in backoff. Only the first NODE_BACKOFF_CHECKS_PER_MIN, less those held.
@@ -83,8 +86,9 @@ export const TYPO_FAILURES = 2;
  * The most failures a source's prefix may have for it to rank as 'typo'. Typo sources are not held back by each
  * other's claims, so each typo-rank check an attacker spends can take the check held for a waiting owner. With
  * the bar at PREFIX_CLEAN_FAILURES (20) one /48 or /24 fed 13 such checks, about 13 minutes of the owner's wait;
- * at 3 it feeds 2 (a clean check, then two more from that source). An owner who mistyped once or twice from home
- * has put at most 2 on their own prefix.
+ * at 3 it feeds 2 on the attacker's first day (a clean check, then two more from that source), and up to 4 a day
+ * if it primed sources the day before. An owner who mistyped once or twice from home has put at most 2 on their
+ * own prefix, so someone else on it can push it past 3 with 3 wrong passwords (2 if the owner mistyped twice).
  */
 export const TYPO_PREFIX_FAILURES = 3;
 /** How long a refused 'typo' source's claim on a free check lasts; each refusal renews it. */

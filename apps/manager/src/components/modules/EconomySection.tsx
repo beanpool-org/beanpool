@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HelpLink } from '../manual/Manual';
 import type { NodeProfile } from '../../lib/profiles';
 import { Avatar } from '../common/Avatar';
 import {
@@ -431,6 +432,7 @@ export function EconomySection({
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>🏛️</span>
                         <span>Shared Projects &amp; Economy</span>
+                        <HelpLink screen={`economy/${subTab}`} />
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         Commons pool, shared enterprises, keeper covenants, and community decisions

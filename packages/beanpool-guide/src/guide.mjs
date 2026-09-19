@@ -118,9 +118,10 @@ export function contentHash(content) {
 
 /**
  * Read content/manifest.json and every page it lists. Each section is a folder, content/<section id>/, holding
- * exactly the pages the manifest lists for it, one file per page named <slug>.md.
+ * exactly the pages the manifest lists for it, one file per page named <slug>.md. The operator manual
+ * (operators/) is read the same way with `aboutSection: null`: it has no section of concept guides.
  */
-export function loadGuide(contentDir) {
+export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
     const manifest = JSON.parse(fs.readFileSync(path.join(contentDir, 'manifest.json'), 'utf8'));
     if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error('manifest.json: "version" must be a whole number, 1 or more');
     if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
@@ -129,7 +130,7 @@ export function loadGuide(contentDir) {
     if (JSON.stringify(folders) !== JSON.stringify(listedFolders)) {
         throw new Error(`manifest.json "sections" (${listedFolders.join(', ')}) must match the folders in content/ (${folders.join(', ')})`);
     }
-    if (!manifest.sections.some(s => s.id === ABOUT_SECTION)) throw new Error(`manifest.json needs the "${ABOUT_SECTION}" section`);
+    if (aboutSection && !manifest.sections.some(s => s.id === aboutSection)) throw new Error(`manifest.json needs the "${aboutSection}" section`);
     const sections = [];
     const guides = [];
     for (const sec of manifest.sections) {
@@ -187,20 +188,20 @@ function blockHtml(b) {
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
 
-function page({ title, description, body }) {
+function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>` }) {
     return `<!DOCTYPE html>
-<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<!-- Generated from packages/beanpool-guide/${root === '../' ? 'content' : 'operators'} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}">
-    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="icon" type="image/png" href="${root}favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style.css?v=2.4">
+    <link rel="stylesheet" href="${root}style.css?v=2.4">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */
         .guide { max-width: 760px; }
@@ -231,10 +232,10 @@ function page({ title, description, body }) {
 <body>
     <nav id="navbar" class="guide-nav">
         <div class="nav-inner">
-            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="${root}index.html" class="logo"><img src="${root}bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html">Members' guide</a>
-                <a href="../index.html">Home</a>
+                ${nav}
+                <a href="${root}index.html">Home</a>
             </div>
         </div>
     </nav>
@@ -250,7 +251,10 @@ ${body}
 const linkItem = g => `            <li><a href="${g.slug}.html"><strong>${inline(g.title)}</strong><span>${inline(g.summary)}</span></a></li>`;
 
 /** Every file under apps/website/guide/, keyed by file name. */
-export function renderWebsite(guide) {
+export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
+    const operators = operatorManualOnWeb
+        ? `Read the <a href="operators/index.html">operator manual</a>.`
+        : `Its manual is in your server's Settings: sign in and press Manual in the side bar.`;
     const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version ${guide.version}.</p>`;
     const bySlug = new Map(guide.guides.map(g => [g.slug, g]));
     const about = guide.sections.find(s => s.id === ABOUT_SECTION);
@@ -262,7 +266,7 @@ export function renderWebsite(guide) {
         body: [
             `        <p class="kicker">For members</p>`,
             `        <h1>Members' guide</h1>`,
-            `        <p class="lede">For people who already belong to a BeanPool community. New here? Start on the <a href="../index.html">home page</a>.</p>`,
+            `        <p class="lede">For people who already belong to a BeanPool community. New here? Start on the <a href="../index.html">home page</a>. Running a community's server? ${operators}</p>`,
             `        <nav class="guide-toc" aria-label="Contents">`,
             `            <h2>Contents</h2>`,
             `            <ul>`,
@@ -305,5 +309,67 @@ export function renderWebsite(guide) {
         });
     }
     files['guide.json'] = serializeGuide(guide);
+    return files;
+}
+
+// ─── The operator manual ───────────────────────────────────────────────────────
+// For the owners and admins who run a community's server. The same block model and the same checks as the members'
+// guide, in a separate collection (operators/) with its own version: the node's Settings bundles operators.json. The
+// website copy under /guide/operators/ is rendered here but not written: scripts/build.mjs has it switched off
+// (PUBLISH_OPERATORS_WEBSITE, Marty's decision 2026-09-19). It is not in the members' guide.json, so the member apps
+// neither carry it nor find it in their search.
+
+/** Every file of the website's copy (apps/website/guide/operators/, when published), keyed by file name. */
+export function renderOperatorsWebsite(manual) {
+    const root = '../../';
+    const nav = `<a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>`;
+    const foot = `        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version ${manual.version}.</p>`;
+    const bySlug = new Map(manual.guides.map(g => [g.slug, g]));
+    const files = {};
+    files['index.html'] = page({
+        root, nav,
+        title: 'Operator manual — BeanPool',
+        description: "How to run a BeanPool community's server: setting up, signing in, roles, members, moderation, disputes, backups, updates and troubleshooting. For owners and admins.",
+        body: [
+            `        <p class="kicker">For owners and admins</p>`,
+            `        <h1>Operator manual</h1>`,
+            `        <p class="lede">For the people who run a BeanPool community's server. Members want the <a href="../index.html">members' guide</a> instead.</p>`,
+            `        <nav class="guide-toc" aria-label="Contents">`,
+            `            <h2>Contents</h2>`,
+            `            <ul>`,
+            ...manual.sections.map(s => `                <li><a href="#${s.id}">${inline(s.title)}</a></li>`),
+            `            </ul>`,
+            `        </nav>`,
+            ...manual.sections.flatMap(s => [
+                `        <h2 id="${s.id}">${inline(s.title)}</h2>`,
+                `        <p>${inline(s.summary)}</p>`,
+                `        <ul class="guide-list">`,
+                ...s.slugs.map(slug => linkItem(bySlug.get(slug))),
+                `        </ul>`,
+            ]),
+            foot,
+        ].join('\n'),
+    });
+    for (const g of manual.guides) {
+        const section = manual.sections.find(s => s.id === g.section);
+        files[`${g.slug}.html`] = page({
+            root, nav,
+            title: `${g.title} — BeanPool operator manual`,
+            description: g.summary,
+            body: [
+                `        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#${section.id}">${inline(section.title)}</a></p>`,
+                `        <h1>${inline(g.title)}</h1>`,
+                `        <p class="lede">${inline(g.summary)}</p>`,
+                ...g.blocks.map(b => `        ${blockHtml(b)}`),
+                `        <h2 class="guide-related">Related</h2>`,
+                `        <ul class="guide-list">`,
+                ...g.related.map(slug => linkItem(bySlug.get(slug))),
+                `        </ul>`,
+                foot,
+            ].join('\n'),
+        });
+    }
+    files['operators.json'] = serializeGuide(manual);
     return files;
 }

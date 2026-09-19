@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ManualProvider } from './components/manual/Manual';
 import {
     loadNodeProfiles,
     addNodeProfile,
@@ -105,7 +106,15 @@ function credentialDigest(password?: string): string {
     return `${password.length}:${(h >>> 0).toString(36)}`;
 }
 
-export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}) {
+export function App(props: { isFleetMode?: boolean } = {}) {
+    return (
+        <ManualProvider>
+            <AppBody {...props} />
+        </ManualProvider>
+    );
+}
+
+function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}) {
     const [profiles, setProfiles] = useState<NodeProfile[]>(() => loadNodeProfiles());
     const [activeProfileId, setActiveProfileId] = useState<string>(() => {
         const savedId = loadActiveProfileId();

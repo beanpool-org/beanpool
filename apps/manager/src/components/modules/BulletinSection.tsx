@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HelpLink } from '../manual/Manual';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 
@@ -154,6 +155,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>📢</span>
                         <span>Bulletin &amp; News</span>
+                        <HelpLink screen={`bulletin/${subTab}`} />
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         Announcements with severity, community broadcast banners, and Pulse RSS channel curation

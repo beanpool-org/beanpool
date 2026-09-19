@@ -16,6 +16,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 - **About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.
 - **About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.
 - **About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.
+- **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.
 
 ## When something is not right
 

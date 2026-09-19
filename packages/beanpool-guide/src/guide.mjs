@@ -38,7 +38,7 @@ function checkInline(file, line, text) {
 }
 
 /** Parse one guide file. `file` is only used in error messages. */
-export function parseGuideMarkdown(source, file = 'guide.md') {
+export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = false } = {}) {
     const lines = source.replace(/\r\n/g, '\n').split('\n');
     if (lines[0] !== '---') fail(file, 1, 'must start with front matter (---)');
     const meta = {};
@@ -91,6 +91,30 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
             blocks.push({ type: level === 2 ? 'h2' : 'h3', text: heading[2].trim() });
             continue;
         }
+        const linkedImg = /^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$/.exec(line.trim());
+        if (linkedImg) {
+            if (!allowImages) fail(file, n, "images are only allowed in the operator manual, not in the members' guide (the apps cannot show them)");
+            flush();
+            const alt = linkedImg[1].trim();
+            const src = linkedImg[2].trim();
+            const href = linkedImg[3].trim();
+            if (!alt) fail(file, n, 'images need alt text');
+            if (!src) fail(file, n, 'images need a source path');
+            if (!href) fail(file, n, 'linked images need a target slug');
+            blocks.push({ type: 'img', src, alt, href });
+            continue;
+        }
+        const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
+        if (img) {
+            if (!allowImages) fail(file, n, "images are only allowed in the operator manual, not in the members' guide (the apps cannot show them)");
+            flush();
+            const alt = img[1].trim();
+            const src = img[2].trim();
+            if (!alt) fail(file, n, 'images need alt text');
+            if (!src) fail(file, n, 'images need a source path');
+            blocks.push({ type: 'img', src, alt });
+            continue;
+        }
         if (line.startsWith('- ')) {
             if (para) flush();
             const item = line.slice(2).trim();
@@ -98,7 +122,7 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
             (list ??= []).push(item);
             continue;
         }
-        if (/^(\d+[.)]\s|[*+]\s|>|\||```)/.test(line)) fail(file, n, 'only "- " bullets, ## headings and paragraphs are supported');
+        if (/^(\d+[.)]\s|[*+]\s|>|\||```)/.test(line)) fail(file, n, 'only "- " bullets, ## headings, images and paragraphs are supported');
         if (list) fail(file, n, 'a bullet is one line; leave a blank line after a list');
         checkInline(file, n, line);
         (para ??= []).push(line.trim());
@@ -121,11 +145,11 @@ export function contentHash(content) {
  * exactly the pages the manifest lists for it, one file per page named <slug>.md. The operator manual
  * (operators/) is read the same way with `aboutSection: null`: it has no section of concept guides.
  */
-export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
+export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImages = false } = {}) {
     const manifest = JSON.parse(fs.readFileSync(path.join(contentDir, 'manifest.json'), 'utf8'));
     if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error('manifest.json: "version" must be a whole number, 1 or more');
     if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
-    const folders = fs.readdirSync(contentDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name).sort();
+    const folders = fs.readdirSync(contentDir, { withFileTypes: true }).filter(d => d.isDirectory() && d.name !== 'images').map(d => d.name).sort();
     const listedFolders = manifest.sections.map(s => s.id).sort();
     if (JSON.stringify(folders) !== JSON.stringify(listedFolders)) {
         throw new Error(`manifest.json "sections" (${listedFolders.join(', ')}) must match the folders in content/ (${folders.join(', ')})`);
@@ -149,7 +173,7 @@ export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
         }
         for (const slug of sec.pages) {
             const file = `${sec.id}/${slug}.md`;
-            const g = parseGuideMarkdown(fs.readFileSync(path.join(dir, `${slug}.md`), 'utf8'), file);
+            const g = parseGuideMarkdown(fs.readFileSync(path.join(dir, `${slug}.md`), 'utf8'), file, { allowImages });
             if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
             if (guides.some(x => x.slug === slug)) throw new Error(`${file}: another page already uses the slug "${slug}"`);
             // Keep the key order stable: it is part of the bytes both apps and the website carry.
@@ -162,6 +186,17 @@ export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
     for (const g of guides) {
         for (const r of g.related) {
             if (!slugs.has(r)) throw new Error(`${g.section}/${g.slug}.md: related page "${r}" does not exist`);
+        }
+        for (const b of g.blocks) {
+            if (b.type === 'img') {
+                const imgPath = path.join(contentDir, b.src);
+                if (!fs.existsSync(imgPath)) {
+                    throw new Error(`${g.section}/${g.slug}.md: image "${b.src}" does not exist`);
+                }
+                if (b.href && !slugs.has(b.href)) {
+                    throw new Error(`${g.section}/${g.slug}.md: linked image target "${b.href}" does not exist`);
+                }
+            }
         }
     }
     return { schema: GUIDE_SCHEMA, version: manifest.version, hash: contentHash({ sections, guides }), sections, guides };
@@ -185,6 +220,10 @@ function blockHtml(b) {
     if (b.type === 'h2') return `<h2>${inline(b.text)}</h2>`;
     if (b.type === 'h3') return `<h3>${inline(b.text)}</h3>`;
     if (b.type === 'p') return `<p>${inline(b.text)}</p>`;
+    if (b.type === 'img') {
+        const img = `<img src="${esc(b.src)}" alt="${esc(b.alt)}" loading="lazy">`;
+        return `<figure>${b.href ? `<a href="${esc(b.href)}.html">${img}</a>` : img}<figcaption>${inline(b.alt)}</figcaption></figure>`;
+    }
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
 

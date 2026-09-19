@@ -11,6 +11,8 @@ When a member buys something, their beans are held until they confirm they got i
 
 **Shared Projects & Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual).
 
+![The Escrow Disputes screen in Settings](images/economy-disputes.webp)
+
 The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held.
 
 Nothing is decided by the server on its own. Held beans are never released automatically. The buyer is reminded every 7 days while beans are held.

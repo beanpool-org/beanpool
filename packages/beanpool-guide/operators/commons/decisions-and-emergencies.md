@@ -21,6 +21,8 @@ What a passed Decision can do by itself: suspend or restore a member, freeze or 
 
 **Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far.
 
+![The Proposals and Decisions screen in Settings](images/economy-decisions.webp)
+
 ## Emergency suspension
 
 For when someone is doing harm now. Open the person (People & Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it.

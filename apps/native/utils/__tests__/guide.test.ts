@@ -74,6 +74,7 @@ describe('validateGuide', () => {
         ['bad slug', (g: any) => { g.guides[0].slug = '../etc'; }],
         ['duplicate slug', (g: any) => { g.guides[1].slug = g.guides[0].slug; }],
         ['unknown block type', (g: any) => { g.guides[0].blocks[0] = { type: 'link', text: 'x', href: 'https://evil' }; }],
+        ['an image block (operators only)', (g: any) => { g.guides[0].blocks[0] = { type: 'img', src: 'images/x.webp', alt: 'x' }; }],
         ['empty paragraph', (g: any) => { g.guides[0].blocks[0] = { type: 'p', text: '' }; }],
         ['huge paragraph', (g: any) => { g.guides[0].blocks[0] = { type: 'p', text: 'x'.repeat(5000) }; }],
         ['non-string bullet', (g: any) => { g.guides[0].blocks[0] = { type: 'ul', items: [42] }; }],

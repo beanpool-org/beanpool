@@ -16,6 +16,8 @@ Go to your server's address followed by /settings and type the admin password. I
 - Your browser keeps the password for this tab only. Close the tab and you sign in again.
 - Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds.
 
+![The sign-in screen in node Settings](images/sign-in.webp)
+
 ## From the app's Manage button
 
 Owners and admins see **Manage** followed by the community's name in the phone app's Settings. Pressing it:

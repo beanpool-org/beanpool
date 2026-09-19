@@ -9,6 +9,8 @@ related: signing-in, roles, first-time-setup, rate-limits
 
 Type the current password and a new one. The new one needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. Only an owner can change it, and only by typing the current password, even when signed in from the app.
 
+![The Access and Security screen in Settings](images/appliance-access.webp)
+
 Change it whenever someone who knew it steps down. Everyone who has it is an owner.
 
 ## Two-factor sign-in

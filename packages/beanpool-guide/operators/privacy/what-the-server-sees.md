@@ -41,6 +41,8 @@ So others can read how each member voted. Whoever runs the machine can copy the 
 - The list of devices connected right now, with their internet address, device type and member name.
 - Reports, and the people they are about.
 
+![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
+
 ## What your server sends elsewhere
 
 - The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.

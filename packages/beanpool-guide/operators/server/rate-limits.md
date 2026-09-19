@@ -17,6 +17,8 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 - **Checking an invite code** before joining: 30 a minute per internet address.
 - **Reports**: 10 an hour per member.
 
+![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
+
 ## The admin password brake
 
 This one slows down anyone guessing the admin password, without ever letting them lock you out.

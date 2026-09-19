@@ -61,7 +61,9 @@ describe('View my profile', () => {
     it('opens the member in the same destination', () => {
         expect(profileLink('app', KEY)).toMatchObject({ label: 'View my profile', href: `beanpool://public-profile?publicKey=${KEY}` });
         expect(profileLink('pwa', KEY)?.href).toBe(`/app#profile=${KEY}`);
-        expect(profileLink('unknown', KEY)?.href).toBe(`/app#profile=${KEY}`);
+    });
+    it('is hidden when the origin is unknown: an older app build, whose member has no web identity', () => {
+        expect(profileLink('unknown', KEY)).toBeNull();
     });
     it('is hidden under password sign-in (no member), and for anything that is not a public key', () => {
         expect(profileLink('app', null)).toBeNull();

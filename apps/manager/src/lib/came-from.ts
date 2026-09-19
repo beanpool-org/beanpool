@@ -53,9 +53,12 @@ export function backLink(from: CameFrom): BackLink {
 
 /**
  * "View my profile", in the same place the back link goes. Only for a key sign-in: under the password there
- * is no member, so there is no profile to show (null hides it).
+ * is no member, so there is no profile to show (null hides it). Hidden too when the origin is unknown: a key
+ * sign-in without `from` is an older app build, whose member has no web identity, so `/app#profile=…` would
+ * leave them on the web app's Welcome page (Fable's review of #969).
  */
 export function profileLink(from: CameFrom, memberPubkey: string | null | undefined): BackLink | null {
+    if (from === 'unknown') return null;
     if (!memberPubkey || !/^[0-9a-f]{64}$/i.test(memberPubkey)) return null;
     const key = memberPubkey.toLowerCase();
     return {

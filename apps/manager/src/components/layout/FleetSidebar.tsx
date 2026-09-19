@@ -123,6 +123,11 @@ export function FleetSidebar({
         { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
 
+    // The drawer's open section: the current one to start with, when it has screens.
+    const [openSection, setOpenSection] = useState<TabId | null>(() =>
+        isSettingsSection(activeTab) && SECTION_SUB_TABS[activeTab].length > 0 ? activeTab : null,
+    );
+
     const manual = useManual();
     const collapsible = !inDrawer && !isFleetMode && !!onCollapse;
 
@@ -131,12 +136,20 @@ export function FleetSidebar({
         const counts = alertCountsFor(item.id, tabAlertCounts, isFleetMode);
         const hasCounts = counts.critical > 0 || counts.warning > 0;
 
-        const subTabs = inDrawer && isActive && isSettingsSection(item.id) ? SECTION_SUB_TABS[item.id] : [];
+        // The phone menu is an accordion: a section with screens opens and shuts in place (one at a time) and the
+        // menu stays up; only a screen, or a section with none (Home), navigates and closes it (Marty, 2026-09-19).
+        const subTabs = inDrawer && isSettingsSection(item.id) ? SECTION_SUB_TABS[item.id] : [];
+        const accordion = subTabs.length > 0;
+        const expanded = accordion && openSection === item.id;
+        const listId = `settings-menu-${item.id}`;
         const button = (
             <button
                 key={item.id}
-                onClick={() => onSelectTab(item.id)}
-                aria-current={isActive && (!inDrawer || subTabs.length === 0) ? 'page' : undefined}
+                type="button"
+                onClick={() => (accordion ? setOpenSection(expanded ? null : item.id) : onSelectTab(item.id))}
+                aria-current={isActive && !accordion ? 'page' : undefined}
+                aria-expanded={accordion ? expanded : undefined}
+                aria-controls={expanded ? listId : undefined}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl ${inDrawer ? 'min-h-[48px] text-sm' : 'text-xs'} font-semibold transition-all ${
                     isActive
                         ? 'bg-terra-500/15 text-white border border-terra-500/40 shadow-sm font-bold'
@@ -172,15 +185,19 @@ export function FleetSidebar({
                             {item.badge}
                         </span>
                     )}
+                    {accordion && (
+                        <span aria-hidden="true" className={`ml-1 text-nature-400 transition-transform ${expanded ? 'rotate-90' : ''}`}>›</span>
+                    )}
                 </div>
             </button>
         );
-        if (subTabs.length === 0) return button;
-        const current = activeSubTab || subTabs[0].id;
+        if (!accordion) return button;
+        // One wrapper whether open or shut, so the button is not remounted (and does not lose focus) as it toggles.
+        const current = isActive ? activeSubTab || subTabs[0].id : undefined;
         return (
             <div key={item.id}>
                 {button}
-                <ul className="mt-1 mb-2 ml-5 pl-3 border-l border-nature-800 space-y-0.5" aria-label={`${item.label} screens`}>
+                {expanded && <ul id={listId} className="mt-1 mb-2 ml-5 pl-3 border-l border-nature-800 space-y-0.5" aria-label={`${item.label} screens`}>
                     {subTabs.map((sub) => (
                         <li key={sub.id}>
                             <button
@@ -195,7 +212,7 @@ export function FleetSidebar({
                             </button>
                         </li>
                     ))}
-                </ul>
+                </ul>}
             </div>
         );
     };
@@ -210,6 +227,7 @@ export function FleetSidebar({
                 countsFor={(id) => alertCountsFor(id, tabAlertCounts, isFleetMode)}
                 returnLinks={returnLinks}
                 onOpenManual={manual ? () => manual.openManual() : undefined}
+                onLogout={onLogout}
                 onCollapse={onCollapse!}
             />
         );
@@ -570,7 +588,8 @@ function CollapseButton({ mode, onCollapse, tip }: {
             type="button"
             onClick={onCollapse}
             aria-label={label}
-            aria-expanded={mode === 'full'}
+            // It is only drawn while the sidebar shows (in full or as the strip), so what it controls is expanded.
+            aria-expanded={true}
             aria-controls="settings-sidebar"
             title={tip ? undefined : label}
             {...tip?.(label)}
@@ -596,13 +615,14 @@ function useRailTooltip(): { tip: { label: string; top: number; left: number } |
     return { tip, hide, bind: (label) => ({ onMouseEnter: show(label), onFocus: show(label), onMouseLeave: hide, onBlur: hide }) };
 }
 
-function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpenManual, onCollapse }: {
+function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpenManual, onLogout, onCollapse }: {
     items: typeof singleNodeNavItems;
     activeTab: TabId;
     onSelectTab: (tab: TabId) => void;
     countsFor: (id: TabId) => AlertCounts;
     returnLinks?: ReturnLinksValue;
     onOpenManual?: () => void;
+    onLogout?: () => void;
     onCollapse: () => void;
 }) {
     const { tip, bind, hide } = useRailTooltip();
@@ -670,6 +690,19 @@ function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpe
                     </button>
                 )}
             </div>
+            {onLogout && (
+                <div className="py-3 w-full flex justify-center border-t border-nature-800/80">
+                    <button
+                        type="button"
+                        onClick={() => { hide(); onLogout(); }}
+                        aria-label="Log Out"
+                        {...bind('Log Out')}
+                        className={`${cell} border border-transparent text-nature-300 hover:text-red-400 hover:bg-nature-800/50`}
+                    >
+                        <span aria-hidden="true">🚪</span>
+                    </button>
+                </div>
+            )}
             {tip && (
                 <div
                     role="tooltip"

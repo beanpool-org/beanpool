@@ -1119,6 +1119,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </button>
                         <p className="text-sm font-semibold text-terra-400 m-0 truncate flex-1 min-w-0">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
                         {returnLinks && <PhoneReturnLink back={returnLinks.back} />}
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="min-h-[48px] px-3 rounded-xl text-sm font-medium text-nature-400 hover:text-red-400 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
+                        >
+                            Log Out
+                        </button>
                     </div>
                 )}
                 {/* Active Target Banner for Control Subsystems */}

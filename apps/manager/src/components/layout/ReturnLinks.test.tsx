@@ -26,17 +26,21 @@ describe('the way back from Settings, in the sidebar, the phone menu and the pho
     it.each([
         ['app', 'Back to the BeanPool app', 'beanpool://foreground', `beanpool://public-profile?publicKey=${KEY}`],
         ['pwa', 'Back to BeanPool', '/app', `/app#profile=${KEY}`],
-        ['unknown', 'Open the BeanPool web app', '/app', `/app#profile=${KEY}`],
+        ['unknown', 'Open the BeanPool web app', '/app', null],
     ] as const)('from %s: "%s"', (from, label, href, profileHref) => {
         const { unmount } = render(<FleetSidebar {...base} returnLinks={links(from)} />);
         const nav = screen.getByRole('navigation', { name: 'Leave Settings' });
         expect(within(nav).getByRole('link', { name: label }).getAttribute('href')).toBe(href);
-        expect(within(nav).getByRole('link', { name: 'View my profile' }).getAttribute('href')).toBe(profileHref);
+        if (profileHref === null) {
+            expect(within(nav).queryByRole('link', { name: 'View my profile' })).toBeNull();
+        } else {
+            expect(within(nav).getByRole('link', { name: 'View my profile' }).getAttribute('href')).toBe(profileHref);
+        }
         unmount();
 
         render(<FleetSidebar {...base} variant="drawer" onClose={() => {}} returnLinks={links(from)} />);
         expect(screen.getByRole('link', { name: label }).className).toContain('min-h-[48px]');
-        expect(screen.getByRole('link', { name: 'View my profile' }).className).toContain('min-h-[48px]');
+        if (profileHref !== null) expect(screen.getByRole('link', { name: 'View my profile' }).className).toContain('min-h-[48px]');
     });
 
     it('hides "View my profile" under password sign-in', () => {
@@ -83,7 +87,8 @@ describe('the collapsing desktop sidebar (full → icons → hidden)', () => {
 
         fireEvent.click(collapse);
         const hide = screen.getByRole('button', { name: 'Hide menu' });
-        expect(hide.getAttribute('aria-expanded')).toBe('false');
+        // The strip is still showing, so what the button controls is still expanded (Fable's review of #969).
+        expect(hide.getAttribute('aria-expanded')).toBe('true');
         // Names are gone from view but every icon keeps its accessible name.
         expect(screen.queryByText('Shared Projects & Economy')).toBeNull();
         for (const name of ['Home', 'People & Safety', 'Shared Projects & Economy', 'Bulletin & News', 'Appliance & Data', 'Manual: running your community']) {
@@ -109,6 +114,13 @@ describe('the collapsing desktop sidebar (full → icons → hidden)', () => {
         expect(screen.getByRole('tooltip').textContent).toBe('Back to BeanPool');
         fireEvent.mouseLeave(screen.getByRole('link', { name: 'Back to BeanPool' }));
         expect(screen.queryByRole('tooltip')).toBeNull();
+    });
+
+    it('Log Out is one press from the icon strip', () => {
+        const onLogout = vi.fn();
+        render(<FleetSidebar {...base} mode="icons" onCollapse={() => {}} onLogout={onLogout} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Log Out' }));
+        expect(onLogout).toHaveBeenCalledTimes(1);
     });
 
     it('the icon strip still says a section needs attention, in its name', () => {

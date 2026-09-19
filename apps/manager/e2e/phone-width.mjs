@@ -2,7 +2,8 @@
 /**
  * Node Settings on a phone: fails if any screen scrolls the PAGE sideways at 320px wide, at normal and at 1.3x text.
  *
- * Every section and sub-tab, the phone menu, the manual (contents and a page), the sign-in card, and the key sign-in
+ * Every section and sub-tab, the phone menu (and its accordion: a section opens in place, a screen or Home navigates and
+ * closes it, every row 48px), the manual (contents and a page), the sign-in card, and the key sign-in
  * hand-off from the app (which must land on the section it names). The node API is answered from fixtures.mjs:
  * nothing here talks to a real node. Things may scroll sideways INSIDE themselves (a table, the sub-tab strip, a
  * log line); the page itself may not.
@@ -98,6 +99,49 @@ try {
                 console.log(`  ✗ menu panel ${at} (${panel.scrollWidth} > ${panel.clientWidth}, ${panel.outside.length} buttons outside)`);
             } else {
                 console.log(`  ✓ menu panel ${at}`);
+            }
+            // The menu is an accordion (Marty, 2026-09-19): a section opens in place and the menu stays up; a screen,
+            // or Home, navigates and closes it. Every row is a 48px target.
+            {
+                const menu = page.getByRole('dialog', { name: 'Settings menu' });
+                const topText = () => page.locator('header').first().innerText();
+                const before = await topText();
+                const people = menu.getByRole('button', { name: /People & Safety/ });
+                const economy = menu.getByRole('button', { name: /Shared Projects & Economy/ });
+                const acc = [];
+                if ((await people.getAttribute('aria-expanded')) !== 'true') acc.push('the current section (People) does not start open');
+                await economy.click();
+                await settle(page);
+                if (!(await menu.isVisible())) acc.push('a section tap closed the menu');
+                if ((await topText()) !== before) acc.push(`a section tap navigated (${before} → ${await topText()})`);
+                if ((await economy.getAttribute('aria-expanded')) !== 'true') acc.push('Economy did not open');
+                if ((await people.getAttribute('aria-expanded')) !== 'false') acc.push('People stayed open beside Economy');
+                if (!(await menu.getByRole('button', { name: 'Escrow Disputes' }).isVisible())) acc.push('Economy\'s screens are not shown');
+                const short = await menu.locator('button').evaluateAll((els) => els
+                    .map((el) => ({ r: el.getBoundingClientRect(), t: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30) }))
+                    .filter(({ r }) => r.width > 0 && r.height < 47.5)
+                    .map(({ r, t }) => `"${t}" ${Math.round(r.height)}px`));
+                if (short.length) acc.push(`rows under 48px: ${short.join(', ')}`);
+                const panel2 = await boxOverflow(menu.locator(':scope > div').nth(1));
+                if (panel2.scrollWidth > panel2.clientWidth || panel2.outside.length) acc.push(`with Economy open the panel overflows (${panel2.scrollWidth} > ${panel2.clientWidth})`);
+                await menu.getByRole('button', { name: 'Escrow Disputes' }).click();
+                await settle(page);
+                if (await menu.count()) acc.push('a screen tap left the menu open');
+                if (!/Escrow Disputes/.test(await topText())) acc.push(`a screen tap did not navigate (${await topText()})`);
+                await page.getByRole('button', { name: 'Menu' }).click();
+                await page.getByRole('dialog', { name: 'Settings menu' }).getByRole('button', { name: /^\W*Home$/ }).click();
+                await settle(page);
+                if (await page.getByRole('dialog', { name: 'Settings menu' }).count()) acc.push('Home left the menu open');
+                if (!/Home/.test(await topText())) acc.push(`Home did not navigate (${await topText()})`);
+                checks++;
+                if (acc.length) {
+                    failures.push(`menu accordion ${at}: ${acc.join('; ')}`);
+                    console.log(`  ✗ menu accordion ${at}`);
+                } else {
+                    console.log(`  ✓ menu accordion ${at} (section opens in place, screen and Home navigate and close, rows ≥ 48px)`);
+                }
+                await page.getByRole('button', { name: 'Menu' }).click();
+                await page.getByRole('dialog', { name: 'Settings menu' }).waitFor();
             }
             await page.getByRole('button', { name: /Manual: running your community/ }).click();
             await page.getByRole('dialog', { name: 'Operator manual' }).waitFor();

@@ -34,6 +34,8 @@ export interface TypedMessagePayload {
     creditFloor?: number;
     resolution?: string;
     authSigner?: string;
+    /** Who ruled, in words a member reads ("a community admin" or the admin's callsign). */
+    resolvedByName?: string;
     reason?: string;
     transactionId?: string;
 }

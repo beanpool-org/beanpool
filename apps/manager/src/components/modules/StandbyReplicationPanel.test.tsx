@@ -367,7 +367,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
     });
 
     it('never asks for the main server admin password, and shows the legacy-password warning', async () => {
-        const warning = "This standby still copies with the main server's admin password, which is kept in plain text in local-config.json.";
+        const warning = "This standby is NOT copying: the main server refuses its stored admin password. The password is still kept in plain text in local-config.json.";
         const fetchMock = vi.fn().mockImplementation(async (url: string) => {
             if (url.includes('/api/local/admin/backup-status')) {
                 return { ok: true, json: async () => ({ role: 'backup', primaryUrl: 'https://primary.example.com' }) };
@@ -390,7 +390,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         render(<StandbyReplicationPanel activeNode={mockNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('alert')).toHaveTextContent(/still copies with the main server's admin password/);
+            expect(screen.getByRole('alert')).toHaveTextContent(/This standby is NOT copying: the main server refuses its stored admin password/);
         });
         expect(screen.queryByLabelText(/Admin Password/i)).not.toBeInTheDocument();
 

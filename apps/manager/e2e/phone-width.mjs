@@ -10,7 +10,8 @@
  *   pnpm --filter @beanpool/manager test:phone-width
  *
  * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: its overlay covers the
- * whole screen, top bar included; every button, link and field in it lies inside its card (the cards clip, so the page check above cannot see a button pushed off the edge),
+ * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no text runs
+ * under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
  * each close it too, and Back does not leave Settings.
  *
@@ -190,6 +191,33 @@ try {
                     const box = await boxOverflow(card, CONTROLS, { skipScrollers: true });
                     if (box.outside.length) fail(`${box.outside.length} controls outside the card\n      ${box.outside.join('\n      ')}`);
                     else console.log(`  ✓ ${modal.name} ${at}: every control inside the card`);
+                    // Nor does any text run past the card's edge (a name that cannot wrap is cut off there). Text in a
+                    // box that clips or scrolls it (an ellipsis, a scrolling table) is that box's business.
+                    checks++;
+                    const cutText = await card.evaluate((c) => {
+                        const b = c.getBoundingClientRect();
+                        const out = [];
+                        const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+                        for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+                            if (!t.textContent.trim()) continue;
+                            let clipped = false;
+                            for (let p = t.parentElement; p && p !== c; p = p.parentElement) {
+                                if (getComputedStyle(p).overflowX !== 'visible') { clipped = true; break; }
+                            }
+                            if (clipped) continue;
+                            const range = document.createRange();
+                            range.selectNodeContents(t);
+                            for (const r of range.getClientRects()) {
+                                if (r.width && (r.left < b.left - 0.5 || r.right > b.right + 0.5)) {
+                                    out.push(`"${t.textContent.trim().slice(0, 30)}" ${Math.round(r.left)}–${Math.round(r.right)} outside ${Math.round(b.left)}–${Math.round(b.right)}`);
+                                    break;
+                                }
+                            }
+                        }
+                        return out.slice(0, 6);
+                    });
+                    if (cutText.length) fail(`${cutText.length} texts run past the card\n      ${cutText.join('\n      ')}`);
+                    else console.log(`  ✓ ${modal.name} ${at}: no text runs past the card`);
 
                     checks++;
                     const x = await closeControl(card);
@@ -213,6 +241,28 @@ try {
                         return probe();
                     });
                     if (!tap.hit) { fail(`a tap on the centre of "${tap.label}" (${tap.r}) misses it`); continue; }
+                    // No text runs under or over it (a title that cannot wrap still lets the tap through, unreadably).
+                    checks++;
+                    const overlaps = await x.evaluate((el) => {
+                        const card = el.closest('.fixed.inset-0 > div');
+                        const b = el.getBoundingClientRect();
+                        const hits = [];
+                        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+                        for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+                            if (!t.textContent.trim() || el.contains(t)) continue;
+                            const range = document.createRange();
+                            range.selectNodeContents(t);
+                            for (const r of range.getClientRects()) {
+                                if (r.width && r.left < b.right - 1 && r.right > b.left + 1 && r.top < b.bottom - 1 && r.bottom > b.top + 1) {
+                                    hits.push(`"${t.textContent.trim().slice(0, 30)}"`);
+                                    break;
+                                }
+                            }
+                        }
+                        return hits.slice(0, 4);
+                    });
+                    if (overlaps.length) fail(`text overlaps "${tap.label}": ${overlaps.join(', ')}`);
+                    else console.log(`  ✓ ${modal.name} ${at}: no text overlaps "${tap.label}"`);
                     await page.mouse.click(tap.cx, tap.cy);
                     await settle(page);
                     if (await page.locator('.fixed.inset-0').count() !== opened - 1) fail(`a tap on "${tap.label}" did not close it`);

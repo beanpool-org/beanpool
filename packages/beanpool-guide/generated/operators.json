@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 1,
-  "hash": "34077b4de4575b2d0d3195acb79f8a6689861177c5be1fe21eab72628b535265",
+  "version": 2,
+  "hash": "2c84a17cae6ee2ae929e6d90286753d56f08abb0cf355f62b47efce6fbffdc3a",
   "sections": [
     {
       "id": "setup",
@@ -114,7 +114,7 @@
           "items": [
             "**data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.",
             "**data/state.db**: the database, with every member, post, deal and vote.",
-            "**data/local-config.json**: the admin password, two-factor settings and gateway settings."
+            "**data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one."
           ]
         },
         {
@@ -152,9 +152,9 @@
         {
           "type": "ul",
           "items": [
-            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access and Security.",
+            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access & Security.",
             "**Step 4** says it seeds the commons, but it does not move any beans.",
-            "If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People and Safety."
+            "If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People & Safety."
           ]
         },
         {
@@ -167,7 +167,7 @@
         },
         {
           "type": "p",
-          "text": "When the first real people have joined, give owner to at least one of them. As the password holder, open People and Safety, open the person and choose **Grant owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners."
+          "text": "When the first real people have joined, give owner to at least one of them. As the password holder, open People & Safety, open the person and choose **👑 Grant Owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners."
         },
         {
           "type": "h2",
@@ -176,7 +176,7 @@
         {
           "type": "ul",
           "items": [
-            "Switch on two-factor sign-in (Access and Security).",
+            "Switch on two-factor sign-in (Access & Security).",
             "Set up backups (Backups and restore).",
             "Invite your first members."
           ]
@@ -251,8 +251,8 @@
         {
           "type": "ul",
           "items": [
-            "Too many wrong passwords close password sign-in for a while, for everyone. Signing in from the app's Manage button still works meanwhile. See Rate limits.",
-            "Forgot the password: owners and admins can still sign in from the app, but nobody can change the password without knowing the old one. The fix is on the server itself: stop it, delete data/local-config.json and start it again with a new ADMIN_PASSWORD. That file also holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds and the backup settings, so you set those again. Members, posts and beans are not touched: they are in data/state.db."
+            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once, and signing in from the app's Manage button is never slowed down. See Rate limits.",
+            "Forgot the password: owners and admins can still sign in from the app, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD, then set those things again. Members, posts and beans are not touched: they are in data/state.db."
           ]
         }
       ]
@@ -281,10 +281,10 @@
           "type": "ul",
           "items": [
             "**Home**: the community at a glance, with shortcuts to invite someone, make an enterprise, download a backup and check the books.",
-            "**People and Safety**: Members (each person's page and role), Invites and QR, and Triage and Moderation (reports and taking posts down).",
-            "**Shared Projects and Economy**: Enterprises, Proposals (the community's Decisions), the Commons Pool, and Escrow Disputes (deals that are stuck).",
-            "**Bulletin and News**: Announcements to every member, and the channels in the Pulse.",
-            "**Appliance and Data**: Diagnostics and Logs, Backups and Restore, Gateway and Peers, Public Address, Node Identity, and Access and Security."
+            "**People & Safety**: Members (each person's page and role), Invites & QR, Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).",
+            "**Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).",
+            "**Bulletin & News**: Announcements to every member, and Pulse Channels.",
+            "**Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security."
           ]
         },
         {
@@ -293,7 +293,7 @@
         },
         {
           "type": "p",
-          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. See Owners, admins and moderators."
+          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins see the list but cannot change it. See Owners, admins and moderators."
         },
         {
           "type": "h2",
@@ -301,14 +301,14 @@
         },
         {
           "type": "p",
-          "text": "A few numbers in Settings are not calculated yet: the trust score on a member's page, the \"Live Request Traffic\" meter under Gateway, and the \"Backed up recently\" line on Home. Check the real thing (the member's history, the logs, the backups list) before you act on them."
+          "text": "A few numbers in Settings are not calculated yet: the trust score on a member's page, the \"Live Request Traffic\" meter under Gateway & Peers, the \"Backed up recently\" line on Home, and everything on the Commons Pool tab. That tab always shows \"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\" and \"0 queued\", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them."
         }
       ]
     },
     {
       "slug": "access-and-security",
       "title": "Access and security",
-      "summary": "Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance and Data, then Access and Security.",
+      "summary": "Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance & Data, then Access & Security.",
       "section": "setup",
       "related": [
         "signing-in",
@@ -341,7 +341,7 @@
           "type": "ul",
           "items": [
             "Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.",
-            "Type the 6-digit code the app shows, and press **Verify and Enable**. Until you do, nothing changes.",
+            "Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.",
             "There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.",
             "Once you have typed a code, the browser does not ask again for **4 hours** of use."
           ]
@@ -356,7 +356,7 @@
             "Some actions check only the password, never the code: changing the password, the factory reset, the community's name and address, invites made by the setup wizard, peer links and the money thresholds. Someone with the password alone can still do those. Guard the password as if two-factor sign-in were off.",
             "Any admin can switch two-factor sign-in off, not only owners.",
             "The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.",
-            "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server (see Signing in)."
+            "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first."
           ]
         },
         {
@@ -365,7 +365,7 @@
         },
         {
           "type": "p",
-          "text": "A break-glass code belongs to one owner. It starts with **bg-** and works in place of the admin password, recorded against that owner's name. Settings cannot make one yet: the break-glass card under Access and Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners."
+          "text": "A break-glass code belongs to one owner. It starts with **bg-** and works in place of the admin password, recorded against that owner's name. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners."
         },
         {
           "type": "p",
@@ -377,7 +377,7 @@
         },
         {
           "type": "p",
-          "text": "**Wipe and Reset Node** needs the admin password. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds and the backup settings. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
+          "text": "**Wipe & Reset Node** needs the admin password. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
         },
         {
           "type": "p",
@@ -443,15 +443,70 @@
         },
         {
           "type": "h2",
-          "text": "Giving and removing roles"
+          "text": "Owners & admins"
         },
         {
           "type": "p",
-          "text": "Open **People and Safety**, then **Members**, and open the person. Choose **Grant Owner**, **Grant Admin** or **Grant Moderator**, or **Revoke** to take the role away. Giving a new role replaces the old one."
+          "text": "**People & Safety**, then **Owners & admins**, lists everyone who holds a role, what it is and who gave it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Owners, signed in with their key or with the admin password, see the list and can add and remove people.",
+            "Admins, signed in with their key, see the list but cannot change it.",
+            "Moderators and ordinary members cannot open Settings at all."
+          ]
         },
         {
           "type": "p",
-          "text": "A change takes effect at once. If the person is signed in to Settings, their sign-in stops working."
+          "text": "Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. The app shows that button only to people the server says hold one of those roles."
+        },
+        {
+          "type": "h2",
+          "text": "Adding someone"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Under **Add someone**, type part of their callsign, or paste their full public key.",
+            "Pick them, then choose **Owner**, **Admin** or **Moderator**.",
+            "**Continue** shows what they will be able to do, in plain words. Nothing changes until you press the **Yes, make …** button."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Giving a new role replaces the old one."
+        },
+        {
+          "type": "h2",
+          "text": "Removing someone"
+        },
+        {
+          "type": "p",
+          "text": "Press **Remove** on their row. You are asked once more before anything happens. Removing an owner or admin takes away their access to Settings straight away; removing yourself signs you out."
+        },
+        {
+          "type": "p",
+          "text": "You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke** to take the role away."
+        },
+        {
+          "type": "h2",
+          "text": "When the server says no"
+        },
+        {
+          "type": "p",
+          "text": "The server checks every change. If it refuses, the screen shows its reason word for word after \"Not done. The node said:\". The usual ones:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "\"Only an owner may grant the admin role\" (or \"revoke\"): you are signed in as an admin. Ask an owner.",
+            "\"Only an owner may grant the owner role\": once a community has an owner, only an owner can add another.",
+            "\"Cannot remove the last owner\": add another owner first, then remove this one.",
+            "\"Only active accounts can hold a node role\": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.",
+            "\"Member not found\": the pasted key is not a member of this community.",
+            "\"Treasury accounts cannot hold a node role\": an enterprise's account is not a person."
+          ]
         },
         {
           "type": "h2",
@@ -474,11 +529,26 @@
         },
         {
           "type": "h2",
+          "text": "A community with no owner"
+        },
+        {
+          "type": "p",
+          "text": "A server with no owner, which is a brand-new one before its first invite, or one whose data has no founding member, shows \"This community has no owner yet — add yourself\" under **Owners & admins**. While that is true the server lets whoever is signed in make the first owner. Do it straight away."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.",
+            "Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "The first owner, Admin"
         },
         {
           "type": "p",
-          "text": "On a new server the first owner is a member called **Admin**, made by the server with a key nobody holds (see First-time setup). It cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up."
+          "text": "The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up."
         }
       ]
     },
@@ -513,7 +583,7 @@
         },
         {
           "type": "p",
-          "text": "Open **People and Safety**, then **Invites and QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing."
+          "text": "Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing."
         },
         {
           "type": "ul",
@@ -528,7 +598,7 @@
         },
         {
           "type": "p",
-          "text": "Open **People and Safety**, then **Members**, and open a person. Owners and admins can:"
+          "text": "Open **People & Safety**, then **Members**, and open a person. Owners and admins can:"
         },
         {
           "type": "ul",
@@ -600,7 +670,7 @@
         },
         {
           "type": "p",
-          "text": "**People and Safety**, then **Triage and Moderation**. Any owner or admin can act on them."
+          "text": "**People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them."
         },
         {
           "type": "ul",
@@ -628,7 +698,7 @@
         },
         {
           "type": "p",
-          "text": "In **Triage and Moderation**, find the post in the posts list and delete it."
+          "text": "In **Triage & Moderation**, find the post in the posts list and delete it."
         },
         {
           "type": "ul",
@@ -670,7 +740,7 @@
       "blocks": [
         {
           "type": "p",
-          "text": "These are under **Bulletin and News**."
+          "text": "These are under **Bulletin & News**."
         },
         {
           "type": "h2",
@@ -707,7 +777,7 @@
         },
         {
           "type": "p",
-          "text": "There is no button to hide an item directly. A member reports it; then, under People and Safety, then Triage and Moderation, press **Remove from the Pulse**. See Reports and takedowns."
+          "text": "There is no button to hide an item directly. A member reports it; then, under People & Safety, then Triage & Moderation, press **Remove from the Pulse**. See Reports and takedowns."
         },
         {
           "type": "h2",
@@ -758,7 +828,7 @@
         },
         {
           "type": "p",
-          "text": "**Shared Projects and Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual)."
+          "text": "**Shared Projects & Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual)."
         },
         {
           "type": "p",
@@ -783,9 +853,9 @@
         {
           "type": "ul",
           "items": [
-            "**Release to seller**: the seller gets the beans, less the usual 1.5% fee.",
-            "**Refund to buyer**: the buyer gets all the beans back, with no fee.",
-            "**Split**: the buyer gets half back; the seller gets the other half, less 1.5% on their half."
+            "**Release to Seller**: the seller gets the beans, less the usual 1.5% fee.",
+            "**Refund to Buyer**: the buyer gets all the beans back, with no fee.",
+            "**Split 50 / 50**: the buyer gets half back; the seller gets the other half, less 1.5% on their half."
           ]
         },
         {
@@ -861,7 +931,7 @@
         },
         {
           "type": "p",
-          "text": "**Shared Projects and Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far."
+          "text": "**Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far."
         },
         {
           "type": "h2",
@@ -869,7 +939,7 @@
         },
         {
           "type": "p",
-          "text": "For when someone is doing harm now. Open the person (People and Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it."
+          "text": "For when someone is doing harm now. Open the person (People & Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it."
         },
         {
           "type": "ul",
@@ -895,7 +965,7 @@
         },
         {
           "type": "p",
-          "text": "**Halt** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public."
+          "text": "**Halt this Decision** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public."
         },
         {
           "type": "ul",
@@ -944,7 +1014,7 @@
         },
         {
           "type": "p",
-          "text": "**Shared Projects and Economy**, then **Enterprises**. Owners and admins can:"
+          "text": "**Shared Projects & Economy**, then **Enterprises**. Owners and admins can:"
         },
         {
           "type": "ul",
@@ -974,7 +1044,7 @@
             "Adding someone as a keeper also gives them the Operator switch (see Members and invites).",
             "Keepers added from Settings are always ordinary keepers, never the lead, and an enterprise made in Settings starts with no lead.",
             "If the lead leaves, the longest-serving keeper becomes lead. If no keeper is left, the enterprise pauses.",
-            "Other keepers have 3 days to object to a change of keepers. The community can remove a lead by a Decision."
+            "When the lead adds or removes a keeper from the app, the other keepers have 3 days to object, and one objection cancels it. Keepers added or removed here in Settings change at once, with no waiting time. The community can remove a lead by a Decision."
           ]
         },
         {
@@ -983,7 +1053,7 @@
         },
         {
           "type": "p",
-          "text": "**Commons Pool** shows the health of the community's shared beans. They come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons."
+          "text": "The commons pool is the community's shared beans. The **Commons Pool** tab does not show it yet: its figures (\"240.0 beans\", \"✓ Solvent & Fully Backed\", \"0.0 drift\", \"0 queued\") are placeholders that never change, so do not rely on them. The beans come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons."
         },
         {
           "type": "p",
@@ -1016,7 +1086,7 @@
           "items": [
             "**state.db** (with state.db-wal and state.db-shm beside it while the server runs): members, posts, deals, beans, votes, messages;",
             "**genesis.json** and **community.key**: the community's own key. Lose these and the community cannot be rebuilt as itself;",
-            "**local-config.json**: the admin password, two-factor sign-in and other settings;",
+            "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
             "**libp2p_key** and **connectors.json**: the server's network identity and peer links;",
             "**snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again."
           ]
@@ -1031,13 +1101,13 @@
         },
         {
           "type": "p",
-          "text": "**Appliance and Data**, then **Backups and Restore**:"
+          "text": "**Appliance & Data**, then **Backups & Restore**:"
         },
         {
           "type": "ul",
           "items": [
             "**Download Sovereign Database**: a .tar.gz with a clean copy of the database, taken while the server runs. It usually carries a copy of your settings too, including the scrambled admin password and the two-factor secret. It does not include the community key.",
-            "**Point-in-time snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one. Snapshots sit on the same disk as the server, so they do not survive a lost disk. Copy one off the server now and then.",
+            "**Point-in-Time Snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one. Snapshots sit on the same disk as the server, so they do not survive a lost disk. Copy one off the server now and then.",
             "**Database Integrity Verification**: checks the live database or a snapshot for damage."
           ]
         },
@@ -1071,7 +1141,7 @@
         {
           "type": "ul",
           "items": [
-            "On your server, **Replication Access** (under Backups and Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.",
+            "On your server, **Replication Access** (under Backups & Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.",
             "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server**. If you give it the admin password instead, it is stored in plain text on the standby.",
             "Copying goes one way only. Your main server never takes data from the standby.",
             "**A standby is not a complete copy.** It does not copy Decisions and their votes, or who holds which role. Keep file backups as well.",
@@ -1126,7 +1196,7 @@
         },
         {
           "type": "p",
-          "text": "The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance and Data**, then **Diagnostics and Logs**, shows the version and whether an update is out, with a button to check now."
+          "text": "The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now."
         },
         {
           "type": "h2",
@@ -1153,7 +1223,7 @@
         },
         {
           "type": "p",
-          "text": "**Diagnostics and Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it."
+          "text": "**Diagnostics & Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it."
         },
         {
           "type": "p",
@@ -1170,7 +1240,7 @@
         {
           "type": "ul",
           "items": [
-            "**Clean Orphaned Media and Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.",
+            "**Clean Orphaned Media & Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.",
             "Keep fewer snapshots, or copy old ones off the server.",
             "Things that grow with no limit: data/logs/archived, the freeze reports (files named report-something.json in data), and Docker's own logs."
           ]
@@ -1195,7 +1265,7 @@
         },
         {
           "type": "p",
-          "text": "**Appliance and Data**, then **Public Address**. Members' apps need an address to reach your server."
+          "text": "**Appliance & Data**, then **Public Address**. Members' apps need an address to reach your server."
         },
         {
           "type": "ul",
@@ -1227,7 +1297,7 @@
         },
         {
           "type": "p",
-          "text": "**Gateway and Peers** has the gateway switches:"
+          "text": "**Gateway & Peers** has the gateway switches:"
         },
         {
           "type": "ul",
@@ -1247,7 +1317,7 @@
         },
         {
           "type": "p",
-          "text": "Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway and Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first."
+          "text": "Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway & Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first."
         }
       ]
     },
@@ -1274,7 +1344,7 @@
         {
           "type": "ul",
           "items": [
-            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance and Data, then Gateway and Peers. Community and federation traffic, and Settings itself, are not counted.",
+            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Community and federation traffic, and Settings itself, are not counted.",
             "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device and checking names.",
             "**Settings**: 300 requests a minute per internet address.",
             "**Group and event chats**: 30 lines a minute per member.",
@@ -1288,11 +1358,25 @@
         },
         {
           "type": "p",
-          "text": "This one is for the whole server, not per address. The first 10 wrong admin passwords cost nothing. After that, password sign-in closes for 2 seconds, then 4, 8 and so on, up to 10 minutes. While it is closed, even the right password is refused. It opens again after a right password, or after 30 minutes with no wrong ones. Signing in from the app's Manage button is not affected."
+          "text": "This one slows down anyone guessing the admin password, without ever letting them lock you out."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "It counts wrong passwords per internet address. The first 5 from an address cost nothing. After that, that address has to wait before its next try: 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits; nobody else is slowed down by it.",
+            "A right password from the address clears its count. So does a day with no wrong password from it.",
+            "An address with no wrong password in the last day is always checked straight away, whatever anyone else is doing. So if you are kept waiting, try from another network (mobile data, another wifi) and the right password works at once.",
+            "Addresses that have got it wrong recently share a limit for the whole server of 12 checks a minute, and those already waiting get only half of it, so an owner who mistyped once is not queued behind a guesser. Over that limit the server says to try again within a minute.",
+            "Many wrong passwords from one neighbourhood of addresses (the same /24, or the same IPv6 /48) take away the \"straight away\" promise for the rest of that neighbourhood."
+          ]
         },
         {
           "type": "p",
-          "text": "If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else."
+          "text": "Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code."
+        },
+        {
+          "type": "p",
+          "text": "If it keeps happening, someone is guessing your password. The logs say which address. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else."
         },
         {
           "type": "h2",
@@ -1312,7 +1396,22 @@
         },
         {
           "type": "p",
-          "text": "The message says which: \"Gateway rate limit exceeded\", \"Too many attempts\", \"You're sending messages too fast\", or \"Too many wrong admin passwords\". The gateway and the password brake also write a line in the logs."
+          "text": "The message says which:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "\"Gateway rate limit exceeded\": the gateway.",
+            "\"Too many attempts\": sign-in and recovery attempts, or checking invite codes.",
+            "\"Too many administrative requests\": Settings, 300 a minute.",
+            "\"You're sending messages too fast\": group and event chats.",
+            "\"You have sent a lot of reports recently\": reports, 10 an hour.",
+            "\"Too many wrong admin passwords from your network\", or \"This node is getting a lot of wrong admin passwords from elsewhere\": the password brake."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The gateway and the password brake also write a line in the logs."
         }
       ]
     },
@@ -1525,10 +1624,10 @@
         {
           "type": "ul",
           "items": [
-            "Appliance and Data, then Diagnostics and Logs, shows how full it is and what is using it.",
-            "Run **Clean Orphaned Media and Compress Logs**, and delete old snapshots after copying them off.",
+            "Appliance & Data, then Diagnostics & Logs, shows how full it is and what is using it.",
+            "Run **Clean Orphaned Media & Compress Logs**, and delete old snapshots after copying them off.",
             "On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.",
-            "When there is room again, check the database: Backups and Restore, then Database Integrity Verification."
+            "When there is room again, check the database: Backups & Restore, then Database Integrity Verification."
           ]
         },
         {
@@ -1538,7 +1637,7 @@
         {
           "type": "ul",
           "items": [
-            "\"Too many wrong admin passwords\": wait, or sign in from the app. See Rate limits.",
+            "\"Too many wrong admin passwords\": wait, try from another network, or sign in from the app. See Rate limits.",
             "Lost the password: see Signing in.",
             "Lost the two-factor code: see Access and security.",
             "Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts."
@@ -1553,7 +1652,7 @@
           "items": [
             "Check the invite has not been used or passed its 30 days.",
             "Invites made in Settings while signed in from the app are not real codes. See Members and invites.",
-            "Check Invites is not switched off under Gateway and Peers."
+            "Check Invites is not switched off under Gateway & Peers."
           ]
         },
         {

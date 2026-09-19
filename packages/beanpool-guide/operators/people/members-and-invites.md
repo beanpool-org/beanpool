@@ -13,14 +13,14 @@ Any member can make invites from their app, and most people will join that way. 
 
 ## Invites from Settings
 
-Open **People and Safety**, then **Invites and QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
+Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
 
 - These invites need the **admin password**. If you signed in from the app's Manage button, Settings cannot make them, and shows made-up codes that the server will not accept. Sign in with the password, or make invites from your own app.
 - Every invite made in Settings is recorded as coming from the first member, Admin, not from you.
 
 ## A member's page
 
-Open **People and Safety**, then **Members**, and open a person. Owners and admins can:
+Open **People & Safety**, then **Members**, and open a person. Owners and admins can:
 
 - **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.
 - **Lift suspension**: ends a suspension early and closes its vote.

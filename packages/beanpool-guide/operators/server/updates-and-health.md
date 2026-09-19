@@ -21,7 +21,7 @@ The repository's docker-compose.yml expects a Docker network called beanpool-sha
 
 ## Is there a new version?
 
-The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance and Data**, then **Diagnostics and Logs**, shows the version and whether an update is out, with a button to check now.
+The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now.
 
 ## Checking from outside
 
@@ -34,7 +34,7 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 ## Checking from inside
 
-**Diagnostics and Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it.
+**Diagnostics & Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it.
 
 The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node
 
@@ -42,6 +42,6 @@ The server keeps its most recent log lines, which Settings shows under Logs. Som
 
 The disk card warns at **80%** full. Nothing stops the server writing when the disk is full, and a full disk can damage the database, so act on the warning.
 
-- **Clean Orphaned Media and Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.
+- **Clean Orphaned Media & Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.
 - Keep fewer snapshots, or copy old ones off the server.
 - Things that grow with no limit: data/logs/archived, the freeze reports (files named report-something.json in data), and Docker's own logs.

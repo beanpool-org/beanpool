@@ -17,7 +17,7 @@ The report form tells members their note goes to moderators. In practice it goes
 
 ## Where reports land
 
-**People and Safety**, then **Triage and Moderation**. Any owner or admin can act on them.
+**People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them.
 
 - The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.
 - It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.
@@ -31,7 +31,7 @@ The report form tells members their note goes to moderators. In practice it goes
 
 ## Taking a post down
 
-In **Triage and Moderation**, find the post in the posts list and delete it.
+In **Triage & Moderation**, find the post in the posts list and delete it.
 
 - If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.
 - Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.

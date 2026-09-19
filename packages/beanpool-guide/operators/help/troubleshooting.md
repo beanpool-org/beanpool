@@ -27,14 +27,14 @@ The BeanPool source code has a small watchdog for Linux machines (ops/watchdog).
 
 ## The disk is full
 
-- Appliance and Data, then Diagnostics and Logs, shows how full it is and what is using it.
-- Run **Clean Orphaned Media and Compress Logs**, and delete old snapshots after copying them off.
+- Appliance & Data, then Diagnostics & Logs, shows how full it is and what is using it.
+- Run **Clean Orphaned Media & Compress Logs**, and delete old snapshots after copying them off.
 - On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.
-- When there is room again, check the database: Backups and Restore, then Database Integrity Verification.
+- When there is room again, check the database: Backups & Restore, then Database Integrity Verification.
 
 ## You cannot sign in
 
-- "Too many wrong admin passwords": wait, or sign in from the app. See Rate limits.
+- "Too many wrong admin passwords": wait, try from another network, or sign in from the app. See Rate limits.
 - Lost the password: see Signing in.
 - Lost the two-factor code: see Access and security.
 - Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts.
@@ -43,7 +43,7 @@ The BeanPool source code has a small watchdog for Linux machines (ops/watchdog).
 
 - Check the invite has not been used or passed its 30 days.
 - Invites made in Settings while signed in from the app are not real codes. See Members and invites.
-- Check Invites is not switched off under Gateway and Peers.
+- Check Invites is not switched off under Gateway & Peers.
 
 ## Getting help
 

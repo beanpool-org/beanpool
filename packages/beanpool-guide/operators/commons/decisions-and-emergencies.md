@@ -19,11 +19,11 @@ What a passed Decision can do by itself: suspend or restore a member, freeze or 
 
 ## Watching them
 
-**Shared Projects and Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far.
+**Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far.
 
 ## Emergency suspension
 
-For when someone is doing harm now. Open the person (People and Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it.
+For when someone is doing harm now. Open the person (People & Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it.
 
 - They are suspended at once and their role, if any, is set aside.
 - A 7-day vote opens: "Keep the suspension?". One member, one vote, 60% to keep it.
@@ -37,7 +37,7 @@ Only the community removes a member, by a Decision. When it passes, the person i
 
 ## Halting a Decision
 
-**Halt** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public.
+**Halt this Decision** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public.
 
 - Halting a removal in its grace period restores the person.
 - Halting a "keep the suspension" vote lifts the suspension.

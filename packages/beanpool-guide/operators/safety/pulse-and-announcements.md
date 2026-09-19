@@ -5,7 +5,7 @@ summary: Telling every member something at once, the channels in the Pulse, the 
 related: reports-and-takedowns, what-the-server-sees, updates-and-health, the-settings-screens
 ---
 
-These are under **Bulletin and News**.
+These are under **Bulletin & News**.
 
 ## Announcements
 
@@ -24,7 +24,7 @@ Under **Pulse Channels** you can add or remove channels that belong to the commu
 
 ## Taking a Pulse item down
 
-There is no button to hide an item directly. A member reports it; then, under People and Safety, then Triage and Moderation, press **Remove from the Pulse**. See Reports and takedowns.
+There is no button to hide an item directly. A member reports it; then, under People & Safety, then Triage & Moderation, press **Remove from the Pulse**. See Reports and takedowns.
 
 ## The daily learning item
 

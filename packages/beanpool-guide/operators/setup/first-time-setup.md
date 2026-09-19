@@ -19,7 +19,7 @@ The server reads ADMIN_PASSWORD only on its first start. After that it keeps a s
 
 - **data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.
 - **data/state.db**: the database, with every member, post, deal and vote.
-- **data/local-config.json**: the admin password, two-factor settings and gateway settings.
+- **data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.
 
 ## Open Settings
 
@@ -37,18 +37,18 @@ What it really does:
 
 What it does not do yet:
 
-- **Step 2** shows an owner-pairing QR, an authenticator secret and an "emergency seed". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access and Security.
+- **Step 2** shows an owner-pairing QR, an authenticator secret and an "emergency seed". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access & Security.
 - **Step 4** says it seeds the commons, but it does not move any beans.
-- If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People and Safety.
+- If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People & Safety.
 
 ## The first owner
 
 The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner. Nobody holds that member's key, so nobody can sign in as it. It exists so the first invites have someone to come from.
 
-When the first real people have joined, give owner to at least one of them. As the password holder, open People and Safety, open the person and choose **Grant owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners.
+When the first real people have joined, give owner to at least one of them. As the password holder, open People & Safety, open the person and choose **👑 Grant Owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners.
 
 ## Then
 
-- Switch on two-factor sign-in (Access and Security).
+- Switch on two-factor sign-in (Access & Security).
 - Set up backups (Backups and restore).
 - Invite your first members.

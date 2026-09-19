@@ -57,7 +57,7 @@
         <p>When someone goes over a limit the server answers &quot;too many requests&quot; (HTTP 429) and says how long to wait. The counts are kept in memory, so a restart clears them all.</p>
         <h2>The limits</h2>
         <ul>
-            <li><strong>The gateway</strong>: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance and Data, then Gateway and Peers. Community and federation traffic, and Settings itself, are not counted.</li>
+            <li><strong>The gateway</strong>: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance &amp; Data, then Gateway &amp; Peers. Community and federation traffic, and Settings itself, are not counted.</li>
             <li><strong>Sign-in and recovery attempts</strong>: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device and checking names.</li>
             <li><strong>Settings</strong>: 300 requests a minute per internet address.</li>
             <li><strong>Group and event chats</strong>: 30 lines a minute per member.</li>
@@ -65,13 +65,30 @@
             <li><strong>Reports</strong>: 10 an hour per member.</li>
         </ul>
         <h2>The admin password brake</h2>
-        <p>This one is for the whole server, not per address. The first 10 wrong admin passwords cost nothing. After that, password sign-in closes for 2 seconds, then 4, 8 and so on, up to 10 minutes. While it is closed, even the right password is refused. It opens again after a right password, or after 30 minutes with no wrong ones. Signing in from the app's Manage button is not affected.</p>
-        <p>If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.</p>
+        <p>This one slows down anyone guessing the admin password, without ever letting them lock you out.</p>
+        <ul>
+            <li>It counts wrong passwords per internet address. The first 5 from an address cost nothing. After that, that address has to wait before its next try: 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits; nobody else is slowed down by it.</li>
+            <li>A right password from the address clears its count. So does a day with no wrong password from it.</li>
+            <li>An address with no wrong password in the last day is always checked straight away, whatever anyone else is doing. So if you are kept waiting, try from another network (mobile data, another wifi) and the right password works at once.</li>
+            <li>Addresses that have got it wrong recently share a limit for the whole server of 12 checks a minute, and those already waiting get only half of it, so an owner who mistyped once is not queued behind a guesser. Over that limit the server says to try again within a minute.</li>
+            <li>Many wrong passwords from one neighbourhood of addresses (the same /24, or the same IPv6 /48) take away the &quot;straight away&quot; promise for the rest of that neighbourhood.</li>
+        </ul>
+        <p>Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code.</p>
+        <p>If it keeps happening, someone is guessing your password. The logs say which address. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.</p>
         <h2>Many people on one connection</h2>
         <p>A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again.</p>
         <p>If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance.</p>
         <h2>Finding out which limit</h2>
-        <p>The message says which: &quot;Gateway rate limit exceeded&quot;, &quot;Too many attempts&quot;, &quot;You're sending messages too fast&quot;, or &quot;Too many wrong admin passwords&quot;. The gateway and the password brake also write a line in the logs.</p>
+        <p>The message says which:</p>
+        <ul>
+            <li>&quot;Gateway rate limit exceeded&quot;: the gateway.</li>
+            <li>&quot;Too many attempts&quot;: sign-in and recovery attempts, or checking invite codes.</li>
+            <li>&quot;Too many administrative requests&quot;: Settings, 300 a minute.</li>
+            <li>&quot;You're sending messages too fast&quot;: group and event chats.</li>
+            <li>&quot;You have sent a lot of reports recently&quot;: reports, 10 an hour.</li>
+            <li>&quot;Too many wrong admin passwords from your network&quot;, or &quot;This node is getting a lot of wrong admin passwords from elsewhere&quot;: the password brake.</li>
+        </ul>
+        <p>The gateway and the password brake also write a line in the logs.</p>
         <h2 class="guide-related">Related</h2>
         <ul class="guide-list">
             <li><a href="troubleshooting.html"><strong>When things go wrong</strong><span>The server has stopped answering, members see &quot;too many requests&quot;, the disk is full, or you cannot sign in.</span></a></li>
@@ -79,7 +96,7 @@
             <li><a href="signing-in.html"><strong>Signing in to Settings</strong><span>The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.</span></a></li>
             <li><a href="updates-and-health.html"><strong>Updates, health checks and disk space</strong><span>Updating the server, checking it is well from outside and inside, and keeping the disk from filling up.</span></a></li>
         </ul>
-        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 2.</p>
     </main>
 </body>
 </html>

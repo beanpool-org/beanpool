@@ -206,7 +206,7 @@ export function FleetSidebar({
                         <button
                             type="button"
                             onClick={() => manual.openManual()}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent transition-all"
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-semibold text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent transition-all"
                         >
                             <span className="text-sm shrink-0">📖</span>
                             <span className="truncate">Manual: running your community</span>

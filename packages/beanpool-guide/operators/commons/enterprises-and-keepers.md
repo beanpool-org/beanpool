@@ -9,7 +9,7 @@ An enterprise is a shared project with its own account: a community garden, a to
 
 ## Setting one up
 
-**Shared Projects and Economy**, then **Enterprises**. Owners and admins can:
+**Shared Projects & Economy**, then **Enterprises**. Owners and admins can:
 
 - make an enterprise. One made here starts with a credit line of 0;
 - set its **working capital ceiling**, the most it can owe;
@@ -26,10 +26,10 @@ A keeper acts for the enterprise from their own app.
 - Adding someone as a keeper also gives them the Operator switch (see Members and invites).
 - Keepers added from Settings are always ordinary keepers, never the lead, and an enterprise made in Settings starts with no lead.
 - If the lead leaves, the longest-serving keeper becomes lead. If no keeper is left, the enterprise pauses.
-- Other keepers have 3 days to object to a change of keepers. The community can remove a lead by a Decision.
+- When the lead adds or removes a keeper from the app, the other keepers have 3 days to object, and one objection cancels it. Keepers added or removed here in Settings change at once, with no waiting time. The community can remove a lead by a Decision.
 
 ## The commons pool
 
-**Commons Pool** shows the health of the community's shared beans. They come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons.
+The commons pool is the community's shared beans. The **Commons Pool** tab does not show it yet: its figures ("240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift", "0 queued") are placeholders that never change, so do not rely on them. The beans come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons.
 
 Settings has no button to pay beans out of the commons by hand, and the setup wizard's "seed the commons" step moves no beans.

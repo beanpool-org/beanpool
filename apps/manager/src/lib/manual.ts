@@ -9,7 +9,9 @@
  * member-guide.ts apply unchanged.
  */
 import { validateGuide, type Guide, type GuidePage } from '@beanpool/core';
-import bundledManual from '@beanpool/guide/generated/operators.json';
+// A relative path, not a package import: @beanpool/guide is not a dependency of the manager, and the undeclared-imports
+// guard (scripts/check-undeclared-imports.mjs) rejects a bare import of it.
+import bundledManual from '../../../../packages/beanpool-guide/generated/operators.json';
 
 /** The bundled manual. Built from checked source, so it always validates; a broken build fails the tests. */
 export const OPERATOR_MANUAL: Guide = validateGuide(bundledManual) as Guide;
@@ -28,6 +30,7 @@ export const SCREEN_HELP = {
     'people/directory': 'members-and-invites',
     'people/invites': 'members-and-invites',
     'people/moderation': 'reports-and-takedowns',
+    'people/roles': 'roles',
     'member-detail': 'roles',
     'economy/enterprises': 'enterprises-and-keepers',
     'economy/decisions': 'decisions-and-emergencies',

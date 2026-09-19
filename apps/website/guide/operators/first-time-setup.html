@@ -63,7 +63,7 @@
         <ul>
             <li><strong>data/genesis.json</strong> and <strong>data/community.key</strong>: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.</li>
             <li><strong>data/state.db</strong>: the database, with every member, post, deal and vote.</li>
-            <li><strong>data/local-config.json</strong>: the admin password, two-factor settings and gateway settings.</li>
+            <li><strong>data/local-config.json</strong>: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.</li>
         </ul>
         <h2>Open Settings</h2>
         <p>Go to your server's address followed by <strong>/settings</strong>, for example https://example.org/settings, and sign in with the admin password.</p>
@@ -77,28 +77,28 @@
         </ul>
         <p>What it does not do yet:</p>
         <ul>
-            <li><strong>Step 2</strong> shows an owner-pairing QR, an authenticator secret and an &quot;emergency seed&quot;. None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access and Security.</li>
+            <li><strong>Step 2</strong> shows an owner-pairing QR, an authenticator secret and an &quot;emergency seed&quot;. None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access &amp; Security.</li>
             <li><strong>Step 4</strong> says it seeds the commons, but it does not move any beans.</li>
-            <li>If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People and Safety.</li>
+            <li>If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People &amp; Safety.</li>
         </ul>
         <h2>The first owner</h2>
         <p>The first time you make an invite on an empty server, it creates a member called <strong>Admin</strong> as the first owner. Nobody holds that member's key, so nobody can sign in as it. It exists so the first invites have someone to come from.</p>
-        <p>When the first real people have joined, give owner to at least one of them. As the password holder, open People and Safety, open the person and choose <strong>Grant owner</strong>. Settings now has an owner who can sign in from their phone. Keep at least two owners.</p>
+        <p>When the first real people have joined, give owner to at least one of them. As the password holder, open People &amp; Safety, open the person and choose <strong>👑 Grant Owner</strong>. Settings now has an owner who can sign in from their phone. Keep at least two owners.</p>
         <h2>Then</h2>
         <ul>
-            <li>Switch on two-factor sign-in (Access and Security).</li>
+            <li>Switch on two-factor sign-in (Access &amp; Security).</li>
             <li>Set up backups (Backups and restore).</li>
             <li>Invite your first members.</li>
         </ul>
         <h2 class="guide-related">Related</h2>
         <ul class="guide-list">
             <li><a href="signing-in.html"><strong>Signing in to Settings</strong><span>The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.</span></a></li>
-            <li><a href="access-and-security.html"><strong>Access and security</strong><span>Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance and Data, then Access and Security.</span></a></li>
+            <li><a href="access-and-security.html"><strong>Access and security</strong><span>Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance &amp; Data, then Access &amp; Security.</span></a></li>
             <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
             <li><a href="members-and-invites.html"><strong>Members and invites</strong><span>How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.</span></a></li>
             <li><a href="backups-and-replicas.html"><strong>Backups and replicas</strong><span>What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.</span></a></li>
         </ul>
-        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 2.</p>
     </main>
 </body>
 </html>

@@ -7,7 +7,7 @@ related: what-the-server-sees, rate-limits, updates-and-health, backups-and-repl
 
 ## Public address
 
-**Appliance and Data**, then **Public Address**. Members' apps need an address to reach your server.
+**Appliance & Data**, then **Public Address**. Members' apps need an address to reach your server.
 
 - You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.
 - The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.
@@ -23,7 +23,7 @@ By default your server tells the BeanPool directory about itself every 12 hours:
 
 ## Gateway
 
-**Gateway and Peers** has the gateway switches:
+**Gateway & Peers** has the gateway switches:
 
 - turn the market, messages, links with other communities, invites or the web app off for everyone;
 - the rate limit (see Rate limits);
@@ -33,4 +33,4 @@ Turning a feature off affects every member at once. Tell them first.
 
 ## Peers: other communities
 
-Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway and Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first.
+Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway & Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first.

@@ -9,7 +9,7 @@ When a member buys something, their beans are held until they confirm they got i
 
 ## Finding them
 
-**Shared Projects and Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual).
+**Shared Projects & Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual).
 
 The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held.
 
@@ -21,9 +21,9 @@ Message both people. Most stuck deals are someone who forgot to press Received. 
 
 ## The three rulings
 
-- **Release to seller**: the seller gets the beans, less the usual 1.5% fee.
-- **Refund to buyer**: the buyer gets all the beans back, with no fee.
-- **Split**: the buyer gets half back; the seller gets the other half, less 1.5% on their half.
+- **Release to Seller**: the seller gets the beans, less the usual 1.5% fee.
+- **Refund to Buyer**: the buyer gets all the beans back, with no fee.
+- **Split 50 / 50**: the buyer gets half back; the seller gets the other half, less 1.5% on their half.
 
 You can add a reason. Both people get a notification, a message in their chat and a line in their activity.
 

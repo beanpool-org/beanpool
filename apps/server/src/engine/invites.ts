@@ -42,7 +42,8 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string): Inv
 export function adminGenerateInvite(
     adminPubkey: string,
     genesisType: GenesisInviteType = 'standard',
-    intendedFor?: string
+    intendedFor?: string,
+    issuedBy?: string
 ): InviteCode | null {
     const admin = getMember(db, adminPubkey);
     if (!admin) return null;
@@ -52,8 +53,8 @@ export function adminGenerateInvite(
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for) VALUES (?, ?, ?, ?, ?)`)
-      .run(code, adminPubkey, createdAt, genesisType, intendedFor || null);
+    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(code, adminPubkey, createdAt, genesisType, intendedFor || null, issuedBy || null);
 
     const invite: InviteCode = { code, createdBy: adminPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     const tierLabel = genesisType === 'standard' ? '🥚' : genesisType === 'trusted' ? '🏠' : genesisType === 'ambassador' ? '🏛️' : '⛰️';

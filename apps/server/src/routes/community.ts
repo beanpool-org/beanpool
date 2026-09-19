@@ -147,20 +147,28 @@ router.post('/api/local/verify-password', async (ctx) => {
     ctx.body = { success: true, ...(tfaSession ? { tfaSessionToken: tfaSession } : {}) };
 });
 
-// Admin: Generate invite codes — supports tiered genesis invites
+// Admin: Generate invite codes — supports tiered genesis invites.
+// Same auth as every other admin route (checkAdminAuth): the node password, or a key-signed session of a member
+// who holds owner or admin in node_roles. Moderators are refused: checkAdminAuth already refuses their sessions,
+// and the role check below says so again. Issuing an invite is ordinary running of the node, so admin may do it
+// as well as owner.
 router.post('/api/admin/seed-invite', async (ctx) => {
     if (!rateLimit(ctx)) return;
-    const config = getLocalConfig();
-    const { password, type: inviteType } = (ctx as any).requestBody || {};
+    const { type: inviteType } = (ctx as any).requestBody || {};
 
-    const pwCheck = await checkAdminPassword(ctx, password);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
+    if (!(await checkAdminAuth(ctx as any))) {
         logger.security('AUTH', 'Unauthorized attempt to generate invite code.');
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
         return;
     }
+    const role = (ctx.state as any)?.adminRole;
+    if (role !== 'owner' && role !== 'admin') {
+        ctx.status = 403;
+        ctx.body = { error: 'Only an owner or admin of this node can issue invites' };
+        return;
+    }
+    // Who issued it, for the audit trail: the signed member under a key session (or a break-glass code),
+    // 'owner:password' under the node password — the same attribution the node-roles routes use.
+    const issuedBy: string = (ctx.state as any)?.actor || 'owner:password';
 
     // Validate invite type
     const genesisType = (['standard', 'trusted', 'ambassador', 'elder'].includes(inviteType) ? inviteType : 'standard') as 'standard' | 'trusted' | 'ambassador' | 'elder';
@@ -178,9 +186,9 @@ router.post('/api/admin/seed-invite', async (ctx) => {
                 || members[0];
         }
         if (genesisMember) {
-            const invite = adminGenerateInvite(genesisMember.publicKey, genesisType);
+            const invite = adminGenerateInvite(genesisMember.publicKey, genesisType, undefined, issuedBy);
             if (invite) {
-                logger.info('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}]`);
+                logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
                 const tierLabels: Record<string, string> = { standard: '🥚 Newcomer', trusted: '🏠 Resident', ambassador: '🏛️ Steward', elder: '⛰️ Elder' };
                 ctx.body = { success: true, code: invite.code, type: genesisType, tierLabel: tierLabels[genesisType], message: `${tierLabels[genesisType]} invite generated` };
                 return;
@@ -202,14 +210,14 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     const pubKeyHex = pubKeyDer.subarray(-32).toString('hex');
 
     seedGenesisMember(pubKeyHex, 'Admin');
-    const invite = adminGenerateInvite(pubKeyHex, genesisType);
+    const invite = adminGenerateInvite(pubKeyHex, genesisType, undefined, issuedBy);
     if (!invite) {
         ctx.status = 500;
         ctx.body = { error: 'Failed to generate seed invite' };
         return;
     }
 
-    logger.info('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}]`);
+    logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
     ctx.body = { success: true, code: invite.code, type: genesisType, message: 'Genesis member created + seed invite generated' };
 });
 

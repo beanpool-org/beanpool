@@ -303,6 +303,7 @@ describe('2FA session token transmission in node client admin actions', () => {
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
 
         fetchMock.mockClear();
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: async () => ({ success: true, code: 'INV-2FA-TEST', type: 'standard' }) });
 
         await generateNodeInvite('https://node.example.com', 'secret123', 'standard', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
@@ -604,6 +605,21 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new Error('not json'); } });
         await expect(fetchNodeRoles('https://node.example.com', 'adminpass')).rejects.toThrow('Failed to fetch node roles (HTTP 502)');
+    });
+
+    it("generateNodeInvite passes the node's refusal through and never returns without a code", async () => {
+        const { generateNodeInvite } = await import('./node-client');
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: 'Invalid password' }) });
+        await expect(generateNodeInvite('https://node.example.com', 'wrong')).rejects.toThrow('Invalid password');
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway', json: async () => { throw new Error('not json'); } });
+        await expect(generateNodeInvite('https://node.example.com', 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
+
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: async () => ({ success: true }) });
+        await expect(generateNodeInvite('https://node.example.com', 'pw')).rejects.toThrow('sent no invite code');
+
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: async () => ({ success: true, code: 'INV-REAL-1', type: 'standard' }) });
+        await expect(generateNodeInvite('https://node.example.com', 'pw')).resolves.toMatchObject({ code: 'INV-REAL-1' });
     });
 
     it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {

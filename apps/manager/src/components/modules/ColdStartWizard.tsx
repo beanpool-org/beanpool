@@ -31,6 +31,8 @@ interface GeneratedCard {
 import { generateOfflineQrUrl } from '../../lib/qr';
 export { generateOfflineQrUrl };
 
+const FOUNDING_INVITE_COUNT = 3;
+
 const FIRST_ENTERPRISE_PRESETS = [
     {
         id: 'food',
@@ -124,9 +126,7 @@ export function ColdStartWizard({
                     }
                 }
             } catch {
-                if (!totpSecret) {
-                    setTotpSecret('BP-' + generateSecureSeed() + '-' + generateSecureSeed());
-                }
+                // No made-up secret: a 2FA secret the node doesn't hold would lock nobody out and help nobody in.
             }
         };
         enrollTotp();
@@ -150,6 +150,7 @@ export function ColdStartWizard({
     // Step 5: Founding Invites
     const [foundingCards, setFoundingCards] = useState<GeneratedCard[]>([]);
     const [generatingInvites, setGeneratingInvites] = useState(false);
+    const [foundingError, setFoundingError] = useState<string | null>(null);
 
     // Helper: clean node base URL
     const getCleanNodeUrl = () => {
@@ -214,7 +215,7 @@ key, ends the session, and writes a permanent, public audit entry:
 KEEP THIS FILE SECURE AND STORED OFF-NODE (OFFLINE USB / SAFE).
 =====================================================
 Emergency Seed: ${emergencySeed}
-TOTP Secret:    ${totpSecret}
+TOTP Secret:    ${totpSecret || '(none: the node did not return a 2FA secret)'}
 =====================================================`;
 
         const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
@@ -318,14 +319,16 @@ TOTP Secret:    ${totpSecret}
         }
     };
 
-    // Step 5: Generate 3 founding invites with printable QR cards
+    // Step 5: Generate 3 founding invites with printable QR cards. Every card carries a code the node issued; when
+    // the node refuses we stop and show its reason — a made-up code would be printed and fail at the door.
     const handleGenerateFoundingInvites = async () => {
         setGeneratingInvites(true);
-        const cards: GeneratedCard[] = [];
+        setFoundingError(null);
+        const cards: GeneratedCard[] = [...foundingCards];
         const baseUrl = getCleanNodeUrl();
         try {
-            for (let i = 0; i < 3; i++) {
-                let code = `FOUNDING-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+            while (cards.length < FOUNDING_INVITE_COUNT) {
+                let code: string;
                 try {
                     const res = await generateNodeInvite(
                         activeNode.url,
@@ -333,9 +336,10 @@ TOTP Secret:    ${totpSecret}
                         'trusted',
                         effectiveTfaToken
                     );
-                    if (res?.code) code = res.code;
-                } catch {
-                    // Fallback to offline code if node is isolated
+                    code = res.code;
+                } catch (err: unknown) {
+                    setFoundingError(err instanceof Error && err.message ? err.message : 'The node could not be reached');
+                    break;
                 }
                 const url = `${baseUrl}/?invite=${encodeURIComponent(code)}`;
                 const qrUrl = generateOfflineQrUrl(url);
@@ -353,7 +357,6 @@ TOTP Secret:    ${totpSecret}
 
     const handleFinishWizard = () => {
         localStorage.setItem('bp_cold_start_completed', 'true');
-        localStorage.setItem('bp_founding_invites_status', '1/3 founding invites claimed · node ready for trade');
         onComplete();
     };
 
@@ -830,7 +833,46 @@ TOTP Secret:    ${totpSecret}
                         )}
                     </div>
 
+                    {foundingError && !generatingInvites && (
+                        <div role="alert" className="p-5 rounded-2xl bg-red-950/60 border border-red-800 space-y-3">
+                            <h4 className="text-sm font-bold text-red-200 m-0 break-words">
+                                {foundingCards.length === 0
+                                    ? 'No founding invites were made'
+                                    : `Only ${foundingCards.length} of ${FOUNDING_INVITE_COUNT} founding invites were made`}
+                            </h4>
+                            <p className="text-xs text-red-100 m-0 break-words">
+                                The node said: <strong>{foundingError}</strong>
+                            </p>
+                            <p className="text-xs text-red-200/80 m-0 break-words">
+                                {foundingCards.length === 0
+                                    ? 'Nothing here is safe to print. Try again, or finish setup now and make invites later under People → Invites.'
+                                    : 'The cards below are real. Try again for the rest, or make them later under People → Invites.'}
+                            </p>
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleGenerateFoundingInvites}
+                                    className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all"
+                                >
+                                    {foundingCards.length === 0
+                                        ? 'Try again'
+                                        : `Try again for the other ${FOUNDING_INVITE_COUNT - foundingCards.length}`}
+                                </button>
+                                {foundingCards.length === 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={handleFinishWizard}
+                                        className="min-h-[48px] px-5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
+                                    >
+                                        Finish setup without invites →
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {foundingCards.length === 0 ? (
+                        !(foundingError && !generatingInvites) && (
                         <div className="p-8 rounded-2xl bg-nature-950 text-center space-y-4">
                             <p className="text-sm font-semibold text-white m-0">
                                 Ready to generate the 3 founding member invite cards?
@@ -847,6 +889,7 @@ TOTP Secret:    ${totpSecret}
                                 {generatingInvites ? 'Generating Cards...' : 'Generate 3 Founding Invites'}
                             </button>
                         </div>
+                        )
                     ) : (
                         <div className="space-y-6">
                             {/* 3 Printable Cards Grid */}
@@ -892,7 +935,7 @@ TOTP Secret:    ${totpSecret}
                                         ✓ Cold-start setup complete!
                                     </span>
                                     <span className="text-nature-300">
-                                        Exit to home screen with 1/3 founding invites claimed · node ready for trade.
+                                        {foundingCards.length} founding invite{foundingCards.length === 1 ? '' : 's'} made by the node · each works once, for 30 days.
                                     </span>
                                 </div>
                                 <button

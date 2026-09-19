@@ -111,16 +111,6 @@ export function HomeScreen({
         });
     }
 
-    const foundingStatus = typeof window !== 'undefined' ? localStorage.getItem('bp_founding_invites_status') : null;
-    if (foundingStatus) {
-        actionItems.push({
-            icon: '🎟️',
-            text: foundingStatus,
-            tab: 'people',
-            sub: 'invites',
-        });
-    }
-
     if (storagePercent >= 80) {
         actionItems.push({
             icon: '💾',

@@ -880,9 +880,16 @@ export async function generateNodeInvite(
         body: JSON.stringify({ password: adminPassword, type }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        // The node's own words (e.g. 'Invalid password', 'Only an owner or admin of this node can issue invites').
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
-    return res.json();
+    const data = await res.json();
+    // A 200 without a code is not an invite. Never hand the caller something to print.
+    if (!data || typeof data.code !== 'string' || !data.code.trim()) {
+        throw new Error('The node answered but sent no invite code');
+    }
+    return data;
 }
 
 export async function updateNodeUserTier(

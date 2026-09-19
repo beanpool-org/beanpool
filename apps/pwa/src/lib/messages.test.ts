@@ -128,7 +128,7 @@ describe('PWA Messaging Parity & Review Fixes', () => {
             // Group chat: readByPeer must be false even if cursors exist
             const groupConv: Partial<Conversation> = {
                 id: 'grp-1',
-                type: 'group',
+                type: 'group_thread',
                 peerLastReadAt: '2026-09-09T00:02:00.000Z',
             };
             const isMe = msg.authorPubkey === myPubkey;

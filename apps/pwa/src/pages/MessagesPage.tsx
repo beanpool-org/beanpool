@@ -153,10 +153,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
     const [showNewDm, setShowNewDm] = useState(false);
-    const [showNewGroup, setShowNewGroup] = useState(false);
     const [members, setMembers] = useState<Member[]>([]);
-    const [groupName, setGroupName] = useState('');
-    const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<number | null>(null);
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
@@ -523,25 +520,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
-    async function handleCreateGroup() {
-        if (selectedMembers.length < 1 || !groupName.trim()) return;
-        try {
-            const result = await createConversationApi(
-                'group',
-                [identity.publicKey, ...selectedMembers],
-                identity.publicKey,
-                groupName.trim(),
-            );
-            setActiveConv(result.conversation);
-            setShowNewGroup(false);
-            setGroupName('');
-            setSelectedMembers([]);
-            await loadConversations();
-        } catch (err: any) {
-            alert(err.message || 'Failed to create group');
-        }
-    }
-
     // E2E key context for a 2-party DM, or null for groups/unknown peer (NAT-1).
     function dmCtxFor(conv: Conversation | null): DMKeyContext | null {
         if (!conv || conv.type !== 'dm') return null;
@@ -660,7 +638,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     function getConversationTitle(conv: Conversation): string {
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || 'Event chat';
-        if (conv.type === 'group') return conv.name || 'Group';
+        if (conv.type === 'group_thread') return conv.name || 'Group';
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
         const otherPubkey = conv.participants.find(p => p !== identity.publicKey) || '';
@@ -695,13 +673,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         );
     }
 
-    function toggleMemberSelection(pubkey: string) {
-        setSelectedMembers(prev =>
-            prev.includes(pubkey)
-                ? prev.filter(p => p !== pubkey)
-                : [...prev, pubkey]
-        );
-    }
 
     // ===================== RENDER =====================
 
@@ -729,45 +700,35 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         boxSizing: 'border-box',
     };
 
-    // New DM / Group overlays
-    if (showNewDm || showNewGroup) {
+    // New DM overlay. (The old "👥 Group" chat was removed on 2026-09-19: a group chat is now the chat every
+    // Commons group owns, and the Talk tab's Groups list and "New group" come in the next slice.)
+    if (showNewDm) {
         return (
             <div className="p-4 max-w-xl mx-auto w-full">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                     <button
-                        onClick={() => { setShowNewDm(false); setShowNewGroup(false); }}
+                        onClick={() => setShowNewDm(false)}
                         style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
                         ← Back
                     </button>
                     <h2 style={{ fontSize: '1.2rem', margin: 0 }}>
-                        {showNewGroup ? 'New Group' : 'New Message'}
+                        New Message
                     </h2>
                 </div>
 
-                {showNewGroup && (
-                    <input
-                        type="text"
-                        value={groupName}
-                        onChange={(e) => setGroupName(e.target.value)}
-                        placeholder="Group name"
-                        style={{ ...inputStyle, width: '100%', marginBottom: '1rem', borderRadius: '10px' }}
-                    />
-                )}
-
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                    {showNewGroup ? 'Select members to add:' : 'Choose someone to message:'}
+                    Choose someone to message:
                 </p>
                 {members.map(m => (
                     <div
                         key={m.publicKey}
-                        onClick={() => showNewGroup ? toggleMemberSelection(m.publicKey) : handleStartDm(m.publicKey)}
+                        onClick={() => handleStartDm(m.publicKey)}
                         style={{
                             ...cardStyle,
                             display: 'flex',
                             alignItems: 'center',
                             gap: '0.75rem',
-                            borderColor: selectedMembers.includes(m.publicKey) ? 'var(--accent)' : 'var(--border-primary)',
                         }}
                     >
                         <div style={{
@@ -777,27 +738,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {renderAvatar(m.avatarUrl, m.callsign, 36)}
                         </div>
                         <span style={{ fontWeight: 600 }}>{m.callsign}</span>
-                        {showNewGroup && selectedMembers.includes(m.publicKey) && (
-                            <span style={{ marginLeft: 'auto', color: 'var(--accent)' }}>✓</span>
-                        )}
                     </div>
                 ))}
 
-                {showNewGroup && selectedMembers.length > 0 && (
-                    <button
-                        onClick={handleCreateGroup}
-                        disabled={!groupName.trim()}
-                        style={{
-                            width: '100%', padding: '0.85rem', borderRadius: '10px',
-                            border: 'none', background: groupName.trim() ? 'var(--accent)' : 'var(--bg-hover)',
-                            color: groupName.trim() ? '#fff' : 'var(--text-muted)', fontSize: '1rem', fontWeight: 600,
-                            cursor: groupName.trim() ? 'pointer' : 'not-allowed',
-                            fontFamily: 'inherit', marginTop: '1rem',
-                        }}
-                    >
-                        Create Group ({selectedMembers.length + 1} members)
-                    </button>
-                )}
             </div>
         );
     }
@@ -854,7 +797,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <div style={{ fontWeight: 600, fontSize: '1rem' }}>
                                 {getConversationTitle(activeConv)}
                             </div>
-                            {activeConv.type === 'group' && (
+                            {activeConv.type === 'group_thread' && (
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                     {activeConv.participants.length} members
                                 </div>
@@ -1128,7 +1071,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     alignItems: isMe ? 'flex-end' : 'flex-start',
                                 }}
                             >
-                                {!isMe && activeConv.type === 'group' && (
+                                {!isMe && activeConv.type === 'group_thread' && (
                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
                                         {membersByPublicKey.get(msg.authorPubkey)?.callsign
                                             || msg.authorPubkey.substring(0, 8)}
@@ -1587,17 +1530,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     >
                         ✉️ New DM
                     </button>
-                    <button
-                        onClick={() => { setShowNewGroup(true); loadMembers(); }}
-                        style={{
-                            padding: '0.4rem 0.75rem', borderRadius: '8px',
-                            border: '1px solid var(--border-input)', background: 'var(--bg-hover)',
-                            color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer',
-                            fontFamily: 'inherit',
-                        }}
-                    >
-                        👥 Group
-                    </button>
                 </div>
             </div>
 
@@ -1695,7 +1627,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </div>
                                 ) : (
                                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                                        {conv.type === 'group' ? (
+                                        {conv.type === 'group_thread' ? (
                                             <div style={{
                                                 width: '44px', height: '44px', borderRadius: '50%',
                                                 background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
@@ -1740,7 +1672,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     )}
                                     {!conv.postTitle && (
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {conv.type === 'group' ? `${conv.participants.length} members` : new Date(conv.createdAt).toLocaleDateString()}
+                                            {conv.type === 'group_thread' ? `${conv.participants.length} members` : new Date(conv.createdAt).toLocaleDateString()}
                                         </div>
                                     )}
                                     

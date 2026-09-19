@@ -569,8 +569,11 @@ export async function deletePulseItem(itemId: string): Promise<{ success: boolea
 
 export interface Conversation {
     id: string;
-    /** `event_thread` is an event's chat — its id is the event's post id (docs/events-on-the-map.md §2.1). */
-    type: 'dm' | 'group' | 'event_thread';
+    /**
+     * `event_thread` is an event's chat — its id is the event's post id (docs/events-on-the-map.md §2.1).
+     * `group_thread` is a Commons group's chat — its id is the group id (groups redesign, 2026-09-19).
+     */
+    type: 'dm' | 'group_thread' | 'event_thread';
     name: string | null;
     participants: string[];
     createdBy: string;
@@ -627,7 +630,7 @@ export interface MessageAttachment {
 }
 
 export async function createConversationApi(
-    type: 'dm' | 'group',
+    type: 'dm',
     participants: string[],
     createdBy: string,
     name?: string,

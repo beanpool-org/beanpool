@@ -2,8 +2,9 @@
  * Test Suite: sealed backups, restore (sealed keys slice 3; sealed-keys.md §6.1–6.2, the slice 3 row of §10).
  *
  *  1. Seal → restore round trip onto a FRESH data dir (a second process with its own data dir, its own genesis and
- *     its own node key) with the recovery code: the database, the node key, community key, genesis, connectors,
- *     the admin/2FA credentials, the roles and the recovery code record all come back.
+ *     its own node key) with the recovery code, through the real HTTPS server as the operator manual's curl line
+ *     sends it: the database, the node key, community key, genesis, connectors, the admin/2FA credentials, the
+ *     roles and the recovery code record all come back.
  *  2. A legacy plain `.tar.gz` still restores (database only; its fresh keys stay — a plain archive's keys are
  *     never installed).
  *  3. The hostile-archive suite through the sealed path: a `../` member, a symlink, a hardlink and an absolute
@@ -122,13 +123,20 @@ async function child(): Promise<void> {
         communityId: JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId,
     };
 
-    const { server, base } = await serveBackupRoutes();
+    // The real HTTPS server, with the request the operator manual gives (curl --data-binary sends
+    // application/x-www-form-urlencoded), so the upload goes through every middleware a node runs.
+    const { initTls } = await import('./services/tls.js');
+    const { startHttpsServer } = await import('./https-server.js');
+    const { setRestoreRestartForTests } = await import('./routes/backup.js');
+    setRestoreRestartForTests(() => { /* the test inspects the data dir instead of restarting */ });
+    await initTls();
+    const port = 20000 + Math.floor(Math.random() * 20000);
+    await startHttpsServer(port);
     resetAdminAuthTarpit();
-    const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/octet-stream' };
+    const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
-    const res = await fetch(base + '/api/local/admin/restore', { method: 'POST', headers, body: fs.readFileSync(file) });
+    const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: fs.readFileSync(file) });
     const body = await res.json();
-    server.close();
 
     const read = (f: string) => { try { return fs.readFileSync(path.join(dataDir, f)); } catch { return null; } };
     const Database = (await import('better-sqlite3')).default;

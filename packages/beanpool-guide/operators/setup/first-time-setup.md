@@ -17,7 +17,7 @@ The server reads ADMIN_PASSWORD only on its first start. After that it keeps a s
 
 ## What the first start creates
 
-- **data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.
+- **data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. A backup from Settings carries both, locked to the owners and the recovery code.
 - **data/state.db**: the database, with every member, post, deal and vote.
 - **data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.
 

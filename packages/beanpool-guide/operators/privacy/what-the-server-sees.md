@@ -13,7 +13,7 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## What the server holds in the clear
 
-Anyone with the server's files can read these, and so can anyone with a backup:
+Anyone with the server's files can read these, and so can anyone who can open a backup: any owner, or whoever holds the printed recovery code. A backup made before backups were locked can be read by anyone who has it:
 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
@@ -24,7 +24,7 @@ Anyone with the server's files can read these, and so can anyone with a backup:
 
 Votes on Decisions are secret in the apps and in Settings: everyone sees only the totals, and each member sees their own vote. But the database records each member's vote, to count it and to stop anyone voting twice.
 
-So every owner and admin can read how each member voted: all of them can download a backup from Settings, and whoever runs the machine can copy the files. Tell your members this plainly. Keep backups encrypted, and let only people the community trusts hold them.
+So every owner can read how each member voted: any one of them can open a backup, and whoever runs the machine can copy the files. An admin can download a backup but cannot open it. Tell your members this plainly, and let only people the community trusts be owners or hold the recovery code.
 
 ## Who can read what over the internet
 

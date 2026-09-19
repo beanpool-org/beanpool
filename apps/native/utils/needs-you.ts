@@ -189,7 +189,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
         });
     }
 
-    // Muted chats stay quiet here too (a lapsed mute is not a mute). Enterprise keeper chats count like any
+    // Muted chats stay quiet here too (a lapsed mute is not a mute). Enterprise discussion threads count like any
     // other: since groups slice 2 they have a screen, and Talk's Groups total counts them.
     const groups = (i.groupChats || []).filter(g => g.unreadCount > 0 && !isMuted(g.mute as YourChatMute | null, new Date(i.now)));
     if (groups.length) {

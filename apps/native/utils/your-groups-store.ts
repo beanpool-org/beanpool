@@ -12,7 +12,7 @@
  * Pure apart from the injected fetcher, so it is unit tested.
  */
 
-import { markChatRead, type YourChat, type YourChatsResponse } from './your-groups';
+import { markChatRead, setChatMute, type YourChat, type YourChatMute, type YourChatsResponse } from './your-groups';
 
 export interface YourGroupsState {
     /** null until the first answer. */
@@ -89,6 +89,12 @@ export function createYourGroupsStore(fetcher: () => Promise<YourChatsResponse>,
                 const items = markChatRead(state.items, conversationId);
                 if (items !== state.items) set({ items });
             }
+        },
+        /** This member muted or unmuted a chat: its row (and so the Groups total) shows it now, not at the next refresh. */
+        setMute(conversationId: string, mute: YourChatMute | null) {
+            if (!state.items) return;
+            const items = setChatMute(state.items, conversationId, mute);
+            if (items !== state.items) set({ items });
         },
         /**
          * Forget everything (another identity on this phone). Silent: it is called while a screen renders, and every

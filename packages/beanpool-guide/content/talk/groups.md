@@ -11,7 +11,7 @@ A group is a place for some people rather than everyone: your street, a garden c
 
 ## Your groups
 
-Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the enterprises you keep (🥖) and the events you are going to (📅). Each shows its latest message and how many you have not read.
+Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the enterprises you keep (🥖) and the events you are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read.
 
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.

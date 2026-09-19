@@ -5194,7 +5194,7 @@ export async function postGroupChatMessage(groupId: string, text: string, client
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId });
 }
 
-/** An enterprise's keeper chat. */
+/** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
 export async function getEnterpriseChat(treasury: string, limit = 50): Promise<any> {
     const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/thread?limit=${limit}`);
     const body = await res.json().catch(() => ({}));

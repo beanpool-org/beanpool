@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createYourGroupsStore } from '../your-groups-store';
-import type { YourChatsResponse } from '../your-groups';
+import { chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, isMuted, groupsUnreadTotal, type YourChatsResponse } from '../your-groups';
 
 const chat = (conversationId: string, unreadCount: number) => ({
     kind: 'group', badge: null, id: conversationId, conversationId, name: conversationId, avatarUrl: null, role: 'member',
@@ -82,5 +82,60 @@ describe('your groups store: one list for Talk and Commons', () => {
         off();
         store.reset();
         expect(store.getState()).toEqual({ items: null, error: null, loading: false });
+    });
+});
+
+describe('an enterprise chat mute survives leaving the chat (PR #963 review round 1, B2)', () => {
+    const ent = (id: string) => ({ ...chat(id, 3), kind: 'enterprise', badge: '🥖' });
+    const always = (id: string) => ({ conversationId: id, mutedUntil: null, always: true });
+
+    it('mute Always → leave → reopen: the header shows muted and the menu offers Unmute, which works', async () => {
+        const node = slowNode();
+        const store = createYourGroupsStore(node.fetcher);
+        store.refresh();
+        await node.answer([ent('bakery')]);
+
+        // First visit: not muted; the member picks Always. The screen records it on the row.
+        let mute = chatMuteFromRows(store.getState().items, 'bakery');
+        expect(muteMenuLabel(mute)).toBe('Mute notifications');
+        store.setMute('bakery', always('bakery'));
+        expect(groupsUnreadTotal(store.getState().items)).toBe(0);
+
+        // Leave, reopen: the screen starts from the row, before the chat loads.
+        mute = chatMuteFromRows(store.getState().items, 'bakery');
+        expect(isMuted(mute)).toBe(true);
+        expect(muteMenuLabel(mute)).toBe('Unmute');
+
+        // An older node's thread answer carries no mute: what we had stays. A current node's answer wins.
+        expect(chatMuteFromAnswer({ messages: [] } as any, mute)).toEqual(always('bakery'));
+        expect(chatMuteFromAnswer({ mute: always('bakery') }, null)).toEqual(always('bakery'));
+
+        // Unmute.
+        store.setMute('bakery', null);
+        mute = chatMuteFromRows(store.getState().items, 'bakery');
+        expect(muteMenuLabel(mute)).toBe('Mute notifications');
+        expect(groupsUnreadTotal(store.getState().items)).toBe(3);
+        expect(chatMuteFromAnswer({ mute: null }, always('bakery'))).toBeNull();
+    });
+
+    it('the next refresh from the node shows the mute too (the node answers with it)', async () => {
+        const node = slowNode();
+        const store = createYourGroupsStore(node.fetcher);
+        store.refresh();
+        await node.answer([{ ...ent('bakery'), mute: always('bakery') }]);
+        expect(muteMenuLabel(chatMuteFromRows(store.getState().items, 'bakery'))).toBe('Unmute');
+    });
+
+    it('a chat not in the list starts unmuted and setMute leaves the list alone', async () => {
+        const node = slowNode();
+        const store = createYourGroupsStore(node.fetcher);
+        expect(chatMuteFromRows(store.getState().items, 'x')).toBeNull();
+        store.setMute('x', always('x'));
+        expect(store.getState().items).toBeNull();
+        store.refresh();
+        await node.answer([ent('bakery')]);
+        const before = store.getState().items;
+        store.setMute('x', always('x'));
+        expect(store.getState().items).toBe(before);
     });
 });

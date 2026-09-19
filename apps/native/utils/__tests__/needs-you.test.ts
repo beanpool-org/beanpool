@@ -93,7 +93,7 @@ describe('What needs you: which kinds show', () => {
         expect(e[0].target).toEqual({ to: 'chat', conversationId: 'g3', thread: 'group' });
     });
 
-    it('an enterprise keeper chat counts, and opens as one (groups slice 2 gave it a screen)', () => {
+    it('an enterprise discussion thread counts, and opens as one (groups slice 2 gave it a screen)', () => {
         const e = buildNeedsYou(quiet({ groupChats: [group('ent', 2, { kind: 'enterprise' })] }));
         expect(e[0]).toMatchObject({ kind: 'group', count: 1, target: { to: 'chat', conversationId: 'ent', thread: 'enterprise' } });
     });

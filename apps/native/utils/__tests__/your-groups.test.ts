@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    ENTERPRISE_CHAT_NOTICE,
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
     threadMessageText, chatEmoji, groupsUnreadTotal, rowBadge, yourGroupsPaneState, markChatRead, showInvitePrompt,
     inviteLandingPhase, inviteLandingFacts, inviteLandingHref, inviteLandingPreviewFromParams,
@@ -243,5 +244,12 @@ describe('invite landing states', () => {
         expect(inviteLandingPreviewFromParams({ memberCount: 'lots' }).memberCount).toBeUndefined();
         expect(inviteLandingFacts({ memberCount: 1 })).toBe('1 member');
         expect(inviteLandingFacts({})).toBe('');
+    });
+});
+
+describe('enterprise chat notice (PR #963 review round 1, B1)', () => {
+    it('says every member of the community can read it — never that it is the keepers\' own', () => {
+        expect(ENTERPRISE_CHAT_NOTICE).toBe("Any member of this community can read this, and so can the node's operator.");
+        expect(ENTERPRISE_CHAT_NOTICE).not.toMatch(/keeper/i);
     });
 });

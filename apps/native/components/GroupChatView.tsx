@@ -1,8 +1,10 @@
 /**
- * GroupChatView — the chat every Commons group owns, and every enterprise's keeper chat (groups decisions 3, 8, 9,
- * 12, 13). One screen shape for both: the owner header ("🌻 Garden Crew · group", "🥖 Bakery · enterprise"),
- * bubbles, grey centred system lines (joins, leaves, role changes), a composer, and the honest notice that the
- * node's operator can read it. Both chats are node-readable `plaintext-v1`, unlike DMs.
+ * GroupChatView — the chat every Commons group owns, and every enterprise's public discussion thread (groups
+ * decisions 3, 8, 9, 12, 13). One screen shape for both: the owner header ("🌻 Garden Crew · group", "🥖 Bakery ·
+ * enterprise"), bubbles, grey centred system lines (joins, leaves, role changes), a composer, and an honest notice
+ * of who can read it. Both chats are node-readable `plaintext-v1`, unlike DMs. A group's chat is its members' only;
+ * an enterprise's thread is readable by any member of the community (the node checks no role on its read) and is
+ * the same thread its page shows as "Public coordination for this enterprise".
  *
  * A group whose convenor is still alone in it opens on "Who do you want to invite?" with a big Invite people
  * button (decision 8) — skippable; Invite people then lives in the header menu for good.
@@ -28,7 +30,11 @@ import {
     type GroupItem,
 } from '../utils/db';
 import { decodeEventChatText } from '../utils/events';
-import { isMuted, threadMessageText, showInvitePrompt as shouldShowInvitePrompt, type YourChatMute } from '../utils/your-groups';
+import {
+    isMuted, threadMessageText, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel,
+    ENTERPRISE_CHAT_NOTICE,
+    type YourChatMute,
+} from '../utils/your-groups';
 import { yourGroupsStore } from './useYourGroups';
 import { hapticTick } from '../utils/haptics';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
@@ -71,7 +77,9 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [inviteOpen, setInviteOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
     const [inviteSkipped, setInviteSkipped] = useState(false);
-    const [mute, setMute] = useState<YourChatMute | null>(null);
+    // Seeded from this chat's "Your groups" row, so a mute set on an earlier visit shows (and can be undone) before
+    // the chat loads — and on a node too old to return the mute with an enterprise thread.
+    const [mute, setMute] = useState<YourChatMute | null>(() => chatMuteFromRows(yourGroupsStore.getState().items, id));
     const draftRef = useRef('');
     // One id per message being written, so a send retried after a dropped connection is stored once (the node
     // de-duplicates on it). A new one once the node has it.
@@ -116,10 +124,11 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             if (kind === 'group') {
                 chat = await getGroupChat(id);
                 setView(chat);
-                setMute(chat?.mute ?? null);
+                setMute(m => chatMuteFromAnswer(chat, m));
             } else {
                 chat = await getEnterpriseChat(id);
-                setView({ ...chat, canPost: !chat.readOnly, notice: "Visible to this enterprise's keepers and this node's operator." });
+                setView({ ...chat, canPost: !chat.readOnly, notice: ENTERPRISE_CHAT_NOTICE });
+                setMute(m => chatMuteFromAnswer(chat, m));
             }
             setError(null);
             const msgs: any[] = chat?.messages || [];
@@ -197,7 +206,9 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         setMuteOpen(false);
         try {
             const res = await muteChatApi(id, duration);
-            setMute(duration === 'off' ? null : (res?.mute ?? { conversationId: id, mutedUntil: null, always: duration === 'always' }));
+            const next = duration === 'off' ? null : (res?.mute ?? { conversationId: id, mutedUntil: null, always: duration === 'always' });
+            setMute(next);
+            yourGroupsStore.setMute(id, next);
         } catch (e: any) {
             Alert.alert('Not changed', e?.message || 'Could not reach the node.');
         }
@@ -289,7 +300,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     const menuItems: Array<{ icon: string; label: string; onPress: () => void; hidden?: boolean }> = [
         { icon: 'account-plus', label: 'Invite people', hidden: kind !== 'group' || !isConvenor, onPress: () => { setMenuOpen(false); setInviteOpen(true); } },
-        { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muted ? 'Unmute' : 'Mute notifications', onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
+        { icon: muted ? 'bell-ring-outline' : 'bell-off-outline', label: muteMenuLabel(mute), onPress: () => { setMenuOpen(false); if (muted) setMuteTo('off'); else setMuteOpen(true); } },
         { icon: 'information-outline', label: kind === 'group' ? 'Group info' : 'Enterprise page', onPress: () => { setMenuOpen(false); openOwner(); } },
     ];
 
@@ -359,7 +370,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                             value={draft}
                             onChangeText={(t) => { draftRef.current = t; setDraft(t); }}
                             // A long name wrapped the placeholder to three lines at 320dp; short ones read better named.
-                            placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message the keepers…')}
+                            placeholder={name.length <= 18 ? `Message ${name}…` : (kind === 'group' ? 'Message the group…' : 'Message…')}
                             placeholderTextColor={colors.text.muted}
                             accessibilityLabel={`Message ${name}`}
                             multiline
@@ -391,7 +402,8 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                                         <Text style={styles.menuLabel}>{c.label}</Text>
                                     </Pressable>
                                 ))}
-                                <Text style={styles.menuHint}>@mentions still reach you.</Text>
+                                {/* Only a group's chat sends @mention pushes; an enterprise thread has none to let through. */}
+                                {kind === 'group' && <Text style={styles.menuHint}>@mentions still reach you.</Text>}
                             </>
                         ) : menuItems.filter(m => !m.hidden).map(m => (
                             <Pressable key={m.label} style={styles.menuRow} onPress={m.onPress} accessibilityRole="button">

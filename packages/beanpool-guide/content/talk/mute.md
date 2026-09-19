@@ -16,10 +16,12 @@ To undo it, tap **⋮**, then **Unmute**.
 
 ## What muting does
 
-- It stops that chat's alerts. The chat still shows new messages.
-- Someone who @mentions you still reaches you. See "Mentions".
+- In a group's chat, it stops that chat's alerts. Someone who @mentions you still reaches you. See "Mentions".
+- An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.
+- The chat still shows new messages.
 - In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.
 - The top bar stays quiet about it too.
+- The mute stays when you leave the chat. When you open it again, the top says **muted**.
 
 ## Other chats
 

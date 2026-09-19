@@ -44,7 +44,10 @@ Sent messages cannot be deleted. Think before you send.
 ## What is private
 
 - A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.
-- Group, enterprise and event chats are not encrypted. The people in them and the people who run your community's server can read them.
+- Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.
+- A group's chat can also be read by the group's members.
+- An event's chat can also be read by the host and everyone going.
+- An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers.
 
 ## Blocking someone from a chat
 

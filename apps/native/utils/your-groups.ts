@@ -151,6 +151,14 @@ export function unreadLabel(n: number): string {
     return n > 99 ? '99+' : String(n);
 }
 
+/**
+ * The line above an enterprise chat's message box. The thread is the enterprise's public discussion: the node
+ * checks no role when it is read, any active member may post, and the enterprise's page shows it as "Public
+ * coordination for this enterprise". It is not the keepers' private chat, so never say it is (PR #963 review, B1).
+ * A group's chat gets its line from the node (members only); an event chat's is EVENT_CHAT_NOTICE.
+ */
+export const ENTERPRISE_CHAT_NOTICE = "Any member of this community can read this, and so can the node's operator.";
+
 /** Muted until a time in the future, or for good. */
 export function isMuted(mute: YourChatMute | null | undefined, now: Date = new Date()): boolean {
     if (!mute) return false;
@@ -215,6 +223,32 @@ export function yourGroupsPaneState(items: ReadonlyArray<unknown> | null, error:
 export function markChatRead<T extends Pick<YourChat, 'conversationId' | 'unreadCount'>>(items: T[], conversationId: string): T[] {
     if (!items.some(i => i.conversationId === conversationId && i.unreadCount)) return items;
     return items.map(i => (i.conversationId === conversationId && i.unreadCount ? { ...i, unreadCount: 0 } : i));
+}
+
+/**
+ * A chat's mute as "Your groups" last knew it — what a chat screen shows before the chat itself has loaded, and all
+ * it has on a node too old to send the mute with an enterprise thread. Without it an enterprise chat muted on an
+ * earlier visit opened unmuted, with no Unmute in its menu.
+ */
+export function chatMuteFromRows(items: ReadonlyArray<Pick<YourChat, 'id' | 'conversationId' | 'mute'>> | null | undefined, conversationId: string): YourChatMute | null {
+    const row = (items || []).find(i => i.conversationId === conversationId || i.id === conversationId);
+    return row?.mute ?? null;
+}
+
+/** The chat's answer wins when it carries a mute (null included); an answer without the field keeps what we had. */
+export function chatMuteFromAnswer(answer: { mute?: YourChatMute | null } | null | undefined, current: YourChatMute | null): YourChatMute | null {
+    return answer && 'mute' in answer ? (answer.mute ?? null) : current;
+}
+
+/** Record a mute (or null for unmuted) on the chat's row, so the Groups total and the next visit see it at once. */
+export function setChatMute<T extends Pick<YourChat, 'conversationId' | 'mute'>>(items: T[], conversationId: string, mute: YourChatMute | null): T[] {
+    if (!items.some(i => i.conversationId === conversationId)) return items;
+    return items.map(i => (i.conversationId === conversationId ? { ...i, mute } : i));
+}
+
+/** The chat menu's mute row: Unmute while muted, otherwise the way into the mute choices. */
+export function muteMenuLabel(mute: YourChatMute | null | undefined, now: Date = new Date()): 'Unmute' | 'Mute notifications' {
+    return isMuted(mute, now) ? 'Unmute' : 'Mute notifications';
 }
 
 /**

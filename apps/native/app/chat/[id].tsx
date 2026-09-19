@@ -114,8 +114,8 @@ export default function ChatRoute() {
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string;
     }>();
     const [isEventChat, setIsEventChat] = useState(event === '1');
-    // A group's chat and an enterprise's keeper chat are node-readable threads like the event chat, on their own
-    // screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
+    // A group's chat and an enterprise's public discussion thread are node-readable threads like the event chat, on
+    // their own screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
     const [threadKind, setThreadKind] = useState<'group' | 'enterprise' | null>(
         group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
     );

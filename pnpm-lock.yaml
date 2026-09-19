@@ -121,6 +121,9 @@ importers:
       '@beanpool/core':
         specifier: workspace:*
         version: link:../../packages/beanpool-core
+      '@beanpool/guide':
+        specifier: workspace:*
+        version: link:../../packages/beanpool-guide
       '@expo/config-plugins':
         specifier: ~55.0.0
         version: 55.0.10
@@ -561,6 +564,8 @@ importers:
       vitest:
         specifier: ^3.0.5
         version: 3.2.7(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/beanpool-guide: {}
 
 packages:
 

@@ -1623,14 +1623,14 @@ export default function SettingsScreen() {
                     </View>
                 </View>
 
-                {/* ─── The BeanPool project (goes to beanpool.org, not to this community's node) ─── */}
-                <Text style={styles.sectionHeader}>BEANPOOL PROJECT</Text>
+                {/* ─── The members' BeanPool sheet: your community, guides, Suggest a change, what's new ─── */}
+                <Text style={styles.sectionHeader}>BEANPOOL</Text>
                 <View style={styles.menuGroup}>
-                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/suggest-change')} accessibilityRole="button" accessibilityLabel="Suggest a change to BeanPool">
-                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
+                    <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => router.push('/beanpool')} accessibilityRole="button" accessibilityLabel="BeanPool: help and how it works">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🫘</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>Suggest a change to BeanPool</Text>
-                            <Text style={styles.menuSub}>Ideas and problems go to the project team</Text>
+                            <Text style={styles.menuText}>BeanPool: help & how it works</Text>
+                            <Text style={styles.menuSub}>Guides, the rules, questions, what's new, Suggest a change</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>

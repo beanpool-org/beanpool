@@ -1526,7 +1526,7 @@ export default function MarketScreen() {
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" />} below={categoryPanelOverlay}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" testID="page-title-market" />} below={categoryPanelOverlay}>
                 {controls}
             </QuickReturnBlock>
             <Animated.FlatList

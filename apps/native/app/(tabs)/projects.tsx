@@ -513,7 +513,7 @@ export default function ProjectsScreen() {
                         <View style={styles.headerInfo}>
                             {/* The page's one large title, first thing in the list, so it scrolls away with it.
                                 The list pads the sides, hence inset 0. */}
-                            <PageTitle title="Commons" inset={0} right={
+                            <PageTitle title="Commons" inset={0} testID="page-title-commons" right={
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"

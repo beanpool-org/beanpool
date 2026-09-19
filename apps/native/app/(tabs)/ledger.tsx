@@ -673,6 +673,7 @@ export default function LedgerScreen() {
                 {/* ── Balance Hero ── */}
                 <View style={[styles.walletHero, { backgroundColor: heroBg, borderColor: heroBorder }]}>
                     <Pressable
+                        testID="bean-sheet-open"
                         accessibilityRole="button"
                         accessibilityLabel="About your balance"
                         hitSlop={8}
@@ -889,7 +890,7 @@ export default function LedgerScreen() {
                 style={{ flex: 1 }}
             >
 
-            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} />
+            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} testID="page-title-ledger" />
 
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
@@ -956,7 +957,7 @@ export default function LedgerScreen() {
                     <MaterialCommunityIcons name="shield-star-outline" size={15} color={activeTab === 'trust' ? tier.color : colors.text.muted} />
                     <Text style={[styles.tabText, activeTab === 'trust' && { color: tier.color, fontWeight: '800' }]}>Levels</Text>
                 </Pressable>
-                <Pressable style={[styles.tab, activeTab === 'financials' && styles.tabActive]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'financials' }} onPress={() => setActiveTab('financials')}>
+                <Pressable testID="ledger-wallet-tab" style={[styles.tab, activeTab === 'financials' && styles.tabActive]} accessibilityRole="button" accessibilityState={{ selected: activeTab === 'financials' }} onPress={() => setActiveTab('financials')}>
                     <MaterialCommunityIcons name="swap-horizontal" size={15} color={activeTab === 'financials' ? colors.brand.primary : colors.text.muted} />
                     <Text style={[styles.tabText, activeTab === 'financials' && { color: colors.brand.primary, fontWeight: '800' }]}>Wallet</Text>
                 </Pressable>

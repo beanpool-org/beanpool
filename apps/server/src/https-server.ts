@@ -125,7 +125,8 @@ import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
-import { clientIp, resolveClientIp } from './client-ip.js';
+import { clientIp, clientLimiterKey, resolveClientIp } from './client-ip.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, passwordBrakeRetryAfter } from './password-brake.js';
 import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 
 
@@ -571,9 +572,23 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 
             if (ticket && isValidWsTicket(ticket)) {
                 authorized = true;
-            } else if (auth && config.adminHash && config.salt && await verifyPasswordAsync(auth, config.adminHash, config.salt)) {
-                logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                authorized = true;
+            } else if (auth && config.adminHash && config.salt) {
+                // The admin password, so under the node-wide brake like every other password check.
+                if (!(await acquirePasswordAttempt())) {
+                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${passwordBrakeRetryAfter()}\r\n\r\n`);
+                    socket.destroy();
+                    return;
+                }
+                let pwOk = false;
+                try {
+                    pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
+                } finally {
+                    settlePasswordAttempt(pwOk);
+                }
+                if (pwOk) {
+                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
+                    authorized = true;
+                }
             }
 
             if (!authorized) {
@@ -816,7 +831,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
-                const ip = clientIp(ctx);
+                const ip = clientLimiterKey(ctx); // IPv6: the /64 (client-ip.ts)
                 const now = Date.now();
                 const windowMs = 60 * 1000; // 1 minute
                 const limit = 300; // max 300 administrative requests per minute

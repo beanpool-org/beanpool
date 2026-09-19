@@ -167,6 +167,51 @@ export function resolveClientIp(peer: string | undefined, headers: Record<string
     return hops[0] || socketIp;
 }
 
+/** The eight 16-bit groups of an IPv6 address, or null. Accepts `::` compression and a dotted IPv4 tail. */
+function ipv6Groups(ip: string): number[] | null {
+    if (net.isIP(ip) !== 6) return null;
+    let s = ip.toLowerCase();
+    const dotted = s.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+    if (dotted) {
+        const [a, b, c, d] = dotted[2].split('.').map(Number);
+        s = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+    }
+    const halves = s.split('::');
+    const head = halves[0] ? halves[0].split(':') : [];
+    const tail = halves.length > 1 && halves[1] ? halves[1].split(':') : [];
+    const fill = halves.length > 1 ? 8 - head.length - tail.length : 0;
+    const groups = [...head, ...Array(fill).fill('0'), ...tail].map(g => parseInt(g, 16));
+    return groups.length === 8 && groups.every(g => g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/**
+ * The bucket a limiter counts an address in. IPv4: the address itself. IPv6: its /64.
+ *
+ * An IPv6 subscriber is handed a whole /64 (at least), and every address in it is theirs to use: privacy
+ * extensions rotate through it on their own, and anyone can pick a fresh one per request. Keyed on the full
+ * /128, each request lands in an empty bucket and no per-address limiter ever says no. One /64 is one
+ * subscriber, so that is the unit counted.
+ *
+ * Only bucket keys go through here. The address that is logged, shown, or matched against an allowlist stays
+ * the full address from clientIp().
+ */
+export function limiterKeyForIp(addr: string | undefined | null): string {
+    const ip = normalizeIp(addr);
+    if (net.isIPv4(ip)) return ip;
+    const groups = ipv6Groups(ip);
+    if (!groups) return ip || 'unknown';
+    // An IPv4-mapped address in any spelling (the ::ffff: prefix is stripped above only in its dotted form).
+    if (groups.slice(0, 5).every(g => g === 0) && groups[5] === 0xffff) {
+        return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join('.');
+    }
+    return `${groups.slice(0, 4).map(g => g.toString(16)).join(':')}::/64`;
+}
+
+/** The limiter bucket for a Koa request: its real client, IPv6 widened to the /64. */
+export function clientLimiterKey(ctx: Koa.Context): string {
+    return limiterKeyForIp(clientIp(ctx));
+}
+
 /** The real client address of a Koa request, computed once per request. */
 export function clientIp(ctx: Koa.Context): string {
     const state = ctx.state || (ctx.state = {});

@@ -211,6 +211,7 @@ run_federation_suites() {
       test-cors-policy
       test-gateway-config
       test-gateway-real-client
+      test-limiter-ipv6-and-password-brake
       test-csrf-protection
       test-totp-admin-2fa
       test-totp-helpers

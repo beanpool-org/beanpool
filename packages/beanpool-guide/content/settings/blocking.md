@@ -15,15 +15,16 @@ Confirm with **Block User**.
 
 ## What it does
 
-- Their posts, Offers and messages are hidden from you.
-- They disappear from your People list and your chats.
+- Their posts in the Market are hidden from you.
+- They disappear from your People list and your chats, and you cannot message each other.
+- Their pins on the Map, their Pulse posts, and their messages in event chats still show.
 - A report goes to your community's admins, who can look into it.
 
 ## What it does not do
 
 - They are not told.
 - They can still see your posts.
-- The block is kept on your phone. If you sign out, reinstall the app or use another device, block them again.
+- The block is kept on this phone. If you reinstall the app or use another device, block them again.
 
 ## Unblocking
 

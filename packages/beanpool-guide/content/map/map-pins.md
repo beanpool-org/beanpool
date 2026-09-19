@@ -7,13 +7,13 @@ related: pin-locations, near-you, events, posting
 
 ## Pins
 
-Tap **Map** at the bottom of the screen. The map shows your community's posts:
+Tap **Map** in the row of tabs. The map shows your community's posts:
 
 - **Green pins:** Offers.
 - **Orange pins:** Needs.
-- **Purple pins with a calendar:** events that have not happened yet.
+- **Purple pins with a calendar:** events that have not finished yet.
 
-A pin shows the post's category picture. Where many pins are close together, they join into a blue circle with a number. Zoom in to see them one by one.
+A pin shows the post's category picture. Where many Offers and Needs are close together, they join into a blue circle with a number. Zoom in to see them one by one. Events always show on their own.
 
 People, groups and enterprises are not on the map. Neither are polls.
 

@@ -33,4 +33,4 @@ Tap **Share a post to Pulse**. Paste the **Post URL**, check which channel and s
 
 ## Remember
 
-Whatever you add here is shown to your community, with your name.
+Whatever you share to the Pulse is shown with your name and photo. Anyone who opens your community's Pulse can see it, including people who have not joined.

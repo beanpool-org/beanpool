@@ -36,7 +36,7 @@ To remove it, tap **Disconnect**.
 
 ## If someone else tries
 
-If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**.
+If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password.
 
 ## If the phone already has an account
 

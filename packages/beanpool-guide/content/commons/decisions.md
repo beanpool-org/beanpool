@@ -9,7 +9,7 @@ related: proposing-a-decision, rules, polls, commons-fund
 
 Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**.
 
-A Decision is binding: if it passes, your community's server carries it out by itself. The rules for who can vote, how much turnout is needed and how much Yes is needed are in "Rules and how decisions work".
+A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in "Rules and how decisions work".
 
 ## Reading a Decision
 
@@ -33,7 +33,7 @@ Every Decision is a **secret ballot**. Members see the totals, never who voted h
 
 These use **voice credits**. You get voice credits from your completed trades, fresh for each Decision. Use **−** and **+** to choose how many votes to give. More votes cost more: 2 votes cost 4 credits, 3 votes cost 9.
 
-If you have not completed a trade yet, you cannot vote on these. You can still vote on every other Decision.
+If you have not completed a trade yet, you cannot vote on these. You can still vote on the other Decisions, as long as you joined before they opened and your credit is not frozen.
 
 ## Results
 

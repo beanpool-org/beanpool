@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "version": 2,
-  "hash": "01005e0d8a74a46eabd48d9bc661274e371c51247d3603d86b2077aaa7f32fb4",
+  "hash": "f64a844c25ebe511a5e72f506b75916ad6b33b7ae329922d9fcf32e956fa9103",
   "sections": [
     {
       "id": "about",
@@ -814,7 +814,7 @@
             "Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.",
             "On the first screen, tap **I'm New Here**. If the invite is on your clipboard, you can tap **Paste** instead.",
             "Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.",
-            "Choose the name people will see. It needs at least 2 letters. Keep it short: names longer than 20 characters are cut short.",
+            "Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.",
             "Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others."
           ]
         },
@@ -899,7 +899,7 @@
           "items": [
             "With the 12 words, you can get your account back on a new phone: your name, your beans and your trust.",
             "Without them, a lost or broken phone can mean a lost account.",
-            "Anyone who has your 12 words can use your account. Never share them, never type them into a website, and never send them in a message. Nobody from BeanPool or your community will ever ask for them."
+            "Anyone who has your 12 words can use your account. Never share them, never type them anywhere except the BeanPool app or your own community's BeanPool web app, and never send them in a message. Nobody from BeanPool or your community will ever ask for them."
           ]
         },
         {
@@ -1007,7 +1007,7 @@
           "type": "ul",
           "items": [
             "**Hidden:** nobody.",
-            "**Trade Partners:** people you have traded with.",
+            "**Trade Partners:** meant for people you trade with. For now it works like Community: every member can see it. To keep it private, choose Hidden or Friends.",
             "**Friends:** people you have added as friends.",
             "**Community:** every member of your community."
           ]
@@ -1213,7 +1213,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap the community's name in the middle of the top bar. A list of your communities opens.",
+            "Tap the title in the middle of the top bar, the one with the small down arrow. **Select Community** opens with your communities.",
             "Tap the one you want."
           ]
         },
@@ -1228,13 +1228,13 @@
         {
           "type": "ul",
           "items": [
-            "In the list at the top of the screen, press and hold a community, then tap **Remove**.",
-            "Or in **Advanced / Subsystem**, tap **Forget**."
+            "In **Advanced / Subsystem**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.",
+            "In **Select Community**, pressing and holding a community and tapping **Remove** only takes it off the list. Its data stays on the phone."
           ]
         },
         {
           "type": "p",
-          "text": "This removes the community and its saved data from this phone. It does not delete your account there, and your other communities are not affected. You cannot forget your only community."
+          "text": "Neither deletes your account there, and your other communities are not affected."
         },
         {
           "type": "h2",
@@ -1319,7 +1319,7 @@
         },
         {
           "type": "p",
-          "text": "Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app shows a warning with **View & Save Recovery Phrase**. Do it, and write them down."
+          "text": "Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app's Settings shows a warning with **View & Save Recovery Phrase**. Do it, and write them down."
         }
       ]
     },
@@ -1341,7 +1341,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Market** at the bottom of the screen. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first."
+          "text": "Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first."
         },
         {
           "type": "p",
@@ -1380,7 +1380,7 @@
           "items": [
             "**All Categories:** pick one category, like Food, Tools or Garden.",
             "**Distance:** only posts within a distance of a point. See \"Finding things near you\".",
-            "**Trust:** only posts by members with at least a certain trust badge.",
+            "**Trust:** only posts by members who have not traded yet (**Founding**), by **Newcomers**, or by members with at least a certain trust badge.",
             "**Beans only:** hides posts that also ask for some cash."
           ]
         },
@@ -1405,7 +1405,7 @@
           "items": [
             "a photo, or the category's picture;",
             "**OFFER** or **NEED**;",
-            "the price in beans, with **/Hr**, **/Dy**, **/Wk** or **/Mo** if it is priced by time;",
+            "the price in beans, with **/Hr** if it is priced by the hour;",
             "**RECURRING** if it stays open after each deal;",
             "**CASH TOO** if the person also needs some cash, for fuel or materials;",
             "a lock and a group name if only that group can see it;",
@@ -1426,7 +1426,7 @@
             "**Message** and their name: ask a question before you commit.",
             "Tap their name to see their profile, reviews and trust.",
             "**Report Post** if it is a scam, offensive or misleading.",
-            "**Block User** to hide everything from them."
+            "**Block User** to hide their posts and chats on your phone. It also tells your admins. See \"Blocking someone\"."
           ]
         },
         {
@@ -1476,8 +1476,8 @@
             "**Category:** pick the closest one.",
             "**Description:** what, when, where, anything people should know.",
             "**Photos:** at least one, up to five. Tap **Camera** or **Gallery**.",
-            "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. The pin is shown on the map to everyone in your community, so drop it near you rather than on your front door if you prefer.",
-            "**Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away.",
+            "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
+            "**Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.",
             "Tap **Post Offer** or **Post Need**."
           ]
         },
@@ -1491,7 +1491,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Not sure what to charge?** under the price. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for more than 500 things. Tapping one fills in an Offer for you."
+          "text": "Tap **Not sure what to charge?** under the price. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for many everyday things. Tapping one fills in an Offer for you."
         },
         {
           "type": "p",
@@ -1534,7 +1534,7 @@
           "items": [
             "**Edit Post** changes the words, category, price and photos. Tap **Save**. The location cannot be changed; delete the post and post it again instead.",
             "**Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.",
-            "**Delete Post** removes it. Anyone still asking for it is told no."
+            "**Delete Post** removes it. Anyone still asking for it sees their request marked declined."
           ]
         },
         {
@@ -1561,7 +1561,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts the deals that need you."
+          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress."
         },
         {
           "type": "h2",
@@ -1570,18 +1570,14 @@
         {
           "type": "ul",
           "items": [
-            "**In Progress:** trades under way, and requests waiting for an answer.",
-            "**My Posts:** your Offers and Needs that are up or paused. Each shows where it stands:",
-            "**Held in Trust:** a trade is under way and the beans are held.",
-            "**Action Required:** someone has asked. You need to answer.",
-            "**Awaiting Approval:** you asked. You are waiting for them.",
-            "**PAUSED:** hidden for now.",
-            "**History:** finished, cancelled and declined trades. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person."
+            "**In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).",
+            "**My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.",
+            "**History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person."
           ]
         },
         {
           "type": "p",
-          "text": "Tap any of them to open the post. That is where you accept, finish or cancel a trade."
+          "text": "Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days."
         },
         {
           "type": "h2",
@@ -1621,7 +1617,7 @@
           "type": "ul",
           "items": [
             "Open the Offer and tap **Accept Offer**.",
-            "If it is priced by the hour or day, say how many.",
+            "If it is priced by the hour, say how many hours.",
             "Tap **Confirm**. Your beans are held straight away, and the seller is told. There is no waiting for the seller to say yes.",
             "A chat with the seller opens. Agree when and where."
           ]
@@ -1638,9 +1634,9 @@
           "type": "ul",
           "items": [
             "Open the Need and tap **Offer to Fulfill**, then **Confirm**.",
-            "The person who posted it decides. Until then you can tap **Withdraw Request**.",
+            "The person who posted it decides. Until then you can tap **Withdraw Request**. If they do not answer in 7 days, the request ends by itself and you are both told.",
             "They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.",
-            "When they approve, their beans are held. Anyone else who offered is told no."
+            "When they approve, their beans are held. Unless the post is Repeatable, anyone else who offered sees their request marked declined."
           ]
         },
         {
@@ -1655,13 +1651,13 @@
           "type": "ul",
           "items": [
             "Do the job, or hand over the thing.",
-            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them.",
+            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them.",
             "The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons."
           ]
         },
         {
           "type": "p",
-          "text": "Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled."
+          "text": "Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder."
         },
         {
           "type": "h2",
@@ -1681,11 +1677,11 @@
         },
         {
           "type": "p",
-          "text": "Both people can rate later: tap **Rate** and the name on the finished post, or **Review** in My Deals, History. You can change your rating; the new one replaces the old."
+          "text": "Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History. You can change your rating; the new one replaces the old."
         },
         {
           "type": "p",
-          "text": "Stars matter. They affect how much trust the other person earns from their trades. Be fair."
+          "text": "Stars matter. A low average reduces how much trust the other person earns from their trades. Be fair."
         }
       ]
     },
@@ -1716,7 +1712,7 @@
         {
           "type": "ul",
           "items": [
-            "**Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message.",
+            "**Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message. A request nobody answers ends by itself after 7 days.",
             "**While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told."
           ]
         },
@@ -1775,19 +1771,19 @@
         },
         {
           "type": "p",
-          "text": "Tap **Map** at the bottom of the screen. The map shows your community's posts:"
+          "text": "Tap **Map** in the row of tabs. The map shows your community's posts:"
         },
         {
           "type": "ul",
           "items": [
             "**Green pins:** Offers.",
             "**Orange pins:** Needs.",
-            "**Purple pins with a calendar:** events that have not happened yet."
+            "**Purple pins with a calendar:** events that have not finished yet."
           ]
         },
         {
           "type": "p",
-          "text": "A pin shows the post's category picture. Where many pins are close together, they join into a blue circle with a number. Zoom in to see them one by one."
+          "text": "A pin shows the post's category picture. Where many Offers and Needs are close together, they join into a blue circle with a number. Zoom in to see them one by one. Events always show on their own."
         },
         {
           "type": "p",
@@ -1875,7 +1871,7 @@
         },
         {
           "type": "p",
-          "text": "The pin is shown to everyone in your community at that spot, to within about 10 metres. The app does not blur it for you."
+          "text": "Anyone who opens your community's map can see the pin at that spot, to within about 10 metres. That includes people who have not joined. The app does not blur it for you."
         },
         {
           "type": "p",
@@ -1891,7 +1887,11 @@
         },
         {
           "type": "p",
-          "text": "When you create an event, you can tap **Approximate (~100 m)**. The pin then shows only roughly where it is. You can put the exact address in **Note for people who are going**, which only you and the people who tap **Going** can read."
+          "text": "When you create an event, place the pin first, then tap **Approximate (~100 m)**. The pin then shows only roughly where it is. If you move the pin afterwards, tap it again."
+        },
+        {
+          "type": "p",
+          "text": "Everyone can see the event's place name, so do not type your home address there. Put the exact address in **Note for people who are going**, which only the hosts and the people who tap **Going** can read."
         },
         {
           "type": "h2",
@@ -1925,7 +1925,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **Market**, then **Distance** in the second row of filters.",
+            "Tap **Market**, then **Distance** in the second row of filters. It is not there while **Events** is chosen.",
             "**Location & Radius** opens. To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.",
             "Choose how far with **Search radius**: from 100 metres to 50 kilometres.",
             "Tap **Apply**. The button then shows the distance, like **5km**.",
@@ -1938,7 +1938,7 @@
         },
         {
           "type": "p",
-          "text": "Until you choose a centre, the distance is measured from a fixed starting point, not from you. Tap the target button first."
+          "text": "The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap **Apply**."
         },
         {
           "type": "h2",
@@ -1976,7 +1976,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Talk** at the bottom of the screen, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**."
+          "text": "Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**."
         },
         {
           "type": "ul",
@@ -2363,7 +2363,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Pulse** at the bottom of the screen. The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do."
+          "text": "Tap **Pulse** in the row of tabs. The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do."
         },
         {
           "type": "ul",
@@ -2532,7 +2532,7 @@
         },
         {
           "type": "p",
-          "text": "Whatever you add here is shown to your community, with your name."
+          "text": "Whatever you share to the Pulse is shown with your name and photo. Anyone who opens your community's Pulse can see it, including people who have not joined."
         }
       ]
     },
@@ -2558,7 +2558,7 @@
         },
         {
           "type": "p",
-          "text": "A Decision is binding: if it passes, your community's server carries it out by itself. The rules for who can vote, how much turnout is needed and how much Yes is needed are in \"Rules and how decisions work\"."
+          "text": "A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in \"Rules and how decisions work\"."
         },
         {
           "type": "h2",
@@ -2604,7 +2604,7 @@
         },
         {
           "type": "p",
-          "text": "If you have not completed a trade yet, you cannot vote on these. You can still vote on every other Decision."
+          "text": "If you have not completed a trade yet, you cannot vote on these. You can still vote on the other Decisions, as long as you joined before they opened and your credit is not frozen."
         },
         {
           "type": "h2",
@@ -3085,7 +3085,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Ledger** at the bottom of the screen. Your balance is at the top right, in **BEANS**. It can be below zero; see \"Your credit line\"."
+          "text": "Tap **Ledger** in the row of tabs. Your balance is at the top right, in **BEANS**. It can be below zero; see \"Your credit line\"."
         },
         {
           "type": "p",
@@ -3176,7 +3176,7 @@
         },
         {
           "type": "p",
-          "text": "It starts at zero. It opens when you complete your first trade in the market, or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold."
+          "text": "It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold."
         },
         {
           "type": "h2",
@@ -3186,7 +3186,7 @@
           "type": "ul",
           "items": [
             "**Trust:** completed trades build trust, especially with many different people. See \"The 500-bean partner limit\".",
-            "**Ratings:** good stars help; poor stars reduce the trust you earn.",
+            "**Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.",
             "The deepest any credit line goes is 2,000 beans."
           ]
         },
@@ -3356,7 +3356,7 @@
         },
         {
           "type": "p",
-          "text": "A community's admins can give a member a badge. That also gives them real credit, the same as earning it."
+          "text": "A community's admins can give a member a badge. That deepens their credit line, like earned trust. It does not count as trades: it adds no voice credits and does not let them send gifts."
         }
       ]
     },
@@ -3500,7 +3500,7 @@
         },
         {
           "type": "p",
-          "text": "Tap the sliders button at the top right of the screen. Settings is not one of the tabs at the bottom."
+          "text": "Tap the sliders button at the top right of the screen. Settings is not one of the tabs."
         },
         {
           "type": "h2",
@@ -3509,11 +3509,16 @@
         {
           "type": "ul",
           "items": [
-            "Your name, photo, bio and when you joined.",
+            "Your name, photo, bio, when you joined and when you were last active.",
             "Your trust badge, how many trades you have done, and your reviews.",
             "Your posts, and where their pins are. See \"Where your pin goes\".",
-            "How you voted on a **Poll**. Votes on **Decisions** are secret."
+            "How you voted on a **Poll**. Votes on **Decisions** are secret.",
+            "Your balance and your trades. The app does not show these to others, but a member who knows how can read them from your community's server."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Your posts and their pins, and anything you share to the Pulse, can also be seen by people who have not joined."
         },
         {
           "type": "h2",
@@ -3525,7 +3530,7 @@
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
             "**App Lock:** asks for your phone's passcode or fingerprint each time the app opens.",
-            "**Channels:** anything you share to the Pulse is shown with your name. See \"Sharing your channels\"."
+            "**Channels:** anything you share to the Pulse is shown with your name, to anyone who opens the Pulse. See \"Sharing your channels\"."
           ]
         },
         {
@@ -3535,8 +3540,8 @@
         {
           "type": "ul",
           "items": [
-            "Chats between two people are end-to-end encrypted. See \"Messages\".",
-            "Your community's server keeps your trades, posts and votes. The owners and admins who run it can see what is stored there, including event chats. Choose a community whose people you trust."
+            "Chats between two people are usually end-to-end encrypted. See \"Messages\" for the one exception.",
+            "Your community's server keeps your trades, posts and votes. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust."
           ]
         },
         {
@@ -3584,8 +3589,9 @@
         {
           "type": "ul",
           "items": [
-            "Their posts, Offers and messages are hidden from you.",
-            "They disappear from your People list and your chats.",
+            "Their posts in the Market are hidden from you.",
+            "They disappear from your People list and your chats, and you cannot message each other.",
+            "Their pins on the Map, their Pulse posts, and their messages in event chats still show.",
             "A report goes to your community's admins, who can look into it."
           ]
         },
@@ -3598,7 +3604,7 @@
           "items": [
             "They are not told.",
             "They can still see your posts.",
-            "The block is kept on your phone. If you sign out, reinstall the app or use another device, block them again."
+            "The block is kept on this phone. If you reinstall the app or use another device, block them again."
           ]
         },
         {
@@ -3641,7 +3647,16 @@
         },
         {
           "type": "p",
-          "text": "Choose a reason: **Spam or scam**, **Offensive content**, **Misleading post** or **Other**. Add a few words if they help. Then tap **Submit Report**."
+          "text": "Then:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**), add a few words if they help, and tap **Submit Report**.",
+            "**A Pulse post:** choose a reason and tap **Submit report**.",
+            "**An event:** tap **Report** to confirm.",
+            "**An enterprise:** type why, and tap **Submit Report**."
+          ]
         },
         {
           "type": "h2",
@@ -3653,7 +3668,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app, a chat has a **Report** button at the top."
+          "text": "In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen."
         },
         {
           "type": "h2",
@@ -3791,7 +3806,7 @@
         {
           "type": "ul",
           "items": [
-            "Your Offers are hidden.",
+            "Your posts are hidden from the Market: Offers, Needs, events and polls.",
             "Nobody can send you new requests.",
             "You cannot post or start a deal yourself.",
             "Your balance and your credit line stay as they are.",
@@ -3847,12 +3862,13 @@
           "type": "ul",
           "items": [
             "Tap **Sign Out (Device Only)**.",
-            "Type **WIPE**, pass your phone's lock screen check, and tap **Confirm Sign Out**."
+            "Type **WIPE** and tap **Confirm Sign Out**.",
+            "Pass your phone's lock screen check, then tap **Sign Out** to confirm."
           ]
         },
         {
           "type": "p",
-          "text": "Everything about BeanPool is removed from this phone, including every community you saved. **Without your 12 words you cannot get back in.** Check you have them first."
+          "text": "Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first."
         },
         {
           "type": "h2",
@@ -3862,7 +3878,8 @@
           "type": "ul",
           "items": [
             "Tap **Permanently Delete Account**.",
-            "Type **DELETE** or your name, pass your phone's lock screen check, and tap **Permanently Purge Account**."
+            "Type **DELETE** or your name and tap **Permanently Purge Account**.",
+            "Pass your phone's lock screen check, then tap **Permanently Purge** to confirm."
           ]
         },
         {
@@ -3962,7 +3979,7 @@
         },
         {
           "type": "p",
-          "text": "If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**."
+          "text": "If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password."
         },
         {
           "type": "h2",

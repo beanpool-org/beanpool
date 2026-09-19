@@ -17,7 +17,7 @@ You join a BeanPool community when a member invites you. An invite is a link, a 
 - Install BeanPool and open it. If you tap an invite link first, the app picks up the invite by itself, even straight after installing it from Google Play.
 - On the first screen, tap **I'm New Here**. If the invite is on your clipboard, you can tap **Paste** instead.
 - Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.
-- Choose the name people will see. It needs at least 2 letters. Keep it short: names longer than 20 characters are cut short.
+- Choose the name people will see. It needs at least 2 letters. Keep it short: when you join, names longer than 20 characters are cut short.
 - Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others.
 
 ## The four steps

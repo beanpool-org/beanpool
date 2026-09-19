@@ -28,7 +28,7 @@ Under **Contact details** you can add a phone number, an email or a WhatsApp num
 Once you add one, choose **Who can see this?**:
 
 - **Hidden:** nobody.
-- **Trade Partners:** people you have traded with.
+- **Trade Partners:** meant for people you trade with. For now it works like Community: every member can see it. To keep it private, choose Hidden or Friends.
 - **Friends:** people you have added as friends.
 - **Community:** every member of your community.
 

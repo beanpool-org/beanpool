@@ -12,7 +12,7 @@ related: my-deals, notifications, credit-line, leaving-or-deleting
 
 ## While you are away
 
-- Your Offers are hidden.
+- Your posts are hidden from the Market: Offers, Needs, events and polls.
 - Nobody can send you new requests.
 - You cannot post or start a deal yourself.
 - Your balance and your credit line stay as they are.

@@ -36,4 +36,4 @@ The web app may offer **Install BeanPool** so it opens from your home screen lik
 
 ## Keep your 12 words
 
-Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app shows a warning with **View & Save Recovery Phrase**. Do it, and write them down.
+Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app's Settings shows a warning with **View & Save Recovery Phrase**. Do it, and write them down.

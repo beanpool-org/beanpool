@@ -18,17 +18,17 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 ## Switching
 
-- Tap the community's name in the middle of the top bar. A list of your communities opens.
+- Tap the title in the middle of the top bar, the one with the small down arrow. **Select Community** opens with your communities.
 - Tap the one you want.
 
 You can also switch in **Settings**, under **System**, then **Advanced / Subsystem**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to Town** on another one to move to it.
 
 ## Forgetting a community on this phone
 
-- In the list at the top of the screen, press and hold a community, then tap **Remove**.
-- Or in **Advanced / Subsystem**, tap **Forget**.
+- In **Advanced / Subsystem**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.
+- In **Select Community**, pressing and holding a community and tapping **Remove** only takes it off the list. Its data stays on the phone.
 
-This removes the community and its saved data from this phone. It does not delete your account there, and your other communities are not affected. You cannot forget your only community.
+Neither deletes your account there, and your other communities are not affected.
 
 ## Visiting as a guest
 

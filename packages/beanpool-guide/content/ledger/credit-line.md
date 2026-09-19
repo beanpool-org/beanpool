@@ -22,12 +22,12 @@ Tap the bar for **Credit Slider Info**, which explains each part.
 
 ## How it opens
 
-It starts at zero. It opens when you complete your first trade in the market, or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
+It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
 
 ## How it grows
 
 - **Trust:** completed trades build trust, especially with many different people. See "The 500-bean partner limit".
-- **Ratings:** good stars help; poor stars reduce the trust you earn.
+- **Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.
 - The deepest any credit line goes is 2,000 beans.
 
 ## Your Offers set how much you can use

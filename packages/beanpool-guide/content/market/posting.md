@@ -21,15 +21,15 @@ You need a name and a profile photo. If one is missing, the app asks you to **Se
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera** or **Gallery**.
-- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. The pin is shown on the map to everyone in your community, so drop it near you rather than on your front door if you prefer.
-- **Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away.
+- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
+- **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.
 
 Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**.
 
 ## Not sure what to charge?
 
-Tap **Not sure what to charge?** under the price. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for more than 500 things. Tapping one fills in an Offer for you.
+Tap **Not sure what to charge?** under the price. A rough guide: 40 beans is about an hour of someone's time. The **Community Pricing Guide** has estimates for many everyday things. Tapping one fills in an Offer for you.
 
 Below the price you see what you will receive after the 1.5% market fee. Gifts have no fee.
 
@@ -51,6 +51,6 @@ Open your post. If no deal is under way on it:
 
 - **Edit Post** changes the words, category, price and photos. Tap **Save**. The location cannot be changed; delete the post and post it again instead.
 - **Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.
-- **Delete Post** removes it. Anyone still asking for it is told no.
+- **Delete Post** removes it. Anyone still asking for it sees their request marked declined.
 
 Posts do not expire. Delete them when they are done.

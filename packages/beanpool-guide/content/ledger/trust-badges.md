@@ -34,4 +34,4 @@ In the **Market**, the **Trust** filter can show only posts from members with a 
 
 ## Admins and badges
 
-A community's admins can give a member a badge. That also gives them real credit, the same as earning it.
+A community's admins can give a member a badge. That deepens their credit line, like earned trust. It does not count as trades: it adds no voice credits and does not let them send gifts.

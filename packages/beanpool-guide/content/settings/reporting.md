@@ -12,13 +12,18 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 - **A Pulse post:** tap the flag on it.
 - **An enterprise:** open it and tap **Report Enterprise** at the bottom.
 
-Choose a reason: **Spam or scam**, **Offensive content**, **Misleading post** or **Other**. Add a few words if they help. Then tap **Submit Report**.
+Then:
+
+- **A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**), add a few words if they help, and tap **Submit Report**.
+- **A Pulse post:** choose a reason and tap **Submit report**.
+- **An event:** tap **Report** to confirm.
+- **An enterprise:** type why, and tap **Submit Report**.
 
 ## A person or a message
 
 There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your admins. See "Blocking someone".
 
-In the web app, a chat has a **Report** button at the top.
+In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen.
 
 ## What happens next
 

@@ -7,7 +7,7 @@ related: posting, a-deal-step-by-step, near-you, trust-badges
 
 ## The Market tab
 
-Tap **Market** at the bottom of the screen. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first.
+Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first.
 
 Pull the list down to refresh it.
 
@@ -27,7 +27,7 @@ The second row narrows it down:
 
 - **All Categories:** pick one category, like Food, Tools or Garden.
 - **Distance:** only posts within a distance of a point. See "Finding things near you".
-- **Trust:** only posts by members with at least a certain trust badge.
+- **Trust:** only posts by members who have not traded yet (**Founding**), by **Newcomers**, or by members with at least a certain trust badge.
 - **Beans only:** hides posts that also ask for some cash.
 
 If you belong to groups, a row of group buttons appears too. **All Groups & Public** shows everything; a group's button shows only posts for that group.
@@ -40,7 +40,7 @@ The button next to **My Deals** changes how the list looks: a list, a grid, or c
 
 - a photo, or the category's picture;
 - **OFFER** or **NEED**;
-- the price in beans, with **/Hr**, **/Dy**, **/Wk** or **/Mo** if it is priced by time;
+- the price in beans, with **/Hr** if it is priced by the hour;
 - **RECURRING** if it stays open after each deal;
 - **CASH TOO** if the person also needs some cash, for fuel or materials;
 - a lock and a group name if only that group can see it;
@@ -53,6 +53,6 @@ Tap a post to open it.
 - **Message** and their name: ask a question before you commit.
 - Tap their name to see their profile, reviews and trust.
 - **Report Post** if it is a scam, offensive or misleading.
-- **Block User** to hide everything from them.
+- **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
 
 You cannot save or share a post yet.

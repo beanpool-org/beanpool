@@ -17,14 +17,16 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 ## Signing out of this phone
 
 - Tap **Sign Out (Device Only)**.
-- Type **WIPE**, pass your phone's lock screen check, and tap **Confirm Sign Out**.
+- Type **WIPE** and tap **Confirm Sign Out**.
+- Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
-Everything about BeanPool is removed from this phone, including every community you saved. **Without your 12 words you cannot get back in.** Check you have them first.
+Your account and every community you saved are removed from this phone. A few settings stay, such as your block list. **Without your 12 words you cannot get back in.** Check you have them first.
 
 ## Deleting your account
 
 - Tap **Permanently Delete Account**.
-- Type **DELETE** or your name, pass your phone's lock screen check, and tap **Permanently Purge Account**.
+- Type **DELETE** or your name and tap **Permanently Purge Account**.
+- Pass your phone's lock screen check, then tap **Permanently Purge** to confirm.
 
 This cannot be undone, even with your 12 words.
 

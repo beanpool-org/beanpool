@@ -7,7 +7,7 @@ related: browsing-the-market, map-pins, pin-locations, events
 
 ## On the Market tab
 
-- Tap **Market**, then **Distance** in the second row of filters.
+- Tap **Market**, then **Distance** in the second row of filters. It is not there while **Events** is chosen.
 - **Location & Radius** opens. To use where you are, tap the target button. Or tap the map, or drag the pin, to choose another centre.
 - Choose how far with **Search radius**: from 100 metres to 50 kilometres.
 - Tap **Apply**. The button then shows the distance, like **5km**.
@@ -15,7 +15,7 @@ related: browsing-the-market, map-pins, pin-locations, events
 
 Posts with no location are always shown.
 
-Until you choose a centre, the distance is measured from a fixed starting point, not from you. Tap the target button first.
+The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap **Apply**.
 
 ## On the Map
 

@@ -7,19 +7,15 @@ related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong
 
 ## Opening it
 
-Tap **My Deals** at the top of the Market tab. A red number on it counts the deals that need you.
+Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress.
 
 ## Three tabs
 
-- **In Progress:** trades under way, and requests waiting for an answer.
-- **My Posts:** your Offers and Needs that are up or paused. Each shows where it stands:
-- **Held in Trust:** a trade is under way and the beans are held.
-- **Action Required:** someone has asked. You need to answer.
-- **Awaiting Approval:** you asked. You are waiting for them.
-- **PAUSED:** hidden for now.
-- **History:** finished, cancelled and declined trades. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
+- **In Progress:** deals under way, and requests waiting for an answer. Each shows where it stands: **Held in Trust** (the beans are held), **Action Required** (someone has asked and you need to answer) or **Awaiting Approval** (you asked and are waiting for them).
+- **My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.
+- **History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person.
 
-Tap any of them to open the post. That is where you accept, finish or cancel a trade.
+Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days.
 
 ## Reviews
 

@@ -7,7 +7,7 @@ related: people, blocking, event-chat, groups
 
 ## Your chats
 
-Tap **Talk** at the bottom of the screen, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**.
+Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**.
 
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by newest or unread, and can show only unread chats or only friends.

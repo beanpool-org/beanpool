@@ -11,7 +11,7 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 
 - With the 12 words, you can get your account back on a new phone: your name, your beans and your trust.
 - Without them, a lost or broken phone can mean a lost account.
-- Anyone who has your 12 words can use your account. Never share them, never type them into a website, and never send them in a message. Nobody from BeanPool or your community will ever ask for them.
+- Anyone who has your 12 words can use your account. Never share them, never type them anywhere except the BeanPool app or your own community's BeanPool web app, and never send them in a message. Nobody from BeanPool or your community will ever ask for them.
 
 ## Write them down
 

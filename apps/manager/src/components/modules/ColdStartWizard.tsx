@@ -939,8 +939,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             <span>Step 3: Establish First Community Enterprise</span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-1">
-                            Choose from a founding preset (food, tools, or machinery), appoint yourself as initial keeper,
-                            and post the first offer to satisfy the offer covenant.
+                            Choose a founding preset (food, tools, or machinery) and post the enterprise's first offer, which
+                            the offer covenant asks for. A member who is already an owner becomes its first keeper.
                         </p>
                     </div>
 

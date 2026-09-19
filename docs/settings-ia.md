@@ -62,6 +62,13 @@ A fresh node has one person and no data. Show a five-step wizard instead of a da
 
 Exit to the home screen with `1/3 founding invites claimed · node ready for trade`.
 
+**As built (2026-09-19, "never false success").** Step 1 saves the name and checks the address; if either
+fails it says so, with Retry and Continue anyway, and the step is not marked done. Step 2 has no pairing QR
+(nothing handled one) and no made-up recovery seed: 2FA is confirmed in place with a code the node verifies,
+the kit holds only the address and the node's real 2FA backup codes, and an owner links their phone by
+joining, being made owner under Owners & admins, and tapping **Manage** in the app. Step 4 explains how the
+commons fills: nothing can fund it by hand, so the wizard moves no beans. No step blocks moving on.
+
 ## 5. What is still missing — six real first-month failures
 
 Each of these is a thing that will actually happen, with no UI today:

@@ -29,17 +29,21 @@ Go to your server's address followed by **/settings**, for example https://examp
 
 While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only.
 
-What it really does:
+What it does:
 
-- **Step 1** saves your community's name. It does not save the region or the address you type.
+- **Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓.
+- **Step 2** turns on two-factor sign-in, if you want it now. Tap **Set up 2FA**, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA; if the server refuses, the wizard shows why, and you can finish it later in Access & Security.
+- **Step 2** also explains how your phone becomes an owner. See The first owner below.
 - **Step 3** can create your first enterprise and post its first offer.
-- **Step 5** makes three founding invites, with QR codes you can print.
+- **Step 4** explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.
+- **Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety.
+
+A step shows ✓ only when it really happened. You can move on from any step without finishing it.
 
 What it does not do yet:
 
-- **Step 2** shows an owner-pairing QR, an authenticator secret and an "emergency seed". The authenticator secret comes from the server, but the wizard never asks for a code, so two-factor sign-in is not switched on until you finish it in Access & Security. The emergency seed is made up on this screen and is not a working recovery code, and scanning the QR does nothing.
-- **Step 4** says it seeds the commons, but it does not move any beans.
-- If the server refuses or cannot be reached, step 5 stops and shows the reason, with no code. Try again, or make invites later under People & Safety.
+- It does not save a region or a map location. Set those later under Node Identity.
+- In step 3, if appointing you as keeper or posting the first offer fails, the wizard still moves on without saying so. Check the enterprise under Shared Projects & Economy.
 
 ## The first owner
 

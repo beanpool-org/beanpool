@@ -4,7 +4,8 @@
  * Periodically checks fleet nodes for metric drift (member, post, tx count changes),
  * streams database backups to ./backups/<nodeId>/state.db, archives daily snapshots to
  * ./backups/<nodeId>/history/beanpool-YYYY-MM-DD.db (auto-pruning >30 days), and collects
- * identity bundles into ./backups/<nodeId>/identity/.
+ * identity bundles into ./backups/<nodeId>/identity/ — the last only with the node's admin password;
+ * a replication token gets the database, never the keys.
  */
 
 import fs from 'node:fs';
@@ -33,6 +34,8 @@ export interface NodeHarvestState {
     memberCount: number;
     postCount: number;
     identityStatus: 'secured' | 'partial' | 'missing';
+    /** Why identity is not 'secured', in words for the dashboard; null when it is. */
+    identityNote?: string | null;
     identityFiles: string[];
     historyCount: number;
 }
@@ -207,16 +210,14 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
     return { dbSize: stat.size };
 }
 
-/** Pull identity bundle tar.gz from node */
+/** Pull identity bundle tar.gz from node. Admin password only: the node refuses the replication token here. */
 export async function pullIdentityForNode(node: FleetNodeConfig): Promise<string[]> {
-    if (!node.adminPassword && !node.replicationToken) {
-        throw new Error('No admin credentials (adminPassword / replicationToken) configured');
+    if (!node.adminPassword) {
+        throw new Error('No admin password configured (a replication token cannot fetch the node keys)');
     }
 
     const baseUrl = normalizeUrl(node.url);
-    const headers: Record<string, string> = {};
-    if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-    if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
+    const headers: Record<string, string> = { 'X-Admin-Password': node.adminPassword };
 
     const res = await fetch(`${baseUrl}/api/local/admin/identity-bundle`, {
         method: 'POST',
@@ -304,6 +305,51 @@ function createDailyArchive(target: string | FleetNodeConfig): void {
     }
 }
 
+function heldIdentityFiles(node: FleetNodeConfig): string[] {
+    const identityDir = path.join(BACKUPS_DIR, nodeSlug(node), 'identity');
+    return fs.existsSync(identityDir) ? fs.readdirSync(identityDir).filter(f => !f.startsWith('.')) : [];
+}
+
+/**
+ * Collects the node keys and says truthfully what is held. The identity bundle is owner/admin only
+ * (routes/backup.ts): a replication token copies the database but never the keys, so a token-only node
+ * is 'partial' — database harvested, keys not. `secured` needs the node identity itself (libp2p_key);
+ * community.key signs nothing today.
+ */
+async function harvestIdentity(node: FleetNodeConfig, prev: NodeHarvestState, pull: boolean): Promise<void> {
+    const setHeld = (note: string) => {
+        const held = heldIdentityFiles(node);
+        prev.identityFiles = held;
+        prev.identityStatus = 'partial';
+        prev.identityNote = held.length > 0
+            ? `${note} The key files shown are an older copy.`
+            : note;
+    };
+    if (!node.adminPassword) {
+        setHeld('Database only: a replication token cannot fetch the node keys. Add this node\'s admin password to collect them.');
+        return;
+    }
+    // With a password, pull only when the database was pulled: a wrong password must not hit the node every minute.
+    if (!pull) return;
+    try {
+        const idFiles = await pullIdentityForNode(node);
+        prev.identityFiles = idFiles;
+        if (idFiles.includes('genesis.json') && idFiles.includes('libp2p_key')) {
+            prev.identityStatus = 'secured';
+            prev.identityNote = null;
+        } else {
+            prev.identityStatus = 'partial';
+            prev.identityNote = 'The node sent no libp2p_key (its node identity), so these keys cannot restore it as itself.';
+        }
+    } catch (idErr: any) {
+        console.warn(`[Harvester] Identity pull warn for ${node.name}:`, idErr.message);
+        const refused = /HTTP 401/.test(idErr.message || '');
+        setHeld(refused
+            ? 'Keys not collected: the node refused the admin password (wrong password, or two-factor sign-in is on).'
+            : `Keys not collected: ${idErr.message}.`);
+    }
+}
+
 /** Harvest a single node: check drift, pull backup if needed, pull identity, update history */
 export async function harvestNode(node: FleetNodeConfig, force = false): Promise<NodeHarvestState> {
     const slug = nodeSlug(node);
@@ -342,22 +388,12 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
             const { dbSize } = await pullBackupForNode(node);
             prev.dbSizeBytes = dbSize;
 
-            // Also attempt identity bundle pull
-            try {
-                const idFiles = await pullIdentityForNode(node);
-                prev.identityFiles = idFiles;
-                if (idFiles.includes('genesis.json') && idFiles.includes('community.key')) {
-                    prev.identityStatus = 'secured';
-                } else {
-                    prev.identityStatus = 'partial';
-                }
-            } catch (idErr: any) {
-                console.warn(`[Harvester] Identity pull warn for ${node.name}:`, idErr.message);
-            }
-
             // Create daily snapshot archive
             createDailyArchive(node);
         }
+
+        // The node keys. Every run, not only on drift, so the status follows the node's credentials.
+        await harvestIdentity(node, prev, hasDrift);
 
         if (counts) {
             prev.memberCount = counts.members;

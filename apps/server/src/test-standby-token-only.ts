@@ -273,6 +273,17 @@ async function main() {
         updateLocalConfig({ replicationTokenOnly: true });
         const pulledTokenOnly = await requestResync();
         assert(pulledTokenOnly.ok, '7. copying still works once the main server is token-only');
+        // The standby's token copies the database, never the node keys (sealed-keys slice 0).
+        const standbyToken = getLocalConfig().backupReplicationToken as string;
+        resetBrakes();
+        const idByToken = await fetch(base + '/api/local/admin/identity-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': standbyToken }, body: '{}' });
+        const idByTokenBody = await idByToken.text();
+        assert(idByToken.status === 401 && !idByToken.headers.get('x-identity-files'), `7. the token is refused the identity bundle (got ${idByToken.status})`);
+        assert(/cannot fetch the node keys/.test(idByTokenBody), '7. …and the refusal says why');
+        resetBrakes();
+        const dbByToken = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Replication-Token': standbyToken }, body: '{}' });
+        await dbByToken.arrayBuffer();
+        assert(dbByToken.status === 200 && dbByToken.headers.get('content-type') === 'application/gzip', `7. the token still downloads the database backup (got ${dbByToken.status})`);
 
         // ---------- 8. Token already present ----------
         updateLocalConfig({ backupAdminPassword: ADMIN_PW });

@@ -32,6 +32,8 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 `test-backup-identity-bundle.ts` covers 401 / 503 / 200-with-password / 200-with-token. **Wanted follow-up (not a
 duplicate):** a WRONG `x-replication-token` with no password must get 401 — a mutant that accepts any token passes the
 current suite, and this route hands out `community.key`. Tarball contents are also unchecked.
+**Update 2026-09-19 (sealed keys, slice 0):** the route no longer takes a replication token at all; the suite now asserts a
+VALID token gets 401, so the wrong-token follow-up is covered. Tarball contents are still unchecked.
 
 ### 2026-09-09 — Marketplace post pause/resume integration test suite LANDED in #678.
 Added `apps/server/src/test-post-pause-resume.ts` covering validation, authorization, and feed visibility filtering for `POST /api/marketplace/posts/pause` and `/resume`. Registered in `scripts/test-all.sh`. Do not re-file.

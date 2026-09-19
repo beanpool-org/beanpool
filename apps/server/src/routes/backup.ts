@@ -112,10 +112,17 @@ router.post('/api/local/admin/backup', async (ctx) => {
 // Returns a tar.gz of all critical identity files needed for a full
 // node restore. These files are generated once on first boot and
 // cannot be regenerated without losing the node's identity.
+// Owner/admin sign-in ONLY. The replication token copies the database; it never
+// reaches the node's keys (libp2p_key is the node identity: whoever holds it can
+// answer as this node to the registrar, peers and standbys).
 router.post('/api/local/admin/identity-bundle', async (ctx) => {
-    const token = ctx.request.header['x-replication-token'];
-    const isTokenValid = token && (await verifyReplicationToken(String(token)));
-    if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx as any))) {
+        if (ctx.request.header['x-replication-token'] && ctx.status === 401 && ctx.body && typeof ctx.body === 'object') {
+            ctx.body = { ...(ctx.body as object), tokenRefused: true,
+                hint: 'A replication token copies the database only; it cannot fetch the node keys. Sign in as an owner or admin.' };
+        }
+        return;
+    }
 
     const { execFileSync } = await import('node:child_process');
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');

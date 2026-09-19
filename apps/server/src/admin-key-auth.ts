@@ -8,7 +8,9 @@
  *     - 60-second single-use handshake token minted for an active member holding a node role
  *     - Handshake token exchanged for a browser session (2h idle / 12h hard limit)
  *     - session_epoch per member for instant revoke-all
- *     - Phone-button deep link and desktop QR flow use the exact same token
+ *     - Phone-button deep link and desktop QR flow use the exact same token; the token is only ever
+ *       returned to the party that proved the key (verify-challenge) or held inside a browser-bound
+ *       pairing — never to someone who only knows a challenge id
  *
  * (b) Attribution:
  *     - Every admin action under a key session is attributed to that member
@@ -58,9 +60,8 @@ export interface AdminChallenge {
     createdAt: number;
     expiresAt: number;
     status: 'pending' | 'resolved' | 'expired';
-    handshakeToken?: string;
-    memberPubkey?: string;
-    role?: MemberNodeRole;
+    // Deliberately no token, signer or role here: the token goes back only to the signer, in the
+    // verify-challenge response. Anything kept on the challenge is one id away from anyone who saw it.
 }
 
 export interface HandshakeTokenEntry {
@@ -232,11 +233,8 @@ export function verifyAndSolveChallenge(params: {
     const role = signer.role;
     const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, role);
 
-    // Resolve challenge
+    // Resolve challenge (single use). The token is not stored on it: see AdminChallenge (#976).
     challenge.status = 'resolved';
-    challenge.handshakeToken = handshakeToken;
-    challenge.memberPubkey = memberPubkey;
-    challenge.role = role;
 
     return {
         ok: true,

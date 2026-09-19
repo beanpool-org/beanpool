@@ -29,6 +29,8 @@ A server with no recovery code says so every time. The download carries the word
 
 **Appliance & Data**, then **Backups & Restore**. The first card shows:
 
+![The Who can unlock this community card in Settings](images/appliance-backups.webp)
+
 - **Locked** (green), and who can open the server's take-over keys: each owner by name, and the recovery code by its number. Any one of them alone is enough. Under it, when the keys were last locked again and why (an owner added or removed, a new code, a changed setting).
 - **Not locked yet** (amber), and why: no owner and no recovery code, or the server has not made its keys yet. Make someone an owner, or make a recovery code.
 - **Error** (red), with the reason. The locked copy from before the change is kept but not handed out.
@@ -66,8 +68,6 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 ## Backups from Settings
 
 **Appliance & Data**, then **Backups & Restore**.
-
-![Backups and restore options in Settings](images/appliance-backups.webp)
 
 **Download Sovereign Database**:
 

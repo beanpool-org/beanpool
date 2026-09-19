@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 21,
-  "hash": "20b102ce266c90f6b135f62e7433589137a16c61d860d00569d9ebd05b030850",
+  "version": 22,
+  "hash": "fcd6f16694d8e3e0b27b2612b36bec4193724e11ce2458c262f103a1da8529e4",
   "sections": [
     {
       "id": "setup",
@@ -1476,6 +1476,11 @@
           "text": "**Appliance & Data**, then **Backups & Restore**. The first card shows:"
         },
         {
+          "type": "img",
+          "src": "images/appliance-backups.webp",
+          "alt": "The Who can unlock this community card in Settings"
+        },
+        {
           "type": "ul",
           "items": [
             "**Locked** (green), and who can open the server's take-over keys: each owner by name, and the recovery code by its number. Any one of them alone is enough. Under it, when the keys were last locked again and why (an owner added or removed, a new code, a changed setting).",
@@ -1544,11 +1549,6 @@
         {
           "type": "p",
           "text": "**Appliance & Data**, then **Backups & Restore**."
-        },
-        {
-          "type": "img",
-          "src": "images/appliance-backups.webp",
-          "alt": "Backups and restore options in Settings"
         },
         {
           "type": "p",

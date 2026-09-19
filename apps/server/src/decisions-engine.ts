@@ -49,6 +49,7 @@ import {
     adminPruneUser,
     COMMUNITY_DECISION_ACTOR,
     isOwnerLevelActor,
+    heldPrivilegedRole,
     broadcast,
     isNodeAdmin,
     isSoleOwner,
@@ -1165,9 +1166,9 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
 /**
  * Admin accelerate: fires a pending grace removal immediately (§3.7).
  */
-export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string } {
+export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string; status?: number } {
     if (!isAdminActor(adminPubkey)) {
-        return { success: false, error: 'Unauthorized: admin required to accelerate decision' };
+        return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
     }
 
     const decision = getDecision(decisionId);
@@ -1177,6 +1178,16 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     }
     if (decision.effect !== 'remove_member' || !decision.subject) {
         return { success: false, error: 'Only pending member removals can be accelerated' };
+    }
+    // The prune below acts for the community, but speeding it up takes away the grace window in which an owner
+    // could halt the removal of an owner or admin — so only an owner may speed that one up.
+    const held = heldPrivilegedRole(decision.subject);
+    if (held && !isOwnerLevelActor(adminPubkey)) {
+        return {
+            success: false,
+            status: 403,
+            error: `This member held the ${held} role, and only an owner can cut short the grace window on removing an owner or admin. Ask an owner to do this`,
+        };
     }
 
     const now = new Date().toISOString();
@@ -1250,7 +1261,8 @@ function restoreSuspendedNodeRole(decisionId: string): void {
  * Lift an emergency suspension whose ratifying Decision did not pass. Call inside a transaction.
  * The member stays suspended if something else holds them there: a pending community removal, or a
  * suspend_member Decision that passed after this suspension began. Lifted, they get back exactly the node
- * role they held; held elsewhere, the community has acted and the role stays gone.
+ * role they held. Held by a pending removal, the role moves to that removal, so halting it gives the role
+ * back; held by a passed suspension, the community has acted and the role stays gone.
  */
 function liftEmergencySuspensionRow(decision: Decision): boolean {
     if (!decision.subject) return false;
@@ -1264,7 +1276,19 @@ function liftEmergencySuspensionRow(decision: Decision): boolean {
         LIMIT 1
     `).get(decision.subject, decision.id, decision.opensAt);
     if (!row || row.status !== 'disabled' || heldElsewhere) {
-        db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+        // A pending community removal took them while this suspension held their role, so it had nothing to
+        // hold itself. Hand the role over to the removal: an owner who halts it gives the member back with it.
+        const pendingRemoval = row?.status === 'disabled' ? db.prepare(`
+            SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
+            ORDER BY created_at DESC LIMIT 1
+        `).get(decision.subject) as { id: string } | undefined : undefined;
+        const removalHolds = pendingRemoval
+            && db.prepare('SELECT 1 FROM suspended_node_roles WHERE decision_id = ?').get(pendingRemoval.id);
+        if (pendingRemoval && !removalHolds) {
+            db.prepare('UPDATE suspended_node_roles SET decision_id = ? WHERE decision_id = ?').run(pendingRemoval.id, decision.id);
+        } else {
+            db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+        }
         return false;
     }
     setUserStatusRow(decision.subject, 'active');

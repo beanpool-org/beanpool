@@ -18,7 +18,8 @@
  *
  *  6. The generic message read honours the event chat's 30-day window: past it both routes answer 410, so
  *     a host or a Going member cannot read through the side door what the chat route has closed.
- *  7. POST .../chat/message is throttled by the marketplace router's rate limit; the chat read is not.
+ *  7. POST .../chat/message is throttled per signed member (the chat bucket, not the per-IP auth limiter);
+ *     the chat read is not.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -35,6 +36,7 @@ import {
     EVENT_SCRUB_AFTER_END_MS, EVENT_CANCELLED_PUSH_TITLE, eventPushBody,
 } from './engine/posts.js';
 import { getEventThread, postEventThreadMessage } from './engine/event-thread.js';
+import { chatRateLimit, resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { runPulseSchedulerTick } from './engine/pulse-resolver.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createMessagingRoutes } from './routes/messaging.js';
@@ -126,8 +128,7 @@ async function main(): Promise<void> {
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4047/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
-    // The chat/message route's throttle, standing in for the real per-IP limiter https-server passes: it
-    // answers 429 itself and returns false, and the route must stop there.
+    // A stand-in for the per-IP auth limiter https-server passes. Section 7 shows chat lines no longer reach it.
     let chatBudget = Number.POSITIVE_INFINITY;
     let rateLimitCalls = 0;
     const deps = {
@@ -445,23 +446,30 @@ async function main(): Promise<void> {
     assert(ctx.status === 403, 'a member who was never in the chat is still refused outright');
 
     // ── 7. The chat/message route is throttled (slice 4 review) ─────────────────────────────
+    // Per signed member, in the chat bucket — not the per-IP auth limiter, which also guards recovery and pairing
+    // for everyone behind the same NAT (0919 follow-up).
     console.log('\n--- 7. The throttle ---');
     const chatty = newEvent(host);
     rsvpEvent(capture, chatty.id, goer, 'going');
     const callsBefore = rateLimitCalls;
-    chatBudget = 2;
+    chatBudget = 0; // were the auth limiter still consulted, every line would be refused
+    resetChatRateLimit();
+    for (let i = 0; i < CHAT_LINES_PER_MINUTE - 2; i++) chatRateLimit({} as any, goer); // two lines left this minute
     ctx = await dispatch(market, 'POST', `/api/marketplace/posts/${chatty.id}/chat/message`, routeCtx(chatty.id, goer, { text: 'one' }));
     assert(ctx.status === 201, 'a message inside the budget is posted');
-    assert(rateLimitCalls > callsBefore, 'the chat/message route consults the rate limiter');
+    assert(rateLimitCalls === callsBefore, 'the chat/message route does not consult the per-IP auth limiter');
     ctx = await dispatch(market, 'POST', `/api/marketplace/posts/${chatty.id}/chat/message`, routeCtx(chatty.id, goer, { text: 'two' }));
     assert(ctx.status === 201, 'and so is the second');
     ctx = await dispatch(market, 'POST', `/api/marketplace/posts/${chatty.id}/chat/message`, routeCtx(chatty.id, goer, { text: 'three' }));
-    assert(ctx.status === 429, 'the message past the budget is refused with 429');
+    assert(ctx.status === 429, 'the message past the budget of that member is refused with 429');
     assert(msgCount(chatty.id) === 2, 'and nothing is written for it');
+    ctx = await dispatch(market, 'POST', `/api/marketplace/posts/${chatty.id}/chat/message`, routeCtx(chatty.id, host, { text: 'host line' }));
+    assert(ctx.status === 201, 'another member in the same chat, same IP, has their own budget');
 
-    // The throttle sits ahead of the auth check, so an unsigned flood is refused just as cheaply.
+    // An unsigned request is refused by the auth check before any write.
     ctx = await dispatch(market, 'POST', `/api/marketplace/posts/${chatty.id}/chat/message`, routeCtx(chatty.id, undefined, { text: 'four' }));
-    assert(ctx.status === 429, 'an unsigned request over the budget is refused by the throttle, not by the auth check');
+    assert(ctx.status === 401 && msgCount(chatty.id) === 3, 'an unsigned request is refused (401) and writes nothing');
+    resetChatRateLimit();
 
     // Reading is not throttled: a member scrolling a chat is not a flood.
     ctx = await dispatch(market, 'GET', `/api/marketplace/posts/${chatty.id}/chat`, routeCtx(chatty.id, goer));

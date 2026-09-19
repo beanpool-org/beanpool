@@ -4,6 +4,7 @@
 
 import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { isNodeOwner } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import crypto from 'node:crypto';
@@ -928,6 +929,30 @@ export function cancelPostTransaction(
 
 export type EscrowDisputeAction = 'release_to_seller' | 'refund_to_buyer' | 'split';
 
+/**
+ * An admin may not arbitrate a dispute they are a party to: the buyer, the seller, or a keeper of an
+ * enterprise that is either. The password cannot show which owner is acting, so it is refused when an owner
+ * is a party — another admin resolves it from their own signed-in session.
+ */
+function assertNotPartyToDispute(row: { buyer_pubkey: string; seller_pubkey: string }, adminSigner: string): void {
+    const parties = new Set<string>([row.buyer_pubkey, row.seller_pubkey]);
+    for (const side of [row.buyer_pubkey, row.seller_pubkey]) {
+        const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(side) as { member_pubkey: string }[];
+        for (const k of keepers) parties.add(k.member_pubkey);
+    }
+    const refuse = (message: string) => {
+        const err: any = new Error(message);
+        err.status = 403;
+        throw err;
+    };
+    if (parties.has(adminSigner)) {
+        refuse('You are a party to this dispute (the buyer, the seller, or a keeper of one of them), so you cannot resolve it. Ask another admin to do this');
+    }
+    if (adminSigner === 'owner:password' && [...parties].some(pk => isNodeOwner(pk))) {
+        refuse('An owner is a party to this dispute, and the password cannot show which owner is acting. Another admin must resolve it from their own signed-in session');
+    }
+}
+
 export function resolveEscrowDispute(
     cb: EscrowCallbacks,
     transactionId: string,
@@ -947,6 +972,8 @@ export function resolveEscrowDispute(
     if (!row) {
         throw new Error('Transaction not found or not in pending escrow');
     }
+
+    assertNotPartyToDispute(row, adminSigner.trim());
 
     const post = db.prepare('SELECT * FROM posts WHERE id=?').get(row.post_id) as any;
     const authSigner = adminSigner.trim();

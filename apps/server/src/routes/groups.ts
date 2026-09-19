@@ -9,6 +9,7 @@
 */
 
 import Router from '@koa/router';
+import { chatRateLimit } from '../chat-rate-limit.js';
 import crypto from 'node:crypto';
 import {
     createGroup,
@@ -316,10 +317,11 @@ export function createGroupRoutes(deps: RouteDeps): Router {
     });
 
     router.post('/api/groups/:id/chat/message', async (ctx) => {
-        // A row per call in a room that pushes to every member: throttled per IP like the event chat.
-        if (!deps.rateLimit(ctx)) return;
         const actor = requireAuth(ctx);
         if (!actor) return;
+        // A row per call in a room that pushes to every member: throttled per signed member, in the chat bucket
+        // (not the per-IP auth limiter that also guards recovery and pairing).
+        if (!chatRateLimit(ctx, actor)) return;
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         const body = (ctx as any).requestBody || {};
         const text = typeof body.text === 'string' ? body.text : '';

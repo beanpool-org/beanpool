@@ -20,6 +20,7 @@ import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
+import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 
 /** May this member open (and so mute) this chat? The same rules as reading it. A group chat goes through
@@ -53,7 +54,7 @@ const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation no
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH, rateLimit } = deps;
+    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
 
 // ===================== MESSAGING API (PUBLIC) =====================
 
@@ -167,11 +168,12 @@ router.post('/api/messages/send', async (ctx) => {
         clientId = id.toLowerCase();
     }
     // A group chat line is a row in a room that pushes to every member, so it is throttled exactly as the group
-    // chat route throttles it (PR #924 review, item 4), and an invite-only group is 404 to an outsider here as
-    // there (item 5). Store apps up to 1.2.37 send group chat lines through this route.
+    // chat route throttles it — per signed member, in the chat bucket (PR #924 review, item 4) — and an
+    // invite-only group is 404 to an outsider here as there (item 5). Store apps up to 1.2.37 send group chat
+    // lines through this route.
     const target = getConversation(conversationId);
     if (target?.type === GROUP_THREAD_TYPE) {
-        if (!rateLimit(ctx)) return;
+        if (!chatRateLimit(ctx, ctx.state.actor)) return;
         if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
     }
     let msg;

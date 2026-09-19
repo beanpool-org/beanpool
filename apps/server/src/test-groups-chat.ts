@@ -42,6 +42,7 @@ import { setChatMute } from './engine/chat-mutes.js';
 import { GROUP_CATEGORIES, DEFAULT_GROUP_CATEGORY, GROUP_CATEGORY_LABELS } from '@beanpool/core';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMessagingRoutes } from './routes/messaging.js';
+import { chatRateLimit, resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -400,22 +401,27 @@ async function main(): Promise<void> {
     assert((listYourChats(bob).items.find(i => i.id === bakery)?.unreadCount ?? -1) === 0, 'and a keeper can mark the enterprise thread read');
 
     // ── 8b. Group chat sends through the ordinary send route are rate-limited ───────────────
-    // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is; a DM is not.
+    // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is: per signed member in the chat
+    // bucket, never the per-IP auth limiter that also guards recovery (0919 follow-up). A DM is not throttled.
     console.log('\n--- 8b. Rate limit on the ordinary send route ---');
-    let limiterCalls = 0;
+    let authLimiterCalls = 0;
     const limited = createMessagingRoutes({
         ...deps,
-        rateLimit: (ctx: any) => { limiterCalls++; ctx.status = 429; ctx.body = { error: 'Too many attempts' }; return false; },
+        rateLimit: (ctx: any) => { authLimiterCalls++; ctx.status = 429; ctx.body = { error: 'Too many attempts' }; return false; },
     });
+    resetChatRateLimit();
+    for (let i = 0; i < CHAT_LINES_PER_MINUTE; i++) chatRateLimit({} as any, bob); // Bob has used his minute
     const before8b = (db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c;
     const throttled = await dispatch(limited, 'POST', '/api/messages/send',
         ctxFor(bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('spam'), nonce: 'plaintext-v1' }));
-    assert(throttled.status === 429 && limiterCalls === 1, 'a group chat line through /api/messages/send goes through the limiter and is refused when it trips');
+    assert(throttled.status === 429, 'a group chat line through /api/messages/send goes through the chat limiter and is refused when it trips');
+    assert(authLimiterCalls === 0, 'and the per-IP auth limiter never sees it');
     assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before8b, 'and nothing is written');
     const dmPair = createConversation('dm', [bob, erin], bob)!;
     const dmSent = await dispatch(limited, 'POST', '/api/messages/send',
         ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ciphertext: 'c', nonce: 'n' }));
-    assert(dmSent.body?.success === true && limiterCalls === 1, 'a DM is not put through the group limiter');
+    assert(dmSent.body?.success === true && authLimiterCalls === 0, 'a DM is not put through either limiter');
+    resetChatRateLimit();
 
     // ── 9. The old chat group is gone ───────────────────────────────────────────────────────
     console.log('\n--- 9. The old chat group is removed ---');

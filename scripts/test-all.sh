@@ -213,6 +213,7 @@ run_federation_suites() {
       test-gateway-real-client
       test-limiter-ipv6-and-password-brake
       test-password-brake-no-lockout
+      test-password-brake-fairness
       test-csrf-protection
       test-totp-admin-2fa
       test-totp-helpers

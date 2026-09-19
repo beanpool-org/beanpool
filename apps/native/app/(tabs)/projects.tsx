@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -14,9 +14,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { enterpriseCardStatus } from '../../utils/enterprise-card';
+import { PAGE_TITLE_SIZE, useTabRetapScrollTop } from '../../components/PageTitle';
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef);
     const [enterprises, setEnterprises] = useState<TreasurySummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -47,7 +50,7 @@ export default function ProjectsScreen() {
         headerContainer: { marginBottom: 16 },
         headerInfo: { marginBottom: 16 },
         titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-        headerTitle: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5 },
+        headerTitle: { flex: 1, fontSize: PAGE_TITLE_SIZE, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
         treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
@@ -478,6 +481,7 @@ export default function ProjectsScreen() {
     return (
         <View style={styles.safeArea}>
             <FlatList
+                ref={listRef}
                 data={activeSection === 'decide' ? [] : activeSection === 'groups' ? (filteredGroups as any[]) : filteredEnterprises}
                 keyExtractor={item => activeSection === 'groups' ? (item as any).id : (item as any).publicKey}
                 renderItem={activeSection === 'groups' ? (renderGroupItem as any) : renderItem}
@@ -494,7 +498,8 @@ export default function ProjectsScreen() {
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>
                             <View style={styles.titleRow}>
-                                <Text style={styles.headerTitle}>🌱 The Commons</Text>
+                                {/* MOCK v3: the page's one large title, first thing in the list, so it scrolls away with it. */}
+                                <Text style={styles.headerTitle} accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.3}>Commons</Text>
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"

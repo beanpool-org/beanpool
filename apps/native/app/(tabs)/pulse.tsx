@@ -38,11 +38,16 @@ import {
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
 import { anchorUrl } from '../../utils/node-post';
+import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
+    // MOCK v3: large "Pulse" title above the pinned lane/category controls; folds away once the feed scrolls.
+    const pageTitle = useCollapsingTitle();
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef);
 
     const [lane, setLane] = useState<'neighbours' | 'local' | 'learn'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
@@ -273,6 +278,7 @@ export default function PulseScreen() {
     // the header, tab bar and gap stack up before any content gets a chance.
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
+            <PageTitle title="Pulse" collapsed={pageTitle.collapsed} />
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>
@@ -301,8 +307,7 @@ export default function PulseScreen() {
                     </Pressable>
                 </View>
 
-                {/* Title lives in GlobalHeader now that Pulse is a tab; keeping it here too
-                    would say "The Pulse" twice and cost a line of vertical space. */}
+                {/* The page's one title is the large "Pulse" above (MOCK v3); this is only its subtitle. */}
                 <View style={styles.titleRow}>
                     <Text style={styles.subtitle}>
                         {activeLane === 'learn'
@@ -432,6 +437,9 @@ export default function PulseScreen() {
                 </View>
             ) : (
                 <FlatList
+                    ref={listRef}
+                    onScroll={pageTitle.onScroll}
+                    scrollEventThrottle={16}
                     data={visibleItems}
                     keyExtractor={item => item.id}
                     renderItem={({ item }) => (

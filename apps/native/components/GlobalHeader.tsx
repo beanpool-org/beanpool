@@ -40,17 +40,13 @@ export const HEADER_ROW_HEIGHT = 48;
 const BEAN_SIZE = 38;
 const AVATAR_SIZE = 32;
 
-// Named after the tab labels, so the header and the tab's accessibilityLabel agree.
-function pageTitle(pathname: string): string {
-    if (pathname === '/' || pathname === '/market') return 'Market';
-    if (pathname === '/map') return 'Map';
-    if (pathname === '/chats') return 'Talk';
-    if (pathname === '/people') return 'People';
-    if (pathname === '/pulse') return 'Pulse';
-    if (pathname === '/projects') return 'Commons';
-    if (pathname === '/ledger') return 'Ledger';
-    if (pathname === '/settings') return 'Settings';
-    return 'BeanPool';
+// MOCK v3: the header names the COMMUNITY, not the page (each page carries its own large
+// title now). Saved alias first, then the node's host, so something readable shows before the
+// first health ping lands.
+function communityLabel(url: string | null, alias?: string | null): string {
+    if (alias && alias.trim()) return alias.trim();
+    if (!url) return 'BeanPool';
+    try { return new URL(url).hostname.split('.')[0] || 'BeanPool'; } catch { return 'BeanPool'; }
 }
 
 /**
@@ -162,6 +158,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     const [isGuestOnActive, setIsGuestOnActive] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
     const [hasAnchorUrl, setHasAnchorUrl] = useState(true);
+    const [communityName, setCommunityName] = useState<string>('BeanPool');
     // In-memory mirror of the version facts already on disk. Storage is read once and written
     // only when something actually changes. The node refreshes its store lookup every 6 hours
     // and the app's own version cannot change while it is running, so the 30-second ping was
@@ -312,11 +309,17 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
             }
             if (isMounted) setHasAnchorUrl(true);
             try {
+                const saved = (await getSavedNodes()).find(n => n.url === active);
+                if (isMounted) setCommunityName(communityLabel(active, saved?.alias));
+            } catch { /* storage unavailable — keep the last name shown */ }
+            try {
                 const r = await fetchWithTimeout(`${active}/api/community/health`, { timeout: 8000 });
                 if (r.ok) {
                     healthFailuresRef.current = 0;
                     if (isMounted) setIsOffline(false);
                     const data = await r.json();
+                    const remoteName = data?.nodeName || data?.name;
+                    if (isMounted && remoteName) setCommunityName(communityLabel(active, remoteName));
                     await updateVersionBanner(active, data);
                 } else {
                     await markHealthFailure(active);
@@ -518,7 +521,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
 
             {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
                 old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
-                it visible against the electric bean's dark rim. The page name sits beside it; invite, settings and avatar are plain icons on the
+                it visible against the electric bean's dark rim. The COMMUNITY's name sits beside it (v3), ellipsized when long; invite, settings and avatar are plain icons on the
                 right. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
@@ -537,7 +540,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 </TouchableOpacity>
 
                 <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                    {pageTitle(pathname)}
+                    {communityName}
                 </Text>
 
                 <View style={styles.headerRightIcons}>

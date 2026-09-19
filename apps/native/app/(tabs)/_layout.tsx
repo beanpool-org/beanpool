@@ -12,15 +12,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../ThemeContext';
 import { withJitter } from '../../utils/jitter';
 
-// MOCK (mock/header-slim): the tab row is icons only. The page name moved up into the
-// header row, so the row needs no label and six icons fit at 320dp without shrinking.
-// Height is fixed here because the library would add the status-bar inset a second time
-// (GlobalHeader already consumes it).
-const TAB_BAR_HEIGHT = 44;
+// MOCK v3 (mock/header-slim): a small label sits ABOVE each icon again, as in today's app,
+// so the text is buffered from the busy page below. Height is fixed here because the library
+// would add the status-bar inset a second time (GlobalHeader already consumes it).
+const TAB_BAR_HEIGHT = 52;
 const ICON_SIZE = 24;
+const LABEL_SIZE = 10;
+// Six tabs share 320dp, ~53dp each. "Commons" is the widest label; this cap was measured on
+// the emulator at 320dp + 1.3x text as the largest scale that keeps it on one unclipped line.
+const LABEL_MAX_SCALE = 1.1;
 const UNDERLINE_HEIGHT = 3;
 
-function TabItem({ icon, focused, color, count, badge }: {
+function TabItem({ label, icon, focused, color, count, badge }: {
     label: string;
     icon: string;
     focused: boolean;
@@ -30,23 +33,32 @@ function TabItem({ icon, focused, color, count, badge }: {
     badge?: React.ReactNode;
 }) {
     return (
-        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-            {/* The emoji can't take a tint, so the inactive ones are dimmed instead and the
-                active one gets full opacity plus the underline below. */}
-            <View style={{ paddingHorizontal: 10, opacity: focused ? 1 : 0.55 }}>
+        <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingBottom: UNDERLINE_HEIGHT }}>
+            {/* The emoji can't take a tint, so the inactive tabs are dimmed instead and the
+                active one gets full opacity, the accent label colour and the underline. */}
+            <View style={{ alignItems: 'center', opacity: focused ? 1 : 0.6 }}>
+                <Text
+                    numberOfLines={1}
+                    maxFontSizeMultiplier={LABEL_MAX_SCALE}
+                    style={{ fontSize: LABEL_SIZE, lineHeight: 13, fontWeight: '700', color, includeFontPadding: false }}
+                >
+                    {label}
+                </Text>
                 <Text allowFontScaling={false} style={{
                     fontSize: ICON_SIZE,
                     lineHeight: ICON_SIZE + 4,
+                    marginTop: 1,
                     includeFontPadding: false,
                 }}>
                     {icon}
                 </Text>
             </View>
             {/* Drawn here rather than via tabBarBadge: the library anchors that to the icon
-                wrapper, which tabBarIconStyle stretches to the whole tab. */}
+                wrapper, which tabBarIconStyle stretches to the whole tab. Sits on the icon's
+                top-right, below the label. */}
             {count !== undefined && count > 0 && (
                 <View style={{
-                    position: 'absolute', top: 3, left: '50%', marginLeft: 6, minWidth: 16, height: 16,
+                    position: 'absolute', top: 16, left: '50%', marginLeft: 6, minWidth: 16, height: 16,
                     borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#dc2626',
                     alignItems: 'center', justifyContent: 'center',
                 }}>
@@ -241,7 +253,6 @@ export default function TabLayout() {
                     name="index"
                     options={{
                         title: 'Market',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Market',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Market" icon="🤝" focused={focused} color={color} count={dealsCount} />
                     }}
@@ -250,7 +261,6 @@ export default function TabLayout() {
                     name="map"
                     options={{
                         title: 'Map',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Map',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Map" icon="🗺️" focused={focused} color={color} />
                     }}
@@ -262,7 +272,6 @@ export default function TabLayout() {
                     name="chats"
                     options={{
                         title: 'Talk',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Talk',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Talk" icon="💬" focused={focused} color={color} count={unread} />
                     }}
@@ -273,7 +282,6 @@ export default function TabLayout() {
                     name="people"
                     options={{
                         title: 'People',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'People',
                         href: null,
                         tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
@@ -283,7 +291,6 @@ export default function TabLayout() {
                     name="pulse"
                     options={{
                         title: 'Pulse',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Pulse',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
                     }}
@@ -292,7 +299,6 @@ export default function TabLayout() {
                     name="projects" 
                     options={{ 
                         title: 'Commons',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Commons',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Commons" icon={Platform.OS === 'ios' ? '🌱' : '🌳'} focused={focused} color={color} /> 
                     }} 
@@ -301,7 +307,6 @@ export default function TabLayout() {
                     name="ledger" 
                     options={{ 
                         title: 'Ledger',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Ledger',
                         tabBarIcon: ({ focused, color }) => <TabItem label="Ledger" icon="📊" focused={focused} color={color} /> 
                     }} 
@@ -310,7 +315,6 @@ export default function TabLayout() {
                     name="settings" 
                     options={{ 
                         title: 'Settings',
-                        // Icons only now, so the tab's name reaches screen readers here.
                         tabBarAccessibilityLabel: 'Settings',
                         href: null,
                         tabBarIcon: ({ focused, color }) => (

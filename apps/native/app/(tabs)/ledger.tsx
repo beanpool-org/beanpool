@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
     DeviceEventEmitter, Alert, ScrollView, Keyboard, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -22,6 +22,7 @@ import { CreditBar } from '../../components/CreditBar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 
 // ── Trust model constants (mirrors beanpool-core/protocol.ts) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -49,6 +50,11 @@ function valueForEarned(target: number): number {
 }
 
 export default function LedgerScreen() {
+    // MOCK v3: large "Ledger" title above the pinned balance bar and Levels/Wallet switch; folds
+    // away once either tab's list scrolls. One ref, pointed at whichever list is showing.
+    const pageTitle = useCollapsingTitle();
+    const listRef = useRef<any>(null);
+    useTabRetapScrollTop(listRef);
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
     const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -456,7 +462,7 @@ export default function LedgerScreen() {
         const selCurrent = tierIdx === selLevel;
         const selNeeded = Math.max(0, sel.min - ec);
         return (
-        <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={listRef} onScroll={pageTitle.onScroll} scrollEventThrottle={16} style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
 
             {/* ── Standing hero ── */}
             <View style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}>
@@ -883,6 +889,8 @@ export default function LedgerScreen() {
                 style={{ flex: 1 }}
             >
 
+            <PageTitle title="Ledger" collapsed={pageTitle.collapsed} />
+
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
                 {/* Avatar + name + tier — left side */}
@@ -957,6 +965,9 @@ export default function LedgerScreen() {
             {/* ── Content ── */}
             {activeTab === 'trust' ? renderTrustTab() : (
                 <FlatList
+                    ref={listRef}
+                    onScroll={pageTitle.onScroll}
+                    scrollEventThrottle={16}
                     data={txns}
                     keyExtractor={item => item.id}
                     renderItem={renderTxn}

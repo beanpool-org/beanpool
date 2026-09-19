@@ -145,11 +145,16 @@ overwrite an active `totpSecret`.
 
 ### `POST /api/local/admin/2fa/verify`
 
-**Auth:** Full `checkAdminAuth()` (password only at this point — 2FA not yet active — or a key session). Owner only.
+**Auth:** Full `checkAdminAuth()` (the password, plus the 2FA session or code if 2FA is already on, or a key session).
+Owner only.
 
-**Request body:** `{ "code": "123456" }`
+**Request body:** `{ "code": "123456" }` (from the NEW authenticator), plus `"currentCode"` when 2FA is already on.
 
-Verifies the 6-digit code against `totpPendingSecret`. On success:
+Verifies the 6-digit code against `totpPendingSecret`. If 2FA is already on, this replaces the authenticator, so it
+also needs a code that is right *now* from the CURRENT authenticator, or one unused backup code, in `currentCode` or
+`X-Admin-TOTP` (`requireCurrentSecondFactor`, as for disable). Without that, a stolen owner session could enrol its
+own authenticator and then use it to turn 2FA off. With 2FA on and no setup in progress, `code` is checked against
+the active secret under the brake, and a right one only issues a 2FA session. On success:
 - Moves `totpPendingSecret` → `totpSecret`
 - Sets `totpEnabled = true`
 - Stores `totpBackupCodesHashes`
@@ -178,7 +183,13 @@ Verifies the 6-digit code against `totpPendingSecret`. On success:
 that is right *now*: a 6-digit code from the authenticator or one unused backup code, in `code`, `totpCode` or
 `X-Admin-TOTP`. A 2FA session from an earlier sign-in, or a key session, is not enough on its own: turning 2FA off
 is what someone holding a stolen session would want. A backup code counts so an owner who lost the phone can
-still turn it off. A wrong code counts against the password brake (password callers) and the tarpit.
+still turn it off. The code is checked under the password brake for every caller, key sessions included: a wrong one
+is a failure from that address (5 free, then 2 s, 4 s, … as for wrong passwords), a right one clears the address's
+record, and a braked address gets 429 without the code being checked. A wrong code also costs the tarpit. A 2FA
+session never clears the brake record or eases the tarpit: only a code checked now does. It does not spend the
+node-wide allowance either: a request with the right password and a valid 2FA session hands its check back
+(`refundNodeCheck`), so after one mistyped code the dashboard's own polling (about 22 a minute, against 12) is never
+refused. A code the request goes on to check is admitted afresh, so each wrong code still costs one.
 
 **Request body:** `{ "code": "123456" }`
 

@@ -182,8 +182,8 @@ async function main() {
     se.sendMessage(conv.id, alice.pubKeyHex, DM_CIPHERTEXT, 'nonce-1');
     // A balance change, exactly as transfer() announces it (A2-20): scoped to its two parties.
     se.broadcast({ type: 'transaction', txn: { from: alice.pubKeyHex, to: bob.pubKeyHex, amount: 7, memo: 'rent' } }, [alice.pubKeyHex, bob.pubKeyHex]);
-    // A trade request, as escrow announces it: community-wide, names both parties and the Beans.
-    se.broadcast({ type: 'transaction_requested', transaction: { id: 'tx-1', buyerPublicKey: bob.pubKeyHex, sellerPublicKey: alice.pubKeyHex, credits: 12 } });
+    // A trade request, as escrow announces it: to its two parties only (test-ws-feed-parties drives the real path).
+    se.broadcast({ type: 'transaction_requested', transaction: { id: 'tx-1', buyerPublicKey: bob.pubKeyHex, sellerPublicKey: alice.pubKeyHex, credits: 12 } }, [alice.pubKeyHex, bob.pubKeyHex]);
     const ANNOUNCEMENT = 'members-meeting-' + crypto.randomBytes(4).toString('hex');
     se.adminBroadcastAnnouncement(ANNOUNCEMENT, 'at the hall', 'info');
     const PRIVATE_NOTE = 'gate-code-' + crypto.randomBytes(4).toString('hex');
@@ -211,10 +211,14 @@ async function main() {
 
     if (OPEN_FEED) {
         const got = anon.events.map(e => e.type);
-        for (const t of ['new_message', 'transaction_requested', 'system_announcement', 'member_joined']) {
+        for (const t of ['system_announcement', 'member_joined']) {
             assert(got.includes(t), `open feed: unsigned socket gets ${t}, as before this change`);
         }
-        assert(!got.includes('transaction'), 'open feed: unsigned socket still never gets a scoped transfer');
+        // A DM, a trade and a transfer are scoped to their parties, so even the open feed never carries them.
+        for (const t of ['transaction', 'new_message', 'conversation_created', 'transaction_requested']) {
+            assert(!got.includes(t), `open feed: unsigned socket never gets the scoped ${t}`);
+        }
+        assert(!anon.raw.some(r => r.includes(DM_CIPHERTEXT)), 'open feed: unsigned socket never sees a DM');
         assert(!anon.raw.some(r => r.includes(DIRECT_TITLE)), 'open feed: unsigned socket still never gets a direct post');
     }
 
@@ -225,7 +229,10 @@ async function main() {
     assert(aliceWs.raw.some(r => r.includes(DM_CIPHERTEXT)), 'member alice gets the DM notice in full');
     assert(aliceWs.events.some(e => e.type === 'new_post' && e.post?.title === 'Street picnic'), 'member alice gets the public event post in full');
     const cGot = carolWs.events.map(e => e.type);
-    assert(cGot.includes('new_message') && cGot.includes('system_announcement'), 'member carol gets the community-wide events, as before');
+    assert(cGot.includes('system_announcement') && cGot.includes('member_joined'), 'member carol gets the community-wide events, as before');
+    assert(!cGot.includes('new_message') && !cGot.includes('conversation_created') && !carolWs.raw.some(r => r.includes(DM_CIPHERTEXT)),
+        "member carol does not get alice and bob's DM");
+    assert(!cGot.includes('transaction_requested'), 'member carol does not get a trade request she is not a party to');
     assert(!cGot.includes('transaction'), 'member carol does not get a transfer she is not a party to');
     assert(carolWs.raw.some(r => r.includes(DIRECT_TITLE)), 'member carol gets the direct post addressed to her');
 

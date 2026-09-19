@@ -217,6 +217,7 @@ run_federation_suites() {
       test-csrf-protection
       test-totp-admin-2fa
       test-2fa-covers-admin-routes
+      test-2fa-reenrol-needs-code
       test-totp-helpers
       test-moderation-admin
       test-report-dedup-and-sync
@@ -300,6 +301,7 @@ run_federation_suites() {
       test-ws-pong-watchdog
       test-ws-http-port
       test-ws-auth-default
+      test-ws-feed-parties
       test-polls
       test-events
       test-event-chat

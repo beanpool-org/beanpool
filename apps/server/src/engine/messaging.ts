@@ -107,7 +107,8 @@ export function createConversation(
     })();
 
     const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
-    cb.broadcast({ type: 'conversation_created', conversation: conv });
+    // A DM's existence says who is talking to whom: only its two participants hear of it.
+    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants);
     return conv;
 }
 
@@ -224,7 +225,8 @@ export function sendMessage(
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime) VALUES (?, ?, ?, ?)`).run(msg.id, attachment.data, attachment.nonce, attachment.mime || 'image/jpeg');
     }
 
-    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
+    // Only the conversation's participants — the people GET /api/messages/:id lets read it.
+    cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));
 
     // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
     if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
@@ -305,7 +307,7 @@ export function toggleMessageReaction(
         messageId,
         metadata: metadataStr,
         participants: participants.map(p => p.public_key)
-    });
+    }, participants.map(p => p.public_key));
 
     return { success: true, metadata: metadataStr };
 }
@@ -372,7 +374,7 @@ export function editMessage(
         conversationId: row.conversation_id,
         message: updated,
         participants: participants.map(p => p.public_key)
-    });
+    }, participants.map(p => p.public_key));
 
     return updated;
 }
@@ -431,7 +433,8 @@ export function injectSystemMessage(
         };
         db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.systemType, msg.metadata, msg.timestamp);
 
-        cb.broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
+        // System lines are plaintext (amounts, rulings): the conversation's participants only.
+        cb.broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));
     }
 }
 

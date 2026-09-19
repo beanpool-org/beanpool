@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
@@ -123,17 +123,23 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     const brakeKey = password ? clientLimiterKey(ctx) : '';
     let refusal: Exclude<Admission, { admitted: true }> | null = null;
     let admitted = false;
+    let chargedAt: number | undefined;
 
     if (password) {
         const admission = await acquirePasswordAttempt(brakeKey);
         admitted = admission.admitted;
         if (!admission.admitted) refusal = admission;
+        else chargedAt = admission.chargedAt;
         let pwOk = false;
         try {
             // While the source is braked the password is not checked at all; a break-glass code still is (64 random
             // bits: not guessable online, and how an owner enrols a key while the password is under attack).
             if (admitted && config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
                 pwOk = true;
+                // Which password this request proved, so a route that must also be sent the current password (change
+                // password) need not run scrypt, and take the brake, a second time for the same string.
+                if (!ctx.state) ctx.state = {};
+                ctx.state.verifiedAdminPassword = password;
             } else {
                 const ownerMatch = verifyBreakGlassCode(password);
                 if (ownerMatch) {
@@ -165,6 +171,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 
     if (!ctx.state) ctx.state = {};
     if (!ctx.state.adminRole) ctx.state.adminRole = 'owner';
+    // This request has had its one brake admission for this source; requireCurrentSecondFactor counts against it.
+    ctx.state.passwordBrakeKey = admitted ? brakeKey : undefined;
+    let viaSession = false;
     if (breakGlassOwner) {
         ctx.state.actor = breakGlassOwner;
         ctx.state.auth_signer = breakGlassOwner;
@@ -191,8 +200,20 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.request?.headers?.['x-admin-2fa-session'] ||
             ctx.headers?.['x-admin-2fa-session'];
         if (sessionToken && isValid2faSession(sessionToken)) {
-            // Session token is valid — 2FA already verified this session
-            if (admitted) notePasswordSuccess(brakeKey);
+            // Session token is valid — 2FA already verified this session. It clears nothing on the password brake:
+            // only a code checked now does (below, verify-password, requireCurrentSecondFactor). A session is a
+            // bearer token; if it cleared the record, someone holding it could send wrong current codes to 2FA
+            // disable or re-enrol, each wiped by their next request, and never be slowed (Fable's review of #953).
+            // Nor does it ease the tarpit below, for the same reason.
+            viaSession = true;
+            // But this request is no guess: the password is right and the session valid. So it hands back the
+            // node-wide check it took (password-brake.ts, 3). Otherwise, after one wrong current code, the owner's
+            // own dashboard polling spends the whole allowance and is refused (Fable's review of #955, B1). A code
+            // this request goes on to check (requireCurrentSecondFactor) is admitted afresh, so it still costs one.
+            if (admitted) {
+                refundNodeCheck(chargedAt);
+                ctx.state.passwordBrakeKey = undefined;
+            }
         } else {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||
@@ -251,8 +272,8 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         } // end of else block (no valid 2FA session token)
     }
 
-    // #135 CR2: Reset tarpit failure count on successful authentication
-    if (adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
+    // #135 CR2: Reset tarpit failure count on successful authentication (a 2FA session alone is not one: above)
+    if (!viaSession && adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
 
     return true;
 }
@@ -276,36 +297,62 @@ export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error:
 /**
  * Proof, in this request, that the caller holds the node's second factor now: a code from the authenticator, or
  * one unused backup code (spent here). A 2FA session from an earlier sign-in, or a key session, is not enough: this
- * guards turning 2FA off, which is what someone holding a stolen session would want to do. A backup code counts so
- * that an owner who has lost the phone can still turn 2FA off.
+ * guards turning 2FA off and replacing the authenticator, which is what someone holding a stolen session would want
+ * to do. A backup code counts so that an owner who has lost the phone can still do both.
  *
  * When checkAdminAuth took this request's code inline it has already checked it (and spent a backup code), so that
- * counts. A wrong code costs the password brake for a password caller (so it cannot be used to guess codes around
- * the sign-in's own count) and the tarpit for everyone. Answers 401 and returns false on failure.
+ * counts. Otherwise the code is checked under the password brake (password-brake.ts), for key sessions too: a wrong
+ * code is a failure from that source (so wrong codes back off exactly as wrong passwords do, and share the count with
+ * them), a right one clears the source's record. A braked source is answered 429 without the code being checked. A
+ * wrong code also costs the global tarpit. `action` ends the error's
+ * sentence "Enter a current code … ". Answers 401 or 429 and returns false on failure.
  */
-export async function requireCurrentSecondFactor(ctx: any, code: unknown): Promise<boolean> {
+export async function requireCurrentSecondFactor(ctx: any, code: unknown, action = 'to turn 2FA off'): Promise<boolean> {
     if (ctx.state?.secondFactorJustVerified) return true;
-    const config = getLocalConfig();
-    if (!config.totpEnabled || !config.totpSecret) return true;
+    if (!getLocalConfig().totpEnabled || !getLocalConfig().totpSecret) return true;
     const clean = code === undefined || code === null ? '' : String(code).trim();
     if (!clean) {
         ctx.status = 401;
-        ctx.body = { error: 'Enter a current code from your authenticator app (or a backup code) to turn 2FA off', totpRequired: true };
+        ctx.body = { error: `Enter a current code from your authenticator app (or a backup code) ${action}`, totpRequired: true };
         return false;
     }
-    let ok = verifyTotpCode(clean, config.totpSecret);
-    if (!ok) {
-        const hashes = config.totpBackupCodesHashes || [];
-        const i = hashes.length > 0 ? verifyAndFindBackupCodeHash(clean, hashes) : -1;
-        if (i !== -1) {
-            const updated = [...hashes];
-            updated.splice(i, 1);
-            updateLocalConfig({ totpBackupCodesHashes: updated });
-            ok = true;
+    // A password caller was admitted by the brake moment ago in checkAdminAuth (a braked source never gets this far):
+    // the code counts against that same admission, so a request costs the node-wide allowance once, not twice.
+    // Anyone else (a key session, a break-glass code) is admitted here.
+    const admittedKey: string | undefined = ctx.state?.passwordBrakeKey;
+    const key = admittedKey ?? clientLimiterKey(ctx);
+    if (!admittedKey) {
+        const admission = await acquirePasswordAttempt(key);
+        if (!admission.admitted) {
+            refuseBraked(ctx, admission);
+            return false;
+        }
+    }
+    let ok = false;
+    try {
+        // Read after the wait: another request may have spent a backup code, or changed the secret, meanwhile.
+        const config = getLocalConfig();
+        if (config.totpEnabled && config.totpSecret) {
+            ok = verifyTotpCode(clean, config.totpSecret);
+            if (!ok) {
+                const hashes = config.totpBackupCodesHashes || [];
+                const i = hashes.length > 0 ? verifyAndFindBackupCodeHash(clean, hashes) : -1;
+                if (i !== -1) {
+                    const updated = [...hashes];
+                    updated.splice(i, 1);
+                    updateLocalConfig({ totpBackupCodesHashes: updated });
+                    ok = true;
+                }
+            }
+        }
+    } finally {
+        if (admittedKey) {
+            if (ok) notePasswordSuccess(key); else notePasswordFailure(key);
+        } else {
+            settlePasswordAttempt(key, ok);
         }
     }
     if (!ok) {
-        if (!ctx.state?.isKeySession) notePasswordFailure(clientLimiterKey(ctx));
         adminAuthFailures++;
         await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
         ctx.status = 401;

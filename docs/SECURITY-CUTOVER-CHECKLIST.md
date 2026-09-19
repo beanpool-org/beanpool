@@ -45,15 +45,17 @@ endpoint is a pure read-only export — it adds no inbound trust.
 **Self-signed LAN primaries:** point `NODE_EXTRA_CA_CERTS` at the primary's CA pem on the backup
 (Node honors it for `fetch`). Public Let's Encrypt nodes (the test pair) need nothing.
 
-**Failover promotion:** restart the backup with `NODE_ROLE=primary` **and** `PROMOTED_FROM_BACKUP=true`
-for that one boot — the boot path runs a ledger conservation sanity check (`promotionSanityCheck`)
-and logs a PASS/FAIL banner before the node takes live writes. Drop `BACKUP_*` and `PROMOTED_FROM_BACKUP`
-on subsequent restarts. (Override these for one boot by shell-exporting them and running
-`sudo -E docker compose ... up -d --force-recreate`; the shell env wins over the node `.env`.)
+**Failover promotion:** in the backup's Settings, **Take over as the main server** with the printed
+recovery code (operator manual, Backups and replicas). It keeps the community's identity, writes
+`nodeRole: primary` to `local-config.json` (over `NODE_ROLE` in `.env`), restarts, and runs the ledger
+conservation sanity check (`promotionSanityCheck`) once, logging a PASS/FAIL banner. No `.env` edit.
+The old `PROMOTED_FROM_BACKUP` env step and `scripts/restore-primary.mjs` are gone (sealed keys slice 8).
+If the old primary is started again and sees the new one at its own public address, it goes read-only
+(`services/identity-epoch.ts`).
 
 ### How the role/backup/enforcement env reaches the container
 
-`docker-compose.yml` declares `NODE_ROLE`, `BACKUP_*`, `PROMOTED_FROM_BACKUP`, and the three
+`docker-compose.yml` declares `NODE_ROLE`, `BACKUP_*`, and the three
 `ENFORCE_*` flags as `${VAR:-}` passthroughs (empty default = primary, puller off, flags off —
 the safe dormant state). Set them per node in a **node-local `.env`** in the project dir
 (`/home/<user>/<DIR>/.env`, `chmod 600`). `deploy.sh` preserves that `.env` across the
@@ -124,7 +126,7 @@ admin password.
       shows none); the backup has exactly one passive mirror = the primary.
 - [ ] `GET /api/local/admin/sync-snapshot` returns a signed payload **only with** the correct
       `X-Admin-Password` (401 without); it never mutates state.
-- [ ] **Failover:** stop the primary; restart the backup with `NODE_ROLE=primary PROMOTED_FROM_BACKUP=true`;
+- [ ] **Failover:** stop the primary; on the backup, Settings → Take over as the main server (recovery code);
       confirm the `🔁 FAILOVER PROMOTION … ✅ PROMOTION OK` banner and that the app can read/write the
       promoted node. Confirm the promoted node now **also** refuses inbound state.
 - [ ] No `Conservation violation` in the backup log during steady-state pulls (full snapshots are

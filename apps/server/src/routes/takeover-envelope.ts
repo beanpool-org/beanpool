@@ -17,6 +17,10 @@
  *   POST /api/local/admin/takeover/cancel               owner        forget an open session
  *   POST /api/local/admin/takeover/progress             admin, or the progress token (X-Takeover-Progress)
  *
+ * The split-brain guard (§5.4; slice 8; services/identity-epoch.ts):
+ *   GET  /api/node/identity-epoch                       public       this identity's take-over count, signed with the
+ *                                                                    node key; an old main server asks its own address
+ *
  * No route here returns a plaintext field of the bundle. The envelope route returns the sealed bytes as they
  * are on disk; the header route returns the header, which is public by design (recipients, code number, sig).
  */
@@ -39,6 +43,7 @@ import {
     TakeoverError, takeoverPreconditions, parseTypedCode, pickEnvelope, codeMatches, openTakeoverSession,
     confirmTakeover, discardTakeoverSession, getTakeoverProgress, progressTokenMatches,
 } from '../services/takeover.js';
+import { currentSignedEpoch, IDENTITY_EPOCH_PATH } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 
 const TAKEOVER_OWNER_ONLY = 'Only an owner of this standby can take over as the main server.';
@@ -322,6 +327,18 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
         }
         ctx.set('Cache-Control', 'no-store');
         ctx.body = getTakeoverProgress();
+    });
+
+    // Public: it proves nothing secret, and an old main server must read it with no credential for this server.
+    router.get(IDENTITY_EPOCH_PATH, async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const signed = currentSignedEpoch();
+        if (!signed) {
+            ctx.status = 404;
+            ctx.body = { error: 'This server has no node key yet.' };
+            return;
+        }
+        ctx.body = signed;
     });
 
     return router;

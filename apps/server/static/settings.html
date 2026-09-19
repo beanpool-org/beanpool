@@ -1927,28 +1927,6 @@
                 <div class="status-msg" id="backup-enroll-status"></div>
             </div>
 
-            <!-- SECTION 2c: Restore primary server wizard (only shown on backups) -->
-            <div class="glass" id="backup-restore-wizard" data-tab="backup" style="display:none;">
-                <h3>🔄 Restore primary server <span style="font-size:0.65rem;font-weight:600;color:#10b981;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);padding:1px 7px;border-radius:8px;vertical-align:middle;margin-left:6px;">disaster recovery</span></h3>
-                <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.75rem;">
-                    If your primary server fails, you can restore a fresh primary node using the data and identity keys from this backup. Run the command below <strong>on the new primary machine</strong> (it must already have the BeanPool node code).
-                </p>
-                <button class="btn btn-primary" id="backup-restore-btn" onclick="generateRestoreCommand()" style="margin-bottom:0.75rem;">
-                    🪄 Generate restore command
-                </button>
-                <div id="backup-restore-result" style="display:none;">
-                    <div style="font-size:0.75rem;color:#94a3b8;font-weight:600;margin-bottom:0.4rem;">Run this on the new PRIMARY machine:</div>
-                    <div style="position:relative;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:0.75rem;padding-right:2.5rem;font-family:'Courier New',monospace;font-size:0.78rem;color:#e2e8f0;line-height:1.6;word-break:break-all;">
-                        <code id="backup-restore-command"></code>
-                        <button onclick="copyRestoreCommand()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy command">📋</button>
-                    </div>
-                    <p style="font-size:0.72rem;color:#64748b;margin:0.5rem 0 0;">
-                        Replace <code style="color:#f59e0b;">&lt;BACKUP_ADMIN_PASSWORD&gt;</code> with this backup server's admin password (not shown here for safety). After the script finishes on the primary machine, boot that node — it will start up with your fully restored database.
-                    </p>
-                </div>
-                <div class="status-msg" id="backup-restore-status"></div>
-            </div>
-
             <!-- Live Connections -->
             <div class="glass" data-tab="connections" style="display:none;">
                 <h3>🔌 Live WebSocket Connections</h3>

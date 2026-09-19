@@ -124,6 +124,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { createBackupRoutes } = await import('./routes/backup.js');
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const { checkAdminAuth } = await import('./admin-auth.js');
+    const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
     await ensureGenesis();
     initAdminPassword();
@@ -133,6 +134,9 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });
     await finishTakeoverAfterBoot();
+    // As index.ts does, but awaited so a suite can see the first answer, and only when the suite says where this
+    // node's "public address" is: the suites' main servers have real-looking hostnames that must never be asked.
+    const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
 
     const deps: any = {
         checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
@@ -149,6 +153,16 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
             (ctx as any).requestBody = {};
         }
         (ctx.request as any).body = (ctx as any).requestBody;
+        await next();
+    });
+    // The split-brain guard, where https-server.ts has it: before the routes. And one write a member could make,
+    // to see it refused or let through.
+    app.use(identityReadOnlyGuard);
+    app.use(async (ctx, next) => {
+        if (ctx.method === 'POST' && ctx.path === '/api/test/member-write') {
+            ctx.body = { written: true };
+            return;
+        }
         await next();
     });
     app.use(createBackupRoutes(deps).routes());
@@ -178,6 +192,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
         role: getNodeRole(),
         auditRan: boot.auditRan,
         resumed: boot.resumed,
+        epochCheck,
     });
 }
 

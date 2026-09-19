@@ -9,8 +9,8 @@
  *
  * ## When a backup is locked (seal review round 1)
  *
- * Only when this server has a recovery code. The only opener that ships today is the code (restore, and
- * scripts/restore-primary.mjs); opening with an owner's phone is slice 6. A file locked to owners alone would be
+ * Only when this server has a recovery code. The only opener that ships today is the code (restore, and the
+ * take-over on a standby); opening with an owner's phone is slice 6. A file locked to owners alone would be
  * a backup nothing can open, so without a code a backup leaves in the readable format it always had — the tar.gz
  * of state.db and node_config.json, or the raw snapshot file — and says so: {@link NOT_LOCKED_MESSAGE} in a
  * response header, in the backup status, and in the log. Never a false "locked".

@@ -261,10 +261,10 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
 // engines, where either could throw. Splitting on spaces and punctuation keeps letters of every script.
 function fold(s: string): string {
     let out = s.toLowerCase();
-    try { out = out.normalize('NFKD').replace(/[̀-ͯ]/g, ''); } catch { /* keep accents */ }
+    try { out = out.normalize('NFKD').replace(/[\u0300-\u036f]/g, ''); } catch { /* keep accents */ }
     return out.replace(/\*\*/g, '');
 }
-const SEPARATORS = /[\s!-/:-@[-`{-~ -¿ -⁯　-〿]+/;
+const SEPARATORS = /[\s!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u206f\u3000-\u303f]+/;
 const words = (s: string) => fold(s).split(SEPARATORS).filter(Boolean);
 
 export interface GuideSearchResult {

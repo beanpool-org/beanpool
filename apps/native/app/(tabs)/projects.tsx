@@ -30,11 +30,13 @@ export default function ProjectsScreen() {
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>('decide');
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
-    // so switch to Decide and show it from the top, then clear the param so a later visit keeps its place.
+    // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
+    // clear the param so a later visit keeps its place.
     const sectionParam = useLocalSearchParams<{ section?: string }>().section;
     useEffect(() => {
         if (sectionParam !== 'decide') return;
         setActiveSection('decide');
+        setActiveDecideView('open');
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
         router.setParams({ section: '' });
     }, [sectionParam]);

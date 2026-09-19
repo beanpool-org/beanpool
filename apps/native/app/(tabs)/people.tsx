@@ -17,8 +17,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { extractNodeOrigin, normaliseInviteCode } from '../../utils/invite-parser';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
+import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 
-type SubView = 'friends' | 'community' | 'invites';
+type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
 
 const MEMBER_ROW_HEIGHT = 66;
@@ -134,13 +135,11 @@ export default function PeopleScreen() {
     }));
 
     const params = useLocalSearchParams<{ view?: string }>();
-    const [view, setView] = useState<SubView>((params.view as SubView) || 'community');
+    const [view, setView] = useState<SubView>(initialPeopleView(params.view));
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
-        if (params.view && ['friends', 'community', 'invites'].includes(params.view)) {
-            setView(params.view as SubView);
-        }
+        if (isPeopleView(params.view)) setView(params.view);
     }, [params.view]);
 
     useEffect(() => {

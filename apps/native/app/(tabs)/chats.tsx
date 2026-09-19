@@ -12,6 +12,7 @@ import { useLocalSearchParams } from 'expo-router';
 import PeopleScreen from './people';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { initialTalkView, type TalkView } from '../../utils/talk-views';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -20,7 +21,7 @@ export default function ChatsScreen() {
     // Talk tab stays highlighted; /people survives for the deep links that pass a `view` param,
     // and PeopleScreen reads that param off whichever route it is mounted on.
     const talkParams = useLocalSearchParams<{ view?: string; filter?: string }>();
-    const [talkView, setTalkView] = useState<'messages' | 'people'>(talkParams.view ? 'people' : 'messages');
+    const [talkView, setTalkView] = useState<TalkView>(initialTalkView(talkParams.view));
 
     React.useEffect(() => {
         if (talkParams.view === 'people') {
@@ -39,12 +40,13 @@ export default function ChatsScreen() {
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
-    // The header's message and group icons land here with filter=unread, when there is more than one chat
-    // to show. Cleared after use so the filter stays the member's own choice from then on.
+    // The header's message and group icons land here with view=messages&filter=unread, when there is more
+    // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
+    // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
     React.useEffect(() => {
         if (talkParams.filter !== 'unread') return;
         setReadFilter('unread');
-        router.setParams({ filter: '' });
+        router.setParams({ filter: '', view: '' });
     }, [talkParams.filter]);
     const [peopleFilter, setPeopleFilter] = useState<'all' | 'friends'>('all');
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());

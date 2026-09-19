@@ -6,6 +6,7 @@ import { InvitesModule } from './InvitesModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
 import { AncestryTreePanel } from './AncestryTreePanel';
+import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport } from '../../lib/node-client';
@@ -23,7 +24,9 @@ interface PeopleSafetySectionProps {
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
-    initialSubTab?: 'directory' | 'invites' | 'moderation';
+    initialSubTab?: 'directory' | 'invites' | 'moderation' | 'roles';
+    /** Who is signed in to /settings — decides whether Owners & admins offers its add/remove controls. */
+    rolesViewer?: RolesViewer;
 }
 
 export function PeopleSafetySection({
@@ -40,8 +43,9 @@ export function PeopleSafetySection({
     onGrantNodeRole,
     onRevokeNodeRole,
     initialSubTab = 'directory',
+    rolesViewer = { kind: 'password' },
 }: PeopleSafetySectionProps) {
-    const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation'>(initialSubTab);
+    const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation' | 'roles'>(initialSubTab);
     const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
@@ -121,11 +125,11 @@ export function PeopleSafetySection({
                         <HelpLink screen={`people/${subTab}`} />
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
-                        Member directory, trust tiers, invites, QR cards, and report triage
+                        Member directory, trust tiers, invites, QR cards, report triage, and who runs the node
                     </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <div className="flex flex-wrap items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
                     <button
                         onClick={() => setSubTab('directory')}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -160,6 +164,16 @@ export function PeopleSafetySection({
                                 {reports.length}
                             </span>
                         )}
+                    </button>
+                    <button
+                        onClick={() => setSubTab('roles')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            subTab === 'roles'
+                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                : 'text-nature-400 hover:text-white border border-transparent'
+                        }`}
+                    >
+                        Owners &amp; admins
                     </button>
                 </div>
             </div>
@@ -231,6 +245,12 @@ export function PeopleSafetySection({
 
             {subTab === 'invites' && (
                 <InvitesModule activeNode={activeNode} />
+            )}
+
+            {subTab === 'roles' && (
+                <SectionErrorBoundary sectionName="Owners & admins" resetKey={activeNode.id}>
+                    <NodeRolesPanel activeNode={activeNode} members={members} viewer={rolesViewer} onChanged={onRefresh} />
+                </SectionErrorBoundary>
             )}
 
             {subTab === 'moderation' && (

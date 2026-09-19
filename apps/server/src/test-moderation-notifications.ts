@@ -275,6 +275,8 @@ async function main() {
         const Q = se.createPost('offer', 'goods', 'Honest honey', 'jars', 8, 'fixed', Ann.pubKeyHex)!;
         const rep3 = se.submitReport(R1.pubKeyHex, Ann.pubKeyHex, 'Other', Q.id)!;
         const memberReport = se.submitReport(R2.pubKeyHex, C.pubKeyHex, 'rude in chat')!;
+        // The phone app files an enterprise report with the enterprise's key where a post id would go.
+        const entReport = se.submitReport(R1.pubKeyHex, C.pubKeyHex, 'odd enterprise', C.pubKeyHex)!;
         await flush(); sent.length = 0; clear(...all);
         const dis = await admin('POST', `/api/local/admin/reports/${rep3.id}/dismiss`);
         assert(dis.status === 200, 'the dismiss route answers 200');
@@ -287,6 +289,10 @@ async function main() {
         await admin('POST', `/api/local/admin/reports/${rep3.id}/dismiss`);
         await flush();
         assert(sent.length === 0, 'dismissing it again sends nothing');
+        clear(...all);
+        await admin('POST', `/api/local/admin/reports/${entReport.id}/dismiss`);
+        await flush();
+        assert(sent.length === 0 && notices(socks.R1).length === 0, 'dismissing a report that names no real post says nothing about "the post you reported"');
 
         // ── 4. A plain admin delete, and the preference ──────────────────────────────────────────
         console.log('\n— 4. a plain admin delete —');
@@ -335,6 +341,9 @@ async function main() {
         assert(live?.postRemoved === false && live?.postId === Q.id, 'a kept post reads postRemoved: false');
         const mem = allList.body.reports.find((x: any) => x.id === memberReport.id);
         assert(mem?.postId === null && mem?.postAuthorCallsign === null && mem?.postRemoved === null, 'a member report has no post fields');
+        const ent = allList.body.reports.find((x: any) => x.id === entReport.id);
+        assert(ent?.targetPostId === C.pubKeyHex && ent?.postId === null && ent?.postRemoved === null,
+            'an enterprise report keeps its old targetPostId but reads as no post');
     } finally {
         (globalThis as any).fetch = realFetch;
         for (const s of all) s.ws.close();

@@ -5086,7 +5086,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
                p.title as post_title,
-               p.active as post_active, p.status as post_status,
+               p.id as post_row_id, p.active as post_active, p.status as post_status,
                mp.callsign as post_author_callsign,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at
@@ -5120,10 +5120,11 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
         postTitle: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
-        postId: r.target_post_id || null,
-        postAuthorCallsign: r.target_post_id ? (r.post_author_callsign || null) : null,
-        // A post the admins or its author already took down, or one never replicated here.
-        postRemoved: r.target_post_id ? (r.post_status == null || r.post_active !== 1 || r.post_status === 'cancelled') : null,
+        // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
+        postId: r.post_row_id || null,
+        postAuthorCallsign: r.post_row_id ? (r.post_author_callsign || null) : null,
+        // A post the admins or its author already took down.
+        postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
         pulseItem: r.target_pulse_item_id
             ? {
@@ -5200,7 +5201,8 @@ export function dismissReport(reportId: string): boolean {
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
     // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed.
-    if (res.changes > 0 && report?.target_post_id && (report.status === 'pending' || report.status == null)) {
+    const isPost = Boolean(report?.target_post_id && db.prepare('SELECT 1 FROM posts WHERE id = ?').get(report.target_post_id));
+    if (res.changes > 0 && isPost && (report.status === 'pending' || report.status == null)) {
         notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id);
     }
     return res.changes > 0;

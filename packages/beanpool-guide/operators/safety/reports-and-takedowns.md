@@ -42,7 +42,7 @@ You open Settings from the app's **🛡️ Moderate** button, or on a computer b
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
 - **Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
 
-The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post that someone has reported.
+The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post while a report on it is still open: once its reports are dismissed or handled, only an owner or admin can remove it.
 
 ## Taking a post down
 

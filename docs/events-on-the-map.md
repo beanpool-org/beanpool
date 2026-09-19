@@ -8,8 +8,10 @@ table, a blurred pin with host approval, and delta-sync federation; each of thos
 polls-as-a-post-type, the public enterprise pin with Approximate (#844), and the listings pull. The old text
 is in this branch's history.
 
-Nothing here is built. Status: **design decided in full on 2026-09-18; Marty reads this note before any
-build brief is written.**
+Status (2026-09-19): **slices 1–6 are built and merged**: server #866, PWA #870, native #869, chat #871,
+notifications and copy #878, moderation and 30-day scrub #883; then edit/reopen and QA fixes #900 and address
+search #901. **Slice 7 (native map layer) is approved by Marty (2026-09-19) and queued as its own PR.** The two
+"later" slices are not scheduled. The text below is the design as decided; where a built PR differs, the PR wins.
 
 ---
 
@@ -370,4 +372,4 @@ The first version of this note asked ten questions the code forced. Marty answer
    `removePost` trusts (§2.2).
 10. **End time:** optional, default start + 2 hours (§2.2, §3).
 
-Next: Marty reads this note; a build brief for slice 1 follows only after that.
+Marty read this note before slice 1; slices 1–6 have since shipped (see Status at the top).

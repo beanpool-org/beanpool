@@ -192,6 +192,20 @@ describe('the manual', () => {
         expect(searchGuide(guide, 'seed phrase').some(r => r.page.slug === 'your-12-words')).toBe(true);
     });
 
+    it('search: accents fold, and words in other scripts are found (a translated guide will need this)', () => {
+        const g: Guide = {
+            schema: 2, version: 1, hash: 'h',
+            sections: [{ id: 'about', title: 'A', summary: 'S', slugs: ['a', 'b'] }],
+            guides: [
+                { slug: 'a', title: 'Café', summary: 'S', section: 'about', related: ['b'], blocks: [{ type: 'p', text: 'Ψωμί και **καφές**, 12 λέξεις.' }] },
+                { slug: 'b', title: 'Other', summary: 'S', section: 'about', related: ['a'], blocks: [{ type: 'p', text: 'nothing here' }] },
+            ],
+        };
+        expect(searchGuide(g, 'cafe').map(r => r.page.slug)).toEqual(['a']);
+        expect(searchGuide(g, 'καφές').map(r => r.page.slug)).toEqual(['a']);
+        expect(searchGuide(g, 'λέξεις').map(r => r.page.slug)).toEqual(['a']);
+    });
+
     it('search results carry a short snippet without bold markers', () => {
         for (const r of searchGuide(guide, 'beans')) {
             expect(r.snippet.length).toBeLessThanOrEqual(112);

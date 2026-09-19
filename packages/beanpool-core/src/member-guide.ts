@@ -257,8 +257,15 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
     project: ['enterprise'], business: ['enterprise'],
 };
 
-const fold = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/\*\*/g, '');
-const words = (s: string) => fold(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+// No Unicode property escapes (\p{L}) and a guarded normalize(): this module loads at app start on old Android
+// engines, where either could throw. Splitting on spaces and punctuation keeps letters of every script.
+function fold(s: string): string {
+    let out = s.toLowerCase();
+    try { out = out.normalize('NFKD').replace(/[̀-ͯ]/g, ''); } catch { /* keep accents */ }
+    return out.replace(/\*\*/g, '');
+}
+const SEPARATORS = /[\s!-/:-@[-`{-~ -¿ -⁯　-〿]+/;
+const words = (s: string) => fold(s).split(SEPARATORS).filter(Boolean);
 
 export interface GuideSearchResult {
     page: GuidePage;

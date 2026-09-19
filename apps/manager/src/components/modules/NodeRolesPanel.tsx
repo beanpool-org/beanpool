@@ -87,6 +87,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     const [confirmingAdd, setConfirmingAdd] = useState(false);
     const [removing, setRemoving] = useState<NodeRoleRecord | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
+    const noticeRef = useRef<HTMLDivElement>(null);
 
     const tfa = getTfaSessionToken(activeNode.id);
     const myKey = viewer.kind === 'key' ? viewer.memberPubkey : null;
@@ -105,6 +106,11 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     }, [activeNode.url, activeNode.adminPassword, tfa]);
 
     useEffect(() => { void load(); }, [load]);
+
+    // The notice sits above the list; after acting on a row far below, bring the node's answer into view.
+    useEffect(() => {
+        if (notice) noticeRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    }, [notice]);
 
     const memberByKey = useMemo(() => {
         const map = new Map<string, MemberItem>();
@@ -231,6 +237,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
 
             {notice && (
                 <div
+                    ref={noticeRef}
                     role={notice.kind === 'error' ? 'alert' : 'status'}
                     className={`p-3 rounded-xl border text-sm flex items-start justify-between gap-3 ${
                         notice.kind === 'error'
@@ -287,13 +294,13 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-base font-bold text-white break-all">{name}</span>
+                                            <span className="text-base font-bold text-white break-words min-w-0">{name}</span>
                                             {isMe && <span className="text-xs text-nature-400">(you)</span>}
                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-bold ${ROLE_BADGE[r.role]}`}>
                                                 {ROLE_ICON[r.role]} {ROLE_LABEL[r.role]}
                                             </span>
                                         </div>
-                                        <div className="text-xs text-nature-400 mt-1 break-all">
+                                        <div className="text-xs text-nature-400 mt-1 break-words">
                                             <span className="font-mono" title={r.member_pubkey}>{shortKey(r.member_pubkey)}</span>
                                             {' · '}added by {grantedByText(r.granted_by)} on {formatWhen(r.granted_at)}
                                         </div>
@@ -399,7 +406,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-2 text-sm text-nature-200">
                                 <span>Adding</span>
-                                <strong className="text-white break-all">{target.pubkey === myKey ? `${target.name} (you)` : target.name}</strong>
+                                <strong className="text-white break-words min-w-0">{target.pubkey === myKey ? `${target.name} (you)` : target.name}</strong>
                                 <span className="font-mono text-xs text-nature-400">{shortKey(target.pubkey)}</span>
                                 <button type="button" onClick={resetAdd} disabled={busy} className="min-h-[48px] px-2 text-sm text-terra-400 underline">
                                     Change

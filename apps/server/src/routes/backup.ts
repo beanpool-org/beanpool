@@ -14,17 +14,32 @@ import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
     clearReplicationToken, hasReplicationToken,
-    updateBackupCadence, redactLocalConfig,
+    updateBackupCadence,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
 import {
-    writeDbSnapshot, createSnapshot, listSnapshots, resolveSnapshotPath,
+    createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import type { RouteDeps } from './types.js';
-import { clientIp } from '../client-ip.js';
+import { clientIp, clientLimiterKey } from '../client-ip.js';
+import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
+import {
+    checkRecoveryCode, parseRecoveryCode, RecoveryCodeError, SealedEnvelopeError,
+    type CodeStanza, type SealedEnvelopeHeader,
+} from '@beanpool/core';
+import {
+    createSealedBackup, describeSealedHeader, BackupNotSealableError, isGzip, readFileStart, readSealedFileHeader,
+    signerCheck, openSealedFileTo, readBundleFrom, applyBundle,
+} from '../services/sealed-backup.js';
+
+/** After a restore the node restarts to load what was written. Tests replace it. */
+let restartAfterRestore: () => void = () => process.exit(0);
+export function setRestoreRestartForTests(fn: (() => void) | null): void {
+    restartAfterRestore = fn ?? (() => process.exit(0));
+}
 
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -48,160 +63,51 @@ export function createBackupRoutes(deps: RouteDeps): Router {
 
 // ======================== DATABASE BACKUP ========================
 
+// Sealed backups (sealed-keys.md §6.1). The response is ALWAYS a `.bpsealed` envelope — the tar of state.db,
+// node_config.json and the take-over bundle, locked to every owner and the printed recovery code — never a
+// plain archive, whichever credential asked. The replication token may fetch it: what it gets is ciphertext.
+// With nobody to lock it to, the answer is 409 with the one action that fixes it (§9), not a plaintext fallback.
+async function sendSealedBackup(ctx: any, opts: { dbFile?: string; filenamePrefix?: string } = {}): Promise<void> {
+    try {
+        const backup = await createSealedBackup(opts);
+        const who = describeSealedHeader(backup.header);
+        ctx.set('Cache-Control', 'no-store');
+        ctx.set('Content-Type', 'application/octet-stream');
+        ctx.set('Content-Disposition', `attachment; filename="${backup.filename}"`);
+        ctx.set('X-Envelope-Id', backup.header.envelopeId);
+        ctx.set('X-Sealed-To', who.opensWith.replace(/[^\x20-\x7E]/g, '?'));
+        ctx.res.on('close', () => backup.cleanup());
+        ctx.body = backup.body;
+    } catch (e: any) {
+        if (e instanceof BackupNotSealableError) {
+            ctx.status = 409;
+            ctx.body = { error: e.message, state: e.state, needsRecipient: e.state === 'no-recipients' };
+            return;
+        }
+        console.error('Backup failed:', e);
+        ctx.status = 500;
+        ctx.body = { error: 'Backup failed: ' + (e?.message || 'unknown error') };
+    }
+}
+
 router.post('/api/local/admin/backup', async (ctx) => {
     const token = ctx.request.header['x-replication-token'];
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    const { execFileSync } = await import('node:child_process');
-    const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    const tmpDir = path.join(DATA_DIR, '.backup-tmp');
-    const tarPath = path.join(DATA_DIR, '.backup-tmp.tar.gz');
-
-    try {
-        // Clean up any previous temp files
-        if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-        if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-        fs.mkdirSync(tmpDir, { recursive: true });
-
-        // Use SQLite VACUUM INTO for a consistent snapshot (no WAL corruption
-        // risk) via the shared helper. NOTE: this tar is built ONLY from
-        // `tmpDir` (state.db + node_config.json below), so it deliberately
-        // does NOT recurse into data/snapshots/ — auto-snapshots never get
-        // swallowed into the manual backup archive.
-        const snapshotPath = path.join(tmpDir, 'state.db');
-        writeDbSnapshot(snapshotPath);
-
-        // Copy node_config.json if it exists
-        const configPath = path.join(DATA_DIR, 'node_config.json');
-        if (fs.existsSync(configPath)) {
-            fs.copyFileSync(configPath, path.join(tmpDir, 'node_config.json'));
-        } else {
-            // Export config from DB, without a standby's legacy plain-text admin password
-            const config = redactLocalConfig(getLocalConfig());
-            fs.writeFileSync(path.join(tmpDir, 'node_config.json'), JSON.stringify(config, null, 2));
-        }
-
-        // Create tar.gz
-        execFileSync('tar', ['-czf', tarPath, '-C', tmpDir, '.']);
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        ctx.set('Content-Type', 'application/gzip');
-        ctx.set('Content-Disposition', `attachment; filename="beanpool-backup-${timestamp}.tar.gz"`);
-        ctx.body = fs.createReadStream(tarPath);
-
-        // Clean up after stream finishes
-        ctx.res.on('finish', () => {
-            try {
-                if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-                if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-            } catch { /* ignore cleanup errors */ }
-        });
-    } catch (e: any) {
-        console.error('Backup failed:', e);
-        // Clean up on error
-        try {
-            if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-            if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-        } catch { /* ignore */ }
-        ctx.status = 500;
-        ctx.body = { error: 'Backup failed: ' + e.message };
-    }
+    await sendSealedBackup(ctx);
 });
 
-// ======================== IDENTITY BUNDLE ========================
-// Returns a tar.gz of all critical identity files needed for a full
-// node restore. These files are generated once on first boot and
-// cannot be regenerated without losing the node's identity.
-// Owner/admin sign-in ONLY. The replication token copies the database; it never
-// reaches the node's keys (libp2p_key is the node identity: whoever holds it can
-// answer as this node to the registrar, peers and standbys).
-router.post('/api/local/admin/identity-bundle', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) {
-        if (ctx.request.header['x-replication-token'] && ctx.status === 401 && ctx.body && typeof ctx.body === 'object') {
-            ctx.body = { ...(ctx.body as object), tokenRefused: true,
-                hint: 'A replication token copies the database only; it cannot fetch the node keys. Sign in as an owner or admin.' };
-        }
-        return;
-    }
-
-    const { execFileSync } = await import('node:child_process');
-    const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    const tmpDir = path.join(DATA_DIR, '.identity-tmp');
-    const tarPath = path.join(DATA_DIR, '.identity-tmp.tar.gz');
-
-    try {
-        if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-        if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-        fs.mkdirSync(tmpDir, { recursive: true });
-
-        // Collect all critical identity files
-        const identityFiles = [
-            { src: 'genesis.json', required: true },
-            { src: 'community.key', required: true },
-            { src: 'libp2p_key', required: false },
-            { src: 'local-config.json', required: false },
-            { src: 'connectors.json', required: false },
-        ];
-
-        const collected: string[] = [];
-        for (const file of identityFiles) {
-            const srcPath = path.join(DATA_DIR, file.src);
-            if (fs.existsSync(srcPath)) {
-                if (file.src === 'local-config.json') {
-                    // Never ship a standby's legacy plain-text admin password in a bundle.
-                    fs.writeFileSync(path.join(tmpDir, file.src), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
-                } else {
-                    fs.copyFileSync(srcPath, path.join(tmpDir, file.src));
-                }
-                collected.push(file.src);
-            } else if (file.required) {
-                ctx.status = 503;
-                ctx.body = { error: `Required identity file missing: ${file.src}` };
-                fs.rmSync(tmpDir, { recursive: true });
-                return;
-            }
-        }
-
-        // Also export local-config from memory if file doesn't exist on disk
-        if (!collected.includes('local-config.json')) {
-            const config = redactLocalConfig(getLocalConfig());
-            fs.writeFileSync(path.join(tmpDir, 'local-config.json'), JSON.stringify(config, null, 2));
-            collected.push('local-config.json');
-        }
-
-        // Create tar.gz
-        execFileSync('tar', ['-czf', tarPath, '-C', tmpDir, '.']);
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        ctx.set('Content-Type', 'application/gzip');
-        ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${timestamp}.tar.gz"`);
-        ctx.set('X-Identity-Files', collected.join(','));
-        ctx.body = fs.createReadStream(tarPath);
-
-        ctx.res.on('finish', () => {
-            try {
-                if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-                if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-            } catch { /* ignore cleanup errors */ }
-        });
-    } catch (e: any) {
-        console.error('Identity bundle failed:', e);
-        try {
-            if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-            if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-        } catch { /* ignore */ }
-        ctx.status = 500;
-        ctx.body = { error: 'Identity bundle failed: ' + e.message };
-    }
-});
+// The plain-text identity bundle (`/api/local/admin/identity-bundle`) is gone (§6.1): the node keys now travel
+// only inside the sealed backup above. The route is not mounted, so every credential gets a 404.
 
 // ======================== BACKUP TAB ========================
 // Read-only enrollment bundle for standing up a NEW backup server that joins
 // THIS node's community. The operator runs `scripts/setup-backup.mjs` on the
 // would-be backup machine; it GETs this with the X-Admin-Password header,
-// writes genesis.json + community.key into the backup's data dir, and configures
-// the backup to pull from this primary. Returns ONLY material the backup needs
-// to recognize this primary's identity — it mutates nothing.
+// writes genesis.json into the backup's data dir, and configures the backup to
+// pull from this primary. Returns ONLY public material the backup needs to
+// recognize this primary's identity — no key (a standby never needed
+// community.key; sealed-keys.md §1.1, §6.1) — and it mutates nothing.
 
 
 router.get('/api/local/admin/backup-enroll', async (ctx) => {
@@ -211,16 +117,12 @@ router.get('/api/local/admin/backup-enroll', async (ctx) => {
     try {
         const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
         const genesisPath = path.join(DATA_DIR, 'genesis.json');
-        const communityKeyPath = path.join(DATA_DIR, 'community.key');
         if (!fs.existsSync(genesisPath)) {
             ctx.status = 503;
             ctx.body = { error: 'Genesis not initialized yet' };
             return;
         }
         const genesis = JSON.parse(fs.readFileSync(genesisPath, 'utf-8'));
-        const communityKey = fs.existsSync(communityKeyPath)
-            ? fs.readFileSync(communityKeyPath).toString('base64')
-            : null;
         const node = getP2PNode();
         const primaryPeerId = node?.peerId?.toString() ?? null;
         if (!primaryPeerId) {
@@ -232,7 +134,6 @@ router.get('/api/local/admin/backup-enroll', async (ctx) => {
         ctx.body = {
             communityId: genesis.communityId,
             genesis,
-            communityKey,
             primaryPeerId,
             primaryUrl: resolvePrimaryUrl(ctx),
         };
@@ -408,7 +309,7 @@ router.post('/api/local/admin/snapshots/delete', async (ctx) => {
 });
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
-// header (the name is in the query string, never the password).
+// header (the name is in the query string, never the password). Always sealed.
 router.get('/api/local/admin/snapshots/download', async (ctx) => {
     const headerPassword = ctx.request.header['x-admin-password'];
     if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
@@ -420,11 +321,10 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         ctx.body = { error: 'Snapshot not found' };
         return;
     }
-    ctx.set('Content-Type', 'application/octet-stream');
-    // eslint-disable-next-line no-control-regex
-    const safeName = path.basename(target).replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
-    ctx.set('Content-Disposition', `attachment; filename="${safeName}"`);
-    ctx.body = fs.createReadStream(target);
+    // Sealed on the way out, like /backup (§6.1): the snapshot becomes the backup's state.db. The file in
+    // data/snapshots/ stays as it is — it sits beside the live plaintext database, so sealing it protects nothing.
+    const base = path.basename(target, '.db').replace(/[^A-Za-z0-9_-]/g, '_');
+    await sendSealedBackup(ctx, { dbFile: target, filenamePrefix: `beanpool-${base}` });
 });
 
 // Get (no body) or set (with {enabled,intervalHours,keep}) the auto-snapshot config.
@@ -647,6 +547,14 @@ router.get('/api/local/admin/sync-delta', async (ctx) => {
     }
 });
 
+// Restore (sealed-keys.md §6.2). Takes either:
+//   - a `.bpsealed` backup, opened with the printed recovery code in the X-Recovery-Code header (an owner's phone
+//     is slice 6). Without a code the answer is 400 with who can open the file, which is the "inspect" step;
+//   - a legacy plain `.tar.gz` backup, as before: reading a file someone already has, and refusing it would brick
+//     the only backup a self-hoster may own (§9).
+// Either way the archive then goes through the SAME hostile-archive checks (SRV-9a) before a byte is extracted.
+// A sealed backup that carries the take-over bundle also brings back the node key, community key, genesis,
+// connectors and the community's admin/2FA credentials, so the server comes back as itself.
 router.post('/api/local/admin/restore', async (ctx) => {
     // Handle auth via custom header for binary uploads to prevent password exposure in query string
     const headerPassword = ctx.request.header['x-admin-password'];
@@ -658,14 +566,26 @@ router.post('/api/local/admin/restore', async (ctx) => {
     const { execFileSync } = await import('node:child_process');
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     const tmpDir = path.join(DATA_DIR, '.restore-tmp');
-    const tarPath = path.join(DATA_DIR, 'uploaded-backup.tar.gz');
+    const uploadPath = path.join(DATA_DIR, 'uploaded-backup.upload');
+    const openedTarPath = path.join(DATA_DIR, 'uploaded-backup.opened.tar.gz');
+    const cleanupAll = () => {
+        for (const p of [tmpDir, uploadPath, openedTarPath]) {
+            try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ }
+        }
+    };
+    /** Answer without restoring anything. */
+    const refuse = (status: number, body: Record<string, unknown>) => {
+        cleanupAll();
+        ctx.status = status;
+        ctx.body = body;
+    };
 
     try {
         // SECURITY (SRV-11): cap the restore upload so an oversized archive can't
         // exhaust disk. Reject an over-limit Content-Length up front, then enforce
         // the cap on the bytes actually streamed (a lying/absent length is the real
         // attack vector), aborting on overflow. The catch below already removes the
-        // partial tarball + tmpDir.
+        // partial upload + tmpDir.
         const MAX_RESTORE_BYTES = 500 * 1024 * 1024; // 500 MB
         const declaredLen = Number(ctx.request.header['content-length']);
         if (Number.isFinite(declaredLen) && declaredLen > MAX_RESTORE_BYTES) {
@@ -675,7 +595,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
         }
         // Read binary body to file
         const bodyStream = ctx.req;
-        const writeStream = fs.createWriteStream(tarPath);
+        const writeStream = fs.createWriteStream(uploadPath, { mode: 0o600 });
         let received = 0;
         await new Promise<void>((resolve, reject) => {
             bodyStream.on('data', (chunk: Buffer) => {
@@ -692,21 +612,109 @@ router.post('/api/local/admin/restore', async (ctx) => {
             writeStream.on('error', reject);
         });
 
+        // Which kind of file is it? gzip magic → a legacy plain backup; otherwise it must be a sealed one.
+        let tarPath: string;
+        let sealedHeader: SealedEnvelopeHeader | null = null;
+        if (isGzip(readFileStart(uploadPath, 2))) {
+            tarPath = uploadPath;
+        } else {
+            try {
+                sealedHeader = readSealedFileHeader(uploadPath);
+            } catch {
+                return refuse(400, { error: 'This is not a BeanPool backup file (.bpsealed or .tar.gz).' });
+            }
+            if (sealedHeader.kind !== 'backup') {
+                return refuse(400, { error: 'This sealed file is a take-over envelope, not a backup.' });
+            }
+            const backup = describeSealedHeader(sealedHeader);
+            // Restore-by-code checks the header signature wherever this server holds a pin (966 follow-up #2).
+            const signer = signerCheck(sealedHeader, ctx.request.header['x-accept-signer'] as string | undefined);
+            if (!signer.ok) return refuse(signer.status, { ...signer.body, backup });
+
+            const code = ctx.request.header['x-recovery-code'];
+            const codeStanzas = sealedHeader.recipients.filter((r): r is CodeStanza => r.type === 'code');
+            const needed = codeStanzas.map((c) => `#${c.codeId}`).join(' or ');
+            if (typeof code !== 'string' || !code.trim()) {
+                return refuse(400, {
+                    error: codeStanzas.length
+                        ? `This backup is locked. Type recovery code ${needed} to open it.`
+                        : "This backup is locked to its owners only, with no recovery code. Opening it with an owner's phone comes in a later update.",
+                    needsRecoveryCode: true,
+                    backup,
+                });
+            }
+            // A typo costs nothing and is not a guess: answered before the brake.
+            let parsed: ReturnType<typeof parseRecoveryCode>;
+            try {
+                parsed = parseRecoveryCode(code);
+            } catch (e: any) {
+                return refuse(400, {
+                    error: e instanceof RecoveryCodeError ? e.message : 'That is not a recovery code: check what you typed.',
+                    typo: true, backup,
+                });
+            }
+            const stanza = parsed.codeId !== undefined
+                ? codeStanzas.find((c) => c.codeId === parsed.codeId)
+                : codeStanzas.length === 1 ? codeStanzas[0] : undefined;
+            if (!stanza) {
+                return refuse(400, {
+                    error: !codeStanzas.length
+                        ? 'This backup is not locked to any recovery code.'
+                        : parsed.codeId !== undefined
+                            ? `This backup needs recovery code ${needed}; the code typed is #${parsed.codeId}.`
+                            : `This backup takes recovery code ${needed}. Type it with its BPRC number.`,
+                    wrongCodeNumber: true,
+                    backup,
+                });
+            }
+            // A well-formed code is a guess at a secret: through the password brake, like the check-code route.
+            const brakeKey = clientLimiterKey(ctx as any);
+            const admission = await acquirePasswordAttempt(brakeKey);
+            if (!admission.admitted) {
+                cleanupAll();
+                refuseBraked(ctx, admission);
+                return;
+            }
+            let matches = false;
+            try {
+                const { codeId, codePub, salt, N, r, p, createdAt } = stanza;
+                matches = await checkRecoveryCode(code, { codeId, codePub, salt, N, r, p, createdAt });
+            } catch {
+                matches = false;
+            } finally {
+                settlePasswordAttempt(brakeKey, matches, false);
+            }
+            if (!matches) {
+                return refuse(403, { error: `That is not recovery code #${stanza.codeId}.`, wrongCode: true, backup });
+            }
+            try {
+                await openSealedFileTo(uploadPath, { type: 'code', code }, openedTarPath);
+            } catch (e: any) {
+                if (e instanceof SealedEnvelopeError) {
+                    return refuse(400, { error: 'The backup file did not open: it has been altered or cut short.', backup });
+                }
+                throw e;
+            }
+            fs.rmSync(uploadPath, { force: true });
+            tarPath = openedTarPath;
+        }
+
         // Extract the tar
         if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
         fs.mkdirSync(tmpDir, { recursive: true });
 
         // SECURITY (SRV-9a): a restore archive is fully attacker-controlled
-        // input. `tar -x` does NOT sanitize member paths — GNU tar (the prod
-        // image) follows `../` and absolute names and will materialise
-        // symlinks/hardlinks — so a crafted archive could write or redirect
-        // files anywhere the node process can reach (cron dirs,
-        // authorized_keys, the app's own JS) → RCE / node takeover. Inspect
-        // the listing and refuse the WHOLE archive if any member would escape
-        // the extraction dir or is a link, BEFORE extracting a single byte.
-        // Legitimate backups are written with `tar -C tmpDir .` (see the
-        // backup route above), so members are plain `./`-prefixed relative
-        // paths and pass cleanly.
+        // input — and so is the archive inside a sealed file: opening it only
+        // proves someone holding a key locked it. `tar -x` does NOT sanitize
+        // member paths — GNU tar (the prod image) follows `../` and absolute
+        // names and will materialise symlinks/hardlinks — so a crafted archive
+        // could write or redirect files anywhere the node process can reach
+        // (cron dirs, authorized_keys, the app's own JS) → RCE / node takeover.
+        // Inspect the listing and refuse the WHOLE archive if any member would
+        // escape the extraction dir or is a link, BEFORE extracting a single
+        // byte. Legitimate backups are written with `tar -C <stage> .` (see
+        // services/sealed-backup.ts), so members are plain `./`-prefixed
+        // relative paths and pass cleanly.
         const listing = execFileSync('tar', ['-tzf', tarPath], {
             encoding: 'utf8',
             maxBuffer: 64 * 1024 * 1024,
@@ -736,6 +744,9 @@ router.post('/api/local/admin/restore', async (ctx) => {
         if (!fs.existsSync(restoredDb) || !fs.lstatSync(restoredDb).isFile()) {
             throw new Error('Invalid backup archive: state.db missing');
         }
+        // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a
+        // sealed file's bundle is used; a plain archive is anyone's to write, so keys in one are never installed.
+        const bundle = sealedHeader ? readBundleFrom(tmpDir, sealedHeader) : null;
 
         // Close current DB connection safely before overwriting
         const { db } = await import('../db/db.js');
@@ -743,28 +754,31 @@ router.post('/api/local/admin/restore', async (ctx) => {
 
         // Replace files
         fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
-        if (fs.existsSync(path.join(tmpDir, 'node_config.json'))) {
-            fs.copyFileSync(path.join(tmpDir, 'node_config.json'), path.join(DATA_DIR, 'node_config.json'));
+        const nodeConfig = path.join(tmpDir, 'node_config.json');
+        if (fs.existsSync(nodeConfig) && fs.lstatSync(nodeConfig).isFile()) {
+            fs.copyFileSync(nodeConfig, path.join(DATA_DIR, 'node_config.json'));
         }
+        const restoredKeys = bundle ? applyBundle(bundle) : [];
+        if (bundle) console.log(`[Restore] Restored the community's keys from the sealed backup: ${restoredKeys.join(', ')}`);
 
-        // Clean up
-        fs.rmSync(tmpDir, { recursive: true });
-        fs.unlinkSync(tarPath);
+        cleanupAll();
 
-        ctx.body = { success: true };
-        
-        // Wait 1 second then exit
+        ctx.body = {
+            success: true,
+            sealed: !!sealedHeader,
+            restoredKeys: restoredKeys.length > 0,
+            ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
+        };
+
+        // Wait 1 second then restart
         setTimeout(() => {
             console.log('Restore successful, rebooting node...');
-            process.exit(0);
+            restartAfterRestore();
         }, 1000);
 
     } catch (e: any) {
         console.error('Restore failed:', e);
-        try {
-            if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-            if (fs.existsSync(tarPath)) fs.unlinkSync(tarPath);
-        } catch { /* ignore */ }
+        cleanupAll();
         ctx.status = e?.httpStatus || 500;
         ctx.body = { error: e?.httpStatus === 413 ? e.message : ('Restore failed: ' + e.message) };
     }

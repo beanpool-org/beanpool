@@ -96,7 +96,7 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
                 ctx.body = { error: e.message, typo: true };
                 return;
             }
-            // A code number of 0 raises the parent class (followups-from-966 §4); still a typo to the person.
+            // Every typo is a RecoveryCodeError now, code number 0 included; anything else is still a typo to the person.
             ctx.status = 400;
             ctx.body = { error: 'That is not a recovery code: check what you typed.', typo: true };
             return;

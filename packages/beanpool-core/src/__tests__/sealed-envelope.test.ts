@@ -574,6 +574,18 @@ describe('slice 3 follow-ups from #966', () => {
         expect(early.state.closed).toBe(true);
     });
 
+    it('the sealer can re-open what it just sealed with the data key, and only that envelope', async () => {
+        let dataKey: Uint8Array | null = null;
+        const env = await sealEnvelope(payload3, opts({ onDataKey: (k) => { dataKey = k; } }));
+        expect(dataKey).toHaveLength(32);
+        const { payload } = await openEnvelope(env, { type: 'dataKey', dataKey: dataKey! }, { kind: 'backup' });
+        expect(payload).toEqual(payload3);
+        // Another envelope's key fails the body tag; a short key is refused before anything is read.
+        const other = await sealEnvelope(payload3, opts());
+        await expect(openEnvelope(other, { type: 'dataKey', dataKey: dataKey! }, { kind: 'backup' })).rejects.toThrow(SealedEnvelopeError);
+        await expect(openEnvelope(env, { type: 'dataKey', dataKey: new Uint8Array(16) }, { kind: 'backup' })).rejects.toThrow(/32 bytes/);
+    });
+
     it('code number 0 is a RecoveryCodeError, like any other typo', () => {
         const body = SEALED_ENVELOPE_VECTORS.recoveryCode.printed.split(/\s+/)[1];
         expect(() => parseRecoveryCode(`BPRC-0 ${body}`)).toThrow(RecoveryCodeError);

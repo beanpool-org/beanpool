@@ -538,6 +538,12 @@ export interface SealOptions {
     chunkSize?: number;
     /** ISO 8601; default now. */
     createdAt?: string;
+    /**
+     * Receives the data key once it is drawn — for a sealer that must prove the round trip before
+     * it deletes the plaintext it sealed (the harvester's seal-old pass, §6.4), and holds no owner
+     * key or code to prove it with. Keep it in memory only, and only for that check.
+     */
+    onDataKey?: (dataKey: Uint8Array) => void;
 }
 
 function requireKind(kind: unknown): asserts kind is SealedEnvelopeKind {
@@ -597,6 +603,7 @@ function prepareSeal(opts: SealOptions): Sealer {
     assertRecoveryCsprngAvailable();
 
     const dek = randomBytes(KEY_LEN);
+    opts.onDataKey?.(dek.slice());
     const envelopeId = randomBytes(ENVELOPE_ID_LEN);
     const recipients: RecipientStanza[] = [];
     const seenOwners = new Set<string>();
@@ -804,7 +811,9 @@ export function verifySealedHeader(header: SealedEnvelopeHeader, signerPublicKey
 /** How the opener proves it is a recipient: an owner's member key, or the printed code. */
 export type SealedEnvelopeKey =
     | { type: 'owner'; privateKey: string | Uint8Array }
-    | { type: 'code'; code: string };
+    | { type: 'code'; code: string }
+    /** The data key itself, from {@link SealOptions.onDataKey}: re-opening what this process just sealed. */
+    | { type: 'dataKey'; dataKey: Uint8Array };
 
 export interface OpenOptions {
     /** The kind the caller expects. An envelope of the other kind is refused. */
@@ -814,11 +823,18 @@ export interface OpenOptions {
 /** Validate the key before touching the envelope, so a typo in the code costs nothing. */
 function preflightKey(key: SealedEnvelopeKey): void {
     if (key?.type === 'code') parseRecoveryCode(key.code);
+    else if (key?.type === 'dataKey') {
+        if (!(key.dataKey instanceof Uint8Array) || key.dataKey.length !== KEY_LEN) {
+            throw new SealedEnvelopeError(`A data key is ${KEY_LEN} bytes.`);
+        }
+    }
     else if (key?.type === 'owner') privateSeed(key.privateKey, 'privateKey');
     else throw new SealedEnvelopeError("The key must be { type: 'owner' } or { type: 'code' }.");
 }
 
 async function unwrapDek(header: SealedEnvelopeHeader, key: SealedEnvelopeKey): Promise<Uint8Array> {
+    // No stanza to open: the body's AEAD tags are what prove it is the right key.
+    if (key.type === 'dataKey') return key.dataKey.slice();
     const envelopeId = hexToBytes(header.envelopeId);
     let stanza: RecipientStanza | undefined;
     let mySecret: Uint8Array;

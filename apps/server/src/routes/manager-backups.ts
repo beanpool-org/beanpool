@@ -5,9 +5,8 @@
 import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import {
-    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, type FleetNodeConfig
+    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, type FleetNodeConfig
 } from '../services/harvester.js';
 import type { RouteDeps } from './types.js';
 
@@ -40,7 +39,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
     // Stays behind checkAdminAuth. /api/manager/* is on the requireSignature bypass list
     // precisely because these handlers are contracted to do their own admin check, so dropping
     // it here would leave the route wide open — and it is internet-reachable, serving fleet
-    // topology, node URLs, member and post counts, DB sizes and identity filenames.
+    // topology, node URLs, member and post counts, backup sizes and sealed-backup filenames.
     //
     // The payload is sanitised regardless: getNodes() returns FleetNodeConfig, which carries
     // adminPassword and replicationToken. The dashboard has never needed either, and a
@@ -96,43 +95,51 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         }
     });
 
-    // Download harvested state.db for a node
-    router.get('/api/manager/backups/download-db', async (ctx) => {
-        if (!(await checkAdminAuth(ctx as any))) return;
+    function resolveNodeSlug(ctx: any): string | null {
         const nodeId = String(ctx.query.nodeId || '');
         if (!nodeId) {
             ctx.status = 400;
             ctx.body = { error: 'nodeId required' };
-            return;
+            return null;
         }
-
         if (nodeId.includes('/') || nodeId.includes('\\') || nodeId.includes('..')) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid nodeId parameter' };
-            return;
+            return null;
         }
-
         const slug = nodeSlug(nodeId);
-        const nodeDir = path.resolve(BACKUPS_DIR, slug);
-        if (path.dirname(nodeDir) !== path.resolve(BACKUPS_DIR)) {
+        if (path.dirname(path.resolve(BACKUPS_DIR, slug)) !== path.resolve(BACKUPS_DIR)) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid nodeId parameter' };
-            return;
+            return null;
         }
+        return slug;
+    }
 
-        const dbPath = path.join(nodeDir, 'state.db');
-        if (!fs.existsSync(dbPath)) {
+    function sendSealedFile(ctx: any, filePath: string, filename: string): void {
+        ctx.set('Cache-Control', 'no-store');
+        ctx.set('Content-Type', 'application/octet-stream');
+        // eslint-disable-next-line no-control-regex
+        ctx.set('Content-Disposition', `attachment; filename="${filename.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
+        ctx.body = fs.createReadStream(filePath);
+    }
+
+    // Download the newest harvested backup for a node. Since sealed backups (sealed-keys.md §6.3) this is the
+    // `.bpsealed` file as the node sent it — the harvester holds no plaintext database to serve.
+    router.get('/api/manager/backups/download-db', async (ctx) => {
+        if (!(await checkAdminAuth(ctx as any))) return;
+        const slug = resolveNodeSlug(ctx);
+        if (!slug) return;
+        const newest = listSealedBackups(slug)[0];
+        if (!newest) {
             ctx.status = 404;
-            ctx.body = { error: `Backup DB not found for node (${slug})` };
+            ctx.body = { error: `No sealed backup held for node (${slug})` };
             return;
         }
-
-        ctx.set('Content-Type', 'application/x-sqlite3');
-        ctx.set('Content-Disposition', `attachment; filename="beanpool-backup-${slug}.db"`);
-        ctx.body = fs.createReadStream(dbPath);
+        sendSealedFile(ctx, newest.path, newest.file);
     });
 
-    // List 30-day historical snapshot archives for a node
+    // List the sealed backups held for a node (the newest, and one a day for 30 days)
     router.get('/api/manager/backups/history', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const nodeId = String(ctx.query.nodeId || '');
@@ -141,32 +148,17 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'nodeId required' };
             return;
         }
-
-        const slug = nodeSlug(nodeId);
-        const historyDir = path.join(BACKUPS_DIR, slug, 'history');
-        if (!fs.existsSync(historyDir)) {
-            ctx.body = { history: [] };
-            return;
-        }
-
-        const files = fs.readdirSync(historyDir)
-            .filter(f => f.startsWith('beanpool-') && f.endsWith('.db'))
-            .map(f => {
-                const p = path.join(historyDir, f);
-                const stat = fs.statSync(p);
-                return {
-                    filename: f,
-                    date: f.replace('beanpool-', '').replace('.db', ''),
-                    sizeBytes: stat.size,
-                    modifiedAt: new Date(stat.mtimeMs).toISOString(),
-                };
-            })
-            .sort((a, b) => b.filename.localeCompare(a.filename));
-
+        const files = listSealedBackups(nodeSlug(nodeId)).map(f => ({
+            filename: f.file,
+            date: new Date(f.mtimeMs).toISOString().slice(0, 10),
+            sizeBytes: f.size,
+            modifiedAt: new Date(f.mtimeMs).toISOString(),
+            sealed: true,
+        }));
         ctx.body = { history: files };
     });
 
-    // Download specific historical archive file
+    // Download one held sealed backup
     router.get('/api/manager/backups/download-history', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const nodeId = String(ctx.query.nodeId || '');
@@ -179,7 +171,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             filename.includes('/') ||
             filename.includes('\\') ||
             filename.includes('..') ||
-            !/^beanpool-[\w-]+\.db$/.test(filename)
+            !/^beanpool-[\w-]+\.bpsealed$/.test(filename)
         ) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid parameters' };
@@ -187,68 +179,26 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         }
 
         const slug = nodeSlug(nodeId);
-        const historyDir = path.resolve(BACKUPS_DIR, slug, 'history');
-        const filePath = path.resolve(historyDir, filename);
-        if (path.dirname(filePath) !== historyDir || !fs.existsSync(filePath)) {
+        const sealedDir = path.resolve(BACKUPS_DIR, slug, 'sealed');
+        const filePath = path.resolve(sealedDir, filename);
+        if (path.dirname(filePath) !== sealedDir || !fs.existsSync(filePath)) {
             ctx.status = 404;
             ctx.body = { error: 'Archive file not found' };
             return;
         }
-
-        ctx.set('Content-Type', 'application/x-sqlite3');
-        // eslint-disable-next-line no-control-regex
-        const safeFilename = filename.replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
-        ctx.set('Content-Disposition', `attachment; filename="${safeFilename}"`);
-        ctx.body = fs.createReadStream(filePath);
+        sendSealedFile(ctx, filePath, filename);
     });
 
-    // Download identity bundle tarball
+    // The plain-text identity bundle is gone (sealed-keys.md §6.1): the node keys travel only inside the sealed
+    // backup, which download-db serves. 410 says so, rather than a 404 that reads like a missing harvest.
     router.get('/api/manager/backups/download-identity', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const nodeId = String(ctx.query.nodeId || '');
-        if (!nodeId) {
-            ctx.status = 400;
-            ctx.body = { error: 'nodeId required' };
-            return;
-        }
-
-        if (nodeId.includes('/') || nodeId.includes('\\') || nodeId.includes('..')) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid nodeId parameter' };
-            return;
-        }
-
-        const slug = nodeSlug(nodeId);
-        const nodeDir = path.resolve(BACKUPS_DIR, slug);
-        if (path.dirname(nodeDir) !== path.resolve(BACKUPS_DIR)) {
-            ctx.status = 400;
-            ctx.body = { error: 'Invalid nodeId parameter' };
-            return;
-        }
-
-        const identityDir = path.join(nodeDir, 'identity');
-        if (!fs.existsSync(identityDir)) {
-            ctx.status = 404;
-            ctx.body = { error: `Identity bundle not found for node (${slug})` };
-            return;
-        }
-
-        // eslint-disable-next-line no-control-regex
-        const safeNodeId = nodeId.replace(/[\r\n"\x00-\x1F\x7F]/g, '_');
-        const tmpTar = path.join(BACKUPS_DIR, slug, `.identity-export-${Date.now()}.tar.gz`);
-        try {
-            execFileSync('tar', ['-czf', tmpTar, '-C', identityDir, '.']);
-            ctx.set('Content-Type', 'application/gzip');
-            ctx.set('Content-Disposition', `attachment; filename="identity-bundle-${safeNodeId}.tar.gz"`);
-            const stream = fs.createReadStream(tmpTar);
-            stream.on('close', () => {
-                try { if (fs.existsSync(tmpTar)) fs.unlinkSync(tmpTar); } catch {}
-            });
-            ctx.body = stream;
-        } catch (e: any) {
-            ctx.status = 500;
-            ctx.body = { error: 'Failed to create identity tarball: ' + e.message };
-        }
+        if (!resolveNodeSlug(ctx)) return;
+        ctx.status = 410;
+        ctx.body = {
+            error: 'Node keys are no longer collected on their own. They are inside the sealed backup (Download backup), '
+                + "locked to the node's owners and its recovery code.",
+        };
     });
 
     // Proxy: List remote node snapshots

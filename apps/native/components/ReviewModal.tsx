@@ -118,10 +118,17 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                         />
 
                         <View style={styles.buttonRow}>
-                            <Pressable style={styles.skipBtn} accessibilityRole="button" onPress={onClose} disabled={submitting}>
+                            <Pressable style={styles.skipBtn} accessibilityRole="button" accessibilityState={{ disabled: submitting }} onPress={onClose} disabled={submitting}>
                                 <Text style={styles.skipText}>Skip for now</Text>
                             </Pressable>
-                            <Pressable style={[styles.submitBtn, submitting && styles.btnDisabled]} accessibilityRole="button" onPress={handleSubmit} disabled={submitting}>
+                            <Pressable
+                                style={[styles.submitBtn, submitting && styles.btnDisabled]}
+                                accessibilityRole="button"
+                                accessibilityLabel={isExisting ? 'Update Rating' : 'Submit Rating'}
+                                accessibilityState={{ disabled: submitting, busy: submitting }}
+                                onPress={handleSubmit}
+                                disabled={submitting}
+                            >
                                 {submitting ? (
                                     <ActivityIndicator size="small" color={colors.text.inverse} />
                                 ) : (

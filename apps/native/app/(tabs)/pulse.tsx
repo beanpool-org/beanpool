@@ -298,7 +298,7 @@ export default function PulseScreen() {
             <View style={{ flex: 1, overflow: 'hidden' }}>
             {/* + Channels rides on the title's line rather than costing a row of its own. */}
             <QuickReturnBlock qr={qr} title={<>
-                <PageTitle title="Pulse" right={
+                <PageTitle title="Pulse" testID="page-title-pulse" right={
                     <Pressable
                         onPress={() => router.push('/channels')}
                         style={styles.channelsBtn}

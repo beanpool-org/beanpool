@@ -674,7 +674,7 @@ export default function ChatsScreen() {
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
-                <PageTitle title="Talk" />
+                <PageTitle title="Talk" testID="page-title-talk" />
                 {talkSwitch}
                 <PeopleScreen />
             </View>
@@ -687,7 +687,7 @@ export default function ChatsScreen() {
                 and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" />} below={optionsDrawer}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" testID="page-title-talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>

@@ -169,6 +169,11 @@ npx expo start --web --port 8082   # Web preview
 npx expo start                      # Native dev client
 ```
 
+## Before a release build
+
+Run the Maestro smoke suite (`../../scripts/maestro-prerelease.sh`, see `e2e/README.md`)
+against a running emulator/device before `eas build --local`.
+
 ## Parity Status (vs PWA)
 
 | Feature | PWA | Native | Notes |

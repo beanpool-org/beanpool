@@ -7,13 +7,14 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { YourGroupRow } from './YourGroupRow';
 import { CreateGroupModal } from './CreateGroupModal';
 import { chatHref, type YourChat } from '../utils/your-groups';
+import { yourGroupsStore } from './useYourGroups';
 
 export function NewGroupButton({ onPress, compact }: { onPress: () => void; compact?: boolean }) {
     const { colors } = useTheme();
@@ -43,7 +44,11 @@ export function YourGroupsRows({ items, myPubkey, showUnread, flush }: { items: 
                     myPubkey={myPubkey}
                     showUnread={showUnread}
                     flush={flush}
-                    onPress={(it) => router.push(chatHref(it) as any)}
+                    onPress={(it) => {
+                        // Opening it reads it: the count goes now, not when the next refresh comes back.
+                        if (showUnread) yourGroupsStore.markRead(it.conversationId);
+                        router.push(chatHref(it) as any);
+                    }}
                 />
             ))}
         </>
@@ -57,6 +62,7 @@ export function useCreateGroupFlow(onCreated?: () => void) {
             isOpen={open}
             onClose={() => setOpen(false)}
             onCreated={(group) => {
+                yourGroupsStore.refresh();
                 onCreated?.();
                 // Decision 8: straight into the new group's chat, which asks who to invite.
                 router.push(chatHref({ kind: 'group', conversationId: group.id, name: group.name }, { created: true }) as any);
@@ -95,12 +101,49 @@ export function YourGroupsEmpty({ onNew, onFindGroups }: { onNew: () => void; on
     );
 }
 
-export function YourGroupsLoading() {
-    const { colors } = useTheme();
-    return <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />;
+/** The list's outline while the first answer is on its way: three grey rows, the same size as real ones. */
+export function YourGroupsLoading({ flush }: { flush?: boolean }) {
+    const styles = useStyles(({ colors }) => StyleSheet.create({
+        row: {
+            flexDirection: 'row', alignItems: 'center', minHeight: 64, paddingVertical: 10, paddingHorizontal: 12,
+            marginHorizontal: 16, marginVertical: 4, borderRadius: 14,
+            backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default,
+        },
+        icon: { width: 46, height: 46, borderRadius: 14, marginRight: 12, backgroundColor: colors.surface.subtle },
+        lines: { flex: 1, gap: 8 },
+        line: { height: 12, borderRadius: 6, backgroundColor: colors.surface.subtle },
+    }));
+    return (
+        <View accessibilityRole="progressbar" accessibilityLabel="Loading your groups">
+            {[0.55, 0.7, 0.45].map((w, i) => (
+                <View key={i} style={[styles.row, flush && { marginHorizontal: 0 }]}>
+                    <View style={styles.icon} />
+                    <View style={styles.lines}>
+                        <View style={[styles.line, { width: `${Math.round(w * 100)}%` }]} />
+                        <View style={[styles.line, { width: '85%' }]} />
+                    </View>
+                </View>
+            ))}
+        </View>
+    );
 }
 
-export function YourGroupsError({ message }: { message: string }) {
-    const { colors } = useTheme();
-    return <Text style={{ margin: 16, fontSize: 14, color: colors.text.secondary, textAlign: 'center' }} accessibilityRole="alert">{message}</Text>;
+/** Nothing to show and the node could not be reached: say so, and offer to try again. */
+export function YourGroupsError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+    const styles = useStyles(({ colors }) => StyleSheet.create({
+        wrap: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 28 },
+        text: { fontSize: 14, lineHeight: 20, color: colors.text.secondary, textAlign: 'center' },
+        retry: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 16, marginTop: 6 },
+        retryText: { fontSize: 15, fontWeight: '800', color: colors.brand.primary },
+    }));
+    return (
+        <View style={styles.wrap}>
+            <Text style={styles.text} accessibilityRole="alert">{message}</Text>
+            {onRetry && (
+                <Pressable style={styles.retry} onPress={onRetry} accessibilityRole="button">
+                    <Text style={styles.retryText}>Try again</Text>
+                </Pressable>
+            )}
+        </View>
+    );
 }

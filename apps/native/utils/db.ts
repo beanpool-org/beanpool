@@ -1176,13 +1176,18 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
 // every poll tick; one POST per conversation per 10s is plenty for read receipts.
 const _lastReadPushAt: Record<string, number> = {};
 
-export async function markConversationRead(conversationId: string, myPubkey: string) {
+/** The phone's own read marker (the Talk tab's badge counts from it); no request. */
+export async function markConversationReadLocally(conversationId: string, myPubkey: string) {
     const database = await getDb();
     const now = new Date().toISOString();
     await database.runAsync(
         'UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?',
         [now, conversationId, myPubkey]
     );
+}
+
+export async function markConversationRead(conversationId: string, myPubkey: string) {
+    await markConversationReadLocally(conversationId, myPubkey);
 
     // Push the read cursor to the server so the PEER's device can render the
     // double-tick. Without this the receipt loop never leaves this phone.
@@ -5228,3 +5233,32 @@ export async function muteChatApi(conversationId: string, duration: '8h' | '1w' 
     return _signedRequest('/api/messages/mute', { conversationId, duration });
 }
 
+/**
+ * One group as the member sees it, for the invite landing: null when the node says not found, and the node's own
+ * message (or "could not reach") thrown otherwise, so the page can tell "not available" from "no signal".
+ */
+export async function getGroupForLanding(id: string): Promise<GroupItem | null> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(id)}`);
+    if (res.status === 404) return null;
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body || typeof body !== 'object') throw new Error(body?.error || 'Could not reach the node.');
+    return body as GroupItem;
+}
+
+/** A group's active members (the faces on the invite landing). Throws when the node could not be reached. */
+export async function getGroupActiveMembers(id: string): Promise<GroupMemberItem[]> {
+    const res = await signedGet(`/api/groups/${encodeURIComponent(id)}/members?status=active`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || 'Could not load the members.');
+    return Array.isArray(body) ? body : [];
+}
+
+/**
+ * Move this member's read marker on a node-readable chat (group, enterprise) to now. Unlike markConversationRead
+ * it is not throttled — callers send it only when there is something new to read — and it resolves once the node
+ * has it, so "Your groups" can drop the count knowing a later refresh agrees.
+ */
+export async function markThreadReadOnNode(conversationId: string, myPubkey: string): Promise<void> {
+    markConversationReadLocally(conversationId, myPubkey).catch(() => { });
+    await _signedRequest('/api/messages/mark-read', { pubkey: myPubkey, conversationId });
+}

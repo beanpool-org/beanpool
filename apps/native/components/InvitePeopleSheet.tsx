@@ -35,7 +35,9 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
-    const [members, setMembers] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
+    // null while the people list is on its way: "nobody here" is only said once the node (or the phone's copy) has
+    // actually answered with nobody.
+    const [members, setMembers] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[] | null>(null);
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
     const [sending, setSending] = useState(false);
@@ -44,12 +46,15 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         if (!isOpen) return;
         setPicked(new Set());
         setQuery('');
-        getInvitablePeople().then(setMembers).catch(() => setMembers([]));
+        setMembers(null);
+        let alive = true;
+        getInvitablePeople().then(m => { if (alive) setMembers(m); }).catch(() => { if (alive) setMembers([]); });
+        return () => { alive = false; };
     }, [isOpen]);
 
     const shown = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return members
+        return (members || [])
             .filter(m => m.publicKey !== myPubkey)
             .filter(m => !q || (m.callsign || '').toLowerCase().includes(q));
     }, [members, query, myPubkey]);
@@ -100,15 +105,18 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         setSending(true);
         await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
         const keys = [...picked];
+        // Four at a time, not one round trip after another: ten invitations on a slow link took ten waits.
         const failed: string[] = [];
-        for (const pk of keys) {
-            try { await inviteGroupMemberApi(groupId, pk); } catch { failed.push(pk); }
+        for (let i = 0; i < keys.length; i += 4) {
+            const batch = keys.slice(i, i + 4);
+            const results = await Promise.allSettled(batch.map(pk => inviteGroupMemberApi(groupId, pk)));
+            batch.forEach((pk, j) => { if (results[j].status === 'rejected') failed.push(pk); });
         }
         setSending(false);
         const sent = keys.length - failed.length;
         if (sent > 0) hapticSuccess();
         if (failed.length) {
-            const names = members.filter(m => failed.includes(m.publicKey)).map(m => m.callsign).join(', ');
+            const names = (members || []).filter(m => failed.includes(m.publicKey)).map(m => m.callsign).join(', ');
             Alert.alert('Some invitations were not sent', `${sent} sent. Not sent: ${names}. Try again when you have signal.`);
         }
         onInvited?.(sent);
@@ -151,7 +159,9 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                         style={{ flexShrink: 1 }}
                         keyExtractor={m => m.publicKey}
                         keyboardShouldPersistTaps="handled"
-                        ListEmptyComponent={<Text style={styles.empty}>{query ? 'Nobody by that name.' : 'Nobody else is in this community yet.'}</Text>}
+                        ListEmptyComponent={members === null
+                            ? <ActivityIndicator style={{ padding: 24 }} color={colors.brand.primary} accessibilityLabel="Loading people" />
+                            : <Text style={styles.empty}>{query ? 'Nobody by that name.' : 'Nobody else is in this community yet.'}</Text>}
                         renderItem={({ item }) => {
                             const already = existing.has(item.publicKey);
                             const on = already || picked.has(item.publicKey);

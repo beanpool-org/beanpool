@@ -21,7 +21,7 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { createGroupApi, type GroupCategory, type JoinPolicy, type GroupItem } from '../utils/db';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 import { submitCreateGroup } from '../utils/create-group-submit';
-import { GROUP_CATEGORY_EMOJI } from '../utils/your-groups';
+import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULTS, START_ENTERPRISE_BRIDGE } from '../utils/create-group-options';
 import { router } from 'expo-router';
 
 interface CreateGroupModalProps {
@@ -30,28 +30,17 @@ interface CreateGroupModalProps {
     onCreated: (group: GroupItem) => void;
 }
 
-// Groups decision 11: Social Circle (default, pre-selected) → General → Working Group → Project Team → Guild.
-// The same form, the same defaults, from Commons and from Talk (decision 4). Emoji match the group's chat header.
-const CATEGORIES: Array<{ key: GroupCategory; label: string; emoji: string; desc: string }> = [
-    { key: 'social', label: 'Social Circle', emoji: GROUP_CATEGORY_EMOJI.social, desc: 'Friends, neighbours, shared interests' },
-    { key: 'general', label: 'General', emoji: GROUP_CATEGORY_EMOJI.general, desc: 'Open discussion space' },
-    { key: 'working_group', label: 'Working Group', emoji: GROUP_CATEGORY_EMOJI.working_group, desc: 'Getting a practical job done together' },
-    { key: 'project', label: 'Project Team', emoji: GROUP_CATEGORY_EMOJI.project, desc: 'Collaborating on an initiative' },
-    { key: 'guild', label: 'Guild', emoji: GROUP_CATEGORY_EMOJI.guild, desc: 'People who share a skill or craft' },
-];
-
-const JOIN_POLICIES: Array<{ key: JoinPolicy; label: string; icon: string; desc: string }> = [
-    { key: 'open', label: 'Open', icon: 'door-open', desc: 'Anyone can join immediately' },
-    { key: 'request_to_join', label: 'Request to Join', icon: 'account-clock', desc: 'Convenor approval required to join' },
-    { key: 'invite_only', label: 'Invite Only', icon: 'lock', desc: 'Convenor must invite new members' },
-];
+// Groups decisions 4, 11, 14: the same form, the same defaults, from Commons and from Talk
+// (utils/create-group-options, unit tested). Emoji match the group's chat header.
+const CATEGORIES = GROUP_CATEGORY_OPTIONS;
+const JOIN_POLICIES = GROUP_JOIN_POLICY_OPTIONS;
 
 export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModalProps) {
     const { colors } = useTheme();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [category, setCategory] = useState<GroupCategory>('social');
-    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>('open');
+    const [category, setCategory] = useState<GroupCategory>(CREATE_GROUP_DEFAULTS.category);
+    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>(CREATE_GROUP_DEFAULTS.joinPolicy);
     const [submitting, setSubmitting] = useState(false);
     const insets = useSafeAreaInsets();
     // Lifted by the keyboard's height, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
@@ -230,8 +219,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                 onCreated(group);
                 setName('');
                 setDescription('');
-                setCategory('social');
-                setJoinPolicy('open');
+                setCategory(CREATE_GROUP_DEFAULTS.category);
+                setJoinPolicy(CREATE_GROUP_DEFAULTS.joinPolicy);
                 onClose();
             },
             onInvalidName: () => Alert.alert('Invalid Name', 'Group name must be at least 2 characters long.'),
@@ -330,14 +319,14 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         <Pressable
                             style={styles.bridge}
                             accessibilityRole="link"
-                            accessibilityLabel="Running something together? Start an enterprise"
+                            accessibilityLabel={`${START_ENTERPRISE_BRIDGE.lead} ${START_ENTERPRISE_BRIDGE.link}`}
                             onPress={async () => {
                                 await Promise.race([KeyboardController.dismiss(), new Promise(r => setTimeout(r, 400))]);
                                 onClose();
-                                router.push('/propose-project');
+                                router.push(START_ENTERPRISE_BRIDGE.route);
                             }}
                         >
-                            <Text style={styles.bridgeText}>🥖 Running something together? <Text style={styles.bridgeLink}>Start an enterprise →</Text></Text>
+                            <Text style={styles.bridgeText}>{START_ENTERPRISE_BRIDGE.lead} <Text style={styles.bridgeLink}>{START_ENTERPRISE_BRIDGE.link}</Text></Text>
                         </Pressable>
 
                         <Text style={styles.fieldLabel}>Join Policy</Text>

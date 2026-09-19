@@ -27,6 +27,7 @@ import { getEventChat, postEventChatMessage, removeEventChatMessage, markConvers
 import { hapticTick } from '../utils/haptics';
 import { EVENT_ACCENT } from './EventCard';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
+import { yourGroupsStore } from './useYourGroups';
 import { decodeEventChatText, trimEventChatDraft, EVENT_CHAT_MESSAGE_MAX } from '../utils/events';
 
 interface Props {
@@ -54,6 +55,8 @@ export function EventChatView({ eventId }: Props) {
             setView(res);
             setError(null);
             if (identity?.publicKey) markConversationRead(eventId, identity.publicKey).catch(() => { });
+            // Talk → Groups lists this chat too: its count goes now, not at the next refresh.
+            yourGroupsStore.markRead(eventId);
         } catch (e: any) {
             setError(e?.message || 'Could not open this event chat.');
         }

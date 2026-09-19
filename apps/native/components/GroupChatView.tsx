@@ -21,13 +21,15 @@ import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'reac
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
+import * as Crypto from 'expo-crypto';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
-    markConversationRead,
+    markThreadReadOnNode,
     type GroupItem,
 } from '../utils/db';
 import { decodeEventChatText } from '../utils/events';
-import { isMuted, threadMessageText, type YourChatMute } from '../utils/your-groups';
+import { isMuted, threadMessageText, showInvitePrompt as shouldShowInvitePrompt, type YourChatMute } from '../utils/your-groups';
+import { yourGroupsStore } from './useYourGroups';
 import { hapticTick } from '../utils/haptics';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { InvitePeopleSheet } from './InvitePeopleSheet';
@@ -71,35 +73,75 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [inviteSkipped, setInviteSkipped] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(null);
     const draftRef = useRef('');
+    // One id per message being written, so a send retried after a dropped connection is stored once (the node
+    // de-duplicates on it). A new one once the node has it.
+    const clientIdRef = useRef<string>(Crypto.randomUUID());
     const listRef = useRef<FlatList>(null);
+    const inFlight = useRef(false);
+    const readUpTo = useRef<string | null>(null);
+    // undefined until the first answer: the details are already being fetched on the way in.
+    const lastSystemId = useRef<string | null | undefined>(undefined);
 
+    // Members and invitations (the header's count, the invite prompt, who is already in): on the way in, then only
+    // when a join/leave line appears in the chat or this member changed something. Not on every poll.
+    const loadDetails = useCallback(async () => {
+        if (kind !== 'group') return;
+        const details = await fetchGroupDetails(id);
+        if (!details) return;
+        setGroup(details.group);
+        setMemberKeys(new Set(details.members
+            .filter(m => m.status === 'active' || m.status === 'invited')
+            .map(m => m.memberPubkey)));
+        setInvitedCount(details.members.filter(m => m.status === 'invited').length);
+    }, [kind, id]);
+
+    // Opening the chat reads it (decision 7: only Talk shows counts, so only reading clears one). The node's marker
+    // moves only when there is something new, and "Your groups" drops the count at once and again once the node
+    // has it, so a refresh already on its way cannot bring it back.
+    const markRead = useCallback((latestId: string | null) => {
+        if (!me || !latestId || readUpTo.current === latestId) return;
+        readUpTo.current = latestId;
+        yourGroupsStore.markRead(id);
+        markThreadReadOnNode(id, me)
+            .then(() => yourGroupsStore.markRead(id))
+            .catch(() => { readUpTo.current = null; /* offline: the next poll tries again */ });
+    }, [id, me]);
+
+    // One request per poll (the chat), and never two at once on a slow connection.
     const load = useCallback(async () => {
+        if (inFlight.current) return;
+        inFlight.current = true;
         try {
+            let chat: any;
             if (kind === 'group') {
-                const [chat, details] = await Promise.all([getGroupChat(id), fetchGroupDetails(id)]);
+                chat = await getGroupChat(id);
                 setView(chat);
                 setMute(chat?.mute ?? null);
-                if (details) {
-                    setGroup(details.group);
-                    setMemberKeys(new Set(details.members
-                        .filter(m => m.status === 'active' || m.status === 'invited')
-                        .map(m => m.memberPubkey)));
-                    setInvitedCount(details.members.filter(m => m.status === 'invited').length);
-                }
             } else {
-                const chat = await getEnterpriseChat(id);
+                chat = await getEnterpriseChat(id);
                 setView({ ...chat, canPost: !chat.readOnly, notice: "Visible to this enterprise's keepers and this node's operator." });
             }
             setError(null);
-            // Opening the chat reads it: the node moves the member's cursor (a keeper's own one for an enterprise),
-            // so Talk's Groups count drops. Commons never shows counts, so it never clears one (decision 7).
-            if (me) markConversationRead(id, me).catch(() => { });
+            const msgs: any[] = chat?.messages || [];
+            markRead(msgs.length ? String(msgs[msgs.length - 1].id) : null);
+            const system = [...msgs].reverse().find(m => m.type === 'system' || m.authorPubkey === 'SYSTEM');
+            const systemId = system ? String(system.id) : null;
+            if (systemId !== lastSystemId.current) {
+                const firstAnswer = lastSystemId.current === undefined;
+                lastSystemId.current = systemId;
+                if (!firstAnswer) loadDetails().catch(() => { });
+            }
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
+        } finally {
+            inFlight.current = false;
         }
-    }, [kind, id, me]);
+    }, [kind, id, markRead, loadDetails]);
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        loadDetails().catch(() => { });
+        load();
+    }, [load, loadDetails]);
     useEffect(() => {
         const t = setInterval(load, 15000);
         return () => clearInterval(t);
@@ -116,7 +158,9 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const aloneInGroup = kind === 'group' && isConvenor && (activeCount ?? 0) <= 1;
     // The big prompt is for a convenor still alone with nobody asked yet; once invitations are out it steps aside
     // and the empty chat says who is on the way.
-    const showInvitePrompt = kind === 'group' && !inviteSkipped && invitedCount === 0 && (justCreated || aloneInGroup) && spoken.length === 0;
+    const showInvitePrompt = shouldShowInvitePrompt({
+        kind, isConvenor, justCreated: !!justCreated, activeCount, invitedCount, spokenCount: spoken.length, skipped: inviteSkipped,
+    });
     const muted = isMuted(mute);
 
     const detail = useMemo(() => {
@@ -132,10 +176,13 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         setSending(true);
         hapticTick();
         try {
-            if (kind === 'group') await postGroupChatMessage(id, text);
-            else await postEnterpriseChatMessage(id, text);
+            if (kind === 'group') await postGroupChatMessage(id, text, clientIdRef.current);
+            else await postEnterpriseChatMessage(id, text, clientIdRef.current);
+            clientIdRef.current = Crypto.randomUUID();
             draftRef.current = '';
             setDraft('');
+            // A poll may be mid-flight with the chat as it was before this message; wait for it, then read again.
+            while (inFlight.current) await new Promise(r => setTimeout(r, 100));
             await load();
             listRef.current?.scrollToEnd({ animated: true });
         } catch (e: any) {
@@ -187,6 +234,9 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
                 <Text style={styles.errorText} accessibilityRole="alert">{error}</Text>
+                <Pressable style={styles.retryBtn} onPress={() => { setError(null); loadDetails().catch(() => { }); load(); }} accessibilityRole="button">
+                    <Text style={styles.retryText}>Try again</Text>
+                </Pressable>
             </View>
         );
     }
@@ -195,7 +245,14 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
-                <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
+                {/* The chat's outline while it loads: the header already names it, from the tap. */}
+                <View style={styles.listContent} accessibilityRole="progressbar" accessibilityLabel="Loading the chat">
+                    {[{ w: '62%', mine: false }, { w: '48%', mine: true }, { w: '70%', mine: false }].map((b, i) => (
+                        <View key={i} style={[styles.skeletonRow, b.mine && styles.bubbleRowMine]}>
+                            <View style={[styles.skeletonBubble, { width: b.w as any }]} />
+                        </View>
+                    ))}
+                </View>
             </View>
         );
     }
@@ -354,7 +411,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     existing={memberKeys}
                     myPubkey={me}
                     onClose={() => setInviteOpen(false)}
-                    onInvited={(n) => { if (n > 0) { setInviteSkipped(true); load(); } }}
+                    onInvited={(n) => { if (n > 0) { setInviteSkipped(true); loadDetails().catch(() => { }); } }}
                 />
             )}
             {kind === 'group' && (
@@ -363,7 +420,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     isOpen={infoOpen}
                     onClose={() => setInfoOpen(false)}
                     myPubkey={me}
-                    onMembershipChanged={load}
+                    onMembershipChanged={() => { loadDetails().catch(() => { }); load(); }}
                 />
             )}
         </KeyboardAvoidingView>
@@ -435,6 +492,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         sendBtnDisabled: { opacity: 0.5 },
         errorText: { margin: 16, fontSize: 15, color: colors.text.body, lineHeight: 21 },
+        retryBtn: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 16 },
+        retryText: { fontSize: 15, fontWeight: '800', color: colors.brand.primary },
+        skeletonRow: { flexDirection: 'row', marginVertical: 6 },
+        skeletonBubble: { height: 40, borderRadius: 16, backgroundColor: colors.surface.subtle },
         menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
         menuSheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 8 },
         menuTitle: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, paddingHorizontal: 20, paddingVertical: 10, textTransform: 'uppercase', letterSpacing: 0.5 },

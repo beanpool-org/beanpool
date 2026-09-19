@@ -8,9 +8,9 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
-import { YourGroupsRows, useCreateGroupFlow } from '../../components/YourGroupsPane';
-import { fetchYourGroups } from '../../utils/db';
-import { groupsYouCouldJoin, chatEmoji, type YourChat } from '../../utils/your-groups';
+import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
+import { groupsYouCouldJoin, chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -26,6 +26,11 @@ export default function ProjectsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+    // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
+    // "Groups you could join" (decision 7).
+    const yourGroupsLive = useYourGroups(identity?.publicKey);
+    const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
+    const yourGroups = useMemo(() => yourGroupsLive.items || [], [yourGroupsLive.items]);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
@@ -59,9 +64,6 @@ export default function ProjectsScreen() {
     const [groups, setGroups] = useState<GroupItem[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [groupCategoryFilter, setGroupCategoryFilter] = useState<'all' | GroupCategory>('all');
-    // Commons → Groups = "Your groups" (the same rows and chats as Talk, without unread badges) + "Groups you could
-    // join" (decision 7).
-    const [yourGroups, setYourGroups] = useState<YourChat[]>([]);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<GroupItem | null>(null);
 
     // Filter & sort states
@@ -228,7 +230,7 @@ export default function ProjectsScreen() {
             console.error('[Projects] Failed loading members:', err);
         }
 
-        fetchYourGroups().then(r => setYourGroups(r.items)).catch(() => { });
+        yourGroupsStore.refresh();
 
         try {
             setLoadingGroups(true);
@@ -457,7 +459,7 @@ export default function ProjectsScreen() {
             <Pressable
                 accessibilityRole="button"
                 style={styles.card}
-                onPress={() => isInvited ? router.push(`/group/${item.id}`) : setSelectedGroupForDetail(item)}
+                onPress={() => isInvited ? router.push(inviteLandingHref(item) as any) : setSelectedGroupForDetail(item)}
             >
                 <View style={styles.cardHeader}>
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
@@ -678,11 +680,16 @@ export default function ProjectsScreen() {
                                 </View>
 
                                 <Text style={styles.groupsHeading}>Your groups</Text>
-                                {yourGroups.length > 0 ? (
+                                {yourGroupsState === 'loading' && <YourGroupsLoading flush />}
+                                {yourGroupsState === 'error' && (
+                                    <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />
+                                )}
+                                {yourGroupsState === 'list' && (
                                     <View style={{ marginHorizontal: 0 }}>
                                         <YourGroupsRows items={yourGroups} myPubkey={identity?.publicKey} flush />
                                     </View>
-                                ) : (
+                                )}
+                                {yourGroupsState === 'empty' && (
                                     <Text style={styles.groupsNone}>You're not in any groups yet. Join one below, or start one with +.</Text>
                                 )}
 

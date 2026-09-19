@@ -182,3 +182,135 @@ export function inviteLandingAction(group: Pick<GroupItem, 'joinPolicy' | 'viewe
     if (group.joinPolicy === 'invite_only') return { label: 'Invitation needed', enabled: false, note: 'Only people the convenor invites can join.' };
     return { label: 'Join the group', enabled: true };
 }
+
+/**
+ * Talk's Groups switch total (decision 12, WhatsApp's rule): every unread message in your groups, enterprises and
+ * events, except in a chat you muted — a muted chat keeps its own grey count on its row but adds nothing here.
+ */
+export function groupsUnreadTotal(items: ReadonlyArray<Pick<YourChat, 'unreadCount' | 'mute'>> | null | undefined, now: Date = new Date()): number {
+    return (items || []).reduce((n, g) => n + (isMuted(g.mute, now) ? 0 : Math.max(0, g.unreadCount || 0)), 0);
+}
+
+/**
+ * A row's unread badge. Only Talk shows one (decision 7); a muted chat's badge is grey. Nothing for zero.
+ */
+export function rowBadge(item: Pick<YourChat, 'unreadCount' | 'mute'>, showUnread: boolean, now: Date = new Date()): { label: string; muted: boolean } | null {
+    if (!showUnread) return null;
+    const label = unreadLabel(item.unreadCount);
+    return label ? { label, muted: isMuted(item.mute, now) } : null;
+}
+
+export type YourGroupsPaneState = 'loading' | 'error' | 'empty' | 'list';
+
+/**
+ * What the Your groups list shows. A list already on screen stays when a later refresh fails (a dropped signal is
+ * not a reason to blank it); an error shows only when there is nothing to show instead.
+ */
+export function yourGroupsPaneState(items: ReadonlyArray<unknown> | null, error: string | null): YourGroupsPaneState {
+    if (items === null) return error ? 'error' : 'loading';
+    return items.length ? 'list' : 'empty';
+}
+
+/** Opening a chat reads it: its count drops to zero at once. The same array when there was nothing to clear. */
+export function markChatRead<T extends Pick<YourChat, 'conversationId' | 'unreadCount'>>(items: T[], conversationId: string): T[] {
+    if (!items.some(i => i.conversationId === conversationId && i.unreadCount)) return items;
+    return items.map(i => (i.conversationId === conversationId && i.unreadCount ? { ...i, unreadCount: 0 } : i));
+}
+
+/**
+ * The new group's empty chat opens on "Who do you want to invite?" (decision 8) for its convenor while it is just
+ * them: nobody else is in it, nobody has been asked, and nothing has been said. "Not now" skips it for good on this
+ * visit; Invite people stays in the header menu.
+ */
+export function showInvitePrompt(s: {
+    kind: 'group' | 'enterprise';
+    isConvenor: boolean;
+    justCreated: boolean;
+    activeCount: number | null;
+    invitedCount: number;
+    spokenCount: number;
+    skipped: boolean;
+}): boolean {
+    if (s.kind !== 'group' || s.skipped || s.invitedCount > 0 || s.spokenCount > 0) return false;
+    const alone = s.isConvenor && (s.activeCount ?? 0) <= 1;
+    return s.justCreated || alone;
+}
+
+// ── The invite landing (groups slice 2) ──────────────────────────────────────────────────────────────────────
+
+/** What the tap that opened the landing already knew, so the page is drawn before the node answers. */
+export interface InviteLandingPreview {
+    name?: string;
+    category?: string;
+    joinPolicy?: string;
+    memberCount?: number;
+    /** Opened from a row that said INVITED. */
+    invited?: boolean;
+}
+
+export type InviteLandingPhase =
+    /** Nothing from the node yet: the outline, with whatever the tap knew. */
+    | 'skeleton'
+    /** The node answered with the group. */
+    | 'ready'
+    /** The node could not be reached, or answered with something other than the group or "not found". */
+    | 'error'
+    /** No such group for this member (#828: invite-only groups answer "not found" to outsiders). */
+    | 'unavailable'
+    /** Opened as an invitation, but it is no longer open and there is no other way in. */
+    | 'expired';
+
+/**
+ * The landing's one state, from what the node has said so far. `group` undefined = still waiting; null = the
+ * node said not found.
+ */
+export function inviteLandingPhase(s: {
+    group: Pick<GroupItem, 'joinPolicy' | 'viewerStatus'> | null | undefined;
+    error: string | null;
+    openedAsInvite: boolean;
+}): InviteLandingPhase {
+    if (s.group === undefined) return s.error ? 'error' : 'skeleton';
+    if (s.group === null) return s.openedAsInvite ? 'expired' : 'unavailable';
+    const status = s.group.viewerStatus;
+    const stillLive = status === 'invited' || status === 'active' || status === 'pending_approval' || status === 'removed';
+    if (s.openedAsInvite && !stillLive && s.group.joinPolicy === 'invite_only') return 'expired';
+    return 'ready';
+}
+
+/** "Garden Crew · 4 members": the facts line, from the node's answer or the tap's preview. */
+export function inviteLandingFacts(p: { category?: string | null; memberCount?: number | null; joinPolicy?: string | null }): string {
+    const bits: string[] = [];
+    if (p.category) bits.push(GROUP_CATEGORY_WORDS[p.category as GroupCategory] || 'Group');
+    if (typeof p.memberCount === 'number' && p.memberCount >= 0) bits.push(`${p.memberCount} ${p.memberCount === 1 ? 'member' : 'members'}`);
+    if (p.joinPolicy && JOIN_POLICY_WORDS[p.joinPolicy]) bits.push(JOIN_POLICY_WORDS[p.joinPolicy]);
+    return bits.join(' · ');
+}
+
+export const GROUP_CATEGORY_WORDS: Readonly<Record<GroupCategory, string>> = {
+    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Project Team', guild: 'Guild',
+};
+
+export const JOIN_POLICY_WORDS: Readonly<Record<string, string>> = {
+    open: 'Anyone can join', request_to_join: 'Ask to join', invite_only: 'Invite only',
+};
+
+/** Where the landing is opened from a row: the preview travels as route params (strings). */
+export function inviteLandingHref(g: Pick<GroupItem, 'id' | 'name' | 'category' | 'joinPolicy' | 'memberCount' | 'viewerStatus'>): { pathname: string; params: Record<string, string> } {
+    const params: Record<string, string> = { name: g.name, category: g.category, joinPolicy: g.joinPolicy };
+    if (typeof g.memberCount === 'number') params.memberCount = String(g.memberCount);
+    if (g.viewerStatus === 'invited') params.invited = '1';
+    return { pathname: `/group/${g.id}`, params };
+}
+
+/** Route params back into a preview. Anything missing or malformed is simply left out. */
+export function inviteLandingPreviewFromParams(p: Record<string, string | string[] | undefined>): InviteLandingPreview {
+    const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
+    const count = Number(one(p.memberCount));
+    return {
+        name: one(p.name),
+        category: one(p.category),
+        joinPolicy: one(p.joinPolicy),
+        memberCount: Number.isFinite(count) && count >= 0 ? count : undefined,
+        invited: one(p.invited) === '1',
+    };
+}

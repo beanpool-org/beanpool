@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter, RefreshControl } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
-import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, fetchYourGroups } from '../../utils/db';
+import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
@@ -14,8 +14,9 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
-import { type YourChat, unreadLabel, isMuted } from '../../utils/your-groups';
+import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils/your-groups';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { useYourGroups } from '../../components/useYourGroups';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -37,12 +38,12 @@ export default function ChatsScreen() {
     }, [talkParams.view]);
 
     const [conversations, setConversations] = useState<any[]>([]);
-    // "Your groups" (slice 1 API): groups, enterprises kept, events going to. Loaded with the conversations so the
-    // switch can show the Groups unread total while Messages is open.
-    const [yourGroups, setYourGroups] = useState<YourChat[] | null>(null);
-    const [yourGroupsError, setYourGroupsError] = useState<string | null>(null);
+    // "Your groups" (slice 1 API): groups, enterprises kept, events going to — the one copy Commons shares, refreshed
+    // with the conversations so the switch can show the Groups unread total while Messages is open.
+    const yourGroupsLive = useYourGroups(identity?.publicKey);
+    const yourGroups = yourGroupsLive.items;
     // A muted chat keeps its own grey count but does not add to the switch's total (WhatsApp's rule).
-    const groupsUnread = React.useMemo(() => (yourGroups || []).reduce((n, g) => n + (isMuted(g.mute) ? 0 : (g.unreadCount || 0)), 0), [yourGroups]);
+    const groupsUnread = React.useMemo(() => groupsUnreadTotal(yourGroups), [yourGroups]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
@@ -325,13 +326,8 @@ export default function ChatsScreen() {
                             if (active) setDeals(prev => keepIfSame(prev, filtered));
                         })
                         .catch(console.error);
-                    fetchYourGroups()
-                        .then(res => {
-                            if (!active) return;
-                            setYourGroups(prev => keepIfSame(prev, res.items));
-                            setYourGroupsError(null);
-                        })
-                        .catch((e: any) => { if (active) setYourGroupsError(e?.message || 'Could not load your groups.'); });
+                    // Sync nudges come in bursts; overlapping asks share one request (utils/your-groups-store).
+                    yourGroupsLive.refresh();
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -709,11 +705,16 @@ export default function ChatsScreen() {
     ) : null;
 
     if (talkView === 'groups') {
-        const hasAny = (yourGroups?.length ?? 0) > 0;
+        const paneState = yourGroupsPaneState(yourGroups, yourGroupsLive.error);
+        const hasAny = paneState === 'list';
         return (
             <View style={styles.safeArea}>
                 {/* Keyed on empty/non-empty so flipping between them starts from the top. */}
-                <Animated.ScrollView key={hasAny ? 'list' : 'empty'} contentContainerStyle={{ paddingBottom: 100 }}>
+                <Animated.ScrollView
+                    key={hasAny ? 'list' : 'empty'}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    refreshControl={<RefreshControl refreshing={false} onRefresh={yourGroupsLive.refresh} tintColor={colors.brand.primary} colors={[colors.brand.primary]} />}
+                >
                     <PageTitle title="Talk" />
                     {talkSwitch}
                     {hasAny && (
@@ -721,11 +722,10 @@ export default function ChatsScreen() {
                             <NewGroupButton onPress={createGroup.open} compact />
                         </View>
                     )}
-                    {yourGroups === null
-                        ? (yourGroupsError ? <YourGroupsError message={yourGroupsError} /> : <YourGroupsLoading />)
-                        : hasAny
-                            ? <YourGroupsRows items={yourGroups} myPubkey={identity?.publicKey} showUnread />
-                            : <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'groups' } })} />}
+                    {paneState === 'loading' && <YourGroupsLoading />}
+                    {paneState === 'error' && <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />}
+                    {paneState === 'list' && <YourGroupsRows items={yourGroups || []} myPubkey={identity?.publicKey} showUnread />}
+                    {paneState === 'empty' && <YourGroupsEmpty onNew={createGroup.open} onFindGroups={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'groups' } })} />}
                 </Animated.ScrollView>
                 {createGroup.modal}
             </View>

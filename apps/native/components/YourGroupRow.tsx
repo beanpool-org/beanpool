@@ -10,7 +10,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, previewLine, rowTime, unreadLabel, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, previewLine, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 
 interface Props {
     item: YourChat;
@@ -58,7 +58,8 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         badgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
     }));
 
-    const unread = showUnread ? item.unreadCount : 0;
+    const badge = rowBadge(item, showUnread);
+    const unread = badge ? item.unreadCount : 0;
     const muted = isMuted(item.mute);
     const kindWord = item.kind === 'enterprise' ? 'Enterprise' : item.kind === 'event' ? 'Event' : null;
     const preview = previewLine(item, myPubkey);
@@ -87,9 +88,9 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
                         </View>
                     )}
                     <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>{preview}</Text>
-                    {unread > 0 && (
-                        <View style={[styles.badge, muted && styles.badgeMuted]}>
-                            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>{unreadLabel(unread)}</Text>
+                    {badge && (
+                        <View style={[styles.badge, badge.muted && styles.badgeMuted]}>
+                            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>{badge.label}</Text>
                         </View>
                     )}
                 </View>

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 12,
-  "hash": "f2784fcccba0492f75a9076e3301e3ea8ac30a484df1d79588052b96f3e577a6",
+  "version": 13,
+  "hash": "a6caeaccd22db77ccf1d6b058e935b74673698b1f039f88096e1dca655058b64",
   "sections": [
     {
       "id": "setup",
@@ -1114,6 +1114,7 @@
             "**connectors.json**: your links with other communities;",
             "**genesis.json** and **community.key**: the community's founding record and a key kept for later. community.key signs nothing today. Keep both anyway;",
             "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
+            "**takeover-envelope.json**: the server's keys and sign-in settings, locked so that only the community's owners can open them (any one of them alone), or a printed recovery code once one is made. The server makes it and keeps it up to date whenever an owner is added or removed, or those settings change. With no owner and no recovery code there is nobody to lock it to, so the file isn't there. It is a locked copy for taking over on another server later; the server still runs from the files above;",
             "**snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again."
           ]
         },

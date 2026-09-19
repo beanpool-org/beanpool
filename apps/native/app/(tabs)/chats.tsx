@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Animated, Pressable, Platform, Image, TextInput, DeviceEventEmitter } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
@@ -11,7 +11,8 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { useLocalSearchParams } from 'expo-router';
 import PeopleScreen from './people';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
-import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
 
 export default function ChatsScreen() {
@@ -34,9 +35,6 @@ export default function ChatsScreen() {
     const [conversations, setConversations] = useState<any[]>([]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
-    const pageTitle = useCollapsingTitle();
-    const listRef = useRef<FlatList>(null);
-    useTabRetapScrollTop(listRef);
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
@@ -51,6 +49,13 @@ export default function ChatsScreen() {
     const [peopleFilter, setPeopleFilter] = useState<'all' | 'friends'>('all');
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());
     const [showOptions, setShowOptions] = useState(false);
+    const [searchFocused, setSearchFocused] = useState(false);
+    // The title, the Messages/People switch and the search row ride away as the list scrolls down and come
+    // back on any scroll up (components/QuickReturn); they stay while the sort/filter drawer is open or the
+    // search field is in use.
+    const qr = useQuickReturn({ pinned: showOptions || searchFocused, resetKey: talkView });
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef, qr.show);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
@@ -550,6 +555,122 @@ export default function ChatsScreen() {
         </View>
     );
 
+    // Collapsible sort and filter options drawer, over the list under the search row.
+    const optionsDrawer = showOptions ? (
+        <View style={styles.optionsDrawer}>
+            {/* Sort Section */}
+            <Text style={styles.optionsLabel}>Sort by</Text>
+            <View style={styles.chipsRow}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sortBy === 'recent' }}
+                    style={[styles.chip, sortBy === 'recent' && styles.chipActive]}
+                    onPress={() => setSortBy('recent')}
+                >
+                    <Text style={[styles.chipText, sortBy === 'recent' && styles.chipTextActive]}>⇅ Recent</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sortBy === 'unread' }}
+                    style={[styles.chip, sortBy === 'unread' && styles.chipActive]}
+                    onPress={() => setSortBy('unread')}
+                >
+                    <Text style={[styles.chipText, sortBy === 'unread' && styles.chipTextActive]}>✉ Unread</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sortBy === 'credits_desc' }}
+                    style={[styles.chip, sortBy === 'credits_desc' && styles.chipActive]}
+                    onPress={() => setSortBy('credits_desc')}
+                >
+                    <Image
+                        source={require('../../assets/images/bean.png')}
+                        style={{ width: 14, height: 14, resizeMode: 'contain' }}
+                    />
+                    <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>Credits: High</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sortBy === 'credits_asc' }}
+                    style={[styles.chip, sortBy === 'credits_asc' && styles.chipActive]}
+                    onPress={() => setSortBy('credits_asc')}
+                >
+                    <Image
+                        source={require('../../assets/images/bean.png')}
+                        style={{ width: 14, height: 14, resizeMode: 'contain' }}
+                    />
+                    <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>Credits: Low</Text>
+                </Pressable>
+            </View>
+
+            {/* Read State Filter Section */}
+            <Text style={styles.optionsLabel}>Read Status</Text>
+            <View style={styles.chipsRow}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: readFilter === 'all' }}
+                    style={[styles.chip, readFilter === 'all' && styles.chipActive]}
+                    onPress={() => setReadFilter('all')}
+                >
+                    <Text style={[styles.chipText, readFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: readFilter === 'unread' }}
+                    style={[styles.chip, readFilter === 'unread' && styles.chipActive]}
+                    onPress={() => setReadFilter('unread')}
+                >
+                    <Text style={[styles.chipText, readFilter === 'unread' && styles.chipTextActive]}>✉ Unread Only</Text>
+                </Pressable>
+            </View>
+
+            {/* People Filter Section */}
+            <Text style={styles.optionsLabel}>People</Text>
+            <View style={styles.chipsRow}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: peopleFilter === 'all' }}
+                    style={[styles.chip, peopleFilter === 'all' && styles.chipActive]}
+                    onPress={() => setPeopleFilter('all')}
+                >
+                    <Text style={[styles.chipText, peopleFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
+                </Pressable>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: peopleFilter === 'friends' }}
+                    style={[styles.chip, peopleFilter === 'friends' && styles.chipActive]}
+                    onPress={() => setPeopleFilter('friends')}
+                >
+                    <Text style={[styles.chipText, peopleFilter === 'friends' && styles.chipTextActive]}>👫 Friends Only</Text>
+                </Pressable>
+            </View>
+
+            {/* Reset Footer */}
+            <View style={styles.optionsFooter}>
+                <Pressable accessibilityRole="button" style={styles.resetBtn} onPress={resetFilters}>
+                    <Text style={styles.resetBtnText}>Reset Defaults</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" style={styles.closeBtn} onPress={() => setShowOptions(false)}>
+                    <Text style={styles.closeBtnText}>✕ Close</Text>
+                </Pressable>
+            </View>
+        </View>
+            ) : null;
+
+    const listEmpty = actionRequired.length === 0 ? (
+        <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="message-outline" size={48} color={colors.border.strong} />
+            <Text style={styles.emptyText}>No conversations yet.</Text>
+            <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push('/')}
+                style={{ marginTop: 12, backgroundColor: colors.accent.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
+            >
+                <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>Browse Market</Text>
+            </Pressable>
+        </View>
+    ) : null;
+
     if (talkView === 'people') {
         return (
             <View style={styles.safeArea}>
@@ -562,11 +683,11 @@ export default function ChatsScreen() {
 
     return (
         <View style={styles.safeArea}>
-            {/* The large "Talk" title replaces the old "Inbox" heading (one title per page)
-                and folds away once the list scrolls. The compose button moved into the search row
-                so it never folds away with the title. */}
-            <PageTitle title="Talk" collapsed={pageTitle.collapsed} />
-            {pageTitle.collapsed ? <View style={{ height: 10 }} /> : null}
+            {/* The large "Talk" title replaces the old "Inbox" heading (one title per page). It, the switch
+                and the search row sit over the list and ride away with it (QuickReturnBlock); the
+                compose button lives in the search row, so it comes back with the first scroll up. */}
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>
@@ -579,6 +700,8 @@ export default function ChatsScreen() {
                         placeholderTextColor={colors.text.muted}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
+                        onFocus={() => setSearchFocused(true)}
+                        onBlur={() => setSearchFocused(false)}
                     />
                     {searchQuery.trim() !== '' && (
                         <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearBtn}>
@@ -612,134 +735,21 @@ export default function ChatsScreen() {
                 </Pressable>
             </View>
 
-            {/* Collapsible sort and filter options drawer */}
-            {showOptions && (
-                <View style={styles.optionsDrawer}>
-                    {/* Sort Section */}
-                    <Text style={styles.optionsLabel}>Sort by</Text>
-                    <View style={styles.chipsRow}>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sortBy === 'recent' }}
-                            style={[styles.chip, sortBy === 'recent' && styles.chipActive]}
-                            onPress={() => setSortBy('recent')}
-                        >
-                            <Text style={[styles.chipText, sortBy === 'recent' && styles.chipTextActive]}>⇅ Recent</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sortBy === 'unread' }}
-                            style={[styles.chip, sortBy === 'unread' && styles.chipActive]}
-                            onPress={() => setSortBy('unread')}
-                        >
-                            <Text style={[styles.chipText, sortBy === 'unread' && styles.chipTextActive]}>✉ Unread</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sortBy === 'credits_desc' }}
-                            style={[styles.chip, sortBy === 'credits_desc' && styles.chipActive]}
-                            onPress={() => setSortBy('credits_desc')}
-                        >
-                            <Image
-                                source={require('../../assets/images/bean.png')}
-                                style={{ width: 14, height: 14, resizeMode: 'contain' }}
-                            />
-                            <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>Credits: High</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sortBy === 'credits_asc' }}
-                            style={[styles.chip, sortBy === 'credits_asc' && styles.chipActive]}
-                            onPress={() => setSortBy('credits_asc')}
-                        >
-                            <Image
-                                source={require('../../assets/images/bean.png')}
-                                style={{ width: 14, height: 14, resizeMode: 'contain' }}
-                            />
-                            <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>Credits: Low</Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Read State Filter Section */}
-                    <Text style={styles.optionsLabel}>Read Status</Text>
-                    <View style={styles.chipsRow}>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: readFilter === 'all' }}
-                            style={[styles.chip, readFilter === 'all' && styles.chipActive]}
-                            onPress={() => setReadFilter('all')}
-                        >
-                            <Text style={[styles.chipText, readFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: readFilter === 'unread' }}
-                            style={[styles.chip, readFilter === 'unread' && styles.chipActive]}
-                            onPress={() => setReadFilter('unread')}
-                        >
-                            <Text style={[styles.chipText, readFilter === 'unread' && styles.chipTextActive]}>✉ Unread Only</Text>
-                        </Pressable>
-                    </View>
-
-                    {/* People Filter Section */}
-                    <Text style={styles.optionsLabel}>People</Text>
-                    <View style={styles.chipsRow}>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: peopleFilter === 'all' }}
-                            style={[styles.chip, peopleFilter === 'all' && styles.chipActive]}
-                            onPress={() => setPeopleFilter('all')}
-                        >
-                            <Text style={[styles.chipText, peopleFilter === 'all' && styles.chipTextActive]}>✓ All</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: peopleFilter === 'friends' }}
-                            style={[styles.chip, peopleFilter === 'friends' && styles.chipActive]}
-                            onPress={() => setPeopleFilter('friends')}
-                        >
-                            <Text style={[styles.chipText, peopleFilter === 'friends' && styles.chipTextActive]}>👫 Friends Only</Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Reset Footer */}
-                    <View style={styles.optionsFooter}>
-                        <Pressable accessibilityRole="button" style={styles.resetBtn} onPress={resetFilters}>
-                            <Text style={styles.resetBtnText}>Reset Defaults</Text>
-                        </Pressable>
-                        <Pressable accessibilityRole="button" style={styles.closeBtn} onPress={() => setShowOptions(false)}>
-                            <Text style={styles.closeBtnText}>✕ Close</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
-
-            <FlatList
+            </QuickReturnBlock>
+            <Animated.FlatList
                 ref={listRef}
-                onScroll={pageTitle.onScroll}
-                scrollEventThrottle={16}
+                {...qr.listProps}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 data={regularConversations}
-                keyExtractor={item => item.id}
+                keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={listHeader}
-                contentContainerStyle={styles.list}
+                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.listInset }]}
                 showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    actionRequired.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <MaterialCommunityIcons name="message-outline" size={48} color={colors.border.strong} />
-                            <Text style={styles.emptyText}>No conversations yet.</Text>
-                            <Pressable
-                                accessibilityRole="button"
-                                onPress={() => router.push('/')}
-                                style={{ marginTop: 12, backgroundColor: colors.accent.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
-                            >
-                                <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>Browse Market</Text>
-                            </Pressable>
-                        </View>
-                    ) : null
-                }
+                ListEmptyComponent={listEmpty}
             />
+            </View>
 
 
         </View>

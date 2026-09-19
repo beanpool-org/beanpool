@@ -11,9 +11,11 @@ Tap **Market** in the row of tabs. You see what people in your community are off
 
 Pull the list down to refresh it.
 
+The search and filters slide away as you scroll down, so you see more posts. Scroll up a little and they come back. To jump back to the top, tap **Market** again.
+
 ## Search
 
-Type in **Search marketplace...** at the top. The search also finds related words: "fruit" finds "lemon". Without a connection, it searches what is already on your phone.
+Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". Without a connection, it searches what is already on your phone.
 
 ## Filters
 
@@ -33,6 +35,8 @@ The second row narrows it down:
 If you belong to groups, a row of group buttons appears too. **All Groups & Public** shows everything; a group's button shows only posts for that group.
 
 If nothing matches, tap **Clear All Filters**.
+
+When you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter.
 
 The button next to **My Deals** changes how the list looks: a list, a grid, or compact.
 

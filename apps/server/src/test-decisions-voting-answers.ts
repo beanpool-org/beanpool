@@ -249,18 +249,28 @@ async function run() {
 
     // ── I. Secret ballots ─────────────────────────────────────────────────
     console.log('\n--- I. Secret ballots ---');
+    // A member's socket (a /ws socket signed by a member is tagged with _memberPubkey at upgrade) gets the full
+    // event; a stranger's socket gets decision_vote_cast only as a bare doorbell (PUBLIC_WS_EVENTS), since the
+    // decisions list and detail are public reads.
     const seen: any[] = [];
-    const fakeSocket = { send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
+    const fakeSocket = { _memberPubkey: proposerA, send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
+    const strangerSeen: any[] = [];
+    const strangerSocket = { send: (m: string) => strangerSeen.push(JSON.parse(m)), readyState: 1 };
     addWsClient(fakeSocket);
+    addWsClient(strangerSocket);
     seen.length = 0;
     const secretVote = castDecisionVote(poolA.id, partner1, false, 1);
     removeWsClient(fakeSocket);
+    removeWsClient(strangerSocket);
     assert(secretVote.success, 'partner1 votes No on pool A');
     const castEvent = seen.find(e => e.type === 'decision_vote_cast');
     assert(!!castEvent && castEvent.decisionId === poolA.id, 'a decision_vote_cast event still announces that the tally moved');
     assert(castEvent && !('voterPubkey' in castEvent) && !('support' in castEvent) && !('weight' in castEvent) && !('creditCost' in castEvent),
         `the broadcast names no voter, side or weight (got keys ${castEvent ? Object.keys(castEvent).join(',') : 'none'})`);
     assert(!JSON.stringify(seen).includes(partner1), 'no broadcast carries the voter key');
+    const strangerCast = strangerSeen.filter(e => e.type === 'decision_vote_cast');
+    assert(strangerCast.length === 1 && JSON.stringify(strangerCast[0]) === '{"type":"decision_vote_cast"}',
+        `a stranger's socket gets decision_vote_cast as a bare doorbell, no decision id or tally (got ${JSON.stringify(strangerSeen)})`);
 
     const detailAsOther = await callRouter(commons, 'GET', `/api/commons/decisions/${poolA.id}`, { actor: proposerA });
     assert(detailAsOther.status === 200 && !('votes' in detailAsOther.body), 'GET /decisions/:id no longer returns a votes list');

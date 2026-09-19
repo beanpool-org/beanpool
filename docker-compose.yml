@@ -20,7 +20,10 @@ services:
       - PUBLIC_ADDRESS_NAME=${PUBLIC_ADDRESS_NAME:-}
       # Cutover: role / backup / enforcement (Phase 1 + SRV-20). Empty defaults =
       # primary role, backup puller off, READ AUTH ON (private reads need a member
-      # signature; set ENFORCE_READ_AUTH=false to opt out), WS and ledger auth off.
+      # signature; set ENFORCE_READ_AUTH=false to opt out), live-updates feed for
+      # members only (/ws gives a socket without a member signature nothing but
+      # public doorbells; ENFORCE_WS_AUTH=true refuses those sockets outright,
+      # ENFORCE_WS_AUTH=false reopens the old feed to anyone), ledger auth off.
       # Set per node via the node-local .env (preserved across redeploys by
       # deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
       - NODE_ROLE=${NODE_ROLE:-}

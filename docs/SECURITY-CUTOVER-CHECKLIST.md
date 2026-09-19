@@ -70,11 +70,11 @@ admin password.
 > `local-config.json` (preserve `thresholds`/branding/contact), then restart with `ADMIN_PASSWORD`
 > set — it re-locks to that value. Set `BACKUP_ADMIN_PASSWORD` on the backup to the same value.
 
-## Enforcement flags (read auth default ON; WS and ledger default OFF)
+## Enforcement flags (read auth default ON; WS feed members-only by default; ledger default OFF)
 | Flag | Closes | Requires (clients) |
 |---|---|---|
 | `ENFORCE_READ_AUTH` | SRV-2/SRV-4 unauth reads | app signs GET reads (native #138 + PWA) |
-| `ENFORCE_WS_AUTH` | SRV-4 unauth `/ws` feed | app signs the WS connect (native #138 + PWA) |
+| `ENFORCE_WS_AUTH` | SRV-4 unauth `/ws` feed. Default (unset): unsigned or non-member sockets get only bare public doorbells; `true` refuses them; `false` = old open feed | app signs the WS connect (every native build since v1.1.56 + PWA) |
 | `ENFORCE_LEDGER_AUTH` | SRV-20 ledger forgery | nothing extra (server-side verify); needs the ledger migration first |
 
 ## PRs in this remediation

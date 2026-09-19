@@ -14,7 +14,7 @@ vi.mock('../../lib/node-client', async (importOriginal) => {
 });
 
 import { fetchNodeRoles, grantNodeRoleApi, revokeNodeRoleApi } from '../../lib/node-client';
-import { NodeRolesPanel, grantConsequence, type RolesViewer } from './NodeRolesPanel';
+import { NodeRolesPanel, grantConsequence, matchMembers, type RolesViewer } from './NodeRolesPanel';
 import { PeopleSafetySection } from './PeopleSafetySection';
 
 const fetchRoles = vi.mocked(fetchNodeRoles);
@@ -222,6 +222,113 @@ describe('NodeRolesPanel', () => {
         expect(screen.getByRole('alert').textContent).toContain('Break-glass mode active');
         expect(screen.queryByTestId('no-owner-banner')).not.toBeInTheDocument();
         expect(screen.queryByTestId('add-role')).not.toBeInTheDocument();
+    });
+});
+
+describe('NodeRolesPanel search: every match is reachable (found on test, 2026-09-19)', () => {
+    // Ten members called Damo-something; the one wanted sorts last. The old list stopped at 8 and never said so.
+    const hex = (i: number) => i.toString(16).padStart(2, '0');
+    const damos = [
+        { publicKey: hex(1).repeat(32), callsign: 'Damo', status: 'active', lastActiveAt: '2026-09-01T00:00:00.000Z' },
+        { publicKey: hex(2).repeat(32), callsign: 'Damo B', status: 'active', lastActiveAt: '2026-09-18T00:00:00.000Z' },
+        { publicKey: hex(3).repeat(32), callsign: 'Big Damo', status: 'active', lastActiveAt: '2026-09-19T00:00:00.000Z' },
+        { publicKey: hex(4).repeat(32), callsign: 'Damon', status: 'active' },
+        { publicKey: hex(5).repeat(32), callsign: 'Damo K', status: 'active', lastActiveAt: '2026-08-01T00:00:00.000Z' },
+        { publicKey: hex(6).repeat(32), callsign: 'Damo L', status: 'active', lastActiveAt: '2026-07-01T00:00:00.000Z' },
+        { publicKey: hex(7).repeat(32), callsign: 'Damo M', status: 'active', lastActiveAt: '2026-06-01T00:00:00.000Z' },
+        { publicKey: hex(8).repeat(32), callsign: 'Damo N', status: 'active', lastActiveAt: '2026-05-01T00:00:00.000Z' },
+        { publicKey: hex(9).repeat(32), callsign: 'Damo P', status: 'active', lastActiveAt: '2026-04-01T00:00:00.000Z' },
+        { publicKey: hex(10).repeat(32), callsign: 'Damo (The IT guy)', status: 'active', lastActiveAt: '2026-01-01T00:00:00.000Z' },
+        { publicKey: hex(11).repeat(32), callsign: 'Kate', status: 'active' },
+    ];
+    const IT_GUY = hex(10).repeat(32);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        fetchRoles.mockResolvedValue([aliceOwner]);
+        grant.mockResolvedValue({ success: true });
+    });
+
+    async function renderDamos() {
+        await act(async () => {
+            render(<NodeRolesPanel activeNode={node} members={[...members, ...damos]} viewer={{ kind: 'password' }} />);
+        });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'damo' } });
+        return within(screen.getByRole('list', { name: 'Matching members' }));
+    }
+
+    it('shows all 10 matches, says how many, and the tenth can be picked', async () => {
+        const list = await renderDamos();
+        expect(list.getAllByRole('button')).toHaveLength(10);
+        expect(screen.getByTestId('match-count').textContent).toBe('10 members match: scroll the list to see them all.');
+        // The list scrolls inside itself, never the page sideways
+        expect(screen.getByTestId('match-list').className).toMatch(/overflow-y-auto/);
+        expect(screen.getByTestId('match-list').className).toMatch(/overflow-x-hidden/);
+
+        await click(list.getByRole('button', { name: /Damo \(The IT guy\)/ }));
+        await click(screen.getByLabelText(/Admin/));
+        await click(screen.getByRole('button', { name: 'Continue' }));
+        await click(screen.getByRole('button', { name: 'Yes, make Damo (The IT guy) an admin' }));
+        expect(grant).toHaveBeenCalledWith('https://node.test', IT_GUY, 'admin', 'pw', undefined);
+    });
+
+    it('every row shows its short key, so rows with the same name can be told apart', async () => {
+        const list = await renderDamos();
+        for (const d of damos.slice(0, 10)) {
+            expect(list.getByText(`${d.publicKey.slice(0, 8)}…${d.publicKey.slice(-6)}`)).toBeInTheDocument();
+        }
+    });
+
+    it('also shows the short key next to a role someone already holds', async () => {
+        await renderPanel();
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'alice' } });
+        const row = suggestion('alice');
+        expect(row.textContent).toContain(`${ALICE.slice(0, 8)}…${ALICE.slice(-6)}`);
+        expect(row.textContent).toContain('Owner');
+    });
+
+    it('ranks starts-with before contains, then most recently active, never-active last', () => {
+        const order = matchMembers(damos, 'damo').map((m) => m.callsign);
+        expect(order).toEqual([
+            'Damo B', 'Damo', 'Damo K', 'Damo L', 'Damo M', 'Damo N', 'Damo P', 'Damo (The IT guy)', 'Damon',
+            'Big Damo',
+        ]);
+    });
+
+    it('is case-insensitive and ignores surrounding spaces', () => {
+        expect(matchMembers(damos, '  DAMO ').length).toBe(10);
+    });
+
+    it('key search still works, and ranks after name matches', async () => {
+        const keyed = [
+            { publicKey: 'dada' + 'e'.repeat(60), callsign: 'Zed', status: 'active' },
+            { publicKey: 'f'.repeat(64), callsign: 'dadaist', status: 'active' },
+        ];
+        expect(matchMembers(keyed, 'dadaee').map((m) => m.callsign)).toEqual(['Zed']);
+        expect(matchMembers(keyed, 'dada').map((m) => m.callsign)).toEqual(['dadaist']); // under 6 characters: names only
+        expect(matchMembers([...keyed, { publicKey: 'a'.repeat(64), callsign: 'dadaee fan' }], 'dadaee').map((m) => m.callsign))
+            .toEqual(['dadaee fan', 'Zed']);
+
+        await act(async () => {
+            render(<NodeRolesPanel activeNode={node} members={[...members, ...keyed]} viewer={{ kind: 'password' }} />);
+        });
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'dadaee' } });
+        expect(suggestion('Zed')).toBeInTheDocument();
+        expect(screen.getByTestId('match-count').textContent).toBe('1 member matches.');
+    });
+
+    it('never offers a treasury or SYSTEM', () => {
+        const all = [...members, { publicKey: 'f1'.repeat(32), callsign: 'SYSTEM' }];
+        expect(matchMembers(all, 's').map((m) => m.callsign)).toEqual([]);
+        expect(matchMembers(all, 'garden')).toEqual([]);
+    });
+
+    it('with no match says so plainly', async () => {
+        await renderDamos();
+        fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'zzz' } });
+        expect(screen.queryByRole('list', { name: 'Matching members' })).not.toBeInTheDocument();
+        expect(screen.getByTestId('no-match').textContent).toBe('No one matches “zzz”. You can paste their full public key instead.');
+        expect(screen.queryByTestId('match-count')).not.toBeInTheDocument();
     });
 });
 

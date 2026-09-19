@@ -78,9 +78,12 @@ requester), SRV-9a/10 (restore traversal + admin pw), SRV-20/21 (mirror-only imp
 (DM E2E), NAT-4 (cleartext scoping), NAT-5/20/21, PWA-1/2/5, SRV-5/8, CORS.
 
 Important context for the audit:
-- **Enforcement flags are CODE-COMPLETE but default OFF** (`ENFORCE_READ_AUTH`, `ENFORCE_WS_AUTH`,
-  `ENFORCE_LEDGER_AUTH`), flipped at the cutover. **Audit the enforcement paths as if the flags are
-  ON** (that's the shipping config) — AND separately note any window that exists while they're off.
+- **Read auth and the /ws feed are safe by default; ledger auth is still a flag.** `ENFORCE_READ_AUTH`
+  is ON unless set to exactly `false`. `/ws` without `ENFORCE_WS_AUTH` gives a member-signed socket the
+  full feed and anyone else only bare `{ type }` doorbells for public changes; `=true` refuses every
+  socket without a member, `=false` restores the old open feed. `ENFORCE_LEDGER_AUTH` is still default
+  OFF, flipped at the cutover. **Audit the defaults and the enforcement paths as the shipping config**
+  — AND separately note any window an operator opens with `=false`, or that exists while ledger auth is off.
 - **Known documented residual** (don't just re-flag — try to find a *worse* version): a compromised
   mirror could forge a *balance-neutral* escrow chain (deposit+release) that the conservation guard
   can't see.

@@ -477,13 +477,24 @@ async function main() {
         assert(getSettingsBlocked.status === 403, 'GET /settings returns 403 during breakGlassMode without key session');
 
         // (d) Password auth CAN access key enrolment route (/api/local/admin/auth/enrol)
+        // The break-glass alert is a security notice for the community's members (it names the member whose
+        // admin key was replaced), so it is watched on a member's socket: a /ws socket signed by a member is
+        // tagged with _memberPubkey at upgrade. A stranger's socket must not receive it at all.
         const receivedWsEvents: any[] = [];
         const mockWs = {
+            _memberPubkey: charlieKeys.pub,
             send: (data: string) => {
                 try { receivedWsEvents.push(JSON.parse(data)); } catch {}
             },
         };
         addWsClient(mockWs);
+        const strangerWsEvents: any[] = [];
+        const strangerWs = {
+            send: (data: string) => {
+                try { strangerWsEvents.push(JSON.parse(data)); } catch {}
+            },
+        };
+        addWsClient(strangerWs);
 
         const enrolRes = await fetch(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
@@ -522,7 +533,10 @@ async function main() {
             e.severity === 'critical'
         );
         assert(alertFound, 'Loud public announcement was broadcast on break-glass key enrolment');
+        assert(!strangerWsEvents.some(e => e.type === 'system_announcement'),
+            `a socket without a member gets no break-glass announcement (got ${JSON.stringify(strangerWsEvents)})`);
         removeWsClient(mockWs);
+        removeWsClient(strangerWs);
 
         // Test that the distinct break-glass code works to authenticate
         const verifyBgCodeDirect = verifyBreakGlassCode(replacementBreakGlassCode);

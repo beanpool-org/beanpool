@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 6,
-  "hash": "96f6a4dee6e0d7bb1ca163da029d7ca6024e368f273afd1e5a289988a5fe6c8e",
+  "version": 7,
+  "hash": "7d1e2013bcf4963e993e5166301f79d1db3f83b08eb2bdb7c3fd1efd94e91ab5",
   "sections": [
     {
       "id": "setup",
@@ -472,7 +472,8 @@
         {
           "type": "ul",
           "items": [
-            "Under **Add someone**, type part of their callsign, or paste their full public key.",
+            "Under **Add someone**, type part of their callsign, or paste their full public key. Typing the first six or more characters of a key also finds them.",
+            "Every member who matches is listed, with a count above the list. A long list scrolls inside its own box. Callsigns that start with what you typed come first, then ones that contain it; among those, the most recently active come first. Each row shows the short form of the member's key, so two people with the same name can be told apart. If nobody matches, it says \"No one matches\".",
             "Pick them, then choose **Owner**, **Admin** or **Moderator**.",
             "**Continue** shows what they will be able to do, in plain words. Nothing changes until you press the **Yes, make …** button."
           ]
@@ -1487,7 +1488,8 @@
           "items": [
             "Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.",
             "Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.",
-            "The live-updates channel, which carries changes as they happen, is open to anyone who can reach your server unless ENFORCE_WS_AUTH=true. Before you switch it on, check with the BeanPool project that the apps your members use sign their connection, or they stop getting live updates."
+            "The live-updates channel tells the apps about changes as they happen. Only members get the full stream: every version of the BeanPool app signs its connection. Anyone else who connects is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
+            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false opens the full stream to anyone who can reach your server, as it was before. Do not use false."
           ]
         },
         {

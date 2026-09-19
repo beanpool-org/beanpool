@@ -950,7 +950,13 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 // pass no recipients and reach every member socket; sockets with no verified member
 // get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
 // feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
-export function broadcast(event: any, recipients?: string[]): void {
+//
+// `othersGetDoorbell`: a private event whose side effect everyone may see (a listing going pending, a
+// completed trade on the activity feed). The recipients get the full event; every other member socket
+// (and an open-feed socket) gets only `{ type }`, so its client re-fetches what it may see. Clients use
+// nothing but the type of these events, so the doorbell refreshes them exactly as the payload did.
+export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): void {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -1006,9 +1012,12 @@ export function broadcast(event: any, recipients?: string[]): void {
             ws._memberPubkey = event.member.publicKey;
             ws._pendingMemberPubkey = null;
         }
-        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) continue;
         let out = msg;
-        if (!ws._memberPubkey && !ws._openFeed) {
+        if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
+            if (!opts?.othersGetDoorbell) continue;
+            if (!ws._memberPubkey && !ws._openFeed && !PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            out = doorbell ??= JSON.stringify({ type: event.type });
+        } else if (!ws._memberPubkey && !ws._openFeed) {
             if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
             out = doorbell ??= JSON.stringify({ type: event.type });
         }
@@ -2157,6 +2166,19 @@ export function canAdministerTreasury(publicKey: string, treasuryPubkey: string)
 }
 
 /**
+ * Who hears of an application to keep an enterprise: the applicant, and the people GET .../keepers/requests
+ * lets read it (the lead or sole keeper, and node admins). It names the applicant and what they pledge.
+ */
+function keeperRequestRecipients(enterprisePubkey: string, applicantPubkey: string): string[] {
+    const candidates = new Set<string>([
+        ...(db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as any[]).map(r => r.member_pubkey),
+        ...listNodeRoles().map(r => r.member_pubkey),
+        ...(getAdminPubkey() ? [getAdminPubkey()] : []),
+    ]);
+    return [applicantPubkey, ...[...candidates].filter(pk => pk !== applicantPubkey && isLeadOrSoleKeeperOrAdmin(enterprisePubkey, pk))];
+}
+
+/**
  * Authority predicate for enterprise lead-level governance (docs/the-commons.md §2.2, §2.3).
  * Matches the authority predicate initiateWindUp and finaliseWindUp use:
  * the lead keeper, the sole keeper, or a node admin.
@@ -2721,7 +2743,7 @@ export function requestToJoinEnterprise(
         VALUES (?, ?, ?, ?, 'pending', ?)
     `).run(id, enterprisePubkey, memberPubkey, parsedAmount, now);
 
-    broadcast({ type: 'enterprise_keeper_request_created', enterprisePubkey, memberPubkey, requestId: id, pledgedBacking: parsedAmount });
+    broadcast({ type: 'enterprise_keeper_request_created', enterprisePubkey, memberPubkey, requestId: id, pledgedBacking: parsedAmount }, keeperRequestRecipients(enterprisePubkey, memberPubkey));
 
     return {
         id,
@@ -2964,7 +2986,7 @@ export function declineKeeperRequest(requestId: string, actorPubkey: string): { 
         WHERE id = ?
     `).run(now, actorPubkey, requestId);
 
-    broadcast({ type: 'enterprise_keeper_declined', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey });
+    broadcast({ type: 'enterprise_keeper_declined', enterprisePubkey: req.enterprise_pubkey, memberPubkey: req.member_pubkey }, keeperRequestRecipients(req.enterprise_pubkey, req.member_pubkey));
     return { ok: true };
 }
 

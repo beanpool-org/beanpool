@@ -152,20 +152,21 @@ export function ensureEventThread(postId: string): Conversation {
 }
 
 /**
- * The next timestamp strictly after everything already written for one membership row.
+ * The next timestamp strictly after everything already written for one chat-membership row.
  *
  * The same rule `rsvpEvent` uses for the RSVP itself, and for the same reason: a member who taps Not going
  * and Going again inside one millisecond would otherwise leave a row and a tombstone stamped identically,
  * and a replica could not tell which came last. Monotonic here means last-write-wins actually decides.
+ * Shared with the group chat (engine/group-thread.ts), whose membership follows the group the same way.
  */
-function membershipWriteAt(postId: string, pubkey: string): string {
+export function participantWriteAt(conversationId: string, pubkey: string): string {
     const nowIso = new Date().toISOString();
     const prev = db.prepare(`
         SELECT MAX(ts) AS ts FROM (
             SELECT updated_at AS ts FROM conversation_participants WHERE conversation_id = ? AND public_key = ?
             UNION ALL
             SELECT deleted_at AS ts FROM tombstones WHERE table_name = 'conversation_participants' AND row_key = ?
-        )`).get(postId, pubkey, `${postId}|${pubkey}`) as { ts: string | null } | undefined;
+        )`).get(conversationId, pubkey, `${conversationId}|${pubkey}`) as { ts: string | null } | undefined;
     return prev?.ts && prev.ts >= nowIso ? new Date(Date.parse(prev.ts) + 1).toISOString() : nowIso;
 }
 
@@ -181,7 +182,7 @@ export function addEventThreadParticipant(postId: string, pubkey: string | null 
     // happened after the leaving.
     db.prepare(
         'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, updated_at) VALUES (?, ?, ?)'
-    ).run(postId, pubkey, membershipWriteAt(postId, pubkey));
+    ).run(postId, pubkey, participantWriteAt(postId, pubkey));
 }
 
 /**
@@ -205,7 +206,7 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
         return;
     }
     if (isEventHost(db, row, pubkey)) return;
-    const writeAt = membershipWriteAt(postId, pubkey);
+    const writeAt = participantWriteAt(postId, pubkey);
     const removed = db.prepare(
         'DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key = ?'
     ).run(postId, pubkey);
@@ -217,9 +218,10 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
     }
 }
 
-function toThreadMessage(r: any, conversationId: string): EventThreadMessage {
+/** One stored row as a chat shows it; a removed row reads as `removedText` (the group chat passes its own). */
+export function toThreadMessage(r: any, conversationId: string, removedText = EVENT_THREAD_REMOVED_TEXT): EventThreadMessage {
     const displayCiphertext = r.type === 'removed'
-        ? Buffer.from(EVENT_THREAD_REMOVED_TEXT, 'utf8').toString('base64')
+        ? Buffer.from(removedText, 'utf8').toString('base64')
         : r.ciphertext;
     return {
         id: r.id,

@@ -25,9 +25,20 @@ import {
     inviteGroupMember,
     deleteGroupPost,
     getGroupsVersion,
-    isGroupConvenor
+    isGroupConvenor,
+    getGroupThread,
+    postGroupThreadMessage,
+    removeGroupThreadMessage,
+    proposeGroupConvenor,
+    voteGroupConvenor,
+    getGroupSuccession,
+    listYourChats,
 } from '../state-engine.js';
+import { groupChatRefusal } from '../engine/group-thread.js';
+import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
+
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function createGroupRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -42,6 +53,39 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         }
         return actor;
     }
+
+    /**
+     * Refuse someone who is not an active member of the group. An invite-only group answers 404, exactly as if it
+     * did not exist, unless the caller has a live relationship with it (an invitation, a request) — the #828 rule
+     * that invite-only groups stay hidden from outsiders. Returns true when the caller may go on.
+     */
+    function requireGroupMember(ctx: any, groupId: string, actor: string): boolean {
+        const refusal = groupChatRefusal(groupId, actor);
+        if (!refusal) return true;
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error };
+        return false;
+    }
+
+    /** Refusals from the group chat and succession engines, as statuses. */
+    function groupChatStatus(msg: string): number {
+        if (msg === 'This vote has closed' || msg.includes('already open') || msg.includes('already voted')) return 409;
+        if (msg.includes('not found') || msg.includes('Not found')) return 404;
+        if (msg.includes('Only') || msg.includes('Observers') || msg.includes('disabled') || msg.includes('suspended')
+            || msg.includes('pruned') || msg.includes('closed') || msg.includes('Frozen') || msg.includes('invalidated')) return 403;
+        return 400;
+    }
+
+    // ===================== YOUR GROUPS (decisions 6, 7, 13) =====================
+
+    // Every group-like chat the caller is in — their groups, the enterprises they keep (🥖), the events they host
+    // or are Going to (📅) — with the latest message and their unread count. Never anyone else's.
+    router.get('/api/your-groups', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = listYourChats(actor);
+    });
 
     // ===================== GROUPS API =====================
 
@@ -252,6 +296,137 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
             ctx.body = { error: e.message || 'Failed to update group' };
+        }
+    });
+
+    // 11. The group's chat (decision 3): active members read; convenors and members post; convenors remove.
+    router.get('/api/groups/:id/chat', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const limit = Math.min(clampLimit(ctx.query.limit), 100);
+        const offset = clampOffset(ctx.query.offset);
+        try {
+            ctx.body = getGroupThread(ctx.params.id, actor, limit, offset);
+        } catch (e: any) {
+            const msg = e?.message || 'Could not open the group chat';
+            ctx.status = groupChatStatus(msg);
+            ctx.body = { error: msg };
+        }
+    });
+
+    router.post('/api/groups/:id/chat/message', async (ctx) => {
+        // A row per call in a room that pushes to every member: throttled per IP like the event chat.
+        if (!deps.rateLimit(ctx)) return;
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        const text = typeof body.text === 'string' ? body.text : '';
+        let clientId: string | undefined;
+        if (body.clientId !== undefined && body.clientId !== null) {
+            if (typeof body.clientId !== 'string' || !UUID_V4.test(body.clientId)) {
+                ctx.status = 400;
+                ctx.body = { error: 'clientId must be a UUID v4' };
+                return;
+            }
+            clientId = body.clientId.toLowerCase();
+        }
+        if (!text.trim()) {
+            ctx.status = 400;
+            ctx.body = { error: 'Message text cannot be empty' };
+            return;
+        }
+        try {
+            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId);
+            ctx.status = 201;
+            ctx.body = { success: true, message };
+        } catch (e: any) {
+            const msg = e?.message || 'Could not post the message';
+            ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
+            ctx.body = { error: msg };
+        }
+    });
+
+    router.post('/api/groups/:id/chat/remove', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        const messageId = body.messageId;
+        if (!messageId || typeof messageId !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'messageId is required' };
+            return;
+        }
+        try {
+            ctx.body = { success: true, message: removeGroupThreadMessage(ctx.params.id, messageId, actor) };
+        } catch (e: any) {
+            const msg = e?.message || 'Could not remove the message';
+            ctx.status = groupChatStatus(msg);
+            ctx.body = { error: msg };
+        }
+    });
+
+    // 12. Convenor succession (answer B): only when the group's only convenor has been silent for 30 days.
+    router.get('/api/groups/:id/succession', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        try {
+            ctx.body = getGroupSuccession(ctx.params.id, actor);
+        } catch (e: any) {
+            const msg = e?.message || 'Could not load the convenor vote';
+            ctx.status = groupChatStatus(msg);
+            ctx.body = { error: msg };
+        }
+    });
+
+    router.post('/api/groups/:id/succession/propose', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        const candidate = body.candidatePubkey;
+        if (!candidate || typeof candidate !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'candidatePubkey is required' };
+            return;
+        }
+        try {
+            const res = proposeGroupConvenor(ctx.params.id, actor, candidate);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const msg = e?.message || 'Could not propose a convenor';
+            ctx.status = groupChatStatus(msg);
+            ctx.body = { error: msg };
+        }
+    });
+
+    router.post('/api/groups/:id/succession/:proposalId/vote', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        const choice = body.choice;
+        if (choice !== 'yes' && choice !== 'no') {
+            ctx.status = 400;
+            ctx.body = { error: "choice must be 'yes' or 'no'" };
+            return;
+        }
+        const prop = db.prepare('SELECT group_id FROM group_convenor_proposals WHERE id = ?').get(ctx.params.proposalId) as any;
+        if (!prop || prop.group_id !== ctx.params.id) {
+            ctx.status = 404;
+            ctx.body = { error: 'Convenor proposal not found' };
+            return;
+        }
+        try {
+            const res = voteGroupConvenor(ctx.params.proposalId, actor, choice);
+            ctx.body = { success: true, ...res };
+        } catch (e: any) {
+            const msg = e?.message || 'Could not record the vote';
+            ctx.status = groupChatStatus(msg);
+            ctx.body = { error: msg };
         }
     });
 

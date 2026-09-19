@@ -54,7 +54,11 @@ export interface Message {
 
 export interface Conversation {
     id: string;
-    type: 'dm' | 'group' | 'enterprise_thread' | string;
+    /**
+     * 'dm' (end-to-end encrypted), or a node-readable thread owned by something else: 'group_thread' (a Commons
+     * group, id = group id), 'event_thread' (id = event post id), 'enterprise_thread' (id = enterprise pubkey).
+     */
+    type: 'dm' | 'group_thread' | 'event_thread' | 'enterprise_thread' | string;
     postId?: string;
     postTitle?: string;
     postStatus?: string;
@@ -247,6 +251,26 @@ export function getConversation(db: Db, id: string): Conversation | undefined {
     } as any;
 }
 
+/**
+ * A group chat's membership lines (joined, left, removed, role changed) are shown in the chat but never count
+ * as unread — nobody should get a badge because someone joined. The server's group chat
+ * (apps/server/src/engine/group-thread.ts, GroupSystemType) writes these kinds.
+ */
+export const QUIET_SYSTEM_TYPES: readonly string[] = [
+    'GROUP_MEMBER_JOINED', 'GROUP_MEMBER_LEFT', 'GROUP_MEMBER_REMOVED', 'GROUP_ROLE_CHANGED',
+];
+const QUIET_SQL = QUIET_SYSTEM_TYPES.map(t => `'${t}'`).join(', ');
+
+/**
+ * SQL predicate on a `messages m` row: true when it counts toward the viewer's unread badge. Not a membership
+ * line, and not a system line about something the viewer did themselves (their own event or poll landing in a
+ * group chat). Takes ONE bound parameter: the viewer's pubkey.
+ */
+export const COUNTS_AS_UNREAD_SQL = `NOT (m.type = 'system' AND (
+    COALESCE(m.system_type, '') IN (${QUIET_SQL})
+    OR COALESCE(CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.actorPubkey') END, '') = ?
+))`;
+
 export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> {
     const rows = db.prepare(`
         SELECT cp.conversation_id, 
@@ -254,11 +278,12 @@ export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> 
                 WHERE m.conversation_id = cp.conversation_id 
                   AND m.author_pubkey != ? 
                   AND (cp.last_read_at IS NULL OR m.timestamp > cp.last_read_at)
+                  AND ${COUNTS_AS_UNREAD_SQL}
                ) as unread_count
         FROM conversation_participants cp
         JOIN conversations c ON cp.conversation_id = c.id
         WHERE cp.public_key = ? AND c.type != 'enterprise_thread'
-    `).all(pubkey, pubkey) as any[];
+    `).all(pubkey, pubkey, pubkey) as any[];
 
     const counts: Record<string, number> = {};
     for (const r of rows) if (r.unread_count > 0) counts[r.conversation_id] = r.unread_count;

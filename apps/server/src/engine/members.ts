@@ -32,6 +32,23 @@ export function recordActivity(publicKey: string): void {
     } catch {
         // Safe to ignore if table does not exist in isolated db test
     }
+    // A group convenor coming back closes any vote to replace them (engine/group-succession.ts). One indexed
+    // lookup; the hook itself (registered by the state engine, which owns the callbacks) runs only on a hit.
+    if (memberActivityHook) {
+        try {
+            const open = db.prepare("SELECT 1 FROM group_convenor_proposals WHERE convenor_pubkey = ? AND status = 'active' LIMIT 1").get(publicKey);
+            if (open) memberActivityHook(publicKey);
+        } catch {
+            // Table absent on an isolated test schema.
+        }
+    }
+}
+
+let memberActivityHook: ((publicKey: string) => void) | null = null;
+
+/** Run `fn` when a member with an open group-convenor vote against them records activity. */
+export function setMemberActivityHook(fn: ((publicKey: string) => void) | null): void {
+    memberActivityHook = fn;
 }
 
 /**

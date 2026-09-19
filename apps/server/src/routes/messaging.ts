@@ -1,5 +1,6 @@
 /**
- * Messaging routes — Conversations, DMs, Groups, Attachments, Reactions.
+ * Messaging routes — Conversations, DMs, Attachments, Reactions, mutes. A Commons group's chat is served by
+ * routes/groups.ts; the reads and writes here re-check group membership for it.
  */
 
 import Router from '@koa/router';
@@ -10,24 +11,51 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
+import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
+import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import type { RouteDeps } from './types.js';
 
+/** May this member open (and so mute) this chat? The same rules as reading it. A group chat goes through
+ *  groupChatRefusal instead, which also says whether to answer 403 or 404. */
+function canOpenChat(conv: { id: string; type: string; participants: string[] }, actor: string): boolean {
+    if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id);
+    if (conv.type === 'event_thread') {
+        try {
+            const row = loadEventForThread(conv.id);
+            return !isEventThreadExpired(row) && canReadEventThread(row, actor);
+        } catch { return false; }
+    }
+    return conv.participants.includes(actor);
+}
+
+/**
+ * Refuse a caller who may not open this group's chat, answering exactly as for an id that does not exist when the
+ * group is invite-only and the caller has no invitation or request (PR #924 review, item 5): same status, same
+ * words, so the ordinary routes cannot be used to learn that a hidden group exists. Returns true when refused.
+ */
+function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, notFound: { status: number; error: string }): boolean {
+    const refusal = groupChatRefusal(groupId, actor);
+    if (!refusal) return false;
+    ctx.status = refusal.status === 404 ? notFound.status : refusal.status;
+    ctx.body = { error: refusal.status === 404 ? notFound.error : refusal.error };
+    return true;
+}
+
+const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
+const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation not found or not a participant' };
+
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH, rateLimit } = deps;
 
 // ===================== MESSAGING API (PUBLIC) =====================
-
-/** Upper bound on people in one group conversation. Each one is a synchronous INSERT
- *  inside the creation transaction, so this is what stops a single request holding the
- *  SQLite write lock against the whole node. */
-const MAX_CONVERSATION_PARTICIPANTS = 50;
 
 /** Ed25519 public keys are 64 hex characters; 128 leaves room without allowing a
  *  megabyte of text to reach the members lookup. */
@@ -50,20 +78,24 @@ function respondToMessagingError(ctx: any, e: unknown, what: string): void {
 }
 
 router.post('/api/messages/conversation', async (ctx) => {
-    const { type, participants, createdBy, name, postId } = (ctx as any).requestBody || {};
+    const { type, participants, createdBy, name } = (ctx as any).requestBody || {};
     if (!type || !participants || !createdBy) {
         ctx.status = 400;
         ctx.body = { error: 'type, participants, and createdBy are required' };
         return;
     }
-    // The engine types `type` as 'dm' | 'group', but TypeScript is not present at
-    // runtime and conversations.type has no CHECK constraint, so any other string
-    // sailed past both length rules below and re-opened the very hole the group cap
-    // closes: type "bulk" with 5,000 participants took the exclusive write lock for
-    // 5,000 INSERTs. Whitelist first, then the caps mean something.
-    if (type !== 'dm' && type !== 'group') {
+    // The old chat group was removed (groups decision 2, 2026-09-19). An app still offering it gets a plain
+    // 410 saying where group chats live now, not a crash. conversations.type has no CHECK constraint, so any
+    // other string is refused here before the length rules below: type "bulk" with 5,000 participants once
+    // took the exclusive write lock for 5,000 INSERTs.
+    if (type === 'group') {
+        ctx.status = 410;
+        ctx.body = { error: CHAT_GROUP_REMOVED_ERROR };
+        return;
+    }
+    if (type !== 'dm') {
         ctx.status = 400;
-        ctx.body = { error: 'type must be either "dm" or "group"' };
+        ctx.body = { error: 'type must be "dm"' };
         return;
     }
     if (!Array.isArray(participants)) {
@@ -80,19 +112,14 @@ router.post('/api/messages/conversation', async (ctx) => {
     // participant made the INSERT loop throw UNIQUE constraint failed and surfaced the raw
     // SQLite error to the caller. De-duplicate and count distinct people.
     const uniqueParticipants: string[] = Array.from(new Set<string>(participants));
-    if (type === 'dm' && uniqueParticipants.length !== 2) {
+    if (uniqueParticipants.length !== 2) {
         ctx.status = 400;
         ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
         return;
     }
-    if (type === 'group' && uniqueParticipants.length > MAX_CONVERSATION_PARTICIPANTS) {
-        ctx.status = 400;
-        ctx.body = { error: `Group conversations can have at most ${MAX_CONVERSATION_PARTICIPANTS} participants` };
-        return;
-    }
     // A2-15: the creator (bound to the verified signer by the spoof check) must
     // be one of the participants. Otherwise a member could fabricate a thread
-    // between OTHER people (a DM "between B and C", or a group they aren't in)
+    // between OTHER people (a DM "between B and C")
     // and inject it into victims' inboxes with an arbitrary name. Enforced at
     // this public route only — internal/system conversation creation
     // (ensureTransactionConversation, injectSystemMessage) calls
@@ -103,7 +130,7 @@ router.post('/api/messages/conversation', async (ctx) => {
         return;
     }
     try {
-        const conv = createConversation(type, uniqueParticipants, createdBy, name, postId);
+        const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
@@ -139,6 +166,14 @@ router.post('/api/messages/send', async (ctx) => {
         }
         clientId = id.toLowerCase();
     }
+    // A group chat line is a row in a room that pushes to every member, so it is throttled exactly as the group
+    // chat route throttles it (PR #924 review, item 4), and an invite-only group is 404 to an outsider here as
+    // there (item 5). Store apps up to 1.2.37 send group chat lines through this route.
+    const target = getConversation(conversationId);
+    if (target?.type === GROUP_THREAD_TYPE) {
+        if (!rateLimit(ctx)) return;
+        if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
+    }
     let msg;
     try {
         msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
@@ -147,8 +182,8 @@ router.post('/api/messages/send', async (ctx) => {
         return;
     }
     if (!msg) {
-        ctx.status = 400;
-        ctx.body = { error: 'Failed to send — conversation not found or not a participant' };
+        ctx.status = SEND_NOT_FOUND.status;
+        ctx.body = { error: SEND_NOT_FOUND.error };
         return;
     }
 
@@ -235,8 +270,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     }
     const convs = getConversationsByMember(publicKey);
     const unreadCounts = getUnreadCounts(publicKey);
+    const mutes = getChatMutesFor(publicKey);
     ctx.body = {
-        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0 })),
+        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })),
         totalUnread: Object.values(unreadCounts).reduce((a, b) => a + b, 0),
     };
 });
@@ -260,13 +296,70 @@ router.post('/api/messages/mark-read', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
-    if (!conv.participants.includes(actor)) {
+    // A group chat's read cursor lives on the member's participant row, which follows the group. A keeper's lives
+    // in thread_read_cursors, never on a participant row: that would let the generic send route write into the
+    // enterprise thread (PR #924 review, B1). Only a current keeper has one to move.
+    if (conv.type === GROUP_THREAD_TYPE) {
+        if (refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
+        syncGroupThreadMembership(conversationId, actor);
+    } else if (conv.type === 'enterprise_thread') {
+        if (!isKeeperOfEnterprise(actor, conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only the keepers of this enterprise have a read marker on its thread' };
+            return;
+        }
+        markKeeperThreadRead(conversationId, actor);
+        ctx.body = { success: true };
+        return;
+    } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;
     }
     markConversationRead(actor, conversationId);
     ctx.body = { success: true };
+});
+
+/**
+ * Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). Only pushes are silenced;
+ * an @mention still gets through. Anyone who can read the chat may mute it for themselves.
+ */
+router.post('/api/messages/mute', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const { conversationId, duration } = (ctx as any).requestBody || {};
+    if (!conversationId || typeof conversationId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'conversationId is required' };
+        return;
+    }
+    if (duration !== 'off' && !isChatMuteDuration(duration)) {
+        ctx.status = 400;
+        ctx.body = { error: "duration must be '8h', '1w', 'always' or 'off'" };
+        return;
+    }
+    const conv = getConversation(conversationId);
+    if (!conv) {
+        ctx.status = 404;
+        ctx.body = { error: 'Conversation not found' };
+        return;
+    }
+    if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
+    if (conv.type !== GROUP_THREAD_TYPE && !canOpenChat(conv, actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'You are not in this conversation' };
+        return;
+    }
+    if (duration === 'off') {
+        clearChatMute(conversationId, actor);
+        ctx.body = { success: true, mute: null };
+        return;
+    }
+    ctx.body = { success: true, mute: setChatMute(conversationId, actor, duration) };
 });
 
 router.get('/api/messages/:conversationId', async (ctx) => {
@@ -277,12 +370,18 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
+    // A group's chat is its current active members, re-checked against the group rather than the participants
+    // mirror, and private whether or not this node enforces read auth. A removed member, someone who left, a
+    // pending request, an open invitation and an outsider are all refused; node admins get no exception.
+    if (conv.type === GROUP_THREAD_TYPE) {
+        if (refuseGroupChat(ctx, conversationId, ctx.state.actor as string | undefined, CONVERSATION_NOT_FOUND)) return;
+    }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Under read-auth the signer is a verified member (ctx.state.actor); require
     // it to be in this conversation. Without this, any member could read any
-    // thread by id (group/system messages are still plaintext-v1, and
+    // thread by id (system messages are plaintext, and
     // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
+    else if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;

@@ -79,13 +79,17 @@ async function main() {
     const a3c = await signedFetch('GET', `/api/messages/conversations/${A.pubKeyHex}`, C);
     assert(a3c.status === 403, `A2-3: C is DENIED A's conversation graph (got ${a3c.status} ${a3c.error ?? ''})`);
 
-    // A2-15 — creating a conversation the signer is NOT part of is rejected.
+    // A2-15 — creating a conversation the signer is NOT part of is rejected. (Was exercised with the old
+    // chat group, removed 2026-09-19; a DM is the only kind this route still creates.)
     const a15bad = await signedFetch('POST', '/api/messages/conversation', C,
-        { type: 'group', createdBy: C.pubKeyHex, participants: [A.pubKeyHex, B.pubKeyHex], name: 'scam' });
+        { type: 'dm', createdBy: C.pubKeyHex, participants: [A.pubKeyHex, B.pubKeyHex], name: 'scam' });
     assert(a15bad.status === 403, `A2-15: creator-not-a-participant is DENIED (got ${a15bad.status} ${a15bad.error ?? ''})`);
     const a15ok = await signedFetch('POST', '/api/messages/conversation', C,
-        { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
+        { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
+    const a15group = await signedFetch('POST', '/api/messages/conversation', C,
+        { type: 'group', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex, B.pubKeyHex], name: 'old style' });
+    assert(a15group.status === 410, `the removed chat group answers 410 Gone (got ${a15group.status} ${a15group.error ?? ''})`);
 
     // Send message — spoof check (signed by A but claiming to be B) is DENIED.
     const msgSpoofed = await signedFetch('POST', '/api/messages/send', A,

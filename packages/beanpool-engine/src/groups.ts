@@ -17,7 +17,8 @@ import {
     isGroupRole,
     isJoinPolicy,
     isGroupCategory,
-    isGroupMemberStatus
+    isGroupMemberStatus,
+    DEFAULT_GROUP_CATEGORY
 } from '@beanpool/core';
 
 export type {
@@ -86,7 +87,7 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
         throw new Error('Group name must be between 1 and 100 characters');
     }
 
-    const category: GroupCategory = params.category ?? 'general';
+    const category: GroupCategory = params.category ?? DEFAULT_GROUP_CATEGORY;
     if (!isGroupCategory(category)) {
         throw new Error(`Invalid group category: ${category}`);
     }

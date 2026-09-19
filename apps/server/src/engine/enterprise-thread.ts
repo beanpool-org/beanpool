@@ -53,6 +53,28 @@ export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: stri
     return !!row;
 }
 
+/**
+ * A keeper's read cursor on the thread, kept in thread_read_cursors and never in conversation_participants: a
+ * participant row is what the generic send and react routes take as the right to write (PR #924 review, B1).
+ * Made read-up-to-now the first time, so a new keeper is not handed the thread's whole history as unread.
+ */
+export function ensureKeeperReadCursor(enterprisePubkey: string, keeperPubkey: string): void {
+    db.prepare('INSERT OR IGNORE INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)')
+        .run(enterprisePubkey, keeperPubkey, new Date().toISOString());
+}
+
+export function markKeeperThreadRead(enterprisePubkey: string, keeperPubkey: string): void {
+    db.prepare(`INSERT INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)
+                ON CONFLICT(conversation_id, member_pubkey) DO UPDATE SET last_read_at = excluded.last_read_at`)
+        .run(enterprisePubkey, keeperPubkey, new Date().toISOString());
+}
+
+export function getKeeperReadCursor(enterprisePubkey: string, keeperPubkey: string): { lastReadAt: string; since: string } | null {
+    const r = db.prepare('SELECT last_read_at, created_at FROM thread_read_cursors WHERE conversation_id = ? AND member_pubkey = ?')
+        .get(enterprisePubkey, keeperPubkey) as any;
+    return r ? { lastReadAt: r.last_read_at, since: r.created_at } : null;
+}
+
 export function ensureEnterpriseThread(enterprisePubkey: string): Conversation {
     const enterprise = db.prepare(
         "SELECT public_key, callsign, is_treasury, status, paused, joined_at FROM members WHERE public_key = ?"

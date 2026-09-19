@@ -3673,7 +3673,8 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     }
 }
 
-export async function createConversationApi(type: 'dm' | 'group', participants: string[], createdBy: string, name?: string, postId?: string): Promise<any> {
+// Only DMs are created here: the old chat group was removed (2026-09-19); a group chat is a Commons group's.
+export async function createConversationApi(type: 'dm', participants: string[], createdBy: string, name?: string, postId?: string): Promise<any> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a node first.');
 

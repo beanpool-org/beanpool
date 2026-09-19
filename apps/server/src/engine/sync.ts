@@ -187,6 +187,15 @@ function applyTombstoneLocally(tableName: string, rowKey: string): boolean {
             const r = db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=? AND public_key=?`).run(conversationId, publicKey);
             return r.changes > 0;
         }
+        // A whole conversation deleted on the primary: the old chat groups (removed 2026-09-19, groups decision 2)
+        // and the per-post threads chat consolidation collapsed. Its messages and membership go with it.
+        case 'conversations': {
+            db.prepare(`DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=?)`).run(rowKey);
+            db.prepare(`DELETE FROM messages WHERE conversation_id=?`).run(rowKey);
+            db.prepare(`DELETE FROM conversation_participants WHERE conversation_id=?`).run(rowKey);
+            const r = db.prepare(`DELETE FROM conversations WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
         // A member leaving a group (or withdrawing a request, or declining an invitation) deletes their row.
         case 'group_members': {
             const [groupId, memberPubkey] = rowKey.split('|');
@@ -703,8 +712,12 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                 }
             }
 
+            const droppedChatGroups = new Set<string>();
             if (remote.conversations) {
                 for (const cv of remote.conversations) {
+                    // The old chat group is gone (groups decision 2); a snapshot from a node not yet updated
+                    // must not bring one back. Its participants and messages then have no conversation to land in.
+                    if (cv.type === 'group') { droppedChatGroups.add(cv.id); conflictsSkipped++; continue; }
                     db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at)
                                 VALUES (?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
@@ -738,6 +751,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
                               AND (conversation_participants.updated_at IS NULL
                                    OR excluded.updated_at > conversation_participants.updated_at)`);
                 for (const cp of remote.conversationParticipants) {
+                    if (droppedChatGroups.has(cp.conversationId)) continue;
                     importParticipant.run(
                         cp.conversationId,
                         cp.publicKey,
@@ -749,6 +763,7 @@ export async function importRemoteState(cb: SyncCallbacks, remote: SyncPayload):
 
             if (remote.messages) {
                 for (const msg of remote.messages) {
+                    if (droppedChatGroups.has(msg.conversationId)) continue;
                     const res = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp, edited_at, updated_at)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET

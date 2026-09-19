@@ -3,19 +3,20 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { getMemberRatings } from '../utils/db';
 import { router } from 'expo-router';
 import { MemberAvatar } from './MemberAvatar';
-import { colors, palette } from '../constants/colors';
+import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 
 /**
  * Trust Tier Thresholds (based on Energy Cycled)
  * Energy = total outbound transaction volume
  */
-// Colors come from the shared trust tokens (constants/colors.ts) so the gold
-// tier ramp stays identical across cards, the Ledger, and the Trust modal.
+// `token` names the shared trust colours (constants/colors.ts), resolved from
+// the active theme at render so the tier ramp follows light/dark and stays
+// identical across cards, the Ledger, and the Trust modal.
 const TRUST_TIERS = [
-    { min: 1320, emoji: '⛰️', label: 'Elder',    color: colors.trust.elder.fg,    bgColor: colors.trust.elder.bg,    borderColor: colors.trust.elder.border },
-    { min: 520,  emoji: '🏛️', label: 'Steward',  color: colors.trust.steward.fg,  bgColor: colors.trust.steward.bg,  borderColor: colors.trust.steward.border },
-    { min: 120,  emoji: '🏠', label: 'Resident', color: colors.trust.resident.fg, bgColor: colors.trust.resident.bg, borderColor: colors.trust.resident.border },
-    { min: 0,    emoji: '🌱', label: 'Newcomer', color: colors.trust.newcomer.fg, bgColor: colors.trust.newcomer.bg, borderColor: colors.trust.newcomer.border },
+    { min: 1320, emoji: '⛰️', label: 'Elder',    token: 'elder' },
+    { min: 520,  emoji: '🏛️', label: 'Steward',  token: 'steward' },
+    { min: 120,  emoji: '🏠', label: 'Resident', token: 'resident' },
+    { min: 0,    emoji: '🌱', label: 'Newcomer', token: 'newcomer' },
 ] as const;
 
 export function getTrustTier(energyCycled: number = 0) {
@@ -49,6 +50,9 @@ interface PostAuthorTrustProps {
 export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl, mode = 'full', navigable = true, isFounding = false }: PostAuthorTrustProps) {
     const [ratingInfo, setRatingInfo] = useState<{ average: number; count: number } | null>(null);
     const tier = getTrustTier(energyCycled);
+    const { colors } = useTheme();
+    const styles = useStyles(makeStyles);
+    const tierColors = colors.trust[tier.token];
 
     useEffect(() => {
         if (!pubkey) return;
@@ -71,7 +75,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
-                <View style={[styles.tierBadgeCompact, { backgroundColor: tier.bgColor, borderColor: tier.borderColor }]}>
+                <View style={[styles.tierBadgeCompact, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
                     <Text style={styles.tierEmojiCompact}>{tier.emoji}</Text>
                 </View>
                 {/* Callsign */}
@@ -96,9 +100,9 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}
-            <View style={[styles.tierBadgeFull, { backgroundColor: tier.bgColor, borderColor: tier.borderColor }]}>
+            <View style={[styles.tierBadgeFull, { backgroundColor: tierColors.bg, borderColor: tierColors.border }]}>
                 <Text style={styles.tierEmojiFull}>{tier.emoji}</Text>
-                <Text style={[styles.tierLabelFull, { color: tier.color }]}>{tier.label}</Text>
+                <Text style={[styles.tierLabelFull, { color: tierColors.fg }]}>{tier.label}</Text>
             </View>
             {/* Callsign */}
             <Text style={styles.fullCallsign} numberOfLines={1}>
@@ -124,7 +128,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
     );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     // Compact mode (grid cards)
     compactContainer: {
         flexDirection: 'row',
@@ -180,7 +184,7 @@ const styles = StyleSheet.create({
     },
     fullCallsign: {
         fontSize: 13,
-        color: palette.gray600,
+        color: colors.market.author,
         fontWeight: '600',
         flexShrink: 1,
     },

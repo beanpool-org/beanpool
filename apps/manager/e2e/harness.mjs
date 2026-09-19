@@ -13,6 +13,21 @@ import path from 'node:path';
 import { mockResponse, UNKNOWN } from './fixtures.mjs';
 
 const MANAGER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Tailwind reads its config from the working directory, so the build only works from apps/manager.
+process.chdir(MANAGER_DIR);
+
+/**
+ * The text font is forced to DejaVu Sans (bundled in e2e/fonts, OFL), which is as wide as Verdana: wider than
+ * Android's Roboto and much wider than Apple's system font. Without this the check measured whatever font the
+ * machine had, passed on a Mac and failed in CI. A row that fits in DejaVu fits on a phone. Monospace is left alone.
+ */
+export const HARNESS_FONT = 'BeanpoolHarnessWide';
+const FONT_DIR = path.join(MANAGER_DIR, 'e2e', 'fonts');
+const FONT_FILES = { 400: 'dejavu-sans-latin-400-normal.woff2', 700: 'dejavu-sans-latin-700-normal.woff2' };
+const FONT_CSS = `
+${Object.entries(FONT_FILES).map(([weight, file]) => `@font-face { font-family: '${HARNESS_FONT}'; font-weight: ${weight}; font-style: normal; src: url('/__harness/fonts/${file}') format('woff2'); }`).join('\n')}
+html, body, body *:not(code):not(pre):not(kbd):not(samp):not(.font-mono) { font-family: '${HARNESS_FONT}' !important; }
+`;
 
 /**
  * Every screen in single-node Settings: a section tab, and the sub-tab inside it. `sub` matches the section's own
@@ -84,7 +99,7 @@ export async function launch() {
  * A fresh page on Settings, signed in with a (mocked) admin password, opened on `screen`.
  * `hash` lets a caller open the key sign-in hand-off link instead (e.g. '#handoff=…&section=disputes').
  */
-export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true }) {
+export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false }) {
     const context = await browser.newContext({
         viewport: { width, height },
         deviceScaleFactor: 1,
@@ -97,6 +112,10 @@ export async function openSettings(browser, origin, { width, height = 800, textS
     page.on('pageerror', (e) => errors.push(String(e)));
     // Nothing leaves this machine: map tiles, avatars and anything else off the local server are refused.
     await context.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort());
+    await context.route(/\/__harness\/fonts\//, (route) => {
+        const file = path.basename(new URL(route.request().url()).pathname);
+        route.fulfill({ status: 200, contentType: 'font/woff2', body: fs.readFileSync(path.join(FONT_DIR, file)) });
+    });
     await page.route(/\/(api|proxy)\//, async (route) => {
         const req = route.request();
         const url = new URL(req.url());
@@ -122,7 +141,7 @@ export async function openSettings(browser, origin, { width, height = 800, textS
             };
             if (document.head) add(); else document.addEventListener('DOMContentLoaded', add);
         }
-    }, { tab: screen.tab, signedIn, css: textScale !== 1 ? TEXT_SCALE_CSS(textScale) : '' });
+    }, { tab: screen.tab, signedIn, css: (systemFont ? '' : FONT_CSS) + (textScale !== 1 ? TEXT_SCALE_CSS(textScale) : '') });
 
     await page.goto(`${origin}/settings/${hash}`);
     if (signedIn) {
@@ -131,6 +150,15 @@ export async function openSettings(browser, origin, { width, height = 800, textS
         await settle(page);
     } else {
         await settle(page);
+    }
+    if (!systemFont) {
+        // A missing font file would quietly fall back to the system font and bring back the Mac-only pass.
+        const loaded = await page.evaluate(async (family) => {
+            await document.fonts.ready;
+            return [...document.fonts].some(f => f.family.replace(/["']/g, '') === family && f.status === 'loaded')
+                && getComputedStyle(document.body).fontFamily.includes(family);
+        }, HARNESS_FONT);
+        if (!loaded) throw new Error(`harness font ${HARNESS_FONT} did not load (e2e/fonts)`);
     }
     return { context, page, errors };
 }
@@ -148,6 +176,7 @@ export async function selectSubTab(page, sub) {
 
 export async function settle(page) {
     await page.waitForLoadState('networkidle').catch(() => {});
+    await page.evaluate(() => document.fonts.ready).catch(() => {});
     await page.waitForTimeout(400);
 }
 
@@ -176,6 +205,26 @@ export async function horizontalOverflow(page) {
         }
         return { viewport: vw, scrollWidth: sw, culprits: culprits.slice(0, 8) };
     });
+}
+
+/**
+ * How far a box (e.g. the phone menu's panel) scrolls sideways inside itself, and whether each of the given buttons
+ * inside it sits wholly within the box. The page-level check cannot see this: a panel that clips or scrolls its own
+ * overflow never widens the page.
+ */
+export async function boxOverflow(locator, buttonSelector = 'button') {
+    return locator.evaluate((box, sel) => {
+        const b = box.getBoundingClientRect();
+        const outside = [];
+        for (const el of box.querySelectorAll(sel)) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0) continue;
+            if (r.left < b.left - 0.5 || r.right > b.right + 0.5) {
+                outside.push(`<${el.tagName.toLowerCase()} aria-label="${el.getAttribute('aria-label') || ''}"> ${Math.round(r.left)}–${Math.round(r.right)} outside ${Math.round(b.left)}–${Math.round(b.right)} "${(el.textContent || '').trim().slice(0, 30)}"`);
+            }
+        }
+        return { clientWidth: box.clientWidth, scrollWidth: box.scrollWidth, outside: outside.slice(0, 8) };
+    }, buttonSelector);
 }
 
 export { UNKNOWN };

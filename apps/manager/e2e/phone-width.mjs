@@ -9,9 +9,11 @@
  *
  *   pnpm --filter @beanpool/manager test:phone-width
  *
+ * Text is set in a bundled Verdana-width font (see HARNESS_FONT in harness.mjs), so a Mac and CI measure the same.
+ *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
-import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, SCREENS, screenName, UNKNOWN } from './harness.mjs';
+import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT } from './harness.mjs';
 
 const WIDTH = 320;
 /** One of each kind of modal an owner meets on a phone: `open` is the button (in the page) that opens it. */
@@ -38,6 +40,7 @@ function record(label, result) {
     }
 }
 
+console.log(`Text font forced to ${HARNESS_FONT} (DejaVu Sans, Verdana width).`);
 const { server, origin } = await startServer();
 const browser = await launch();
 try {
@@ -55,6 +58,18 @@ try {
                     await settle(page);
                 }
                 record(`${screenName(screen)} ${at}`, await horizontalOverflow(page));
+                // Links are thumb targets too: every link on the screen is at least 48px tall (the map's own
+                // controls excepted, as in index.css).
+                checks++;
+                const smallLinks = await page.evaluate(() => [...document.querySelectorAll('main a[href]')]
+                    .filter(a => !a.closest('.leaflet-container'))
+                    .map(a => ({ r: a.getBoundingClientRect(), text: (a.textContent || '').trim().slice(0, 40) }))
+                    .filter(({ r }) => r.width > 0 && r.height < 47.5)
+                    .map(({ r, text }) => `"${text}" ${Math.round(r.width)}×${Math.round(r.height)}`));
+                if (smallLinks.length) {
+                    failures.push(`${screenName(screen)} ${at}: links under 48px: ${smallLinks.join(', ')}`);
+                    console.log(`  ✗ ${screenName(screen)} links ${at}`);
+                }
             }
             if (errors.length) failures.push(`${tab} ${at}: page errors: ${errors.join(' | ')}`);
             await context.close();
@@ -66,6 +81,16 @@ try {
             await page.getByRole('button', { name: 'Menu' }).click();
             await page.getByRole('dialog', { name: 'Settings menu' }).waitFor();
             record(`menu ${at}`, await horizontalOverflow(page));
+            // The menu's panel clips and scrolls its own overflow, so the page check above cannot see a row that is
+            // too wide for it: measure the panel, and every button in it (the ✕ above all) sits wholly inside.
+            checks++;
+            const panel = await boxOverflow(page.getByRole('dialog', { name: 'Settings menu' }).locator(':scope > div').nth(1));
+            if (panel.scrollWidth > panel.clientWidth || panel.outside.length) {
+                failures.push(`menu panel ${at}: panel is ${panel.scrollWidth}px wide inside ${panel.clientWidth}px\n      ${panel.outside.join('\n      ')}`);
+                console.log(`  ✗ menu panel ${at} (${panel.scrollWidth} > ${panel.clientWidth}, ${panel.outside.length} buttons outside)`);
+            } else {
+                console.log(`  ✓ menu panel ${at}`);
+            }
             await page.getByRole('button', { name: /Manual: running your community/ }).click();
             await page.getByRole('dialog', { name: 'Operator manual' }).waitFor();
             record(`manual contents ${at}`, await horizontalOverflow(page));

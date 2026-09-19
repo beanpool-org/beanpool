@@ -9,11 +9,16 @@
  *
  *   pnpm --filter @beanpool/manager test:phone-width
  *
+ * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: every button, link and
+ * field in it lies inside its card (the cards clip, so the page check above cannot see a button pushed off the edge),
+ * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
+ * each close it too, and Back does not leave Settings.
+ *
  * Text is set in a bundled Verdana-width font (see HARNESS_FONT in harness.mjs), so a Mac and CI measure the same.
  *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
-import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT } from './harness.mjs';
+import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT, ALL_MODALS, openModal, topModal, closeControl } from './harness.mjs';
 
 const WIDTH = 320;
 /** One of each kind of modal an owner meets on a phone: `open` is the button (in the page) that opens it. */
@@ -69,6 +74,8 @@ try {
                 if (smallLinks.length) {
                     failures.push(`${screenName(screen)} ${at}: links under 48px: ${smallLinks.join(', ')}`);
                     console.log(`  ✗ ${screenName(screen)} links ${at}`);
+                } else {
+                    console.log(`  ✓ ${screenName(screen)} links ${at}`);
                 }
             }
             if (errors.length) failures.push(`${tab} ${at}: page errors: ${errors.join(' | ')}`);
@@ -151,6 +158,99 @@ try {
         }
     }
 
+    // Every modal and wizard: nothing in it sits outside its card, and its ✕ can be tapped.
+    const CONTROLS = 'button, a[href], input:not([type=hidden]), select, textarea';
+    const MODAL_WIDTHS = (process.env.MODAL_WIDTHS || '320,360').split(',').map(Number);
+    const only = process.env.MODALS ? new Set(process.env.MODALS.split(',')) : null;
+    for (const width of MODAL_WIDTHS) {
+        for (const textScale of TEXT_SCALES) {
+            const at = `@${width}${textScale !== 1 ? ` ×${textScale}` : ''}`;
+            console.log(`\nmodals ${at}`);
+            for (const modal of ALL_MODALS.filter(m => !only || only.has(m.name))) {
+                const { context, page, errors } = await openSettings(browser, origin, { width, textScale, screen: modal.screen, overrides: modal.overrides });
+                const fail = (what) => {
+                    failures.push(`modal ${modal.name} ${at}: ${what}`);
+                    console.log(`  ✗ ${modal.name} ${at}: ${what.split('\n')[0]}`);
+                };
+                try {
+                    const before = await page.locator('.fixed.inset-0').count();
+                    const opened = await openModal(page, modal);
+                    checks++;
+                    if (opened <= before) { fail('did not open'); continue; }
+                    const { card } = topModal(page);
+                    const box = await boxOverflow(card, CONTROLS, { skipScrollers: true });
+                    if (box.outside.length) fail(`${box.outside.length} controls outside the card\n      ${box.outside.join('\n      ')}`);
+                    else console.log(`  ✓ ${modal.name} ${at}: every control inside the card`);
+
+                    checks++;
+                    const x = await closeControl(card);
+                    if (!x) { fail('no ✕ (or Cancel) to close it'); continue; }
+                    const tap = await x.evaluate((el) => {
+                        const probe = () => {
+                            const r = el.getBoundingClientRect();
+                            const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+                            const hit = document.elementFromPoint(cx, cy);
+                            return { cx, cy, hit: hit === el || el.contains(hit), label: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 20), r: `${Math.round(r.left)}–${Math.round(r.right)}` };
+                        };
+                        const first = probe();
+                        if (first.hit) return first;
+                        // Below the fold (of the page or of a card that scrolls): scroll up or down to it, as a thumb
+                        // would, but never sideways. A card that clips can still be scrolled sideways by a script
+                        // (scrollIntoView does it), which a thumb cannot do, so every sideways scroll is put back.
+                        const lefts = [];
+                        for (let p = el.parentElement; p; p = p.parentElement) lefts.push([p, p.scrollLeft]);
+                        el.scrollIntoView({ block: 'center', inline: 'nearest' });
+                        for (const [p, left] of lefts) p.scrollLeft = left;
+                        return probe();
+                    });
+                    if (!tap.hit) { fail(`a tap on the centre of "${tap.label}" (${tap.r}) misses it`); continue; }
+                    await page.mouse.click(tap.cx, tap.cy);
+                    await settle(page);
+                    if (await page.locator('.fixed.inset-0').count() !== opened - 1) fail(`a tap on "${tap.label}" did not close it`);
+                    else console.log(`  ✓ ${modal.name} ${at}: "${tap.label}" closes it`);
+
+                    // Backdrop, Escape and Back: once per modal, at the narrowest size, each on a fresh page.
+                    if (width === MODAL_WIDTHS[0] && textScale === 1) {
+                        for (const how of ['backdrop', 'Escape', 'Back']) {
+                            checks++;
+                            const fresh = await openSettings(browser, origin, { width, textScale, screen: modal.screen, overrides: modal.overrides });
+                            try {
+                                const p = fresh.page;
+                                const where = await p.locator('header').first().innerText().catch(() => '');
+                                const n = await openModal(p, modal);
+                                if (how === 'backdrop') {
+                                    // The overlay's left margin, halfway down: outside the card, on the dimmed backdrop.
+                                    const pt = await topModal(p).overlay.evaluate((o) => {
+                                        const y = window.innerHeight / 2;
+                                        return { y, onBackdrop: document.elementFromPoint(3, y) === o };
+                                    });
+                                    if (!pt.onBackdrop) { fail('the backdrop beside the card cannot be tapped'); continue; }
+                                    await p.mouse.click(3, pt.y);
+                                }
+                                else if (how === 'Escape') await p.keyboard.press('Escape');
+                                else await p.goBack({ timeout: 3000 }).catch(() => {});
+                                await settle(p);
+                                // Back must close the modal and stay on the same screen, not go to the one before.
+                                const stillSettings = p.url().includes('/settings') && await p.locator('main').count() > 0
+                                    && await p.locator('header').first().innerText().catch(() => '') === where;
+                                const closed = stillSettings && await p.locator('.fixed.inset-0').count() === n - 1;
+                                if (!closed) fail(`${how} does not close it${stillSettings ? '' : ' (Back left the screen)'}`);
+                                else console.log(`  ✓ ${modal.name} ${at}: ${how} closes it`);
+                            } finally {
+                                await fresh.context.close().catch(() => {});
+                            }
+                        }
+                    }
+                } catch (e) {
+                    fail(`error: ${String(e.message || e).split('\n')[0]}`);
+                } finally {
+                    if (errors.length) failures.push(`modal ${modal.name} ${at}: page errors: ${errors.join(' | ')}`);
+                    await context.close().catch(() => {});
+                }
+            }
+        }
+    }
+
     // The key sign-in hand-off (#933) lands on the section it names, visible in the top bar and the sub-tab strip.
     console.log(`\nhand-off at ${WIDTH}px`);
     for (const [section, label, sub] of [['disputes', 'Escrow Disputes', 'disputes'], ['moderation', 'Triage & Moderation', 'moderation'], ['decisions', 'Proposals', 'decisions']]) {
@@ -186,4 +286,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} of ${checks} checks failed:\n  - ${failures.join('\n  - ')}`);
     process.exit(1);
 }
-console.log(`\n✓ ${checks} checks: no page-level horizontal scroll at ${WIDTH}px, and the hand-off lands on its section.`);
+console.log(`\n✓ ${checks} checks: no page-level horizontal scroll at ${WIDTH}px, every modal fits its card and closes, and the hand-off lands on its section.`);

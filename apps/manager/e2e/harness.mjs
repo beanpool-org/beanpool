@@ -98,8 +98,9 @@ export async function launch() {
 /**
  * A fresh page on Settings, signed in with a (mocked) admin password, opened on `screen`.
  * `hash` lets a caller open the key sign-in hand-off link instead (e.g. '#handoff=…&section=disputes').
+ * `overrides` maps an API path to a function that edits the fixture's reply.
  */
-export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false }) {
+export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {} }) {
     const context = await browser.newContext({
         viewport: { width, height },
         deviceScaleFactor: 1,
@@ -120,9 +121,11 @@ export async function openSettings(browser, origin, { width, height = 800, textS
         const req = route.request();
         const url = new URL(req.url());
         // The app's one-time sign-in link: any well-formed token is accepted here, as an owner.
-        const { status, json } = url.pathname === '/api/local/admin/auth/exchange'
+        let { status, json } = url.pathname === '/api/local/admin/auth/exchange'
             ? { status: 200, json: { role: 'owner', memberPubkey: 'f'.repeat(64), csrfToken: 'fixture-csrf' } }
             : mockResponse(req.method(), url.pathname, url.searchParams, req.postData() || '');
+        // A screen that shows only on some nodes (e.g. a primary rather than a standby): `overrides[path]` edits the reply.
+        if (overrides[url.pathname]) json = overrides[url.pathname](json);
         await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
     });
     await page.addInitScript(({ tab, signedIn, css }) => {
@@ -212,19 +215,95 @@ export async function horizontalOverflow(page) {
  * inside it sits wholly within the box. The page-level check cannot see this: a panel that clips or scrolls its own
  * overflow never widens the page.
  */
-export async function boxOverflow(locator, buttonSelector = 'button') {
-    return locator.evaluate((box, sel) => {
+export async function boxOverflow(locator, buttonSelector = 'button', { skipScrollers = false } = {}) {
+    return locator.evaluate((box, [sel, skipScrollers]) => {
         const b = box.getBoundingClientRect();
         const outside = [];
         for (const el of box.querySelectorAll(sel)) {
             const r = el.getBoundingClientRect();
             if (r.width === 0) continue;
+            // A control inside a box of its own that scrolls sideways (a wide table, a QR grid) can be scrolled to.
+            if (skipScrollers) {
+                let scroller = false;
+                for (let p = el.parentElement; p && p !== box; p = p.parentElement) {
+                    if (['auto', 'scroll'].includes(getComputedStyle(p).overflowX)) { scroller = true; break; }
+                }
+                if (scroller) continue;
+            }
             if (r.left < b.left - 0.5 || r.right > b.right + 0.5) {
                 outside.push(`<${el.tagName.toLowerCase()} aria-label="${el.getAttribute('aria-label') || ''}"> ${Math.round(r.left)}–${Math.round(r.right)} outside ${Math.round(b.left)}–${Math.round(b.right)} "${(el.textContent || '').trim().slice(0, 30)}"`);
             }
         }
         return { clientWidth: box.clientWidth, scrollWidth: box.scrollWidth, outside: outside.slice(0, 8) };
-    }, buttonSelector);
+    }, [buttonSelector, skipScrollers]);
+}
+
+/**
+ * Every modal and wizard single-node Settings can open (each `fixed inset-0` overlay in src/components, except the
+ * phone menu and the full-screen manual, which phone-width.mjs checks on their own). `steps` are the buttons to press,
+ * in order: `in: 'main'` is the page, `in: 'modal'` the modal already open on top. The fleet manager's own modals
+ * (add/edit node, the TOTP prompt, topology history) run only on the Mac manager and are not reachable here.
+ */
+export const ALL_MODALS = [
+    { name: 'member-detail', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }] },
+    { name: 'member-rekey', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Re-Key$/ }] },
+    { name: 'member-offboard', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Offboard$/ }] },
+    { name: 'member-prune-branch', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Prune Branch$/ }] },
+    { name: 'member-tier', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', title: 'Click to upgrade or edit member standing tier' }] },
+    { name: 'create-treasury', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /Create Treasury/ }] },
+    { name: 'treasury-offer', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /\+ Post Offer/ }] },
+    { name: 'invite-print-sheet', screen: { tab: 'people', sub: 'invites' }, steps: [{ in: 'main', button: /^Generate \d+ Pass/ }, { in: 'main', button: /View Printable Sheet/ }] },
+    { name: 'invite-qr', screen: { tab: 'people', sub: 'invites' }, steps: [{ in: 'main', button: /^Generate \d+ Pass/ }, { in: 'main', button: /^Enlarge$/ }] },
+    { name: 'report-review', screen: { tab: 'people', sub: 'moderation' }, steps: [{ in: 'main', button: /Inspect & Action/ }] },
+    { name: 'delete-post', screen: { tab: 'people', sub: 'moderation' }, steps: [{ in: 'main', button: /^Delete post / }] },
+    { name: 'create-enterprise', screen: { tab: 'economy', sub: 'enterprises' }, steps: [{ in: 'main', button: /Create Enterprise/ }] },
+    { name: 'keepers', screen: { tab: 'economy', sub: 'enterprises' }, steps: [{ in: 'main', button: /^Keepers$/ }] },
+    { name: 'seed-offer', screen: { tab: 'economy', sub: 'enterprises' }, steps: [{ in: 'main', button: /^Seed Offer$/ }] },
+    { name: 'halt-decision', screen: { tab: 'economy', sub: 'decisions' }, steps: [{ in: 'main', button: /Halt this Decision/ }] },
+    { name: 'resolve-dispute', screen: { tab: 'economy', sub: 'disputes' }, steps: [{ in: 'main', button: /Split 50 \/ 50/ }] },
+    { name: 'add-pulse-channel', screen: { tab: 'bulletin', sub: 'pulse' }, steps: [{ in: 'main', button: /Add Feed Channel/ }] },
+    { name: 'clean-storage', screen: { tab: 'appliance', sub: 'diagnostics' }, steps: [{ in: 'main', button: /Clean Orphaned Media/ }] },
+    { name: 'standby-resync', screen: { tab: 'appliance', sub: 'backups' }, steps: [{ in: 'main', button: /Force Full Resync/ }] },
+    { name: 'remove-peer', screen: { tab: 'appliance', sub: 'gateway' }, steps: [{ in: 'main', button: /^Remove$/ }] },
+    { name: 'reset-tunnel', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Reset Tunnel/ }] },
+    { name: 'take-offline', screen: { tab: 'appliance', sub: 'network' }, steps: [{ in: 'main', button: /Take offline/ }] },
+    { name: 'generate-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /Generate \/ rotate token/ }] },
+    { name: 'remove-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Remove Token$/ }] },
+];
+
+/** The topmost open modal overlay, and its card (the overlay's first child). */
+export function topModal(page) {
+    const overlay = page.locator('.fixed.inset-0').last();
+    return { overlay, card: overlay.locator(':scope > div').first() };
+}
+
+/**
+ * Open a modal from ALL_MODALS on a page already showing its screen. The buttons are pressed with a DOM click, so a
+ * button that a broken layout pushed out of sight still opens the next step (the check then reports the layout).
+ * Returns the number of overlays open afterwards, or throws naming the step that could not be found.
+ */
+export async function openModal(page, modal) {
+    for (const step of modal.steps) {
+        const scope = step.in === 'modal' ? topModal(page).card : page.locator('main');
+        const target = step.title
+            ? scope.locator(`button[title="${step.title}"]`).first()
+            : scope.getByRole('button', { name: step.button }).first();
+        if (!(await target.count())) throw new Error(`${modal.name}: no button ${step.title || step.button} in ${step.in}`);
+        await target.evaluate((el) => el.click());
+        await settle(page);
+    }
+    return page.locator('.fixed.inset-0').count();
+}
+
+/**
+ * The control that closes the top modal: its ✕ (or a button labelled Close), else its Cancel button for a
+ * confirmation that has no ✕.
+ */
+export async function closeControl(card) {
+    const x = card.locator('button:text-is("✕"), button:text-is("×"), button[aria-label^="Close" i]').first();
+    if (await x.count()) return x;
+    const cancel = card.getByRole('button', { name: /^(Cancel|Close|Keep)\b/ }).first();
+    return (await cancel.count()) ? cancel : null;
 }
 
 export { UNKNOWN };

@@ -92,6 +92,8 @@ const MEMBERS = [
     {
         publicKey: pubkey(MEMBER_NAMES[1]),
         name: 'Maria Santos',
+        // Invited by the owner, so the owner's member detail offers Prune Branch.
+        invitedBy: pubkey(MEMBER_NAMES[0]),
         callsign: MEMBER_NAMES[1],
         tier: 'Steward',
         standing: 'Steward',
@@ -107,6 +109,8 @@ const MEMBERS = [
     {
         publicKey: pubkey(MEMBER_NAMES[2]),
         name: 'Declan O’Reilly',
+        // Invited by the owner, so the owner's member detail offers Prune Branch.
+        invitedBy: pubkey(MEMBER_NAMES[0]),
         callsign: MEMBER_NAMES[2],
         tier: 'Resident',
         standing: 'Resident',

@@ -2,7 +2,8 @@
  * The gateway's request throttle (on by default: GatewayConfig.rateLimiting, 120 a minute).
  *
  * Buckets:
- *   - `ip:<client>`  — unsigned requests, `maxPerMinute` per real client address (client-ip.ts). It used to key
+ *   - `ip:<client>`  — unsigned requests, `maxPerMinute` per real client address (client-ip.ts; an IPv6 client
+ *     is counted by its /64, see limiterKeyForIp). It used to key
  *     on the raw socket address, which in tunnel mode is the cloudflared container for EVERY member, so a whole
  *     community shared one 120-a-minute bucket and a busy minute answered 429 to everyone.
  *   - `m:<pubkey>`   — requests with a verified member signature, `maxPerMinute` per member. A hall's wifi or a
@@ -15,7 +16,7 @@
  * headers buy nothing for that address's plain traffic.
  */
 import type Koa from 'koa';
-import { clientIp } from './client-ip.js';
+import { clientLimiterKey } from './client-ip.js';
 import { logger } from './logger.js';
 
 export const SIGNED_CEILING_FACTOR = 10;
@@ -59,7 +60,7 @@ function logTrip(key: string, now: number): void {
  * path where the signature middleware will verify them.
  */
 export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): boolean {
-    const ip = clientIp(ctx);
+    const ip = clientLimiterKey(ctx);
     if (claimsSignature) {
         ctx.state.gatewaySignedClaim = true;
         return take(ctx, `sig:${ip}`, maxPerMinute * SIGNED_CEILING_FACTOR, now);
@@ -77,7 +78,7 @@ export function gatewayAdmitMember(ctx: Koa.Context, maxPerMinute: number, now =
 /** After the request: a claimed signature that never produced a verified member is charged as unsigned. */
 export function gatewaySettle(ctx: Koa.Context, now = Date.now()): void {
     if (!ctx.state.gatewaySignedClaim || ctx.state.gatewayMemberCharged) return;
-    const key = `ip:${clientIp(ctx)}`;
+    const key = `ip:${clientLimiterKey(ctx)}`;
     const entry = buckets.get(key);
     if (entry && now < entry.resetAt) entry.count++;
     else buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });

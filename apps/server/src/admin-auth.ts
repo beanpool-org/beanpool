@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refuseBraked, resetPasswordBrake } from './password-brake.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -115,17 +116,36 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 
     let ok = false;
     let breakGlassOwner: string | null = null;
+    // The node-wide password brake (password-brake.ts). Under 2FA it lets go only when the code passes too.
+    const totpOn = !!(config.totpEnabled && config.totpSecret);
+    let braked = false;
+    let admitted = false;
 
     if (password) {
-        if (config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
-            ok = true;
-        } else {
-            const ownerMatch = verifyBreakGlassCode(password);
-            if (ownerMatch) {
-                ok = true;
-                breakGlassOwner = ownerMatch.member_pubkey;
+        admitted = await acquirePasswordAttempt();
+        braked = !admitted;
+        let pwOk = false;
+        try {
+            // While the brake is on the password is not checked at all; a break-glass code still is (64 random
+            // bits: not guessable online, and how an owner enrols a key while the password is under attack).
+            if (admitted && config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
+                pwOk = true;
+            } else {
+                const ownerMatch = verifyBreakGlassCode(password);
+                if (ownerMatch) {
+                    pwOk = true;
+                    breakGlassOwner = ownerMatch.member_pubkey;
+                }
             }
+        } finally {
+            if (admitted) settlePasswordAttempt(pwOk, !totpOn);
         }
+        ok = pwOk;
+    }
+
+    if (!ok && braked) {
+        refuseBraked(ctx);
+        return false;
     }
 
     if (!ok) {
@@ -168,6 +188,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             ctx.headers?.['x-admin-2fa-session'];
         if (sessionToken && isValid2faSession(sessionToken)) {
             // Session token is valid — 2FA already verified this session
+            if (admitted) notePasswordSuccess();
         } else {
         const totpHeader = (typeof ctx.get === 'function' ? ctx.get('x-admin-totp') : null) ||
             ctx.request?.headers?.['x-admin-totp'] ||
@@ -201,6 +222,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         if (!totpValid) {
             // #135 CR: Increment tarpit counter on 2FA code failure so TOTP codes cannot be brute-forced
             adminAuthFailures++;
+            if (admitted) notePasswordFailure();
             ctx.status = 401;
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return false;
@@ -218,6 +240,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         // ctx.state to hand off the token without fighting the response).
         if (!ctx.state) ctx.state = {};
         ctx.state.tfaSessionToken = newSessionToken;
+        if (admitted) notePasswordSuccess();
         } // end of else block (no valid 2FA session token)
     }
 
@@ -230,6 +253,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
+    resetPasswordBrake();
 }
 
 // ===================== CSRF TOKEN STORE =====================

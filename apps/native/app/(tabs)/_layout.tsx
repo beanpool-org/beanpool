@@ -22,6 +22,7 @@ const LABEL_SIZE = 10;
 // the emulator at 320dp + 1.3x text as the largest scale that keeps it on one unclipped line.
 const LABEL_MAX_SCALE = 1.1;
 const UNDERLINE_HEIGHT = 3;
+const TAB_BUTTON_INSET = 5;
 
 function TabItem({ label, icon, focused, color, count, badge }: {
     label: string;
@@ -40,7 +41,10 @@ function TabItem({ label, icon, focused, color, count, badge }: {
                 <Text
                     numberOfLines={1}
                     maxFontSizeMultiplier={LABEL_MAX_SCALE}
-                    style={{ fontSize: LABEL_SIZE, lineHeight: 13, fontWeight: '700', color, includeFontPadding: false }}
+                    // The library's tab button pads 5dp a side (tabVerticalUiKit, not reachable via
+                    // tabBarItemStyle), which left "Commons" 43dp of a 53dp tab at 320dp. The negative
+                    // margin gives the centred label the tab's full width back.
+                    style={{ marginHorizontal: -TAB_BUTTON_INSET, fontSize: LABEL_SIZE, lineHeight: 13, fontWeight: '700', color, includeFontPadding: false }}
                 >
                     {label}
                 </Text>

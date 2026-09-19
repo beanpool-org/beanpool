@@ -278,14 +278,24 @@ export default function PulseScreen() {
     // the header, tab bar and gap stack up before any content gets a chance.
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
-            <PageTitle title="Pulse" collapsed={pageTitle.collapsed} />
+            {/* + Channels rides on the title's line (MOCK v3) rather than costing a row of its own. */}
+            <PageTitle title="Pulse" collapsed={pageTitle.collapsed} right={
+                <Pressable
+                    onPress={() => router.push('/channels')}
+                    style={styles.channelsBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Manage your channels"
+                >
+                    <Text style={styles.channelsBtnText}>+ Channels</Text>
+                </Pressable>
+            } />
             {/* Header */}
             <View style={styles.header}>
+                {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
+                    fallback while the app-review instructions reference that path), so
+                    Back only makes sense when we actually arrived on a stack. */}
+                {router.canGoBack() && (
                 <View style={styles.headerTop}>
-                    {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
-                        fallback while the app-review instructions reference that path), so
-                        Back only makes sense when we actually arrived on a stack. */}
-                    {router.canGoBack() ? (
                         <Pressable
                             onPress={() => router.back()}
                             style={styles.backBtn}
@@ -295,17 +305,8 @@ export default function PulseScreen() {
                         >
                             <Text style={styles.backText}>‹ Back</Text>
                         </Pressable>
-                    ) : <View />}
-
-                    <Pressable
-                        onPress={() => router.push('/channels')}
-                        style={styles.channelsBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Manage your channels"
-                    >
-                        <Text style={styles.channelsBtnText}>+ Channels</Text>
-                    </Pressable>
                 </View>
+                )}
 
                 {/* The page's one title is the large "Pulse" above (MOCK v3); this is only its subtitle. */}
                 <View style={styles.titleRow}>

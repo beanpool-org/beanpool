@@ -49,6 +49,42 @@ function communityLabel(url: string | null, alias?: string | null): string {
     try { return new URL(url).hostname.split('.')[0] || 'BeanPool'; } catch { return 'BeanPool'; }
 }
 
+const NAME_SIZE = 20;
+const NAME_MIN_SIZE = 16;
+
+/**
+ * Measured at 320dp + 1.3x, ~124dp is left beside the icons: a scaled 26sp cut "Mullumbimby"
+ * to "Mullumbi…", and even a fixed 20sp to "Mullumbim…". So the name is pinned at 20sp, shrinks
+ * as far as 16sp to fit, and past that ellipsizes. Done by measuring rather than with
+ * adjustsFontSizeToFit, because Android ignores minimumFontScale and shrank a long name to an
+ * unreadable size.
+ */
+function CommunityName({ name, style }: { name: string; style: any }) {
+    const [avail, setAvail] = useState(0);
+    const [natural, setNatural] = useState(0);
+    const size = avail && natural > avail
+        ? Math.max(NAME_MIN_SIZE, Math.floor(NAME_SIZE * avail / natural))
+        : NAME_SIZE;
+    return (
+        <View style={{ flex: 1, marginLeft: 4, justifyContent: 'center' }} onLayout={e => setAvail(e.nativeEvent.layout.width)} pointerEvents="none">
+            <Text style={[style, { flex: 0, marginLeft: 0, fontSize: size }]} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1}>
+                {name}
+            </Text>
+            {/* Off-screen copy at full size, unconstrained, to learn the name's natural width. */}
+            <View style={{ position: 'absolute', left: 0, top: 0, width: 2000, opacity: 0 }} importantForAccessibility="no-hide-descendants">
+                <Text
+                    style={[style, { flex: 0, marginLeft: 0, alignSelf: 'flex-start', fontSize: NAME_SIZE }]}
+                    maxFontSizeMultiplier={1}
+                    numberOfLines={1}
+                    onLayout={e => setNatural(e.nativeEvent.layout.width)}
+                >
+                    {name}
+                </Text>
+            </View>
+        </View>
+    );
+}
+
 /**
  * `onMeasure` reports the header's real rendered height — including the update banner,
  * which appears and disappears. The map screen floats this header absolutely and has to
@@ -539,9 +575,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                    {communityName}
-                </Text>
+                <CommunityName name={communityName} style={styles.headerTitle} />
 
                 <View style={styles.headerRightIcons}>
                     <TouchableOpacity

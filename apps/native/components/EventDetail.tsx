@@ -353,7 +353,7 @@ export function EventDetail({ post }: EventDetailProps) {
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         header: {
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
             paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,

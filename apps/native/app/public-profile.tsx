@@ -50,7 +50,7 @@ export default function PublicProfileScreen() {
     }), [colors]);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
 
         header: {
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -258,7 +258,7 @@ export default function PublicProfileScreen() {
         // Stats
         statsGrid: { flexDirection: 'row', padding: 16, gap: 10, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         statBoxOverall: {
-            flex: 1, backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default,
+            flex: 1, backgroundColor: colors.surface.page, borderWidth: 1, borderColor: colors.border.default,
             borderRadius: 14, padding: 12, alignItems: 'center',
         },
         statBoxProvider: {

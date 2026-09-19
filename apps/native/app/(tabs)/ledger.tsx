@@ -112,7 +112,7 @@ export default function LedgerScreen() {
     const [showMemberPicker, setShowMemberPicker] = useState(false);
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        root: { flex: 1, backgroundColor: colors.surface.app },
+        root: { flex: 1, backgroundColor: colors.surface.page },
 
         // Top bar
         topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
@@ -462,7 +462,7 @@ export default function LedgerScreen() {
         const selCurrent = tierIdx === selLevel;
         const selNeeded = Math.max(0, sel.min - ec);
         return (
-        <ScrollView ref={listRef} onScroll={pageTitle.onScroll} scrollEventThrottle={16} style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={listRef} onScroll={pageTitle.onScroll} scrollEventThrottle={16} style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
 
             {/* ── Standing hero ── */}
             <View style={[styles.tierHero, { backgroundColor: tier.bg, borderColor: tier.border }]}>

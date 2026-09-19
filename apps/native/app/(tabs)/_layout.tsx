@@ -233,11 +233,14 @@ export default function TabLayout() {
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',
                 headerShown: false,
+                // Tab screens paint nothing of their own so the wallpaper behind the
+                // navigator shows through; the icon strip below stays a solid fill.
+                sceneStyle: { backgroundColor: 'transparent' },
                 // The vine banner stays in GlobalHeader above; the icon strip is a flat fill so
                 // the two do not fight. green950 is what the vine read as under its 65% black
                 // overlay, so losing the image is not a colour change.
                 tabBarStyle: { 
-                    backgroundColor: colors.surface.app, 
+                    backgroundColor: colors.surface.chrome,
                     borderTopWidth: 0,
                     elevation: 0,
                     height: TAB_BAR_HEIGHT,

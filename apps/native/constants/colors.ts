@@ -179,6 +179,8 @@ export const lightColors = {
     // Surfaces & borders
     surface: {
         app: '#faf9f6',          // premium warm off-white (Claude-like)
+        page: '#faf9f6' as string, // page background; 'transparent' when the doodle pattern is on
+        chrome: '#faf9f6' as string, // bars and floating control blocks; the pattern's ground when it is on
         card: palette.white,
         subtle: '#f1efea',       // sunken warm off-white/gray
     },
@@ -300,6 +302,8 @@ export const earthColors = {
     // Surfaces & borders
     surface: {
         app: '#fbfaf8',          // oat.50 (warm cream app background)
+        page: '#fbfaf8' as string, // page background; 'transparent' when the doodle pattern is on
+        chrome: '#fbfaf8' as string, // bars and floating control blocks; the pattern's ground when it is on
         card: palette.white,     // clean card
         subtle: '#ebe6df',       // oat.200 (warm sunken elements)
     },
@@ -417,6 +421,8 @@ export const slateColors = {
     // Surfaces & borders
     surface: {
         app: '#f8fafc',          // slate.50 (cool slate app background)
+        page: '#f8fafc' as string, // page background; 'transparent' when the doodle pattern is on
+        chrome: '#f8fafc' as string, // bars and floating control blocks; the pattern's ground when it is on
         card: palette.white,
         subtle: '#f1f5f9',       // slate.100
     },
@@ -534,6 +540,8 @@ export const darkColors = {
     // Surfaces & borders
     surface: {
         app: palette.neutral950, // screen background (dark)
+        page: palette.neutral950 as string, // page background; 'transparent' when the doodle pattern is on
+        chrome: palette.neutral950 as string, // bars and floating control blocks; the pattern's ground when it is on
         card: palette.neutral900, // card background (dark gray)
         subtle: palette.neutral800, // chips, sunken rows (dark neutral)
     },

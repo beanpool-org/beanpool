@@ -252,7 +252,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, [treasuries, filter]);
 
     return (
-        <div className="flex flex-col h-full bg-bg-primary relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
+        <div className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
             {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
                 on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list. */}
             <header className="bg-nature-900 px-4 pt-4 pb-3 flex flex-col gap-3">

@@ -174,7 +174,7 @@ export function QuickReturnBlock({ qr, title, children, below, style }: {
     const { colors } = useTheme();
     return (
         <Animated.View
-            style={[styles.block, qr.docked && styles.blockDocked, { backgroundColor: colors.surface.app, transform: [{ translateY: qr.translateY }] }, style]}
+            style={[styles.block, qr.docked && styles.blockDocked, { backgroundColor: colors.surface.chrome, transform: [{ translateY: qr.translateY }] }, style]}
             // Off screen it cannot be reached by touch; keep it out of the accessibility tree too. (With a
             // screen reader on it is never off screen.)
             importantForAccessibility={qr.hidden ? 'no-hide-descendants' : 'auto'}

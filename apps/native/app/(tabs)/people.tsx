@@ -48,7 +48,7 @@ export default function PeopleScreen() {
     useTabRetapScrollTop(listRef);
     
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.app },
+        safeArea: { flex: 1, backgroundColor: colors.surface.page },
         navRow: { flexDirection: 'row', padding: 12, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         pill: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12, marginHorizontal: 2 },
         pillActive: { backgroundColor: colors.surface.subtle, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, borderWidth: 1, borderColor: colors.border.default },

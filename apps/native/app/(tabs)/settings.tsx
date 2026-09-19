@@ -62,7 +62,7 @@ function getDatabaseFilePaths(dbFilename: string): string[] {
 }
 
 export default function SettingsScreen() {
-    const { theme, colors, themePreference, setThemePreference, lightPalette, setLightPalette } = useTheme();
+    const { theme, colors, themePreference, setThemePreference, lightPalette, setLightPalette, patternEnabled, setPatternEnabled } = useTheme();
     const { identity, setIdentity } = useIdentity();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
@@ -1535,6 +1535,24 @@ export default function SettingsScreen() {
                                 );
                             })}
                         </View>
+                    </View>
+
+                    {/* Background pattern: the doodle wallpaper, or a plain colour. Per device. */}
+                    <View style={styles.menuBtn}>
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🎨</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Background pattern</Text>
+                            <Text style={styles.menuSub}>Doodles behind the app, or a plain background</Text>
+                        </View>
+                        <Pressable
+                            style={[styles.toggle, patternEnabled && styles.toggleOn]}
+                            accessibilityRole="switch"
+                            accessibilityLabel="Background pattern"
+                            accessibilityState={{ checked: patternEnabled }}
+                            onPress={() => setPatternEnabled(!patternEnabled)}
+                        >
+                            <View style={[styles.toggleThumb, patternEnabled && styles.toggleThumbOn]} />
+                        </Pressable>
                     </View>
 
                     {/* App Lock Switch */}

@@ -30,6 +30,8 @@
   --success: #647664;         /* nature-600 */
   --scrollbar-thumb: #c0ccc0; /* nature-300 */
   --header-bg: #fbfaf8;       /* oat-50 */
+  --pattern-image: -webkit-image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
+  --pattern-bg: #f1f1e4;      /* the tile's own ground — what shows between the doodles */
   --header-overlay: rgba(251, 250, 248, 0.85);
   --nav-bg: #ffffff;
   --shadow-card: 0 4px 6px -1px rgba(100, 118, 100, 0.1), 0 2px 4px -2px rgba(100, 118, 100, 0.05);
@@ -77,6 +79,8 @@
   --scrollbar-thumb: #526052;
   --header-bg: #1d231d;
   --header-overlay: rgba(29, 35, 29, 0.85);
+  --pattern-image: -webkit-image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
+  --pattern-bg: #101717;
   --nav-bg: #2a322a;
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
 }
@@ -84,10 +88,35 @@
 html, body, #root {
   height: 100%;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--bg-primary);
+  background-color: var(--pattern-bg, var(--bg-primary));
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ——— Doodle wallpaper ———
+   Stands in for the flat page colour. Drawn once here, on the app root: screens sit on it
+   transparently, while inputs, cards and sunken rows keep their own solid fills.
+
+   The asset is a 2x2 block of a seamless tile, so `background-size` is the whole 890px
+   block. Halving it to 445px (one tile) would render the art at half scale and still tile
+   seamlessly — an easy mistake to ship unnoticed. Whole numbers only: a fractional tile
+   size lands on part-pixels and that is what makes a repeat show seams.
+
+   "Plain background" in Settings adds .plain-background to <html>. */
+#root {
+  background-image: var(--pattern-image);
+  background-repeat: repeat;
+  background-size: 890px 890px;
+}
+
+:root.plain-background {
+  --pattern-image: none;
+  --pattern-bg: var(--bg-primary);
+}
+
+@media print {
+  #root { background-image: none; }
 }
 
 /* Pulse animation for sync indicator */

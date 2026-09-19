@@ -449,7 +449,7 @@ function SystemLine({ item, styles }: { item: any; styles: ReturnType<typeof mak
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.surface.app },
+        container: { flex: 1, backgroundColor: colors.surface.page },
         readOnly: {
             marginHorizontal: 12, marginTop: 10, padding: 10, borderRadius: 10,
             backgroundColor: colors.surface.subtle, color: colors.text.secondary, fontSize: 13, textAlign: 'center',

@@ -24,6 +24,8 @@ import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import appConfig from '../app.json';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import PatternBackground from '../components/PatternBackground';
+import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
@@ -583,11 +585,20 @@ function RootLayoutNav() {
     if (isLoading || !appLockChecked) return null; // Or a splash screen
 
     const isDark = theme === 'dark';
+    const navTheme = isDark
+        ? { ...NavDarkTheme, colors: { ...NavDarkTheme.colors, background: 'transparent' } }
+        : { ...NavDefaultTheme, colors: { ...NavDefaultTheme.colors, background: 'transparent' } };
 
     return (
         <View style={{ flex: 1 }}>
+            {/* The wallpaper sits behind every route; screens are transparent over it. */}
+            <PatternBackground />
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-            <Stack screenOptions={{ headerShown: false }}>
+            {/* React Navigation paints its own theme background over each screen, which would
+                hide the wallpaper no matter how transparent the screens themselves are. Handing
+                it a transparent background is what lets the pattern show through. */}
+            <NavThemeProvider value={navTheme}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
                 <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="welcome" />
                 <Stack.Screen name="node-mismatch" options={{ gestureEnabled: false }} />
@@ -608,6 +619,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="channels" />
                 <Stack.Screen name="pulse" />
             </Stack>
+            </NavThemeProvider>
 
             {isLocked && identity && (
                 <View style={[StyleSheet.absoluteFill, {

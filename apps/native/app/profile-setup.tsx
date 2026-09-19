@@ -310,7 +310,7 @@ export default function ProfileSetupScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.app },
+    container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { padding: 20, paddingBottom: 48 },
     steps: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
     stepDot: { width: 26, height: 4, borderRadius: 2, backgroundColor: colors.border.strong, marginRight: 6 },

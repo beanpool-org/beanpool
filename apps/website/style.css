@@ -1,6 +1,7 @@
 /* ======================== DESIGN SYSTEM TOKENS ======================== */
 :root {
     --bg-primary: #030712;
+    --pattern-bg: #101717;   /* the doodle tile's own ground */
     --bg-surface: #0b0f19;
     --bg-card: rgba(17, 24, 39, 0.45);
     --bg-card-hover: rgba(22, 32, 54, 0.6);
@@ -56,11 +57,21 @@ html {
 }
 body {
     font-family: var(--font-body);
-    background-color: var(--bg-primary);
-    background-image: 
-        radial-gradient(at 50% 0%, #0c1524 0%, #030712 65%),
+    background-color: var(--pattern-bg);
+    /* The doodle tile is the ground the page sits on, in place of the flat colour. It is the
+       LAST entry because CSS paints the first background-image on top: the two accent washes
+       stay above it, while the old opaque vignette is gone — it would have hidden the art.
+
+       The asset is a 2x2 block of a seamless tile, so the size is the whole 890px block; a
+       single tile's 445px would draw the art at half scale and still tile without a seam,
+       which makes the mistake easy to miss. Whole numbers only — a fractional tile size lands
+       on part-pixels, and that is what makes a repeat show seams. */
+    background-image:
         radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%);
+        radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.03) 0%, transparent 50%),
+        -webkit-image-set(url('assets/pattern-dark.webp') 1x, url('assets/pattern-dark-2x.webp') 2x);
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-size: auto, auto, 890px 890px;
     background-attachment: fixed;
     color: var(--text-primary);
     line-height: 1.7;

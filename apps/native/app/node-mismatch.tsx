@@ -214,7 +214,7 @@ export default function NodeMismatchScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.app },
+    container: { flex: 1, backgroundColor: colors.surface.page },
     wipeWrap: { marginTop: 4 },
     wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
     wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },

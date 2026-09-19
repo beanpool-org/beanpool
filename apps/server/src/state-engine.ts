@@ -54,6 +54,7 @@ export {
 import {
     createDecision,
     getDecision,
+    publicDecision,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -66,6 +67,7 @@ import {
     getActiveMembersCount30d,
     getQuorumRequired,
     checkCanProposeDecision,
+    checkProposalStanding,
     checkVoterEligibility,
     getDecisionVoiceCredits,
     getOwnDecisionVotes,
@@ -87,6 +89,7 @@ import {
 export {
     createDecision,
     getDecision,
+    publicDecision,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -99,6 +102,7 @@ export {
     getActiveMembersCount30d,
     getQuorumRequired,
     checkCanProposeDecision,
+    checkProposalStanding,
     checkVoterEligibility,
     getDecisionVoiceCredits,
     getOwnDecisionVotes,
@@ -1169,6 +1173,22 @@ export function assessTradeRisk(s: {
     return { band: 'yellow', headline: 'New to you', reasons, tips: [] };
 }
 
+/**
+ * A member's last-active time as served to anyone but the member themself: the UTC day only.
+ *
+ * Secret ballots (answer I): the live tally and the per-vote broadcast say WHEN a vote landed, and every
+ * signed write stamps last_active_at, so a millisecond timestamp would let anyone match a vote to its voter.
+ * A day is still enough to say "active today". The member sees their own exact time. Server-side checks
+ * (turnout, lead inactivity) read the column directly and are unaffected.
+ */
+export function lastActiveForViewer(iso: string | null | undefined, subjectPubkey: string, viewerPubkey?: string | null): string | null {
+    if (!iso) return null;
+    if (viewerPubkey && viewerPubkey === subjectPubkey) return iso;
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t)) return null;
+    return `${new Date(t).toISOString().slice(0, 10)}T00:00:00.000Z`;
+}
+
 export interface ViewerTrustProfile {
     publicKey: string;
     callsign: string;
@@ -1349,7 +1369,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         publicKey: targetPubkey,
         callsign: member.callsign,
         joinedAt: member.joinedAt || null,
-        lastActiveAt: member.lastActiveAt || null,
+        lastActiveAt: lastActiveForViewer(member.lastActiveAt, targetPubkey, viewerPubkey),
         tier,
         earnedCredit,
         stats,
@@ -2138,7 +2158,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
-        lastActiveAt: r.last_active_at || r.joined_at || null,
+        lastActiveAt: lastActiveForViewer(r.last_active_at || r.joined_at, r.public_key),
         suspended: r.can_operate !== 1 || r.status !== 'active',
     }));
 }
@@ -3256,8 +3276,10 @@ export function getLeadInactivity(enterprisePubkey: string): {
     return {
         leadPubkey: leadRow.member_pubkey,
         leadCallsign: leadRow.callsign,
-        lastActiveAt: lastActiveStr || null,
-        daysInactive,
+        // Served: the day and whole days only (secret ballots — see lastActiveForViewer). isEligible above
+        // uses the exact time.
+        lastActiveAt: lastActiveForViewer(lastActiveStr, leadRow.member_pubkey),
+        daysInactive: Math.floor(daysInactive),
         isEligible,
         autoPromoted,
     };

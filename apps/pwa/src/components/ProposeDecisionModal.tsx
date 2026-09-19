@@ -457,7 +457,7 @@ export function ProposeDecisionModal({
                     <div className="bg-nature-800/40 border border-nature-700/60 rounded-xl p-3 flex items-start gap-2 text-xs text-nature-300">
                         <span className="text-emerald-400 text-sm">🛡️</span>
                         <div>
-                            <span className="font-bold text-white">No bond required.</span> Open to anyone who has completed a trade. Open for 7 days, executing automatically on pass.
+                            <span className="font-bold text-white">No bond required.</span> Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.
                         </div>
                     </div>
 

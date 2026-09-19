@@ -88,6 +88,15 @@ describe('MembersModule helper functions', () => {
         it('returns Active today for current timestamp', () => {
             expect(fmtLastActive(new Date().toISOString())).toBe('Active today');
         });
+
+        // The node serves other members' last activity as the UTC day only (secret ballots), e.g.
+        // "2026-09-18T00:00:00.000Z". Any time of day, today's day reads as today and yesterday's as yesterday.
+        it('reads the day-only value the node serves', () => {
+            const today = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+            const yesterday = `${new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)}T00:00:00.000Z`;
+            expect(fmtLastActive(today)).toBe('Active today');
+            expect(fmtLastActive(yesterday)).toBe('Active yesterday');
+        });
     });
 
     describe('getMemberTier', () => {

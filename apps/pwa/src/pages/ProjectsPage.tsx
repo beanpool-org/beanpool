@@ -42,6 +42,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     // The signer's voice credits for votes on community money — the number the node checks (answer H).
     const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
+    const [nodeSaysCanPropose, setNodeSaysCanPropose] = useState<boolean | null>(null);
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -93,6 +94,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
+            setNodeSaysCanPropose((decData as { canPropose?: boolean | null }).canPropose ?? null);
             setCommonsBalance(commonsData.balance || 0);
             if (Array.isArray(membersData)) {
                 setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
@@ -104,7 +106,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         }
     };
 
-    const canProposeDecision = (balanceInfo?.earnedCredit || 0) > 0;
+    // The node's rule (earned standing, or a node admin); earned credit only until the list has loaded.
+    const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
         return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');

@@ -28,7 +28,6 @@ const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote:
     executionError: null,
     executionReason: null,
     adminHaltedAt: null,
-    adminHaltedBy: null,
     adminHaltReason: null,
     updatedAt: '2026-09-18T00:00:00.000Z',
     tally: {
@@ -57,7 +56,7 @@ describe('DecideSection wording', () => {
     it('says who can propose in plain words, without the developer term earnedCredit', () => {
         const { container } = renderDecide(false);
 
-        expect(screen.getByText(/Open to anyone who has completed a trade\./)).toBeInTheDocument();
+        expect(screen.getByText(/Open to members with a completed trade or earned standing, and to node admins\./)).toBeInTheDocument();
         expect(screen.getByText(/You can propose once you have completed a trade\./)).toBeInTheDocument();
         expect(container.textContent).not.toMatch(/earnedCredit/);
     });

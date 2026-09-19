@@ -7,12 +7,13 @@
  * backup, opens it, and restores the database and configuration locally. It
  * then updates the local .env to run in the 'primary' role.
  *
- * Backups are sealed (sealed-keys.md §6): the backup server's download is a
- * `.bpsealed` file locked to that server's owners and its printed recovery
- * code, never a plain archive. This script opens it with the recovery code, so
- * make one on the backup server first (Settings → recovery code) if it has
- * none; the download answers with that instruction when it is needed. It is
- * replaced by the in-image take-over (slice 5) and deleted in slice 8.
+ * Backups are locked (sealed-keys.md §6) once the backup server has a recovery
+ * code: the download is then a `.bpsealed` file locked to that server's owners
+ * and the code, and this script opens it with the code. A backup server with no
+ * recovery code sends the readable .tar.gz it always did, and this script takes
+ * that as before. To make a code, see the operator manual (Backups and
+ * replicas: "Make a recovery code"). It is replaced by the in-image take-over
+ * (slice 5) and deleted in slice 8.
  *
  * Usage:
  *   node scripts/restore-primary.mjs --backup <https url> --admin-pw <pw> [--data-dir <path>]
@@ -175,7 +176,7 @@ async function main() {
 
     // 3. Download the sealed backup from the backup server.
     const backupUrl = `${backup}/api/local/admin/backup`;
-    console.log(`→ Downloading the sealed backup from ${backupUrl} ...`);
+    console.log(`→ Downloading the backup from ${backupUrl} ...`);
     const work = path.join(dataDir, `.restore-work-${process.pid}`);
     fs.rmSync(work, { recursive: true, force: true });
     fs.mkdirSync(work, { recursive: true, mode: 0o700 });
@@ -194,31 +195,33 @@ async function main() {
             die(`Backup download failed (HTTP ${res.status}): ${body || res.statusText}`);
         }
         await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(sealedPath, { mode: 0o600 }));
-        console.log('  • downloaded the sealed backup');
+        console.log(`  • downloaded the backup (${res.headers.get('x-backup-locked') === 'no' ? 'not locked' : 'locked'})`);
     } catch (e) {
         cleanup();
         die(`Could not download backup file: ${e?.message || e}`);
     }
 
-    // 4. Open it with the recovery code. A plain archive here means the backup server predates sealed backups.
+    // 4. Open it with the recovery code. A readable archive means the backup server has no code (or is older).
     // The first 256 KiB hold the whole header (its cap); the body is never read into memory.
     const start = Buffer.alloc(4 + 256 * 1024 + 1);
     const fd = fs.openSync(sealedPath, 'r');
     const startLen = fs.readSync(fd, start, 0, start.length, 0);
     fs.closeSync(fd);
     const first = start.subarray(0, 2);
+    let archivePath = tarPath;
     if (first[0] === 0x1f && first[1] === 0x8b) {
-        cleanup();
-        die('The backup server sent an unlocked archive: it runs a BeanPool older than sealed backups. Update it first.');
-    }
-    try {
+        // A readable backup: the backup server has no recovery code (or predates locked backups). Taken as before.
+        console.log('  • the backup is not locked (the backup server has no recovery code): using it as it is');
+        archivePath = sealedPath;
+    } else try {
         const header = core.readSealedHeader(new Uint8Array(start.subarray(0, startLen)));
         const codes = header.recipients.filter((r) => r.type === 'code').map((r) => `#${r.codeId}`);
         console.log(`  • locked to ${header.recipients.filter((r) => r.type === 'owner').length} owner(s)` +
             (codes.length ? ` and recovery code ${codes.join(', ')}` : ' and no recovery code'));
         if (!codes.length) {
             cleanup();
-            die('This backup has no recovery code to open it with. Make one on the backup server (Settings), then run this again.');
+            die('This backup has no recovery code to open it with, and nothing in this version opens it without one. '
+                + 'Make a recovery code on the backup server (operator manual, Backups and replicas), then run this again.');
         }
         const code = await askRecoveryCode();
         const { chunks } = await core.openEnvelopeStream(fs.createReadStream(sealedPath, { highWaterMark: 1 << 20 }),
@@ -236,9 +239,9 @@ async function main() {
     console.log('→ Validating backup archive...');
     const extract = path.join(work, 'extract');
     try {
-        checkArchive(tarPath);
+        checkArchive(archivePath);
         fs.mkdirSync(extract, { recursive: true });
-        execFileSync('tar', ['--no-same-owner', '-xzf', tarPath, '-C', extract]);
+        execFileSync('tar', ['--no-same-owner', '-xzf', archivePath, '-C', extract]);
         const db = path.join(extract, 'state.db');
         if (!fs.existsSync(db) || !fs.lstatSync(db).isFile()) throw new Error('the backup has no state.db');
         fs.writeFileSync(path.join(dataDir, 'genesis.json'), JSON.stringify(genesis, null, 2));

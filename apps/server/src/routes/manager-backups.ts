@@ -6,7 +6,7 @@ import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, type FleetNodeConfig
+    loadHarvestState, harvestNode, harvestAllNodes, getNodes, nodeSlug, listSealedBackups, listPlainHistory, type FleetNodeConfig
 } from '../services/harvester.js';
 import type { RouteDeps } from './types.js';
 
@@ -124,22 +124,40 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         ctx.body = fs.createReadStream(filePath);
     }
 
-    // Download the newest harvested backup for a node. Since sealed backups (sealed-keys.md §6.3) this is the
-    // `.bpsealed` file as the node sent it — the harvester holds no plaintext database to serve.
+    /** A readable database copy, as these routes served it before locked backups. */
+    function sendPlainDb(ctx: any, filePath: string, filename: string): void {
+        ctx.set('Cache-Control', 'no-store');
+        ctx.set('Content-Type', 'application/x-sqlite3');
+        ctx.set('X-Backup-Locked', 'no');
+        // eslint-disable-next-line no-control-regex
+        ctx.set('Content-Disposition', `attachment; filename="${filename.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
+        ctx.body = fs.createReadStream(filePath);
+    }
+
+    // Download the newest harvested backup for a node: the newest locked `.bpsealed` file as the node sent it, or —
+    // for a node whose backups are not locked yet (no recovery code, or an older BeanPool) — the readable state.db,
+    // as before locked backups. Whichever is newer.
     router.get('/api/manager/backups/download-db', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const slug = resolveNodeSlug(ctx);
         if (!slug) return;
-        const newest = listSealedBackups(slug)[0];
+        const newest = listSealedBackups(slug).find(f => !f.identity);
+        const plainPath = path.join(BACKUPS_DIR, slug, 'state.db');
+        const plain = fs.existsSync(plainPath) ? fs.statSync(plainPath) : null;
+        if (plain && (!newest || plain.mtimeMs > newest.mtimeMs)) {
+            sendPlainDb(ctx, plainPath, `beanpool-backup-${slug}.db`);
+            return;
+        }
         if (!newest) {
             ctx.status = 404;
-            ctx.body = { error: `No sealed backup held for node (${slug})` };
+            ctx.body = { error: `No backup held for node (${slug})` };
             return;
         }
         sendSealedFile(ctx, newest.path, newest.file);
     });
 
-    // List the sealed backups held for a node (the newest, and one a day for 30 days)
+    // List the backups held for a node: locked files (the newest, and one a day for 30 days; the locked legacy key
+    // files too, marked `identity`) and readable daily copies (`sealed: false`), newest first.
     router.get('/api/manager/backups/history', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const nodeId = String(ctx.query.nodeId || '');
@@ -148,17 +166,27 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'nodeId required' };
             return;
         }
-        const files = listSealedBackups(nodeSlug(nodeId)).map(f => ({
+        const slug = nodeSlug(nodeId);
+        const sealed = listSealedBackups(slug).map(f => ({
             filename: f.file,
             date: new Date(f.mtimeMs).toISOString().slice(0, 10),
             sizeBytes: f.size,
             modifiedAt: new Date(f.mtimeMs).toISOString(),
             sealed: true,
+            identity: f.identity,
         }));
-        ctx.body = { history: files };
+        const plain = listPlainHistory(slug).map(f => ({
+            filename: f.file,
+            date: f.file.replace('beanpool-', '').replace('.db', ''),
+            sizeBytes: f.size,
+            modifiedAt: new Date(f.mtimeMs).toISOString(),
+            sealed: false,
+            identity: false,
+        }));
+        ctx.body = { history: [...sealed, ...plain].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt)) };
     });
 
-    // Download one held sealed backup
+    // Download one held backup: a locked file from sealed/, or a readable daily copy from history/.
     router.get('/api/manager/backups/download-history', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         const nodeId = String(ctx.query.nodeId || '');
@@ -171,7 +199,7 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
             filename.includes('/') ||
             filename.includes('\\') ||
             filename.includes('..') ||
-            !/^beanpool-[\w-]+\.bpsealed$/.test(filename)
+            !/^beanpool-[\w-]+\.(bpsealed|db)$/.test(filename)
         ) {
             ctx.status = 400;
             ctx.body = { error: 'Invalid parameters' };
@@ -179,14 +207,16 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         }
 
         const slug = nodeSlug(nodeId);
-        const sealedDir = path.resolve(BACKUPS_DIR, slug, 'sealed');
-        const filePath = path.resolve(sealedDir, filename);
-        if (path.dirname(filePath) !== sealedDir || !fs.existsSync(filePath)) {
+        const isSealed = filename.endsWith('.bpsealed');
+        const dir = path.resolve(BACKUPS_DIR, slug, isSealed ? 'sealed' : 'history');
+        const filePath = path.resolve(dir, filename);
+        if (path.dirname(filePath) !== dir || !fs.existsSync(filePath)) {
             ctx.status = 404;
             ctx.body = { error: 'Archive file not found' };
             return;
         }
-        sendSealedFile(ctx, filePath, filename);
+        if (isSealed) sendSealedFile(ctx, filePath, filename);
+        else sendPlainDb(ctx, filePath, filename);
     });
 
     // The plain-text identity bundle is gone (sealed-keys.md §6.1): the node keys travel only inside the sealed
@@ -196,8 +226,8 @@ export function createManagerBackupsRoutes(deps: RouteDeps): Router {
         if (!resolveNodeSlug(ctx)) return;
         ctx.status = 410;
         ctx.body = {
-            error: 'Node keys are no longer collected on their own. They are inside the sealed backup (Download backup), '
-                + "locked to the node's owners and its recovery code.",
+            error: 'Node keys are no longer collected on their own. Once the node has a recovery code they are inside its '
+                + 'locked backup (Download backup); a readable backup never carries them.',
         };
     });
 

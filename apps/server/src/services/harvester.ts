@@ -2,13 +2,21 @@
  * Automated Fleet Harvester Service
  *
  * Periodically checks fleet nodes for metric drift (member, post, tx count changes) and, on drift, pulls the node's
- * SEALED backup (sealed-keys.md §6.3) into ./backups/<nodeId>/sealed/beanpool-<ts>.bpsealed, keeping the newest file
- * and one a day for 30 days. The harvester cannot open these files and does not need to: they are locked to the
- * node's owners and its printed recovery code, and they carry the node keys inside, so any credential that can
- * pull a backup — the replication token included — now collects the keys too, locked.
+ * backup. What it keeps depends on what the node sends (seal review round 1):
  *
- * On every run it also seals any plaintext the harvester wrote before this (state.db, history/*.db, identity/),
- * proves each sealed file re-opens, and deletes the plaintext (§6.4).
+ * - A LOCKED backup (the node has a recovery code; sealed-keys.md §6.3) is stored as it arrives in
+ *   ./backups/<nodeId>/sealed/beanpool-<ts>.bpsealed, the newest file and one a day for 30 days. The harvester cannot
+ *   open it and does not need to: the code opens it, and it carries the node keys inside, locked.
+ * - A READABLE backup (a node with no recovery code, or one older than locked backups) is kept exactly as before:
+ *   ./backups/<nodeId>/state.db plus ./backups/<nodeId>/history/beanpool-YYYY-MM-DD.db (30 days), and the status
+ *   says the node's backups are not locked yet.
+ *
+ * A failed pull backs off (5 minutes, doubling to 6 hours) instead of asking again every minute.
+ *
+ * The seal-old pass (§6.4) locks the readable files held for a node — but only when the newest backup from the node
+ * is locked, has a recovery-code stanza, and is signed by the node key the harvester already knows (a `peerId` in
+ * manager-nodes.json, or the key file it collected before). Without all three it deletes nothing and says why.
+ * With them, it deletes a readable file only after its locked copy has been read back from disk and opened.
  */
 
 import fs from 'node:fs';
@@ -19,7 +27,8 @@ import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
-import { sealFileVerified } from './sealed-backup.js';
+import { sealFileVerified, checkBackupArchive } from './sealed-backup.js';
+import { peerIdOfKeyFile } from './takeover-envelope.js';
 
 export interface FleetNodeConfig {
     id: string;
@@ -27,6 +36,8 @@ export interface FleetNodeConfig {
     url: string;
     adminPassword?: string;
     replicationToken?: string;
+    /** The node's PeerId (its libp2p key), set by the operator. The seal-old pass trusts only a header it signed. */
+    peerId?: string;
 }
 
 export interface NodeHarvestState {
@@ -40,17 +51,24 @@ export interface NodeHarvestState {
     dbSizeBytes: number;
     memberCount: number;
     postCount: number;
-    /** 'secured' = a sealed backup is held, and it carries the node keys (locked). 'partial' is no longer produced. */
+    /** 'secured' = a locked backup is held, and it carries the node keys. 'partial' = only a readable backup (no keys). */
     identityStatus: 'secured' | 'partial' | 'missing';
     /** Why identity is not 'secured', in words for the dashboard; null when it is. */
     identityNote?: string | null;
-    /** The sealed file that holds the keys (the newest sealed backup), when there is one. */
+    /** The locked file that holds the keys (the newest locked backup), when there is one. */
     identityFiles: string[];
-    /** How many sealed backups are held. */
+    /** How many backups are held: locked files plus readable daily copies. */
     historyCount: number;
-    /** The newest sealed backup, read from its public header (§6.3). */
+    /** What the node said about its latest backup: locked, or not locked yet and why. Unset until the first pull. */
+    backupLock?: { locked: boolean; message: string; at: string };
+    /** After a failed pull: no automatic pull again before `nextPullAt` (a forced one still goes). */
+    pullBackoff?: { failures: number; nextPullAt: string; lastError: string };
+    /** The node key the seal-old pass trusts, and where it came from. */
+    pinnedPeerId?: string | null;
+    pinSource?: 'manager-nodes.json' | 'collected key file' | null;
+    /** The newest backup held, read from its public header when locked (§6.3). */
     sealedBackup?: {
-        state: 'sealed' | 'none';
+        state: 'sealed' | 'unlocked' | 'none';
         file: string | null;
         sizeBytes: number;
         envelopeId: string | null;
@@ -62,7 +80,7 @@ export interface NodeHarvestState {
         /** One sentence for the dashboard, e.g. "Sealed backup held: sealed 2026-10-03 14:02 UTC, locked to 2 owners + recovery code #1." */
         message: string;
     };
-    /** The seal-old pass (§6.4): which old plaintext files were sealed, and anything still left in plaintext. */
+    /** The seal-old pass (§6.4): which readable files were locked, what is still readable, and why if it did not run. */
     sealOld?: { lastRunAt: string; sealed: string[]; left: string[]; error: string | null };
 }
 
@@ -184,8 +202,14 @@ function sealedDirOf(target: string | FleetNodeConfig): string {
     return path.join(nodeDirOf(target), 'sealed');
 }
 
-/** The node's sealed backups, newest first (by modification time, which the seal-old pass carries over). */
-export function listSealedBackups(target: string | FleetNodeConfig): { file: string; path: string; mtimeMs: number; size: number }[] {
+/** The legacy key files, locked by the seal-old pass: beanpool-identity-<date>-legacy.bpsealed. */
+const IDENTITY_PREFIX = 'beanpool-identity-';
+
+/**
+ * The node's sealed files, newest first (by modification time, which the seal-old pass carries over). `identity`
+ * marks the locked legacy key files; they are listed and downloadable like any other, but they are not backups.
+ */
+export function listSealedBackups(target: string | FleetNodeConfig): { file: string; path: string; mtimeMs: number; size: number; identity: boolean }[] {
     const dir = sealedDirOf(target);
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir)
@@ -193,27 +217,33 @@ export function listSealedBackups(target: string | FleetNodeConfig): { file: str
         .map(f => {
             const p = path.join(dir, f);
             const st = fs.statSync(p);
-            return { file: f, path: p, mtimeMs: st.mtimeMs, size: st.size };
+            return { file: f, path: p, mtimeMs: st.mtimeMs, size: st.size, identity: f.startsWith(IDENTITY_PREFIX) };
         })
         .sort((a, b) => b.mtimeMs - a.mtimeMs || b.file.localeCompare(a.file));
 }
 
-/** The same 30-day rule as the old daily archives: the newest file, plus the newest of each day for 30 days. */
+/**
+ * The same 30-day rule as the old daily archives: the newest backup, plus the newest of each day for 30 days. Key
+ * files are counted on their own: the newest is always kept (keys do not go stale), older ones go after 30 days.
+ */
 function pruneSealed(target: string | FleetNodeConfig): void {
-    const files = listSealedBackups(target);
-    const keptDays = new Set<string>();
+    const all = listSealedBackups(target);
     const now = Date.now();
-    files.forEach((f, i) => {
-        const day = new Date(f.mtimeMs).toISOString().slice(0, 10);
-        const keep = i === 0 || (!keptDays.has(day) && now - f.mtimeMs <= MAX_AGE_MS);
-        if (keep) {
-            keptDays.add(day);
-            return;
-        }
+    const drop = (f: { file: string; path: string }) => {
         try {
             fs.unlinkSync(f.path);
-            console.log(`[Harvester] Pruned sealed backup for ${nodeSlug(target)}: ${f.file}`);
+            console.log(`[Harvester] Pruned sealed file for ${nodeSlug(target)}: ${f.file}`);
         } catch { /* ignore */ }
+    };
+    const keptDays = new Set<string>();
+    all.filter(f => !f.identity).forEach((f, i) => {
+        const day = new Date(f.mtimeMs).toISOString().slice(0, 10);
+        const keep = i === 0 || (!keptDays.has(day) && now - f.mtimeMs <= MAX_AGE_MS);
+        if (keep) keptDays.add(day);
+        else drop(f);
+    });
+    all.filter(f => f.identity).forEach((f, i) => {
+        if (i > 0 && now - f.mtimeMs > MAX_AGE_MS) drop(f);
     });
 }
 
@@ -241,12 +271,82 @@ function readHeaderOf(file: string): SealedEnvelopeHeader {
     }
 }
 
+export type PullResult =
+    | { kind: 'sealed'; dbSize: number; file: string; header: SealedEnvelopeHeader }
+    | { kind: 'plain'; dbSize: number; message: string };
+
+/** The node's own words when it sends a readable backup, or ours for a node too old to say. */
+function notLockedMessage(res: Response): string {
+    const said = res.headers.get('x-backup-locked');
+    if (said === 'no') return res.headers.get('x-backup-not-locked') || 'Backups are not locked yet: make a recovery code to lock them.';
+    return 'This node runs a BeanPool older than locked backups, so its backups are readable. Update it, then make a recovery code to lock them.';
+}
+
+/** Keep a readable backup exactly as before locked backups: state.db, and one copy a day in history/. */
+function keepPlainBackup(node: FleetNodeConfig, tarPath: string): number {
+    const nodeDir = nodeDirOf(node);
+    const extract = path.join(nodeDir, '.tmp-extract');
+    fs.rmSync(extract, { recursive: true, force: true });
+    fs.mkdirSync(extract, { recursive: true });
+    try {
+        checkBackupArchive(tarPath, { requireStateDb: true });
+        execFileSync('tar', ['-xzf', tarPath, '-C', extract, '--no-same-owner', '--no-same-permissions']);
+        const extractedDb = path.join(extract, 'state.db');
+        if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) throw new Error('Downloaded backup did not contain state.db');
+        const destDb = path.join(nodeDir, 'state.db');
+        fs.copyFileSync(extractedDb, destDb);
+        createDailyArchive(node);
+        return fs.statSync(destDb).size;
+    } finally {
+        fs.rmSync(extract, { recursive: true, force: true });
+    }
+}
+
+/** One copy a day of the readable state.db in history/, pruned after 30 days, as before locked backups. */
+function createDailyArchive(node: FleetNodeConfig): void {
+    const nodeDir = nodeDirOf(node);
+    const dbPath = path.join(nodeDir, 'state.db');
+    if (!fs.existsSync(dbPath)) return;
+    const historyDir = path.join(nodeDir, 'history');
+    fs.mkdirSync(historyDir, { recursive: true });
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const archivePath = path.join(historyDir, `beanpool-${todayStr}.db`);
+    if (!fs.existsSync(archivePath)) {
+        fs.copyFileSync(dbPath, archivePath);
+        console.log(`[Harvester] Created daily archive for ${nodeSlug(node)}: beanpool-${todayStr}.db`);
+    }
+    const now = Date.now();
+    for (const file of fs.readdirSync(historyDir).filter(f => f.startsWith('beanpool-') && f.endsWith('.db'))) {
+        const filePath = path.join(historyDir, file);
+        try {
+            if (now - fs.statSync(filePath).mtimeMs > MAX_AGE_MS) {
+                fs.unlinkSync(filePath);
+                console.log(`[Harvester] Pruned old snapshot archive for ${nodeSlug(node)}: ${file}`);
+            }
+        } catch { /* ignore */ }
+    }
+}
+
+/** The readable daily copies held for a node, newest first. */
+export function listPlainHistory(target: string | FleetNodeConfig): { file: string; path: string; mtimeMs: number; size: number }[] {
+    const dir = path.join(nodeDirOf(target), 'history');
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir)
+        .filter(f => f.startsWith('beanpool-') && f.endsWith('.db'))
+        .map(f => {
+            const p = path.join(dir, f);
+            const st = fs.statSync(p);
+            return { file: f, path: p, mtimeMs: st.mtimeMs, size: st.size };
+        })
+        .sort((a, b) => b.file.localeCompare(a.file));
+}
+
 /**
- * Pull the node's sealed backup and store it as it arrives: backups/<node>/sealed/beanpool-<ts>.bpsealed. The
- * harvester cannot open it and does not need to. It refuses to keep anything that is not a sealed backup — an
- * older node that still sends a plain archive has it deleted, not stored.
+ * Pull the node's backup. A locked one is stored as it arrives (backups/<node>/sealed/beanpool-<ts>.bpsealed); the
+ * harvester cannot open it and does not need to. A readable one — the node has no recovery code, or it is older
+ * than locked backups — is kept as it always was (state.db + history/), with the node's reason.
  */
-export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize: number; file: string; header: SealedEnvelopeHeader }> {
+export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResult> {
     if (!node.adminPassword && !node.replicationToken) {
         throw new Error('No admin credentials (adminPassword / replicationToken) configured');
     }
@@ -267,9 +367,9 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
         throw new Error(`HTTP ${res.status}: ${detail || res.statusText}`);
     }
 
-    const sealedDir = sealedDirOf(node);
-    fs.mkdirSync(sealedDir, { recursive: true, mode: 0o700 });
-    const incoming = path.join(sealedDir, `.incoming-${process.pid}-${Date.now()}`);
+    const nodeDir = nodeDirOf(node);
+    fs.mkdirSync(nodeDir, { recursive: true, mode: 0o700 });
+    const incoming = path.join(nodeDir, `.incoming-${process.pid}-${Date.now()}`);
     try {
         if (!res.body) throw new Error('Response body is empty');
         await pipeline(Readable.fromWeb(res.body as any), fs.createWriteStream(incoming, { mode: 0o600 }));
@@ -277,24 +377,58 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<{ dbSize
         const fd = fs.openSync(incoming, 'r');
         try { fs.readSync(fd, start, 0, 2, 0); } finally { fs.closeSync(fd); }
         if (start[0] === 0x1f && start[1] === 0x8b) {
-            throw new Error('The node sent an unlocked backup (it runs a BeanPool older than sealed backups). It was not kept: update the node.');
+            const message = notLockedMessage(res);
+            const dbSize = keepPlainBackup(node, incoming);
+            console.warn(`[Harvester] ${node.name}: kept a readable backup. ${message}`);
+            return { kind: 'plain', dbSize, message };
         }
         let header: SealedEnvelopeHeader;
         try {
             header = readHeaderOf(incoming);
         } catch (e: any) {
-            throw new Error(`The node's backup is not a sealed backup file: ${e?.message || e}`);
+            throw new Error(`The node's backup is neither a locked backup nor a readable one: ${e?.message || e}`);
         }
         if (header.kind !== 'backup') throw new Error(`The node sent a '${header.kind}' envelope, not a backup.`);
         if (!selfSigned(header)) throw new Error("The node's backup signature does not match the server it names; not kept.");
+        const sealedDir = sealedDirOf(node);
+        fs.mkdirSync(sealedDir, { recursive: true, mode: 0o700 });
         const stamp = (Date.parse(header.createdAt) ? new Date(header.createdAt) : new Date()).toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const dest = path.join(sealedDir, `beanpool-${stamp}${SEALED_EXT}`);
         fs.renameSync(incoming, dest);
         pruneSealed(node);
-        return { dbSize: fs.statSync(dest).size, file: path.basename(dest), header };
+        return { kind: 'sealed', dbSize: fs.statSync(dest).size, file: path.basename(dest), header };
     } finally {
         try { fs.rmSync(incoming, { force: true }); } catch { /* ignore */ }
     }
+}
+
+// ── Back-off after a failed pull ────────────────────────────────────────────────────────────
+
+const BACKOFF_FIRST_MS = 5 * 60_000;
+const BACKOFF_MAX_MS = 6 * 60 * 60_000;
+
+/** How long to wait after the n-th failure in a row: 5 min, 10, 20 … up to 6 hours. */
+export function backoffDelayMs(failures: number): number {
+    return Math.min(BACKOFF_FIRST_MS * 2 ** Math.max(0, failures - 1), BACKOFF_MAX_MS);
+}
+
+// ── The node key the seal-old pass trusts ────────────────────────────────────────────────────
+
+/**
+ * The node's PeerId, from somewhere other than the node's own answer: the operator's `peerId` in
+ * manager-nodes.json, or the libp2p_key file this harvester collected before locked backups (remembered in the
+ * state, since the seal-old pass locks that file away). Never learned from a backup it is about to trust.
+ */
+function nodePin(node: FleetNodeConfig, prev: NodeHarvestState): { peerId: string; source: NonNullable<NodeHarvestState['pinSource']> } | null {
+    if (typeof node.peerId === 'string' && node.peerId.trim()) return { peerId: node.peerId.trim(), source: 'manager-nodes.json' };
+    if (prev.pinnedPeerId && prev.pinSource === 'collected key file') return { peerId: prev.pinnedPeerId, source: 'collected key file' };
+    const keyFile = path.join(nodeDirOf(node), 'identity', 'libp2p_key');
+    try {
+        if (fs.existsSync(keyFile) && fs.lstatSync(keyFile).isFile()) {
+            return { peerId: peerIdOfKeyFile(fs.readFileSync(keyFile)), source: 'collected key file' };
+        }
+    } catch { /* not a key: no pin from it */ }
+    return null;
 }
 
 // ── The harvester's own signing key (seal-old pass) ─────────────────────────────────────────
@@ -345,13 +479,21 @@ function tarInto(tarPath: string, stageDir: string): void {
 
 /**
  * Seal every plaintext file the harvester holds for this node, to the node's current recipients (the public header
- * of its newest sealed backup), re-open each with the data key still in memory to prove the round trip, and only
- * then delete the plaintext. Each database becomes a restorable backup (a tar holding state.db); the old key files
+ * of its newest locked backup, which the caller has checked against the pinned node key), read each back from
+ * disk and open it (sealFileVerified), and only then delete the plaintext. Refuses without a recovery-code stanza. Each database becomes a restorable backup (a tar holding state.db); the old key files
  * become one sealed file. Deleting does not scrub an SSD, and copies elsewhere are the operator's to find.
  */
-export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelopeHeader): Promise<{ sealed: string[]; left: string[] }> {
+export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelopeHeader): Promise<{ sealed: string[]; left: string[]; error: string | null }> {
     const leftovers = plaintextLeftovers(node);
-    if (leftovers.length === 0) return { sealed: [], left: [] };
+    if (leftovers.length === 0) return { sealed: [], left: [], error: null };
+    // Only the recovery code opens anything today. Locked to owners alone, these files would be unopenable, and the
+    // readable originals are about to be deleted: refuse, touching nothing.
+    if (!header.recipients.some(r => r.type === 'code')) {
+        return {
+            sealed: [], left: leftovers.map(p => path.relative(nodeDirOf(node), p)),
+            error: 'Old readable backups are kept: the newest locked backup has no recovery code to lock them to. Nothing was deleted.',
+        };
+    }
     const signer = await harvesterSigner();
     const recipients = {
         owners: header.recipients.filter(r => r.type === 'owner').map(r => ({ pubkey: (r as any).pubkey, callsign: (r as any).callsign })),
@@ -373,7 +515,8 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
         const tarPath = path.join(work, 'plain.tar.gz');
         tarInto(tarPath, stage);
         const out = path.join(sealedDir, outName);
-        await sealFileVerified(tarPath, out, sealOpts);
+        // Resolves only once the file on disk has been read back, opened, and passed the restore's archive checks.
+        await sealFileVerified(tarPath, out, { ...sealOpts, requireStateDb: asDb });
         fs.utimesSync(out, mtime, mtime);
         for (const src of sources) fs.rmSync(src, { force: true });
         fs.rmSync(work, { recursive: true, force: true });
@@ -400,7 +543,7 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
             : [];
         if (idFiles.length) {
             const newest = new Date(Math.max(...idFiles.map(p => fs.statSync(p).mtimeMs)));
-            await sealOne(idFiles, false, `identity-${newest.toISOString().slice(0, 10)}-legacy${SEALED_EXT}`, newest);
+            await sealOne(idFiles, false, `${IDENTITY_PREFIX}${newest.toISOString().slice(0, 10)}-legacy${SEALED_EXT}`, newest);
         }
         // Temp leftovers of the old pull code, and folders now empty: nothing in them is worth keeping in plaintext.
         for (const p of plaintextLeftovers(node)) {
@@ -414,7 +557,7 @@ export async function sealOldBackups(node: FleetNodeConfig, header: SealedEnvelo
     } finally {
         fs.rmSync(work, { recursive: true, force: true });
     }
-    return { sealed, left: plaintextLeftovers(node).map(p => path.relative(dir, p)) };
+    return { sealed, left: plaintextLeftovers(node).map(p => path.relative(dir, p)), error: null };
 }
 
 // ── Status ─────────────────────────────────────────────────────────────────────────────────
@@ -429,16 +572,21 @@ function describeHeader(header: SealedEnvelopeHeader): { owners: string[]; codeI
     return { owners, codeIds, words: parts.join(' + ') };
 }
 
-/** What the harvester holds for this node, from the newest sealed file's public header. */
-function refreshSealedStatus(node: FleetNodeConfig, prev: NodeHarvestState, pullError: string | null): SealedEnvelopeHeader | null {
-    const files = listSealedBackups(node);
+/** What the harvester holds for this node: the newest locked backup, else the readable one, and what the node said. */
+function refreshSealedStatus(node: FleetNodeConfig, prev: NodeHarvestState, pullError: string | null): void {
+    const files = listSealedBackups(node).filter(f => !f.identity);
+    const plainHistory = listPlainHistory(node);
+    const plainDb = path.join(nodeDirOf(node), 'state.db');
+    const plain = fs.existsSync(plainDb) ? fs.statSync(plainDb) : null;
     const newest = files[0];
     let header: SealedEnvelopeHeader | null = null;
     if (newest) {
         try { header = readHeaderOf(newest.path); } catch { header = null; }
     }
-    prev.historyCount = files.length;
-    if (newest && header) {
+    prev.historyCount = files.length + plainHistory.length;
+    const failed = pullError ? ` The latest pull failed: ${pullError}` : '';
+    const notLocked = prev.backupLock && !prev.backupLock.locked ? ` ${prev.backupLock.message}` : '';
+    if (newest && header && (!plain || newest.mtimeMs >= plain.mtimeMs)) {
         const who = describeHeader(header);
         const sealedOn = header.createdAt.slice(0, 16).replace('T', ' ');
         prev.sealedBackup = {
@@ -450,25 +598,64 @@ function refreshSealedStatus(node: FleetNodeConfig, prev: NodeHarvestState, pull
             sealedBy: header.nodePeerId,
             owners: who.owners,
             codeIds: who.codeIds,
-            message: `Sealed backup held: sealed ${sealedOn} UTC, locked to ${who.words}.`
-                + (pullError ? ` The latest pull failed: ${pullError}` : ''),
+            message: `Sealed backup held: sealed ${sealedOn} UTC, locked to ${who.words}.` + notLocked + failed,
         };
         prev.identityStatus = 'secured';
         prev.identityFiles = [newest.file];
         prev.identityNote = null;
+    } else if (plain) {
+        const heldOn = new Date(plain.mtimeMs).toISOString().slice(0, 16).replace('T', ' ');
+        const why = prev.backupLock && !prev.backupLock.locked ? prev.backupLock.message : 'Backups are not locked yet: make a recovery code to lock them.';
+        prev.sealedBackup = {
+            state: 'unlocked', file: 'state.db', sizeBytes: plain.size, envelopeId: null, sealedAt: null, sealedBy: null,
+            owners: [], codeIds: [],
+            message: `Readable backup held (not locked): copied ${heldOn} UTC. ${why}` + failed,
+        };
+        // A readable backup never carries the node keys: they travel only inside a locked one.
+        prev.identityStatus = 'partial';
+        prev.identityFiles = [];
+        prev.identityNote = 'Database only: the node keys travel only inside a locked backup. Make a recovery code on the node to lock its backups.';
     } else {
         prev.sealedBackup = {
             state: 'none', file: null, sizeBytes: 0, envelopeId: null, sealedAt: null, sealedBy: null, owners: [], codeIds: [],
-            message: pullError ? `No sealed backup held: ${pullError}` : 'No sealed backup held yet.',
+            message: pullError ? `No backup held: ${pullError}` : 'No backup held yet.',
         };
         prev.identityStatus = 'missing';
         prev.identityFiles = [];
         prev.identityNote = prev.sealedBackup.message;
     }
-    return header;
 }
 
-/** Harvest a single node: check drift, pull a sealed backup if needed, seal any old plaintext, update status */
+/**
+ * The header the seal-old pass may lock old files to, or why there is none. All of: the node's latest backup was
+ * locked (so its recipients are current), the newest file it sent is signed by the pinned node key, and that file
+ * has a recovery-code stanza. A spoofed endpoint cannot choose the recipients, and nothing is locked to owners only.
+ */
+function sealOldHeader(node: FleetNodeConfig, prev: NodeHarvestState): { header: SealedEnvelopeHeader } | { reason: string } {
+    const kept = 'Old readable backups are kept';
+    if (!prev.backupLock?.locked) {
+        return { reason: `${kept}: this node's backups are not locked yet (make a recovery code on the node). Nothing was deleted.` };
+    }
+    const pin = nodePin(node, prev);
+    if (!pin) {
+        return { reason: `${kept}: the fleet manager has no pinned key for this node, so it cannot check who a locked backup `
+            + 'says to lock them to. Add the node\'s "peerId" to manager-nodes.json. Nothing was deleted.' };
+    }
+    prev.pinnedPeerId = pin.peerId;
+    prev.pinSource = pin.source;
+    const newest = listSealedBackups(node).filter(f => !f.identity)
+        .map(f => { try { return readHeaderOf(f.path); } catch { return null; } })
+        .find((h): h is SealedEnvelopeHeader => !!h && h.nodePeerId === pin.peerId);
+    if (!newest || newest.kind !== 'backup' || !selfSigned(newest)) {
+        return { reason: `${kept}: no locked backup held is signed by this node's pinned key (${pin.peerId}, from ${pin.source}). Nothing was deleted.` };
+    }
+    if (!newest.recipients.some(r => r.type === 'code')) {
+        return { reason: `${kept}: the newest locked backup has no recovery code to lock them to. Nothing was deleted.` };
+    }
+    return { header: newest };
+}
+
+/** Harvest a single node: check drift, pull a backup if needed (backing off after a failure), seal old files, status */
 export async function harvestNode(node: FleetNodeConfig, force = false): Promise<NodeHarvestState> {
     const slug = nodeSlug(node);
     const stateMap = loadHarvestState();
@@ -500,50 +687,63 @@ export async function harvestNode(node: FleetNodeConfig, force = false): Promise
     let pullError: string | null = null;
     try {
         const counts = await fetchRemoteCounts(node);
-        // Also pull when no sealed backup is held yet: the first harvest after the upgrade must get one, both to
-        // hold one and to learn who to lock the old plaintext files to.
+        // Also pull once after this update (backupLock unset), to learn whether the node's backups are locked.
         const hasDrift = force || !counts || counts.members !== prev.memberCount || counts.posts !== prev.postCount
-            || prev.dbSizeBytes === 0 || listSealedBackups(node).length === 0;
+            || prev.dbSizeBytes === 0 || prev.backupLock === undefined;
+        const waitUntil = prev.pullBackoff ? Date.parse(prev.pullBackoff.nextPullAt) : 0;
 
-        if (hasDrift) {
-            console.log(`[Harvester] Pulling sealed backup for ${node.name} (${slug}) [force: ${force}]`);
+        if (hasDrift && !force && waitUntil > Date.now()) {
+            // Backing off: the node failed recently. A forced harvest (the dashboard button) still pulls.
+            pullError = `${prev.pullBackoff!.lastError} (next try after ${prev.pullBackoff!.nextPullAt.slice(0, 16).replace('T', ' ')} UTC)`;
+        } else if (hasDrift) {
+            console.log(`[Harvester] Pulling backup for ${node.name} (${slug}) [force: ${force}]`);
             try {
-                const { dbSize } = await pullBackupForNode(node);
-                prev.dbSizeBytes = dbSize;
+                const r = await pullBackupForNode(node);
+                prev.dbSizeBytes = r.dbSize;
+                prev.backupLock = r.kind === 'sealed'
+                    ? { locked: true, message: 'Backups are locked.', at: new Date().toISOString() }
+                    : { locked: false, message: r.message, at: new Date().toISOString() };
+                delete prev.pullBackoff;
             } catch (e: any) {
-                pullError = e?.message || String(e);
+                const msg = e?.message || String(e);
+                const failures = (prev.pullBackoff?.failures || 0) + 1;
+                prev.pullBackoff = { failures, nextPullAt: new Date(Date.now() + backoffDelayMs(failures)).toISOString(), lastError: msg };
+                pullError = msg;
             }
         }
 
-        const header = refreshSealedStatus(node, prev, pullError);
+        refreshSealedStatus(node, prev, pullError);
 
-        // Seal old backups: every run while any plaintext is left, so it finishes even if one run is cut short.
-        if (header) {
-            try {
-                const r = await sealOldBackups(node, header);
-                if (r.sealed.length || r.left.length || prev.sealOld) {
+        // Seal old backups: every run while any readable file is left, so it finishes even if one run is cut short.
+        const leftovers = plaintextLeftovers(node);
+        if (leftovers.length || prev.sealOld) {
+            const gate = sealOldHeader(node, prev);
+            if ('reason' in gate) {
+                if (leftovers.length) {
+                    prev.sealOld = {
+                        lastRunAt: new Date().toISOString(), sealed: prev.sealOld?.sealed || [],
+                        left: leftovers.map(p => path.relative(nodeDirOf(node), p)), error: gate.reason,
+                    };
+                }
+            } else {
+                try {
+                    const r = await sealOldBackups(node, gate.header);
                     prev.sealOld = {
                         lastRunAt: new Date().toISOString(),
                         sealed: [...(prev.sealOld?.sealed || []), ...r.sealed],
                         left: r.left,
-                        error: null,
+                        error: r.error,
+                    };
+                } catch (e: any) {
+                    console.error(`[Harvester] Seal-old pass failed for ${node.name}:`, e?.message || e);
+                    prev.sealOld = {
+                        lastRunAt: new Date().toISOString(), sealed: prev.sealOld?.sealed || [],
+                        left: plaintextLeftovers(node).map(p => path.relative(nodeDirOf(node), p)),
+                        error: e?.message || String(e),
                     };
                 }
-            } catch (e: any) {
-                console.error(`[Harvester] Seal-old pass failed for ${node.name}:`, e?.message || e);
-                prev.sealOld = {
-                    lastRunAt: new Date().toISOString(), sealed: prev.sealOld?.sealed || [],
-                    left: plaintextLeftovers(node).map(p => path.relative(nodeDirOf(node), p)),
-                    error: e?.message || String(e),
-                };
+                refreshSealedStatus(node, prev, pullError);
             }
-            refreshSealedStatus(node, prev, pullError);
-        } else if (plaintextLeftovers(node).length) {
-            prev.sealOld = {
-                lastRunAt: new Date().toISOString(), sealed: prev.sealOld?.sealed || [],
-                left: plaintextLeftovers(node).map(p => path.relative(nodeDirOf(node), p)),
-                error: 'Old unlocked backups are still here: they are locked once a sealed backup has been pulled from this node.',
-            };
         }
 
         if (counts) {

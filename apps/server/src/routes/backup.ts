@@ -31,8 +31,9 @@ import {
     type CodeStanza, type SealedEnvelopeHeader,
 } from '@beanpool/core';
 import {
-    createSealedBackup, describeSealedHeader, BackupNotSealableError, isGzip, readFileStart, readSealedFileHeader,
-    signerCheck, openSealedFileTo, readBundleFrom, applyBundle,
+    createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
+    readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
+    type BackupLock,
 } from '../services/sealed-backup.js';
 
 /** After a restore the node restarts to load what was written. Tests replace it. */
@@ -63,14 +64,42 @@ export function createBackupRoutes(deps: RouteDeps): Router {
 
 // ======================== DATABASE BACKUP ========================
 
-// Sealed backups (sealed-keys.md §6.1). The response is ALWAYS a `.bpsealed` envelope — the tar of state.db,
-// node_config.json and the take-over bundle, locked to every owner and the printed recovery code — never a
-// plain archive, whichever credential asked. The replication token may fetch it: what it gets is ciphertext.
-// With nobody to lock it to, the answer is 409 with the one action that fixes it (§9), not a plaintext fallback.
-async function sendSealedBackup(ctx: any, opts: { dbFile?: string; filenamePrefix?: string } = {}): Promise<void> {
+// Backups (sealed-keys.md §6.1, seal review round 1). With a recovery code the response is a `.bpsealed` envelope —
+// the tar of state.db, node_config.json and the take-over bundle, locked to every owner and the code — whichever
+// credential asked; the replication token may fetch it, because what it gets is ciphertext. Without a code the only
+// opener that ships (the code) could not open a locked file, so the response is the readable backup this route
+// always sent — the tar.gz of state.db and node_config.json, no keys — marked as such: X-Backup-Locked: no, the
+// reason in X-Backup-Not-Locked, and a log line. Never a file nothing can open, and never a false "locked".
+function markLock(ctx: any, lock: BackupLock): void {
+    ctx.set('X-Backup-Locked', lock.locked ? 'yes' : 'no');
+    if (!lock.locked) ctx.set('X-Backup-Not-Locked', lock.message);
+}
+
+async function sendBackup(ctx: any, opts: { dbFile?: string; filenamePrefix?: string; plainFile?: { path: string; name: string } } = {}): Promise<void> {
+    const lock = backupLockState();
     try {
+        if (!lock.locked) {
+            console.warn(`[Backup] ${lock.message} Sent an unlocked backup (${opts.plainFile ? 'snapshot ' + opts.plainFile.name : 'database'}).`);
+            markLock(ctx, lock);
+            ctx.set('Cache-Control', 'no-store');
+            if (opts.plainFile) {
+                // The snapshot file itself, as this route always sent it.
+                ctx.set('Content-Type', 'application/octet-stream');
+                // eslint-disable-next-line no-control-regex
+                ctx.set('Content-Disposition', `attachment; filename="${opts.plainFile.name.replace(/[\r\n"\x00-\x1F\x7F]/g, '_')}"`);
+                ctx.body = fs.createReadStream(opts.plainFile.path);
+                return;
+            }
+            const plain = await createPlainBackup();
+            ctx.set('Content-Type', 'application/gzip');
+            ctx.set('Content-Disposition', `attachment; filename="${plain.filename}"`);
+            ctx.res.on('close', () => plain.cleanup());
+            ctx.body = plain.body;
+            return;
+        }
         const backup = await createSealedBackup(opts);
         const who = describeSealedHeader(backup.header);
+        markLock(ctx, lock);
         ctx.set('Cache-Control', 'no-store');
         ctx.set('Content-Type', 'application/octet-stream');
         ctx.set('Content-Disposition', `attachment; filename="${backup.filename}"`);
@@ -79,11 +108,6 @@ async function sendSealedBackup(ctx: any, opts: { dbFile?: string; filenamePrefi
         ctx.res.on('close', () => backup.cleanup());
         ctx.body = backup.body;
     } catch (e: any) {
-        if (e instanceof BackupNotSealableError) {
-            ctx.status = 409;
-            ctx.body = { error: e.message, state: e.state, needsRecipient: e.state === 'no-recipients' };
-            return;
-        }
         console.error('Backup failed:', e);
         ctx.status = 500;
         ctx.body = { error: 'Backup failed: ' + (e?.message || 'unknown error') };
@@ -94,11 +118,11 @@ router.post('/api/local/admin/backup', async (ctx) => {
     const token = ctx.request.header['x-replication-token'];
     const isTokenValid = token && (await verifyReplicationToken(String(token)));
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
-    await sendSealedBackup(ctx);
+    await sendBackup(ctx);
 });
 
 // The plain-text identity bundle (`/api/local/admin/identity-bundle`) is gone (§6.1): the node keys now travel
-// only inside the sealed backup above. The route is not mounted, so every credential gets a 404.
+// only inside a locked backup, which needs a recovery code. The route is not mounted: every credential gets a 404.
 
 // ======================== BACKUP TAB ========================
 // Read-only enrollment bundle for standing up a NEW backup server that joins
@@ -155,6 +179,8 @@ router.post('/api/local/admin/backup-status', async (ctx) => {
         intervalMs: Number(process.env.BACKUP_PULL_INTERVAL_MS) || 60000,
         ...getBackupStatus(),
         credential: getNodeRole() === 'backup' ? getStandbyCredentialState() : null,
+        // Whether the next backup leaves locked, and if not why, in words the manager can show as they are.
+        backupLock: backupLockState(),
     };
 });
 
@@ -309,7 +335,7 @@ router.post('/api/local/admin/snapshots/delete', async (ctx) => {
 });
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
-// header (the name is in the query string, never the password). Always sealed.
+// header (the name is in the query string, never the password). Locked like /backup when there is a code.
 router.get('/api/local/admin/snapshots/download', async (ctx) => {
     const headerPassword = ctx.request.header['x-admin-password'];
     if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
@@ -321,10 +347,11 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
         ctx.body = { error: 'Snapshot not found' };
         return;
     }
-    // Sealed on the way out, like /backup (§6.1): the snapshot becomes the backup's state.db. The file in
+    // Locked on the way out, like /backup (§6.1): the snapshot becomes the backup's state.db. The file in
     // data/snapshots/ stays as it is — it sits beside the live plaintext database, so sealing it protects nothing.
+    // Without a code: the snapshot file itself, as before, marked not locked.
     const base = path.basename(target, '.db').replace(/[^A-Za-z0-9_-]/g, '_');
-    await sendSealedBackup(ctx, { dbFile: target, filenamePrefix: `beanpool-${base}` });
+    await sendBackup(ctx, { dbFile: target, filenamePrefix: `beanpool-${base}`, plainFile: { path: target, name: path.basename(target) } });
 });
 
 // Get (no body) or set (with {enabled,intervalHours,keep}) the auto-snapshot config.
@@ -615,6 +642,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
         // Which kind of file is it? gzip magic → a legacy plain backup; otherwise it must be a sealed one.
         let tarPath: string;
         let sealedHeader: SealedEnvelopeHeader | null = null;
+        let signerAcceptedByName = false;
         if (isGzip(readFileStart(uploadPath, 2))) {
             tarPath = uploadPath;
         } else {
@@ -630,6 +658,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
             // Restore-by-code checks the header signature wherever this server holds a pin (966 follow-up #2).
             const signer = signerCheck(sealedHeader, ctx.request.header['x-accept-signer'] as string | undefined);
             if (!signer.ok) return refuse(signer.status, { ...signer.body, backup });
+            signerAcceptedByName = signer.acceptedByName;
 
             const code = ctx.request.header['x-recovery-code'];
             const codeStanzas = sealedHeader.recipients.filter((r): r is CodeStanza => r.type === 'code');
@@ -638,7 +667,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
                 return refuse(400, {
                     error: codeStanzas.length
                         ? `This backup is locked. Type recovery code ${needed} to open it.`
-                        : "This backup is locked to its owners only, with no recovery code. Opening it with an owner's phone comes in a later update.",
+                        : "This backup is locked to its owners only, with no recovery code. Nothing in this version can open it: "
+                            + "opening with an owner's phone comes in a later update. This version never makes such a file.",
                     needsRecoveryCode: true,
                     backup,
                 });
@@ -703,39 +733,11 @@ router.post('/api/local/admin/restore', async (ctx) => {
         if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
         fs.mkdirSync(tmpDir, { recursive: true });
 
-        // SECURITY (SRV-9a): a restore archive is fully attacker-controlled
-        // input — and so is the archive inside a sealed file: opening it only
-        // proves someone holding a key locked it. `tar -x` does NOT sanitize
-        // member paths — GNU tar (the prod image) follows `../` and absolute
-        // names and will materialise symlinks/hardlinks — so a crafted archive
-        // could write or redirect files anywhere the node process can reach
-        // (cron dirs, authorized_keys, the app's own JS) → RCE / node takeover.
-        // Inspect the listing and refuse the WHOLE archive if any member would
-        // escape the extraction dir or is a link, BEFORE extracting a single
-        // byte. Legitimate backups are written with `tar -C <stage> .` (see
-        // services/sealed-backup.ts), so members are plain `./`-prefixed
-        // relative paths and pass cleanly.
-        const listing = execFileSync('tar', ['-tzf', tarPath], {
-            encoding: 'utf8',
-            maxBuffer: 64 * 1024 * 1024,
-        }).split('\n').map((s: string) => s.trim()).filter(Boolean);
-        for (const entry of listing) {
-            // Reject POSIX/Windows-absolute paths and any `..` traversal segment.
-            if (path.isAbsolute(entry) || /^[A-Za-z]:/.test(entry) || entry.split('/').some(seg => seg === '..')) {
-                throw new Error('Invalid backup archive: unsafe member path');
-            }
-        }
-        // Reject symlink/hardlink members (type char 'l'/'h' in the verbose
-        // listing) so a link can't redirect a later write outside tmpDir.
-        const verboseListing = execFileSync('tar', ['-tvzf', tarPath], {
-            encoding: 'utf8',
-            maxBuffer: 64 * 1024 * 1024,
-        }).split('\n').map((s: string) => s.trim()).filter(Boolean);
-        for (const line of verboseListing) {
-            if (line[0] === 'l' || line[0] === 'h') {
-                throw new Error('Invalid backup archive: links are not permitted');
-            }
-        }
+        // SECURITY (SRV-9a): a restore archive is fully attacker-controlled input — and so is the archive inside a
+        // sealed file: opening it only proves someone holding a key locked it. checkBackupArchive refuses the WHOLE
+        // archive if any member would escape the extraction dir or is a link, BEFORE a byte is extracted.
+        // Legitimate backups are written with `tar -C <stage> .`, so members are plain `./`-prefixed paths.
+        checkBackupArchive(tarPath);
 
         execFileSync('tar', ['-xzf', tarPath, '-C', tmpDir]);
 
@@ -746,7 +748,12 @@ router.post('/api/local/admin/restore', async (ctx) => {
         }
         // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a
         // sealed file's bundle is used; a plain archive is anyone's to write, so keys in one are never installed.
-        const bundle = sealedHeader ? readBundleFrom(tmpDir, sealedHeader) : null;
+        // Nor are they from a file let through by X-Accept-Signer: anyone who has seen a header can make one
+        // (signerCheck), so naming its signer restores the database only. Harvester-sealed files carry none.
+        const bundle = sealedHeader && !signerAcceptedByName ? readBundleFrom(tmpDir, sealedHeader) : null;
+        if (sealedHeader && signerAcceptedByName && fs.existsSync(path.join(tmpDir, 'takeover-bundle.json'))) {
+            console.warn(`[Restore] Ignored the keys inside a backup signed by ${sealedHeader.nodePeerId}, accepted by name: database only.`);
+        }
 
         // Close current DB connection safely before overwriting
         const { db } = await import('../db/db.js');
@@ -767,6 +774,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
             success: true,
             sealed: !!sealedHeader,
             restoredKeys: restoredKeys.length > 0,
+            ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
             ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
         };
 

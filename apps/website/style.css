@@ -1513,7 +1513,7 @@ footer {
 }
 
 /* ======================== HOME PAGE (member-first rewrite) ======================== */
-/* Phone menu. Only the home page has a .nav-menu; other pages keep their nav as it was. */
+/* Phone menu. Only the home page and the Help Centre have a .nav-menu; other pages keep their nav as it was. */
 .nav-menu { display: none; position: relative; }
 .nav-menu summary {
     list-style: none;
@@ -1564,7 +1564,8 @@ footer {
     color: #030712;
     font-weight: 700;
 }
-@media (max-width: 768px) {
+/* 1023px, not 768px: below 1024 the full desktop row no longer fits on one line, so the menu takes over */
+@media (max-width: 1023px) {
     .nav-inner.has-menu { padding: 0.6rem 1rem; }
     .nav-inner.has-menu .nav-links { display: none; }
     .nav-inner.has-menu .nav-menu { display: block; }
@@ -1706,4 +1707,73 @@ footer {
     border-color: rgba(255, 255, 255, 0.45);
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(255, 255, 255, 0.15);
+}
+/* a:hover is amber; keep the GitHub icon white (YouTube and Reddit set their own fill) */
+.hero-social-btn:hover { color: #ffffff; }
+
+/* The home page's desktop nav stays on one line down to 1024px (below that its menu takes over):
+   nav words never break, and the spacing tightens first */
+.nav-inner.has-menu .nav-links a { white-space: nowrap; }
+@media (max-width: 1200px) {
+    .nav-inner.has-menu .nav-links { gap: 1rem; }
+    .nav-inner.has-menu .nav-cta { padding: 0.625rem 1.1rem !important; }
+}
+/* The other pages keep their desktop row down to 769px; tighter spacing keeps Get Started on screen */
+@media (max-width: 1023px) {
+    .nav-links { gap: 1rem; }
+    .nav-cta { padding: 0.625rem 1.1rem !important; }
+}
+
+/* ======================== HELP CENTRE ======================== */
+.nav-links a[aria-current="page"] { color: var(--text-primary); }
+.nav-links a[aria-current="page"]::after { width: 100%; }
+.help-centre { max-width: 1000px; }
+.help-centre .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+.help-centre h2 { font-size: 1.15rem; line-height: 1.3; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 2.25rem 0 0.85rem; }
+.help-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+    gap: 1rem;
+}
+.help-card {
+    display: block;
+    min-height: 48px;
+    padding: 1.35rem 1.4rem;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    text-decoration: none !important;
+}
+.help-card:hover, .help-card:focus-visible { color: var(--text-secondary); transform: translateY(-2px); }
+.help-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help-card h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-header);
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #ffffff;
+    margin: 0 0 0.45rem;
+}
+.help-card h3::after { content: '→'; margin-left: auto; color: var(--accent); transition: var(--transition); }
+.help-card:hover h3::after { transform: translateX(3px); }
+.help-card .help-icon { width: 22px; height: 22px; flex-shrink: 0; fill: currentColor; }
+.help-centre .help-card p { margin: 0; font-size: 0.95rem; line-height: 1.55; color: var(--text-secondary); }
+.help-centre .help-card p.help-who { color: var(--accent); font-weight: 600; font-size: 0.88rem; margin-bottom: 0.4rem; }
+.help-centre .help-card p.help-note {
+    margin-top: 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-left: 3px solid var(--accent-success);
+    background: rgba(16, 185, 129, 0.07);
+    border-radius: var(--radius-sm);
+}
+@media (max-width: 480px) {
+    .help-centre { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+    .help-card { padding: 1.1rem 1rem; }
+}
+/* Footer links are tapped on phones: give each a 48px row instead of a gap */
+@media (max-width: 768px) {
+    .footer-links { gap: 0; }
+    .footer-links a { display: flex; align-items: center; min-height: 48px; }
 }

@@ -200,7 +200,7 @@ function page({ title, description, body }) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style.css?v=2.4">
+    <link rel="stylesheet" href="../style.css?v=2.5">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */
         .guide { max-width: 760px; }
@@ -220,11 +220,14 @@ function page({ title, description, body }) {
         .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
         .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
         .guide-nav .nav-links { gap: 1.25rem; }
-        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
-        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
         @media (max-width: 480px) {
             .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
             .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
         }
     </style>
 </head>
@@ -234,7 +237,8 @@ function page({ title, description, body }) {
             <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
                 <a href="index.html">Members' guide</a>
-                <a href="../index.html">Home</a>
+                <a href="../help.html">Help</a>
+                <a href="../index.html" class="guide-nav-home">Home</a>
             </div>
         </div>
     </nav>
@@ -251,7 +255,7 @@ const linkItem = g => `            <li><a href="${g.slug}.html"><strong>${inline
 
 /** Every file under apps/website/guide/, keyed by file name. */
 export function renderWebsite(guide) {
-    const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version ${guide.version}.</p>`;
+    const foot = `        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version ${guide.version}.</p>`;
     const bySlug = new Map(guide.guides.map(g => [g.slug, g]));
     const about = guide.sections.find(s => s.id === ABOUT_SECTION);
     const manual = guide.sections.filter(s => s.id !== ABOUT_SECTION);

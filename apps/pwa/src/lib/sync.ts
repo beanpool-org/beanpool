@@ -296,8 +296,8 @@ export function connectToAnchor(url?: string): void {
             if (ident && ident.callsign) {
                 params.push(`callsign=${encodeURIComponent(ident.callsign)}`);
             }
-            // Forward-compatible WS connect auth (SRV-4): additive signed params,
-            // ignored by nodes that don't yet enforce WS auth.
+            // WS connect auth (SRV-4): a member-signed socket gets the full feed; an
+            // unsigned one gets only public doorbells (and is refused under ENFORCE_WS_AUTH=true).
             try {
                 const signed = await buildSignedWsParams('/ws');
                 if (signed) params.push(signed);

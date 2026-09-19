@@ -22,6 +22,8 @@ The report form tells members their note goes to moderators. In practice it goes
 - The list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
 - Each row shows which post the report is about, who wrote it, and whether it has already been removed.
 
+![The Triage and Moderation screen in Settings](images/people-moderation.webp)
+
 ## What each action does
 
 - **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, they are told instead that it "is no longer up".

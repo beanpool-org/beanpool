@@ -10,7 +10,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "test:phone-width": "node e2e/phone-width.mjs",
-    "screenshots": "node e2e/screenshots.mjs"
+    "screenshots": "node e2e/screenshots.mjs",
+    "manual-shots": "node e2e/manual-shots.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

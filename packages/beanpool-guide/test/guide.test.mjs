@@ -175,6 +175,13 @@ test('the operator manual covers what an operator needs, and the (unpublished) w
         assert.ok(index.includes(`href="${g.slug}.html"`), `index links ${g.slug}`);
         const html = site[`${g.slug}.html`].replace(/<\/?strong>/g, '');
         for (const b of g.blocks) {
+            if (b.type === 'img') {
+                assert.ok(html.includes(`<img src="${b.src}"`), `${g.slug}.html renders img ${b.src}`);
+                if (b.href) {
+                    assert.ok(html.includes(`<a href="${b.href}.html">`), `${g.slug}.html links img to ${b.href}`);
+                }
+                continue;
+            }
             for (const t of b.type === 'ul' ? b.items : [b.text]) {
                 const firstWords = t.replace(/\*\*/g, '').split(' ').slice(0, 4).join(' ')
                     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -221,3 +228,73 @@ test('check() reports a stray file in the website folder, including any operator
         if (!existed) fs.rmSync(OPERATORS_WEBSITE_DIR, { recursive: true });
     }
 });
+
+test('parser: inline images and linked images', () => {
+    const wrap = body => `---\nslug: a\ntitle: T\nsummary: S\nrelated: b\n---\n\n${body}\n`;
+    const g = parseGuideMarkdown(wrap('![My screenshot](images/pic.webp)\n\n[![Linked screenshot](images/link.webp)](target-page)'), 'x.md', { allowImages: true });
+    assert.deepEqual(g.blocks, [
+        { type: 'img', src: 'images/pic.webp', alt: 'My screenshot' },
+        { type: 'img', src: 'images/link.webp', alt: 'Linked screenshot', href: 'target-page' },
+    ]);
+});
+
+test('images are rejected in members\' guide markdown', () => {
+    const wrap = body => `---\nslug: a\ntitle: T\nsummary: S\nrelated: b\n---\n\n${body}\n`;
+    assert.throws(
+        () => parseGuideMarkdown(wrap('![Screenshot](images/pic.webp)'), 'content/a.md'),
+        /images are only allowed in the operator manual/
+    );
+    assert.throws(
+        () => parseGuideMarkdown(wrap('[![Screenshot](images/pic.webp)](other)'), 'content/a.md'),
+        /images are only allowed in the operator manual/
+    );
+});
+
+test("the members' guide build fails on a page with a picture", () => {
+    const tmp = fs.mkdtempSync(path.join(path.dirname(CONTENT_DIR), 'tmp-guide-test-'));
+    try {
+        fs.cpSync(CONTENT_DIR, tmp, { recursive: true });
+        const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
+        const sec = manifest.sections[0];
+        const file = path.join(tmp, sec.id, `${sec.pages[0]}.md`);
+        fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + '\n![A screenshot](images/pic.webp)\n');
+        assert.doesNotThrow(() => loadGuide(CONTENT_DIR));
+        assert.throws(() => loadGuide(tmp),
+            new RegExp(`${sec.id}/${sec.pages[0]}\\.md:\\d+: images are only allowed in the operator manual`));
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('validation: referenced image must exist on disk and linked href must be a valid slug', () => {
+    const tmp = fs.mkdtempSync(path.join(path.dirname(OPERATORS_DIR), 'tmp-guide-test-'));
+    try {
+        fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify({
+            version: 1,
+            sections: [{ id: 'sec', title: 'Sec', summary: 'Summary', pages: ['p1', 'p2'] }]
+        }));
+        fs.mkdirSync(path.join(tmp, 'sec'));
+        fs.writeFileSync(path.join(tmp, 'sec', 'p2.md'),
+            '---\nslug: p2\ntitle: P2\nsummary: S\nrelated: p1\n---\n\nText\n');
+        // 1. Missing image
+        fs.writeFileSync(path.join(tmp, 'sec', 'p1.md'),
+            '---\nslug: p1\ntitle: P1\nsummary: S\nrelated: p2\n---\n\n![Missing](images/missing.webp)\n');
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /image "images\/missing\.webp" does not exist/);
+
+        // 2. Image exists, but invalid linked href
+        fs.mkdirSync(path.join(tmp, 'images'));
+        fs.writeFileSync(path.join(tmp, 'images', 'pic.webp'), 'fake-bytes');
+        fs.writeFileSync(path.join(tmp, 'sec', 'p1.md'),
+            '---\nslug: p1\ntitle: P1\nsummary: S\nrelated: p2\n---\n\n[![Linked](images/pic.webp)](non-existent-slug)\n');
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /linked image target "non-existent-slug" does not exist/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('website has no operator images and no operator content', () => {
+    const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true }).map(String);
+    assert.ok(!webFiles.some(f => f.includes('operators')), 'no operators in website folder');
+    assert.ok(!webFiles.some(f => f.endsWith('.webp')), 'no operator webp images in website folder');
+});
+

@@ -4,7 +4,7 @@
  * only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
  */
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView, Keyboard } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -108,6 +108,9 @@ export default function SettingsSigninScreen() {
 
     const submitCode = async () => {
         if (!totp || busy || !looksLikeTotpCode(code)) return;
+        // Dismiss before any Alert can follow: an Alert raised over an open keyboard inside a Modal is the
+        // pattern memory keyboard-avoidance-pattern.md warns about (same as useManageNode's submitCode).
+        Keyboard.dismiss();
         setBusy(true);
         try {
             handle(await totp.continueWith(code));

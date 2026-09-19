@@ -95,6 +95,22 @@ export function canReadGroupThread(groupId: string, pubkey: string | undefined):
     return groupChatRole(groupId, pubkey) !== null;
 }
 
+/**
+ * Why this caller may not open the group's chat, as the status every route answers with — or null when they may.
+ * An invite-only group answers 404, exactly as if it did not exist, unless the caller has a live relationship with
+ * it (an invitation, a request): the #828 rule that invite-only groups stay hidden from outsiders. Anyone else
+ * who is not an active member gets 403. Shared by the group routes and the ordinary messaging routes, so the two
+ * never disagree about whether a group exists.
+ */
+export function groupChatRefusal(groupId: string, pubkey: string | undefined): { status: 403 | 404; error: string } | null {
+    if (canReadGroupThread(groupId, pubkey)) return null;
+    const g = db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string } | undefined;
+    const related = !!pubkey && !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'")
+        .get(groupId, pubkey);
+    if (!g || (g.join_policy === 'invite_only' && !related)) return { status: 404, error: GROUP_NOT_FOUND };
+    return { status: 403, error: GROUP_CHAT_FORBIDDEN };
+}
+
 function activeMemberKeys(groupId: string): string[] {
     return (db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(groupId) as any[])
         .map(r => r.member_pubkey);

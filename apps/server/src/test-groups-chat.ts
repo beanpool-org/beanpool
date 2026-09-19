@@ -220,6 +220,23 @@ async function main(): Promise<void> {
     assert((await get(`/api/groups/${secret.id}/chat`, erin)).status === 404, 'an invite-only group answers an outsider 404, as if it did not exist');
     assert((await get(`/api/groups/${secret.id}/succession`, erin)).status === 404, 'its succession route too');
     assert((await get(`/api/groups/${secret.id}/chat`, hugo)).status === 403, 'an invitee gets 403 (they know it exists) until they accept');
+    // The ordinary messaging routes answer the same way (PR #924 review, item 5): an outsider cannot tell an
+    // invite-only group's chat from an id that does not exist.
+    const nowhere = crypto.randomUUID();
+    const same = (a: any, b: any) => a.status === b.status && JSON.stringify(a.body) === JSON.stringify(b.body);
+    const hiddenGet = await mget(`/api/messages/${secret.id}`, erin);
+    assert(hiddenGet.status === 404 && same(hiddenGet, await mget(`/api/messages/${nowhere}`, erin)),
+        'GET /api/messages/:id: an invite-only group is 404 to an outsider, word for word as an unknown id');
+    const muteBody = (id: string) => ({ conversationId: id, duration: '8h' });
+    const hiddenMute = await mpost('/api/messages/mute', erin, muteBody(secret.id));
+    assert(hiddenMute.status === 404 && same(hiddenMute, await mpost('/api/messages/mute', erin, muteBody(nowhere))), 'mute: the same');
+    const hiddenRead = await mpost('/api/messages/mark-read', erin, { conversationId: secret.id });
+    assert(hiddenRead.status === 404 && same(hiddenRead, await mpost('/api/messages/mark-read', erin, { conversationId: nowhere })), 'mark-read: the same');
+    const sendBody = (id: string) => ({ conversationId: id, authorPubkey: erin, ciphertext: b64('hi'), nonce: 'plaintext-v1' });
+    assert(same(await mpost('/api/messages/send', erin, sendBody(secret.id)), await mpost('/api/messages/send', erin, sendBody(nowhere))),
+        'send: the same answer as an unknown id');
+    assert((await mget(`/api/messages/${secret.id}`, hugo)).status === 403, 'the invitee, who knows it exists, gets 403 there as on the group routes');
+    assert((await mget(`/api/messages/${garden.id}`, erin)).status === 403, 'a group that is not invite-only stays 403 to an outsider');
     joinGroup(secret.id, hugo);
     assert((await get(`/api/groups/${secret.id}/chat`, hugo)).status === undefined, 'after accepting, the invitee reads it');
     assert(lastLine(secret.id)?.ciphertext === 'Hugo joined', 'accepting an invitation writes "joined"');
@@ -381,6 +398,24 @@ async function main(): Promise<void> {
     assert((listYourChats(bob).items.find(i => i.id === bakery)?.unreadCount ?? 0) === 1, 'a new line in the enterprise thread shows as unread for its keeper');
     await mpost('/api/messages/mark-read', bob, { conversationId: bakery });
     assert((listYourChats(bob).items.find(i => i.id === bakery)?.unreadCount ?? -1) === 0, 'and a keeper can mark the enterprise thread read');
+
+    // ── 8b. Group chat sends through the ordinary send route are rate-limited ───────────────
+    // (PR #924 review, item 4) — exactly as POST /api/groups/:id/chat/message is; a DM is not.
+    console.log('\n--- 8b. Rate limit on the ordinary send route ---');
+    let limiterCalls = 0;
+    const limited = createMessagingRoutes({
+        ...deps,
+        rateLimit: (ctx: any) => { limiterCalls++; ctx.status = 429; ctx.body = { error: 'Too many attempts' }; return false; },
+    });
+    const before8b = (db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c;
+    const throttled = await dispatch(limited, 'POST', '/api/messages/send',
+        ctxFor(bob, { conversationId: garden.id, authorPubkey: bob, ciphertext: b64('spam'), nonce: 'plaintext-v1' }));
+    assert(throttled.status === 429 && limiterCalls === 1, 'a group chat line through /api/messages/send goes through the limiter and is refused when it trips');
+    assert((db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id = ?').get(garden.id) as any).c === before8b, 'and nothing is written');
+    const dmPair = createConversation('dm', [bob, erin], bob)!;
+    const dmSent = await dispatch(limited, 'POST', '/api/messages/send',
+        ctxFor(bob, { conversationId: dmPair.id, authorPubkey: bob, ciphertext: 'c', nonce: 'n' }));
+    assert(dmSent.body?.success === true && limiterCalls === 1, 'a DM is not put through the group limiter');
 
     // ── 9. The old chat group is gone ───────────────────────────────────────────────────────
     console.log('\n--- 9. The old chat group is removed ---');

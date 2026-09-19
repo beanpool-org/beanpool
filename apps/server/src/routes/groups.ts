@@ -33,8 +33,8 @@ import {
     voteGroupConvenor,
     getGroupSuccession,
     listYourChats,
-    canReadGroupThread,
 } from '../state-engine.js';
+import { groupChatRefusal } from '../engine/group-thread.js';
 import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
 
@@ -60,17 +60,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
      * that invite-only groups stay hidden from outsiders. Returns true when the caller may go on.
      */
     function requireGroupMember(ctx: any, groupId: string, actor: string): boolean {
-        if (canReadGroupThread(groupId, actor)) return true;
-        const g = db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string } | undefined;
-        const related = !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'")
-            .get(groupId, actor);
-        if (!g || (g.join_policy === 'invite_only' && !related)) {
-            ctx.status = 404;
-            ctx.body = { error: 'Group not found' };
-            return false;
-        }
-        ctx.status = 403;
-        ctx.body = { error: 'Only members of this group can open its chat' };
+        const refusal = groupChatRefusal(groupId, actor);
+        if (!refusal) return true;
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error };
         return false;
     }
 

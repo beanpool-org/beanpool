@@ -104,6 +104,26 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   The app remembers the role in memory for 10 minutes per node and key, and only then asks for the queue,
   on the header's existing refresh gate; a refused queue makes it ask the role again.
 
+**Desktop QR — built 2026-09-20 (Marty's decision on the board, 2026-09-19: "QR from the phone app").**
+
+- *Why not the challenge above:* the original desktop sketch put the challenge in the QR and let the browser
+  poll `GET /auth/challenge/:id` for the token. Whoever holds the QR (a photo, a shoulder-surfer) could poll
+  it too. So the QR flow is a **pairing bound to the browser** instead (`settings-signin-pairing.ts`).
+- *Browser:* `POST /api/local/admin/auth/pairing` → 32-byte id, 6-character short code, 2-minute life, and a
+  binding secret set as an httpOnly, SameSite=Strict cookie scoped to the pairing routes. The QR carries
+  `beanpool-settings-signin:v1?node=<origin>&p=<id>&c=<code>` (`@beanpool/core`), never the secret.
+- *Phone:* Settings → "Sign in on a computer" (owners/admins, beside Manage). The code must name the app's own
+  node; the node's lookup must return the same short code and names the browser ("Firefox on Windows"); then
+  the phone unlock (same gate as Manage), then the member key signs
+  `beanpool-settings-signin:v1:approve:<id>:<code>`. The node runs the same signer checks as the Manage link
+  (`authorizeKeySigner`: active member, owner/admin, signature, TOTP) and mints the same 60 s handshake token,
+  kept inside the pairing: the phone never sees it.
+- *Redemption:* the browser long-polls `…/pairing/:id/wait` with its cookie and the node redeems the held token
+  through `consumeHandshakeToken` → the same `admin_session` + CSRF token. Without the binding secret: 403,
+  logged. Single use throughout; five refused approvals burn a pairing; creation braked at 10/min per client
+  and 200 live; phone calls go through the auth limiter. SECURITY log lines name who approved which pairing.
+- *PWA:* not a scanner. Its Manage row says to open Settings on the computer and scan with the app.
+
 ### 2.4 Migration — do not flip this in one release
 
 A flip-day locks the operator out of their own machine.

@@ -231,11 +231,39 @@ test('check() reports a stray file in the website folder, including any operator
 
 test('parser: inline images and linked images', () => {
     const wrap = body => `---\nslug: a\ntitle: T\nsummary: S\nrelated: b\n---\n\n${body}\n`;
-    const g = parseGuideMarkdown(wrap('![My screenshot](images/pic.webp)\n\n[![Linked screenshot](images/link.webp)](target-page)'), 'x.md');
+    const g = parseGuideMarkdown(wrap('![My screenshot](images/pic.webp)\n\n[![Linked screenshot](images/link.webp)](target-page)'), 'x.md', { allowImages: true });
     assert.deepEqual(g.blocks, [
         { type: 'img', src: 'images/pic.webp', alt: 'My screenshot' },
         { type: 'img', src: 'images/link.webp', alt: 'Linked screenshot', href: 'target-page' },
     ]);
+});
+
+test('images are rejected in members\' guide markdown', () => {
+    const wrap = body => `---\nslug: a\ntitle: T\nsummary: S\nrelated: b\n---\n\n${body}\n`;
+    assert.throws(
+        () => parseGuideMarkdown(wrap('![Screenshot](images/pic.webp)'), 'content/a.md'),
+        /images are only allowed in the operator manual/
+    );
+    assert.throws(
+        () => parseGuideMarkdown(wrap('[![Screenshot](images/pic.webp)](other)'), 'content/a.md'),
+        /images are only allowed in the operator manual/
+    );
+});
+
+test("the members' guide build fails on a page with a picture", () => {
+    const tmp = fs.mkdtempSync(path.join(path.dirname(CONTENT_DIR), 'tmp-guide-test-'));
+    try {
+        fs.cpSync(CONTENT_DIR, tmp, { recursive: true });
+        const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
+        const sec = manifest.sections[0];
+        const file = path.join(tmp, sec.id, `${sec.pages[0]}.md`);
+        fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + '\n![A screenshot](images/pic.webp)\n');
+        assert.doesNotThrow(() => loadGuide(CONTENT_DIR));
+        assert.throws(() => loadGuide(tmp),
+            new RegExp(`${sec.id}/${sec.pages[0]}\\.md:\\d+: images are only allowed in the operator manual`));
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
 });
 
 test('validation: referenced image must exist on disk and linked href must be a valid slug', () => {
@@ -251,14 +279,14 @@ test('validation: referenced image must exist on disk and linked href must be a 
         // 1. Missing image
         fs.writeFileSync(path.join(tmp, 'sec', 'p1.md'),
             '---\nslug: p1\ntitle: P1\nsummary: S\nrelated: p2\n---\n\n![Missing](images/missing.webp)\n');
-        assert.throws(() => loadGuide(tmp, { aboutSection: null }), /image "images\/missing\.webp" does not exist/);
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /image "images\/missing\.webp" does not exist/);
 
         // 2. Image exists, but invalid linked href
         fs.mkdirSync(path.join(tmp, 'images'));
         fs.writeFileSync(path.join(tmp, 'images', 'pic.webp'), 'fake-bytes');
         fs.writeFileSync(path.join(tmp, 'sec', 'p1.md'),
             '---\nslug: p1\ntitle: P1\nsummary: S\nrelated: p2\n---\n\n[![Linked](images/pic.webp)](non-existent-slug)\n');
-        assert.throws(() => loadGuide(tmp, { aboutSection: null }), /linked image target "non-existent-slug" does not exist/);
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /linked image target "non-existent-slug" does not exist/);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }

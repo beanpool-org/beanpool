@@ -49,7 +49,7 @@ const COLLECTIONS = [
 /** Every generated file (absolute path → exact contents) for the current source. */
 export function expectedOutputs() {
     const guide = loadGuide(CONTENT_DIR);
-    const manual = loadGuide(OPERATORS_DIR, { aboutSection: null });
+    const manual = loadGuide(OPERATORS_DIR, { aboutSection: null, allowImages: true });
     const out = { [BUNDLED_JSON]: serializeGuide(guide), [OPERATORS_JSON]: serializeGuide(manual) };
     const websiteOpts = { operatorManualOnWeb: PUBLISH_OPERATORS_WEBSITE };
     for (const [name, text] of Object.entries(renderWebsite(guide, websiteOpts))) out[path.join(WEBSITE_DIR, name)] = text;

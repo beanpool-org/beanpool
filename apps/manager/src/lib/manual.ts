@@ -10,13 +10,13 @@
  * It is the same block model as the members' guide, so the checks, search and bold-splitting in @beanpool/core's
  * member-guide.ts apply unchanged.
  */
-import { validateGuide, type Guide, type GuidePage } from '@beanpool/core';
+import { validateGuide, type OperatorGuide, type OperatorGuidePage } from '@beanpool/core';
 // A relative path, not a package import: @beanpool/guide is not a dependency of the manager, and the undeclared-imports
 // guard (scripts/check-undeclared-imports.mjs) rejects a bare import of it.
 import bundledManual from '../../../../packages/beanpool-guide/generated/operators.json';
 
 /** The bundled manual. Built from checked source, so it always validates; a broken build fails the tests. */
-export const OPERATOR_MANUAL: Guide = validateGuide(bundledManual) as Guide;
+export const OPERATOR_MANUAL: OperatorGuide = validateGuide(bundledManual, { allowImages: true }) as OperatorGuide;
 
 /**
  * Every Settings screen and the manual page its "?" opens. A screen is a section tab, or a section tab and one of
@@ -47,10 +47,10 @@ export const SCREEN_HELP = {
 
 export type HelpScreen = keyof typeof SCREEN_HELP;
 
-export function manualPage(slug: string): GuidePage | null {
+export function manualPage(slug: string): OperatorGuidePage | null {
     return OPERATOR_MANUAL?.guides.find(g => g.slug === slug) ?? null;
 }
 
-export function helpPageFor(screen: HelpScreen): GuidePage | null {
+export function helpPageFor(screen: HelpScreen): OperatorGuidePage | null {
     return manualPage(SCREEN_HELP[screen]);
 }

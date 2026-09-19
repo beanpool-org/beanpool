@@ -9,14 +9,14 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 ## The limits
 
-![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
-
 - **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Community and federation traffic, and Settings itself, are not counted.
 - **Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device and checking names.
 - **Settings**: 300 requests a minute per internet address.
 - **Group and event chats**: 30 lines a minute per member.
 - **Checking an invite code** before joining: 30 a minute per internet address.
 - **Reports**: 10 an hour per member.
+
+![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
 
 ## The admin password brake
 

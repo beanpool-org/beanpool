@@ -70,15 +70,26 @@ describe('Manual in Settings', () => {
         await user.click(within(manualDialog).getByRole('button', { name: /Enlarge: The Access and Security screen in Settings/ }));
         const lightbox = screen.getByRole('dialog', { name: 'The Access and Security screen in Settings' });
         expect(lightbox).toBeInTheDocument();
-        expect(within(lightbox).getByRole('button', { name: 'Close enlarged image' })).toBeInTheDocument();
+        const closeBtn = within(lightbox).getByRole('button', { name: 'Close enlarged image' });
+        expect(closeBtn).toBeInTheDocument();
+        expect(closeBtn.className).toContain('min-h-[48px]');
+        expect(closeBtn.className).toContain('min-w-[48px]');
+
+        // Image fills width and has no max-h-[70vh] constraint
+        const lightboxImg = within(lightbox).getByRole('img', { name: 'The Access and Security screen in Settings' });
+        expect(lightboxImg.className).toContain('w-full');
+        expect(lightboxImg.className).not.toContain('max-h-[70vh]');
 
         // Escape closes the lightbox first, leaving manual open
         await user.keyboard('{Escape}');
         expect(screen.queryByRole('dialog', { name: 'The Access and Security screen in Settings' })).not.toBeInTheDocument();
         expect(screen.getByRole('dialog', { name: 'Operator manual' })).toBeInTheDocument();
 
+        // There is no separate "Enlarge 🔍" button in the figcaption (image itself is the button)
+        expect(within(manualDialog).queryByRole('button', { name: 'Enlarge 🔍' })).not.toBeInTheDocument();
+
         // Open lightbox again and close with Close button
-        await user.click(within(manualDialog).getByRole('button', { name: 'Enlarge 🔍' }));
+        await user.click(within(manualDialog).getByRole('button', { name: /Enlarge: The Access and Security screen in Settings/ }));
         const lightbox2 = screen.getByRole('dialog', { name: 'The Access and Security screen in Settings' });
         await user.click(within(lightbox2).getByRole('button', { name: 'Close enlarged image' }));
         expect(screen.queryByRole('dialog', { name: 'The Access and Security screen in Settings' })).not.toBeInTheDocument();

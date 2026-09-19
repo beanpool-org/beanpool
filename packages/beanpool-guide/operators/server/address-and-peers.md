@@ -9,11 +9,11 @@ related: what-the-server-sees, rate-limits, updates-and-health, backups-and-repl
 
 **Appliance & Data**, then **Public Address**. Members' apps need an address to reach your server.
 
-![Public Address configuration in Settings](images/appliance-network.webp)
-
 - You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.
 - The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.
 - The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away.
+
+![Public Address configuration in Settings](images/appliance-network.webp)
 
 You can also use your own domain name and certificate. BeanPool does not need to be involved.
 
@@ -29,11 +29,11 @@ By default your server tells the BeanPool directory about itself every 12 hours:
 
 **Gateway & Peers** has the gateway switches:
 
-![Gateway and Peers settings in Settings](images/appliance-gateway.webp)
-
 - turn the market, messages, links with other communities, invites or the web app off for everyone;
 - the rate limit (see Rate limits);
 - which other websites may call your server.
+
+![Gateway and Peers settings in Settings](images/appliance-gateway.webp)
 
 Turning a feature off affects every member at once. Tell them first.
 

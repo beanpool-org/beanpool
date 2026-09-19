@@ -38,7 +38,7 @@ function checkInline(file, line, text) {
 }
 
 /** Parse one guide file. `file` is only used in error messages. */
-export function parseGuideMarkdown(source, file = 'guide.md') {
+export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = false } = {}) {
     const lines = source.replace(/\r\n/g, '\n').split('\n');
     if (lines[0] !== '---') fail(file, 1, 'must start with front matter (---)');
     const meta = {};
@@ -93,6 +93,7 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
         }
         const linkedImg = /^\[!\[([^\]]*)\]\(([^)]+)\)\]\(([^)]+)\)$/.exec(line.trim());
         if (linkedImg) {
+            if (!allowImages) fail(file, n, "images are only allowed in the operator manual, not in the members' guide (the apps cannot show them)");
             flush();
             const alt = linkedImg[1].trim();
             const src = linkedImg[2].trim();
@@ -105,6 +106,7 @@ export function parseGuideMarkdown(source, file = 'guide.md') {
         }
         const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
         if (img) {
+            if (!allowImages) fail(file, n, "images are only allowed in the operator manual, not in the members' guide (the apps cannot show them)");
             flush();
             const alt = img[1].trim();
             const src = img[2].trim();
@@ -143,7 +145,7 @@ export function contentHash(content) {
  * exactly the pages the manifest lists for it, one file per page named <slug>.md. The operator manual
  * (operators/) is read the same way with `aboutSection: null`: it has no section of concept guides.
  */
-export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
+export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION, allowImages = false } = {}) {
     const manifest = JSON.parse(fs.readFileSync(path.join(contentDir, 'manifest.json'), 'utf8'));
     if (!Number.isInteger(manifest.version) || manifest.version < 1) throw new Error('manifest.json: "version" must be a whole number, 1 or more');
     if (!Array.isArray(manifest.sections) || manifest.sections.length === 0) throw new Error('manifest.json: "sections" lists the sections');
@@ -171,7 +173,7 @@ export function loadGuide(contentDir, { aboutSection = ABOUT_SECTION } = {}) {
         }
         for (const slug of sec.pages) {
             const file = `${sec.id}/${slug}.md`;
-            const g = parseGuideMarkdown(fs.readFileSync(path.join(dir, `${slug}.md`), 'utf8'), file);
+            const g = parseGuideMarkdown(fs.readFileSync(path.join(dir, `${slug}.md`), 'utf8'), file, { allowImages });
             if (g.slug !== slug) throw new Error(`${file}: slug "${g.slug}" must match the file name`);
             if (guides.some(x => x.slug === slug)) throw new Error(`${file}: another page already uses the slug "${slug}"`);
             // Keep the key order stable: it is part of the bytes both apps and the website carry.

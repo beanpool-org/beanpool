@@ -37,11 +37,11 @@ So others can read how each member voted. Whoever runs the machine can copy the 
 
 ## What admins see in Settings
 
-![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
-
 - The logs, with passwords, keys and 12-word phrases removed before they are written.
 - The list of devices connected right now, with their internet address, device type and member name.
 - Reports, and the people they are about.
+
+![Diagnostics and system activity visible to admins in Settings](images/appliance-diagnostics.webp)
 
 ## What your server sends elsewhere
 

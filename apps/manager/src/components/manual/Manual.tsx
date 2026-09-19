@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { searchGuide, splitBold, type GuideBlock, type GuidePage } from '@beanpool/core';
+import { searchGuide, splitBold, type OperatorGuideBlock, type OperatorGuidePage } from '@beanpool/core';
 import { OPERATOR_MANUAL, SCREEN_HELP, helpPageFor, manualPage, type HelpScreen } from '../../lib/manual';
 
 /**
@@ -101,7 +101,7 @@ function StandaloneImage({
     onEnlarge,
     inGrid = false,
 }: {
-    img: Extract<GuideBlock, { type: 'img' }>;
+    img: Extract<OperatorGuideBlock, { type: 'img' }>;
     onEnlarge: (img: { src: string; alt: string }) => void;
     inGrid?: boolean;
 }) {
@@ -152,15 +152,8 @@ function StandaloneImage({
                     </span>
                 </div>
             </button>
-            <figcaption className="px-3 py-2 text-xs text-nature-400 border-t border-nature-800 bg-nature-900/80 flex items-center justify-between gap-2">
+            <figcaption className="px-3 py-2 text-xs text-nature-400 border-t border-nature-800 bg-nature-900/80">
                 <span className="leading-snug">{img.alt}</span>
-                <button
-                    type="button"
-                    onClick={() => onEnlarge({ src: img.src, alt: img.alt })}
-                    className="text-[11px] font-bold text-terra-400 hover:text-terra-300 ml-2 shrink-0 min-h-[28px] px-2 py-1 rounded bg-nature-800/60 border border-nature-700"
-                >
-                    Enlarge 🔍
-                </button>
             </figcaption>
         </figure>
     );
@@ -170,7 +163,7 @@ function LinkedImageCard({
     img,
     onOpen,
 }: {
-    img: Extract<GuideBlock, { type: 'img' }>;
+    img: Extract<OperatorGuideBlock, { type: 'img' }>;
     onOpen: (slug: string) => void;
 }) {
     return (
@@ -205,7 +198,7 @@ function ImageGroup({
     onOpen,
     onEnlarge,
 }: {
-    items: Extract<GuideBlock, { type: 'img' }>[];
+    items: Extract<OperatorGuideBlock, { type: 'img' }>[];
     onOpen: (slug: string) => void;
     onEnlarge: (img: { src: string; alt: string }) => void;
 }) {
@@ -227,12 +220,12 @@ function ImageGroup({
 }
 
 type GroupedBlock =
-    | { kind: 'block'; block: Exclude<GuideBlock, { type: 'img' }> }
-    | { kind: 'images'; items: Extract<GuideBlock, { type: 'img' }>[] };
+    | { kind: 'block'; block: Exclude<OperatorGuideBlock, { type: 'img' }> }
+    | { kind: 'images'; items: Extract<OperatorGuideBlock, { type: 'img' }>[] };
 
-function groupBlocks(blocks: GuideBlock[]): GroupedBlock[] {
+function groupBlocks(blocks: OperatorGuideBlock[]): GroupedBlock[] {
     const result: GroupedBlock[] = [];
-    let currentImgs: Extract<GuideBlock, { type: 'img' }>[] = [];
+    let currentImgs: Extract<OperatorGuideBlock, { type: 'img' }>[] = [];
 
     for (const b of blocks) {
         if (b.type === 'img') {
@@ -251,7 +244,7 @@ function groupBlocks(blocks: GuideBlock[]): GroupedBlock[] {
     return result;
 }
 
-function Block({ block }: { block: Exclude<GuideBlock, { type: 'img' }> }) {
+function Block({ block }: { block: Exclude<OperatorGuideBlock, { type: 'img' }> }) {
     if (block.type === 'ul') {
         return (
             <ul className="list-disc pl-5 my-3 space-y-1.5 text-[0.95rem] leading-relaxed text-nature-200">
@@ -264,7 +257,7 @@ function Block({ block }: { block: Exclude<GuideBlock, { type: 'img' }> }) {
     return <p className="text-[0.95rem] leading-relaxed text-nature-200 my-3"><Rich text={block.text} /></p>;
 }
 
-function PageButton({ page, onOpen, snippet }: { page: GuidePage; onOpen: (slug: string) => void; snippet?: string }) {
+function PageButton({ page, onOpen, snippet }: { page: OperatorGuidePage; onOpen: (slug: string) => void; snippet?: string }) {
     return (
         <li>
             <button
@@ -310,7 +303,7 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
         onNavigate(next);
     };
     const section = page ? OPERATOR_MANUAL.sections.find(s => s.id === page.section) : null;
-    const related = page ? page.related.map(manualPage).filter((p): p is GuidePage => p !== null) : [];
+    const related = page ? page.related.map(manualPage).filter((p): p is OperatorGuidePage => p !== null) : [];
 
     return (
         <div
@@ -401,7 +394,7 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                                     <h2 id={`manual-${s.id}`} className="text-lg font-black text-white m-0">{s.title}</h2>
                                     <p className="text-sm text-nature-400 mt-1 mb-3">{s.summary}</p>
                                     <ul className="space-y-2.5">
-                                        {s.slugs.map(sl => manualPage(sl)).filter((p): p is GuidePage => p !== null)
+                                        {s.slugs.map(sl => manualPage(sl)).filter((p): p is OperatorGuidePage => p !== null)
                                             .map(p => <PageButton key={p.slug} page={p} onOpen={open} />)}
                                     </ul>
                                 </section>
@@ -421,31 +414,37 @@ export function ManualPanel({ slug, onNavigate, onClose }: { slug: string | null
                     role="dialog"
                     aria-modal="true"
                     aria-label={enlarged.alt || 'Enlarged image'}
-                    className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in"
+                    className="fixed inset-0 z-[120] bg-black/95 flex flex-col animate-in fade-in"
                     onClick={() => setEnlarged(null)}
                 >
                     <div
-                        className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center"
+                        className="w-full border-b border-nature-800 bg-nature-900/90 backdrop-blur-sm px-4 py-2 flex items-center justify-between gap-3 shrink-0"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="w-full flex items-center justify-between pb-2">
-                            <span className="text-xs font-bold text-nature-300 truncate max-w-[80%]">
-                                {enlarged.alt}
-                            </span>
-                            <button
-                                type="button"
-                                onClick={() => setEnlarged(null)}
-                                aria-label="Close enlarged image"
-                                className="min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-lg bg-nature-900 border border-nature-700 text-white font-bold text-sm hover:bg-nature-800 flex items-center gap-1 shrink-0"
-                            >
-                                ✕ Close
-                            </button>
-                        </div>
-                        <div className="overflow-auto max-h-[75vh] w-full rounded-xl border border-nature-800 bg-nature-950 p-2 shadow-2xl flex items-center justify-center">
+                        <span className="text-xs sm:text-sm font-bold text-nature-200 truncate max-w-[80%]">
+                            {enlarged.alt}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setEnlarged(null)}
+                            aria-label="Close enlarged image"
+                            className="min-h-[48px] min-w-[48px] px-3 py-2 rounded-lg bg-nature-800 border border-nature-700 text-white font-bold text-sm hover:bg-nature-700 flex items-center justify-center gap-1.5 shrink-0"
+                        >
+                            ✕ Close
+                        </button>
+                    </div>
+                    <div
+                        className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-6 flex flex-col items-center"
+                        onClick={() => setEnlarged(null)}
+                    >
+                        <div
+                            className="w-full max-w-4xl my-auto"
+                            onClick={(e) => e.stopPropagation()}
+                        >
                             <img
                                 src={resolveImageSrc(enlarged.src)}
                                 alt={enlarged.alt}
-                                className="max-w-full max-h-[70vh] w-auto h-auto object-contain rounded-lg"
+                                className="w-full h-auto block rounded-lg shadow-2xl border border-nature-800"
                             />
                         </div>
                     </div>

@@ -25,10 +25,13 @@ export const GUIDE_ABOUT_SECTION = 'about';
 
 export type GuideBlock =
     | { type: 'h2' | 'h3' | 'p'; text: string }
-    | { type: 'ul'; items: string[] }
+    | { type: 'ul'; items: string[] };
+
+export type OperatorGuideBlock =
+    | GuideBlock
     | { type: 'img'; src: string; alt: string; href?: string };
 
-export interface GuidePage {
+export interface GuidePage<B = GuideBlock> {
     slug: string;
     title: string;
     summary: string;
@@ -38,8 +41,10 @@ export interface GuidePage {
     related: string[];
     /** A YouTube video id from the Learn lane that shows this task, if one has been made. */
     video?: string;
-    blocks: GuideBlock[];
+    blocks: B[];
 }
+
+export type OperatorGuidePage = GuidePage<OperatorGuideBlock>;
 
 export interface GuideSection {
     id: string;
@@ -49,13 +54,15 @@ export interface GuideSection {
     slugs: string[];
 }
 
-export interface Guide {
+export interface Guide<P = GuidePage> {
     schema: number;
     version: number;
     hash: string;
     sections: GuideSection[];
-    guides: GuidePage[];
+    guides: P[];
 }
+
+export type OperatorGuide = Guide<OperatorGuidePage>;
 
 /** Where the guide on screen came from. */
 export type GuideSource = 'bundled' | 'cached' | 'website';
@@ -77,16 +84,21 @@ const VIDEO_RE = /^[A-Za-z0-9_-]{6,20}$/;
 
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 
-/** A guide object, or null if anything about it is off. Never throws. */
-export function validateGuide(raw: unknown): Guide | null {
+/**
+ * A guide object, or null if anything about it is off. Never throws. Picture blocks are for the operator manual
+ * only: the members' guide rejects them, so the apps' readers never see one.
+ */
+export function validateGuide(raw: unknown, options?: { allowImages?: false }): Guide | null;
+export function validateGuide(raw: unknown, options: { allowImages: true }): OperatorGuide | null;
+export function validateGuide(raw: unknown, { allowImages = false }: { allowImages?: boolean } = {}): OperatorGuide | null {
     try {
-        return validate(raw);
+        return validate(raw, allowImages);
     } catch {
         return null;
     }
 }
 
-function validate(raw: unknown): Guide | null {
+function validate(raw: unknown, allowImages: boolean): OperatorGuide | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const g = raw as Record<string, unknown>;
     if (g.schema !== GUIDE_SCHEMA) return null;
@@ -95,7 +107,7 @@ function validate(raw: unknown): Guide | null {
     if (!Array.isArray(g.guides) || g.guides.length === 0 || g.guides.length > MAX_GUIDES) return null;
     if (!Array.isArray(g.sections) || g.sections.length === 0 || g.sections.length > MAX_SECTIONS) return null;
 
-    const guides: GuidePage[] = [];
+    const guides: OperatorGuidePage[] = [];
     const seen = new Set<string>();
     for (const p of g.guides as unknown[]) {
         if (!p || typeof p !== 'object') return null;
@@ -108,7 +120,7 @@ function validate(raw: unknown): Guide | null {
         if (!page.related.every(r => typeof r === 'string' && SLUG_RE.test(r))) return null;
         if (page.video !== undefined && (typeof page.video !== 'string' || !VIDEO_RE.test(page.video))) return null;
         if (!Array.isArray(page.blocks) || page.blocks.length === 0 || page.blocks.length > MAX_BLOCKS) return null;
-        const blocks: GuideBlock[] = [];
+        const blocks: OperatorGuideBlock[] = [];
         for (const b of page.blocks as unknown[]) {
             if (!b || typeof b !== 'object') return null;
             const block = b as Record<string, unknown>;
@@ -120,17 +132,18 @@ function validate(raw: unknown): Guide | null {
                 if (!isText(block.text, MAX_TEXT)) return null;
                 blocks.push({ type: block.type, text: block.text });
             } else if (block.type === 'img') {
+                if (!allowImages) return null;
                 if (typeof block.src !== 'string' || !block.src || block.src.length > MAX_TEXT) return null;
                 if (typeof block.alt !== 'string' || !block.alt || block.alt.length > MAX_TEXT) return null;
                 if (block.href !== undefined && (typeof block.href !== 'string' || !SLUG_RE.test(block.href))) return null;
-                const imgBlock: GuideBlock = { type: 'img', src: block.src, alt: block.alt };
+                const imgBlock: OperatorGuideBlock = { type: 'img', src: block.src, alt: block.alt };
                 if (block.href) (imgBlock as { href?: string }).href = block.href;
                 blocks.push(imgBlock);
             } else {
                 return null;
             }
         }
-        const out: GuidePage = {
+        const out: OperatorGuidePage = {
             slug: page.slug, title: page.title, summary: page.summary, section: page.section,
             related: [...(page.related as string[])], blocks,
         };
@@ -217,27 +230,27 @@ export async function refreshGuideFromWebsite(
     }
 }
 
-export function findGuidePage(guide: Guide, slug: string): GuidePage | null {
+export function findGuidePage<P extends GuidePage<OperatorGuideBlock> = GuidePage>(guide: Guide<P>, slug: string): P | null {
     return guide.guides.find(g => g.slug === slug) ?? null;
 }
 
-export function findGuideSection(guide: Guide, id: string): GuideSection | null {
+export function findGuideSection(guide: Guide<unknown>, id: string): GuideSection | null {
     return guide.sections.find(s => s.id === id) ?? null;
 }
 
 /** The pages of a section, in its order. */
-export function sectionPages(guide: Guide, section: GuideSection): GuidePage[] {
-    return section.slugs.map(s => findGuidePage(guide, s)).filter((p): p is GuidePage => p !== null);
+export function sectionPages<P extends GuidePage<OperatorGuideBlock> = GuidePage>(guide: Guide<P>, section: GuideSection): P[] {
+    return section.slugs.map(s => findGuidePage(guide, s)).filter((p): p is P => p !== null);
 }
 
 /** The how-to manual's sections: every section but the one holding the four guides. */
-export function manualSections(guide: Guide): GuideSection[] {
+export function manualSections(guide: Guide<unknown>): GuideSection[] {
     return guide.sections.filter(s => s.id !== GUIDE_ABOUT_SECTION);
 }
 
 /** The pages a page lists under "Related", skipping any that are missing. */
-export function relatedPages(guide: Guide, page: GuidePage): GuidePage[] {
-    return page.related.map(s => findGuidePage(guide, s)).filter((p): p is GuidePage => p !== null);
+export function relatedPages<P extends GuidePage<OperatorGuideBlock> = GuidePage>(guide: Guide<P>, page: P): P[] {
+    return page.related.map(s => findGuidePage(guide, s)).filter((p): p is P => p !== null);
 }
 
 /** "a **b** c" → [{text:'a ',bold:false},{text:'b',bold:true},{text:' c',bold:false}]. */
@@ -275,14 +288,14 @@ function fold(s: string): string {
 const SEPARATORS = /[\s!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u206f\u3000-\u303f]+/;
 const words = (s: string) => fold(s).split(SEPARATORS).filter(Boolean);
 
-export interface GuideSearchResult {
-    page: GuidePage;
+export interface GuideSearchResult<P = GuidePage> {
+    page: P;
     score: number;
     /** A short piece of the page around the first match, for the result row. */
     snippet: string;
 }
 
-function blockTexts(page: GuidePage): Array<{ text: string; heading: boolean }> {
+function blockTexts(page: { blocks: readonly OperatorGuideBlock[] }): Array<{ text: string; heading: boolean }> {
     const out: Array<{ text: string; heading: boolean }> = [];
     for (const b of page.blocks) {
         if (b.type === 'ul') b.items.forEach(t => out.push({ text: t, heading: false }));
@@ -301,10 +314,14 @@ function snippetAround(text: string, term: string, max = 110): string {
 }
 
 /** Pages matching every word of `query`, best first. An empty query finds nothing. */
-export function searchGuide(guide: Guide, query: string, limit = 20): GuideSearchResult[] {
+export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>(
+    guide: Guide<P>,
+    query: string,
+    limit = 20,
+): Array<GuideSearchResult<P>> {
     const terms = [...new Set(words(query).filter(t => t.length >= 2))].slice(0, 8);
     if (terms.length === 0) return [];
-    const results: GuideSearchResult[] = [];
+    const results: Array<GuideSearchResult<P>> = [];
     for (const page of guide.guides) {
         const title = words(page.title);
         const summary = words(page.summary);

@@ -19,10 +19,10 @@ The report form tells members their note goes to moderators. In practice it goes
 
 **People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them.
 
-![The Triage and Moderation screen in Settings](images/people-moderation.webp)
-
 - The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.
 - It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.
+
+![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
 ## What each action does
 

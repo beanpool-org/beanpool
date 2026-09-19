@@ -9,9 +9,11 @@ An enterprise is a shared project with its own account: a community garden, a to
 
 ## Setting one up
 
-**Shared Projects & Economy**, then **Enterprises**. Owners and admins can:
+**Shared Projects & Economy**, then **Enterprises**.
 
 ![The Enterprises screen in Settings](images/economy-enterprises.webp)
+
+Owners and admins can:
 
 - make an enterprise. One made here starts with a credit line of 0;
 - set its **working capital ceiling**, the most it can owe;

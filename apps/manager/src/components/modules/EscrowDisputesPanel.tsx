@@ -644,7 +644,7 @@ export function EscrowDisputesPanel({
                             <button
                                 onClick={handleCloseResolveModal}
                                 disabled={resolving}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-300 text-xs font-bold transition"
+                                className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-300 text-xs font-bold transition"
                             >
                                 Cancel
                             </button>

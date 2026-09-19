@@ -248,7 +248,7 @@ export function PruneBranchModal({
                 {/* Type-To-Confirm Safeguard */}
                 <div className="space-y-2">
                     <label htmlFor="prune-branch-confirm-input" className="block text-xs font-bold text-nature-300">
-                        To confirm, type the branch root name <span className="text-terra-400 font-mono font-black">&quot;{rootName}&quot;</span> below:
+                        To confirm, type the branch root name <span className="text-terra-400 font-mono font-black break-all">&quot;{rootName}&quot;</span> below:
                     </label>
                     <input
                         id="prune-branch-confirm-input"

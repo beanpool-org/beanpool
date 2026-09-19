@@ -136,14 +136,14 @@ export function OffboardMemberWizard({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-4">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-10 h-10 rounded-2xl bg-red-950/60 border border-red-800/80 flex items-center justify-center text-xl">
+                        <div className="w-10 h-10 shrink-0 rounded-2xl bg-red-950/60 border border-red-800/80 flex items-center justify-center text-xl">
                             🚪
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-white leading-tight">
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-bold text-white leading-tight break-words">
                                 Offboard Member
                             </h3>
-                            <p className="text-xs text-nature-400 font-mono mt-0.5">
+                            <p className="text-xs text-nature-400 font-mono mt-0.5 break-all">
                                 @{member.callsign} · {member.publicKey.slice(0, 10)}...
                             </p>
                         </div>
@@ -341,7 +341,7 @@ export function OffboardMemberWizard({
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold text-xs"
+                                className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold text-xs"
                             >
                                 Cancel
                             </button>

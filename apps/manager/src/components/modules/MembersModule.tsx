@@ -1041,7 +1041,7 @@ export function MembersModule({
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
+                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
                                 </p>
                             </div>
                             <button

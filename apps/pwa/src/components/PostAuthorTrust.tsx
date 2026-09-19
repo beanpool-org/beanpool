@@ -1,37 +1,34 @@
 /**
  * PostAuthorTrust — Hybrid Trust Display for PWA
  *
- * Shows an avatar + 4-tier energy badge + star rating.
+ * Shows an avatar + tier badge + star rating.
  * Avatar shows initials fallback or real image.
  * Clicking the component opens the PublicProfileModal.
  *
- * Trust Tier Thresholds (based on Energy Cycled):
- *   0+     → 🌱 New      (gray)
- *   1000+  → 🌿 Member   (indigo)
- *   5000+  → 🌳 Trusted  (emerald)
- *   10000+ → ✨ Elder    (gold)
+ * The tier is the node's own (@beanpool/core tierForCredit). `energyCycled` is the post's
+ * authorEnergyCycled, which the node fills with the author's tier credit (vouch + earned + granted),
+ * so the badge matches the tier on the author's own Ledger. Only the colours live here.
  */
 
 import { useState } from 'react';
+import { tierForCredit, type TierLevel, type TierName } from '@beanpool/core';
 
 import { resolveAvatarUrl } from '../lib/avatar';
 
-const TRUST_TIERS = [
-    { min: 10000, emoji: '⛰️', label: 'Elder',   color: 'text-amber-500',   bg: 'bg-amber-500/15',   border: 'border-amber-500/30' },
-    { min: 5000,  emoji: '🌳', label: 'Trusted', color: 'text-emerald-600', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-    { min: 1000,  emoji: '🌿', label: 'Member',  color: 'text-indigo-500',  bg: 'bg-indigo-500/10',  border: 'border-indigo-500/20' },
-    { min: 0,     emoji: '🌱', label: 'New',     color: 'text-nature-400',  bg: 'bg-nature-500/10',  border: 'border-nature-500/20' },
-] as const;
+const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string }> = {
+    Newcomer: { color: 'text-nature-600 dark:text-nature-300', bg: 'bg-nature-500/10', border: 'border-nature-500/20' },
+    Resident: { color: 'text-blue-600 dark:text-blue-400',     bg: 'bg-blue-500/10',   border: 'border-blue-500/20' },
+    Steward:  { color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
+    Elder:    { color: 'text-amber-600 dark:text-amber-500',   bg: 'bg-amber-500/15',  border: 'border-amber-500/30' },
+};
 
-export function getTrustTier(energyCycled: number = 0) {
-    for (const tier of TRUST_TIERS) {
-        if (energyCycled >= tier.min) return tier;
-    }
-    return TRUST_TIERS[TRUST_TIERS.length - 1];
+export function getTrustTier(energyCycled: number = 0): TierLevel & { label: TierName; color: string; bg: string; border: string } {
+    const tier = tierForCredit(energyCycled);
+    return { ...tier, label: tier.name, ...TIER_LOOK[tier.name] };
 }
 
 export function isElder(energyCycled: number = 0): boolean {
-    return energyCycled >= 10000;
+    return tierForCredit(energyCycled).name === 'Elder';
 }
 
 interface PostAuthorTrustProps {

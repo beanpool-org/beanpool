@@ -33,7 +33,7 @@ import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
-import { approximateLocation, type AddressResult } from '@beanpool/core';
+import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
@@ -1030,7 +1030,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
             const typeLabel = post.type === 'offer' ? 'Offer' : 'Need';
             // Elder Glow: highlight established community members
-            const hasElderGlow = (post.authorEnergyCycled ?? 0) >= 10000;
+            const hasElderGlow = tierForCredit(post.authorEnergyCycled ?? 0).name === 'Elder';
             
             let html: string;
             if (useModernMarkers) {
@@ -1707,7 +1707,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             {previewPost.title}
                         </span>
                         <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 truncate transition-colors">
-                            {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{(previewPost.authorEnergyCycled ?? 0) >= 10000 ? ' ⛰️ Elder' : ''}
+                            {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? ' ⛰️ Elder' : ''}
                         </span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}

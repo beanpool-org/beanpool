@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { pruneInviteBranch, getTfaSessionToken } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
@@ -352,12 +353,11 @@ export function AncestryTreePanel({
         const isFrozen = standing === 'FROZEN' || pk.startsWith('frozen-');
         const isActive = !isPruned && !isFrozen;
 
-        // Tier badge
+        // Tier badge — the node's own tier (admin data carries it). Only when a node sends none, fall back to
+        // the core table on earnedCredit, which on the admin feed is the granted lane alone.
+        const nodeTierIdx = tierIndexForName(typeof m?.tier === 'string' ? m.tier : undefined);
         const earnedCredit = typeof m?.earnedCredit === 'number' ? m.earnedCredit : 0;
-        const tierBadge = earnedCredit >= 1320 ? 'Elder'
-            : earnedCredit >= 600 ? 'Steward'
-            : earnedCredit >= 200 ? 'Resident'
-            : 'Newcomer';
+        const tier = nodeTierIdx >= 0 ? TIER_LEVELS[nodeTierIdx] : tierForCredit(earnedCredit);
 
         // Badges
         const canVouch = Boolean(m?.canVouch);
@@ -430,7 +430,7 @@ export function AncestryTreePanel({
 
                             {/* Tier Badge */}
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
-                                {tierBadge === 'Elder' ? '⛰️ Elder' : tierBadge === 'Steward' ? '🏛️ Steward' : tierBadge === 'Resident' ? '🏠 Resident' : '🥚 Newcomer'}
+                                {tier.emoji} {tier.name}
                             </span>
 
                             {/* Voucher Pill */}
@@ -482,7 +482,7 @@ export function AncestryTreePanel({
 
                             {/* Tier Badge */}
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
-                                {tierBadge === 'Elder' ? '⛰️ Elder' : tierBadge === 'Steward' ? '🏛️ Steward' : tierBadge === 'Resident' ? '🏠 Resident' : '🥚 Newcomer'}
+                                {tier.emoji} {tier.name}
                             </span>
 
                             {/* Voucher Pill */}

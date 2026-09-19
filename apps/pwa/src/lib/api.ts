@@ -689,11 +689,10 @@ export async function getConversationMessages(conversationId: string, limit = 50
 
 // ===================== LEDGER =====================
 
+/** The node's tier for this member — a merit badge that gates nothing (see @beanpool/core getTier). */
 export interface TierInfo {
     name: string;
     emoji: string;
-    canGift: boolean;
-    canInvite: boolean;
 }
 
 export interface BalanceInfo {

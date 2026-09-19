@@ -253,11 +253,12 @@ async function main() {
 
         const handshakeTokenAlice = aliceSolveBody.handshakeToken;
 
-        // Polling resolved challenge returns handshakeToken
+        // Polling a resolved challenge shows its status only: the id alone must never yield the token
+        // (test-challenge-token-leak.ts).
         const pollResolved = await fetch(`${base}/api/local/admin/auth/challenge/${chalBody.challengeId}`);
         const pollResolvedBody: any = await pollResolved.json();
         assert(pollResolvedBody.status === 'resolved', 'Challenge status is now resolved');
-        assert(pollResolvedBody.handshakeToken === handshakeTokenAlice, 'Polled challenge returns correct handshakeToken');
+        assert(pollResolvedBody.handshakeToken === undefined, 'Polled challenge does not return the handshakeToken');
 
         // ── 2. Handshake Token Exchange for Session ──
         console.log('Testing handshake token exchange for session...');

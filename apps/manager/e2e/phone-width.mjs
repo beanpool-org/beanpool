@@ -11,8 +11,8 @@
  *   pnpm --filter @beanpool/manager test:phone-width
  *
  * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: its overlay covers the
- * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no text runs
- * under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
+ * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no controls
+ * overlap each other, no text runs under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
  * each close it too, and Back does not leave Settings.
  *
@@ -235,6 +235,32 @@ try {
                     const box = await boxOverflow(card, CONTROLS, { skipScrollers: true });
                     if (box.outside.length) fail(`${box.outside.length} controls outside the card\n      ${box.outside.join('\n      ')}`);
                     else console.log(`  ✓ ${modal.name} ${at}: every control inside the card`);
+                    // Nor do controls overlap each other (e.g. an avatar field under a text input).
+                    checks++;
+                    const controlOverlaps = await card.evaluate((c, sel) => {
+                        const els = [...c.querySelectorAll(sel)].filter(el => {
+                            const r = el.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0;
+                        });
+                        const pairs = [];
+                        for (let i = 0; i < els.length; i++) {
+                            for (let j = i + 1; j < els.length; j++) {
+                                const a = els[i], b = els[j];
+                                if (a.contains(b) || b.contains(a)) continue;
+                                const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+                                const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+                                const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+                                if (ox > 8 && oy > 8) {
+                                    const la = (a.getAttribute('aria-label') || a.getAttribute('placeholder') || a.textContent || '').trim().slice(0, 30);
+                                    const lb = (b.getAttribute('aria-label') || b.getAttribute('placeholder') || b.textContent || '').trim().slice(0, 30);
+                                    pairs.push(`<${a.tagName.toLowerCase()}> "${la}" (${Math.round(ra.left)}–${Math.round(ra.right)}, ${Math.round(ra.top)}–${Math.round(ra.bottom)}) overlaps <${b.tagName.toLowerCase()}> "${lb}" (${Math.round(rb.left)}–${Math.round(rb.right)}, ${Math.round(rb.top)}–${Math.round(rb.bottom)})`);
+                                }
+                            }
+                        }
+                        return pairs;
+                    }, CONTROLS);
+                    if (controlOverlaps.length) fail(`${controlOverlaps.length} overlapping controls\n      ${controlOverlaps.join('\n      ')}`);
+                    else console.log(`  ✓ ${modal.name} ${at}: no controls overlap`);
                     // Nor does any text run past the card's edge (a name that cannot wrap is cut off there). Text in a
                     // box that clips or scrolls it (an ellipsis, a scrolling table) is that box's business.
                     checks++;

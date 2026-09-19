@@ -92,6 +92,10 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 - *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /
   SFSafariViewController. The token goes in the **fragment**, so it never reaches a server, proxy log or
   Referer. `/settings` wipes it from the address bar, then POSTs it once to `/api/local/admin/auth/exchange`.
+- *Who gets the token (fixed 2026-09-20, Fable's review of #974):* only the party that proved the key, in the
+  `verify-challenge` response. The challenge keeps no token, and `GET /auth/challenge/:id` answers status
+  only. It used to return the token once signed, so anyone who saw the id could redeem it first. A browser
+  waiting on a phone must be bound by a secret only it holds (the QR pairing), never by the challenge id.
 - *Android app links* claim only `/` on node hosts (where `/?invite=` lives) and `/auth/*` on beanpool.org.
   That means `/settings`, `/app` and the website stay in the browser.
 - *Web app (PWA):* shows the same owner/admin-only entry, as a plain link to `/settings`, which then asks

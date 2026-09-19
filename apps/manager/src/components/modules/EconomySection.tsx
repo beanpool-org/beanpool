@@ -782,7 +782,7 @@ export function EconomySection({
                                         key={p.name}
                                         type="button"
                                         onClick={() => handleApplyPreset(p)}
-                                        className="p-2.5 rounded-xl bg-nature-950 hover:bg-nature-800/80 border border-nature-800 text-left transition-all group"
+                                        className="p-2.5 rounded-xl bg-nature-950 hover:bg-nature-800/80 border border-nature-800 text-left transition-all group min-h-[48px]"
                                     >
                                         <div className="flex items-center gap-1.5 text-xs font-bold text-white group-hover:text-terra-300">
                                             <Avatar
@@ -800,14 +800,14 @@ export function EconomySection({
                         </div>
 
                         <form onSubmit={handleCreateEnterprise} className="space-y-3 pt-2">
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className="col-span-1">
+                            <div className="space-y-3">
+                                <div>
                                     <label className="block text-xs font-bold text-nature-300 mb-1">Avatar</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2.5">
                                         <Avatar
                                             src={newEnterpriseAvatar}
                                             alt={newEnterpriseName || 'Enterprise'}
-                                            className="w-10 h-10 rounded-xl bg-nature-950 border border-nature-700 flex items-center justify-center text-lg overflow-hidden shrink-0"
+                                            className="w-12 h-12 rounded-xl bg-nature-950 border border-nature-700 flex items-center justify-center text-xl overflow-hidden shrink-0"
                                             fallbackGlyph="🌾"
                                         />
                                         <input
@@ -815,11 +815,12 @@ export function EconomySection({
                                             value={newEnterpriseAvatar}
                                             onChange={(e) => setNewEnterpriseAvatar(e.target.value)}
                                             placeholder="🌾"
-                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-sm text-white focus:outline-none focus:border-terra-500"
+                                            aria-label="Avatar"
+                                            className="w-16 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-2 py-2 text-center text-base text-white focus:outline-none focus:border-terra-500"
                                         />
                                     </div>
                                 </div>
-                                <div className="col-span-3">
+                                <div>
                                     <label className="block text-xs font-bold text-nature-300 mb-1">Enterprise Name</label>
                                     <input
                                         type="text"
@@ -827,7 +828,7 @@ export function EconomySection({
                                         onChange={(e) => setNewEnterpriseName(e.target.value)}
                                         placeholder="e.g. Community Eggs, Tool Shed, Bakery"
                                         required
-                                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        className="w-full min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
                                     />
                                 </div>
                             </div>
@@ -839,7 +840,7 @@ export function EconomySection({
                                     onChange={(e) => setNewEnterprisePurpose(e.target.value)}
                                     placeholder="What does this enterprise produce or provide for the community?"
                                     rows={2}
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 resize-none"
+                                    className="w-full min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 resize-none"
                                 />
                             </div>
 
@@ -853,7 +854,7 @@ export function EconomySection({
                                     value={newEnterpriseCeiling}
                                     onChange={(e) => setNewEnterpriseCeiling(e.target.value)}
                                     placeholder="e.g. 200 (surplus above this automatically sweeps to Commons)"
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
+                                    className="w-full min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
                                 />
                                 <p className="text-[10px] text-nature-400 mt-1">
                                     Rule 7: Enterprise retains operating reserves up to ceiling; surplus returns to Commons.
@@ -867,7 +868,7 @@ export function EconomySection({
                                 <select
                                     value={newEnterpriseKeeper}
                                     onChange={(e) => setNewEnterpriseKeeper(e.target.value)}
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
+                                    className="w-full min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500"
                                 >
                                     <option value="">None (assign keeper later)</option>
                                     {members.map((m, idx) => {
@@ -890,14 +891,14 @@ export function EconomySection({
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="px-4 py-2 rounded-xl bg-nature-800 text-xs font-bold text-nature-300 hover:text-white"
+                                    className="min-h-[48px] px-4 py-2 rounded-xl bg-nature-800 text-xs font-bold text-nature-300 hover:text-white"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={creatingEnterprise}
-                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                    className="min-h-[48px] px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
                                 >
                                     {creatingEnterprise ? 'Creating...' : 'Create Enterprise'}
                                 </button>

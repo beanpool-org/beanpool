@@ -150,7 +150,10 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
 
 /**
  * GET /api/local/admin/auth/challenge/:challengeId
- * Polled by desktop browser waiting for mobile app challenge signature.
+ * Status only: pending, resolved or expired. It never returns the handshake token, the signer or the role.
+ * The id is not a secret worth a sign-in (it travels in a QR or a log line), and the token already goes to the
+ * one party that proved the key, in the verify-challenge response. A browser waiting on a phone uses the
+ * browser-bound pairing instead (settings-signin-pairing).
  */
 router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
     const c = getAdminChallenge(ctx.params.challengeId);
@@ -159,16 +162,7 @@ router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
         ctx.body = { error: 'Challenge not found or expired', status: 'expired' };
         return;
     }
-    if (c.status === 'pending') {
-        ctx.body = { status: 'pending', expiresAt: c.expiresAt };
-        return;
-    }
-    ctx.body = {
-        status: 'resolved',
-        handshakeToken: c.handshakeToken,
-        memberPubkey: c.memberPubkey,
-        role: c.role,
-    };
+    ctx.body = { status: c.status, expiresAt: c.expiresAt };
 });
 
 /**

@@ -515,7 +515,7 @@ export function AnalyticsModule({
 
             {/* NODE PEAK & THRESHOLD CAPACITY BREAKDOWN GRID */}
             <div className="space-y-4">
-                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800/80 pb-3">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800/80 pb-3">
                     <h3 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider m-0 min-w-0">
                         Node Capacity & Threshold Peak Breakdown
                     </h3>

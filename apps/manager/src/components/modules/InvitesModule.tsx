@@ -450,7 +450,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto"
                 >
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl my-8">
-                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-4">
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-4">
                             <div className="min-w-0">
                                 <h3 id="printable-sheet-title" className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>📄</span>

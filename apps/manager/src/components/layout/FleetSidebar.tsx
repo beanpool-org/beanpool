@@ -204,7 +204,7 @@ export function FleetSidebar({
                 : `w-72 bg-nature-900 border-r border-nature-800 ${isFleetMode ? 'flex' : 'hidden lg:flex'} flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none`}
         >
             {/* Header Brand */}
-            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between gap-2">
+            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between gap-2 lg:gap-0">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
                         className="w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"

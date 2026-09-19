@@ -101,7 +101,7 @@ export function AiServicesModule({ activeNode, contextData }: AiServicesModulePr
 
             {/* AI Provider Config */}
             <div className="bg-nature-950/60 border border-nature-800 p-5 rounded-2xl space-y-4 pt-4">
-                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
                     <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider min-w-0">
                         AI Provider Configuration
                     </h4>

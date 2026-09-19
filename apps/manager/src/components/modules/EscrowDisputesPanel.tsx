@@ -537,7 +537,7 @@ export function EscrowDisputesPanel({
                         className="m-auto bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
                     >
                         {/* Modal Header */}
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start justify-between gap-3 lg:gap-0">
                             <div className="space-y-1 min-w-0 flex-1">
                                 <h3 id="resolve-dialog-title" className="text-lg font-black text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span> Confirm Escrow Resolution

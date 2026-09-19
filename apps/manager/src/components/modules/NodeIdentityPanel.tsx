@@ -579,7 +579,7 @@ export function NodeIdentityPanel({
 
                 {/* Directory Publishing */}
                 <div className="pt-6 border-t border-nature-800/80 space-y-4">
-                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
                         <h4 className="text-sm font-bold text-white m-0 min-w-0">Directory Publishing</h4>
                         <a
                             href={resolveNodeApiUrl(activeNode.url, '/api/directory/info')}

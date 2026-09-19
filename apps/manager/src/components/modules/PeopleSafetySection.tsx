@@ -270,7 +270,7 @@ export function PeopleSafetySection({
                 <div className="space-y-6">
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
-                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-b border-nature-800 pb-3">
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⚠️</span>

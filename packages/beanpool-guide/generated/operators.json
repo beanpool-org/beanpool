@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 10,
-  "hash": "d0d92fcae110089e1b5f14166ba5474bae35926cf72e3f1f0a66bb8693d7ce18",
+  "version": 11,
+  "hash": "78c9b4cd67bfdae64d478656f1dfb8ccbd12cf9316208eb46a34fee2876b0f77",
   "sections": [
     {
       "id": "setup",
@@ -692,7 +692,7 @@
         {
           "type": "ul",
           "items": [
-            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was \"reviewed and kept\".",
+            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was \"reviewed and kept\". If its author had already taken it down, they are told instead that it \"is no longer up\".",
             "**Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.",
             "**Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.",
             "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it."
@@ -719,7 +719,7 @@
         },
         {
           "type": "p",
-          "text": "**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care."
+          "text": "**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: \"The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report.\" The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed."
         },
         {
           "type": "h2",
@@ -896,7 +896,7 @@
         },
         {
           "type": "p",
-          "text": "The notification, the chat line and the ledger memo name who ruled in words:"
+          "text": "The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:"
         },
         {
           "type": "ul",

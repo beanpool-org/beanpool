@@ -38,7 +38,7 @@ This is why a community needs more than one admin.
 
 ## What the two people see
 
-The notification, the chat line and the ledger memo name who ruled in words:
+The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:
 
 - **Signed in with your own key:** your callsign.
 - **Signed in with the admin password:** "a community admin".

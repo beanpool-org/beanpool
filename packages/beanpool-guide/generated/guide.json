@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 10,
-  "hash": "61f8ea8b4272cce19aaa3a7955c9c16b7cdf793059cffd1504bac4dc03502dee",
+  "version": 11,
+  "hash": "6e9631999b0e946aa9b6f1c75aa9f2ac5220d7a71490de3fcf8beb66519f794c",
   "sections": [
     {
       "id": "about",
@@ -3893,7 +3893,7 @@
         {
           "type": "ul",
           "items": [
-            "**A Market post or an event:** if they remove it, you get an alert: \"The post you reported was removed\". If they look at it and keep it, you are told that too.",
+            "**A Market post or an event:** if they remove it, you get an alert: \"The post you reported was removed\". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.",
             "**A Pulse post, an enterprise or a person:** you are not told the outcome in the app.",
             "Nobody is told who reported. Not the person you reported, and not anyone else who reported the same thing."
           ]
@@ -3905,6 +3905,10 @@
         {
           "type": "p",
           "text": "If one of your own posts is removed by the admins, you get an alert saying so, and why if they gave a reason. It does not say who reported it."
+        },
+        {
+          "type": "p",
+          "text": "Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report."
         },
         {
           "type": "p",

@@ -24,7 +24,7 @@ The report form tells members their note goes to moderators. In practice it goes
 
 ## What each action does
 
-- **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept".
+- **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, they are told instead that it "is no longer up".
 - **Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.
 - **Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.
 - To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it.
@@ -40,7 +40,7 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 - These come as an alert in the app and, if the member allows Marketplace notifications, on their phone.
 - Settings does not offer a reason yet. When it does, the reason you pick (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules) is added to the author's alert. To explain more, message them yourself.
 
-**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care.
+**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
 
 ## Be fair
 

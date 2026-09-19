@@ -29,12 +29,14 @@ In the web app, a chat with one person has a report button at the top: a flag, w
 
 Your report goes to the people who run your community's server. They decide what to do. They can remove a post, or suspend a member while the community votes on it.
 
-- **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too.
+- **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
 - **A Pulse post, an enterprise or a person:** you are not told the outcome in the app.
 - Nobody is told who reported. Not the person you reported, and not anyone else who reported the same thing.
 
 These alerts come under **Marketplace Activity** in your notification settings. See "Notifications".
 
 If one of your own posts is removed by the admins, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
+
+Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report.
 
 If someone is in danger, contact your local emergency services first.

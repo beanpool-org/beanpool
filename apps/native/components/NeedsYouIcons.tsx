@@ -74,8 +74,8 @@ async function loadLocal(me: string): Promise<LocalParts> {
 }
 
 /**
- * Owners and admins only: the role is remembered for ten minutes (utils/node-admin.ts), and the admin queue
- * is asked for only when it says owner/admin. Everyone else sends no queue request at all.
+ * Owners, admins and moderators only: the role is remembered for ten minutes (utils/node-admin.ts), and the
+ * admin queue is asked for only when it says one of those (a moderator's holds the reports alone). Everyone else sends no queue request at all.
  */
 async function loadAdmin(identity: BeanPoolIdentity): Promise<Pick<NodeParts, 'admin' | 'communityName'>> {
     const url = await anchorUrl();

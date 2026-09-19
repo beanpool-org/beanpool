@@ -1,5 +1,6 @@
 /**
- * Settings → "🛡️ Manage <community>": shown ONLY to a member the node itself says is an owner or admin.
+ * Settings → "🛡️ Manage <community>" ("Moderate <community>" for a moderator): shown ONLY to a member the node
+ * itself says is an owner, admin or moderator. A moderator's /settings is Reports only; the node enforces that.
  *
  * The role is asked of the node each time Settings is focused (utils/node-admin.ts → GET /api/node-admin/me)
  * and never stored on disk, so there is nothing on the phone to edit into a button. Pressing it asks for the
@@ -15,7 +16,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { fetchMyNodeRole, rememberNodeRole, canManageNode, type ManageRole } from '../utils/node-admin';
+import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSubtitle, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
@@ -38,7 +39,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                 const url = await getAnchorUrl();
                 if (!url || !identity?.privateKey) { if (!cancelled) setRole(null); return; }
                 const mine = await fetchMyNodeRole(url, identity);
-                // A new owner/admin: the header's 🛡️ icon picks it up now rather than when its own answer
+                // A new owner/admin/moderator: the header's 🛡️ icon picks it up now rather than when its own answer
                 // expires. Only a positive: "no role" here may just mean the node was unreachable.
                 if (canManageNode(mine.role)) rememberNodeRole(url, identity.publicKey, mine);
                 if (cancelled) return;
@@ -51,26 +52,27 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
 
     if (!canManageNode(role) || !identity) return null;
     const name = communityName || fallbackCommunityName || 'this community';
+    const label = manageLabel(role, name);
 
     return (
         <>
-            <Text style={styles.sectionHeader}>COMMUNITY ADMIN</Text>
+            <Text style={styles.sectionHeader}>{role === 'moderator' ? 'COMMUNITY MODERATION' : 'COMMUNITY ADMIN'}</Text>
             <View style={styles.menuGroup}>
                 <Pressable
                     style={[styles.menuBtn, { minHeight: 48 }]}
                     onPress={() => start(name)}
                     disabled={busy}
                     accessibilityRole="button"
-                    accessibilityLabel={`Manage ${name}`}
-                    accessibilityHint="Asks for your phone's unlock, then opens the community's admin settings in a browser tab"
+                    accessibilityLabel={label}
+                    accessibilityHint={role === 'moderator'
+                        ? "Asks for your phone's unlock, then opens the community's reports in a browser tab"
+                        : "Asks for your phone's unlock, then opens the community's admin settings in a browser tab"}
                     accessibilityState={{ busy, disabled: busy }}
                 >
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>Manage {name}</Text>
-                        <Text style={styles.menuSub}>
-                            {role === 'owner' ? "You're an owner" : "You're an admin"} · opens the node's settings, signed in as you
-                        </Text>
+                        <Text style={styles.menuText}>{label}</Text>
+                        <Text style={styles.menuSub}>{manageSubtitle(role)}</Text>
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>

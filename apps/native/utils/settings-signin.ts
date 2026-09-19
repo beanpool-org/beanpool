@@ -148,7 +148,7 @@ export async function approveComputerSignin(opts: {
             const body = await res.json().catch(() => ({})) as { success?: boolean; totpRequired?: boolean; error?: string; reason?: string };
             if (res.ok && body.success) return { kind: 'approved' };
             if (body.totpRequired) return { kind: 'totp-required', wrongCode: !!totpCode, continueWith: attempt };
-            if (body.reason === 'not-admin') return { kind: 'refused', message: `You are not an owner or admin of ${opts.communityName}, so you can't open its Settings.` };
+            if (body.reason === 'not-admin') return { kind: 'refused', message: `You are not an owner, admin or moderator of ${opts.communityName}, so you can't open its Settings.` };
             if (res.status === 403 || res.status === 404 || res.status === 409 || res.status === 410) {
                 return { kind: 'refused', message: body.error || 'The node refused the sign-in.' };
             }

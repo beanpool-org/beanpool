@@ -181,10 +181,10 @@ describe('the "Sign in" press', () => {
         expect(LocalAuthentication.authenticateAsync).toHaveBeenCalledTimes(1);
     });
 
-    it('says plainly when the member is not an owner or admin, or the code is gone', async () => {
+    it('says plainly when the member holds no role here, or the code is gone', async () => {
         mockFetch([{ status: 403, body: { error: 'x', reason: 'not-admin' } }]);
         const r = await approveComputerSignin(opts);
-        expect(r).toEqual({ kind: 'refused', message: "You are not an owner or admin of Mullum, so you can't open its Settings." });
+        expect(r).toEqual({ kind: 'refused', message: "You are not an owner, admin or moderator of Mullum, so you can't open its Settings." });
         mockFetch([{ status: 410, body: { error: 'That code has expired. Get a new code on the computer.' } }]);
         expect(await approveComputerSignin(opts)).toEqual({ kind: 'refused', message: 'That code has expired. Get a new code on the computer.' });
     });

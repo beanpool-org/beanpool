@@ -13,7 +13,7 @@ export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
 
 /**
  * Highest first. The highest sits nearest the invite/Settings/avatar group and keeps its spot as others
- * come and go; the lowest are the first to fold into "•••". Admin work (🛡️, owners and admins only) comes
+ * come and go; the lowest are the first to fold into "•••". Admin work (🛡️, owners, admins and moderators only) comes
  * first: a report or an emergency suspension can be urgent.
  */
 export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'message', 'group'];
@@ -80,7 +80,7 @@ export interface NeedsYouInputs {
     conversations: NeedsYouConversation[] | null;
     groupChats: NeedsYouGroupChat[] | null;
     /**
-     * The member's node role (GET /api/node-admin/me) and, only when that is owner/admin, the node's admin
+     * The member's node role (GET /api/node-admin/me) and, only when that is owner/admin/moderator, the node's admin
      * queue (GET /api/node-admin/queue). null when either is unknown: no 🛡️ rather than a guess.
      */
     admin: { role: unknown; queue: { total: number; items: AdminQueueItem[] } | null } | null;
@@ -135,8 +135,8 @@ function dealsWaiting(txns: NeedsYouTransaction[], me: string): NeedsYouTransact
 export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     const out: NeedsYouEntry[] = [];
 
-    // Owners and admins only, and only while the node's queue holds something. The node answers the queue
-    // only for an owner/admin anyway; checking the role here as well means a stale queue never outlives a demotion.
+    // Owners, admins and moderators only, and only while the node's queue holds something (a moderator's queue
+    // is the reports alone: the node filters it). The node answers the queue only for a node role anyway; checking the role here as well means a stale queue never outlives a demotion.
     const queue = canManageNode(i.admin?.role) ? i.admin?.queue : null;
     const adminItems = (queue?.items || []).filter(x => x.count > 0);
     if (queue && queue.total > 0 && adminItems.length) {

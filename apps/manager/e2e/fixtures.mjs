@@ -258,6 +258,26 @@ const REPORTS = [
     },
 ];
 
+/** The same reports as the moderation list reads them (GET /api/local/admin/reports): a post, a Pulse item, a member. */
+const LISTED_REPORTS = [
+    {
+        id: 'report-2001', reason: 'Listed the same secondhand generator in both the free and for-sale categories at once, twice this week',
+        createdAt: '2026-09-18T09:12:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[1], targetCallsign: MEMBER_NAMES[6],
+        postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
+        postDescription: 'Saturday morning, will feed you afterwards. Contact via https://www.example.org/a-very-long-unbroken-link-that-should-wrap-inside-its-card',
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+    },
+    {
+        id: 'report-2002', reason: 'Cross-posted the same "urgent free firewood, gate code 4482, ask for Dave" listing to the Pulse feed every day for a week',
+        createdAt: '2026-09-18T10:40:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[2], targetCallsign: MEMBER_NAMES[4], postId: null,
+        pulseItem: { title: 'URGENT free firewood pickup today only, gate code 4482, ask for Dave out back', platform: 'facebook', url: 'https://www.facebook.com/groups/riverbendcommunityswap/permalink/9284710002983471/', removed: false },
+    },
+    {
+        id: 'report-2003', reason: 'Repeatedly no-showed on three separate firewood trades after confirming pickup times',
+        createdAt: '2026-09-19T07:05:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[4], targetCallsign: MEMBER_NAMES[3], postId: null, pulseItem: null,
+    },
+];
+
 const POSTS = [
     { id: 'post-2001', type: 'offer', title: 'Split Ironbark Firewood, 1 Trailer Load', description: 'Seasoned, ready to burn. Farm gate pickup only.', category: 'firewood', price: 45, authorCallsign: MEMBER_NAMES[1], authorPublicKey: MEMBERS[1].publicKey, createdAt: '2026-09-12T04:10:00.000Z' },
     { id: 'post-2002', type: 'offer', title: 'Farm Fresh Pastured Eggs, 5 Dozen Weekly Subscription', description: 'Free range, weekly drop at the Saturday market stall.', category: 'produce', price: 25, authorCallsign: MEMBER_NAMES[5], authorPublicKey: MEMBERS[5].publicKey, createdAt: '2026-09-14T22:41:00.000Z' },
@@ -820,11 +840,13 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
         const limit = Number(searchParams.get('limit')) || 50;
         const offset = Number(searchParams.get('offset')) || 0;
         const getOutcome = (r) => r.outcome || (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open');
-        const filtered = REPORTS.filter((r) => {
+        // Both sets: the long-words ones (#978's moderator screen) first, then the ones the node summary carries.
+        const all = LISTED_REPORTS.concat(REPORTS);
+        const filtered = all.filter((r) => {
             if (status === 'all') return true;
             return getOutcome(r) === status;
         });
-        const openCount = REPORTS.filter((r) => getOutcome(r) === 'open').length;
+        const openCount = all.filter((r) => getOutcome(r) === 'open').length;
         const paged = filtered.slice(offset, offset + limit);
         return ok({
             success: true,
@@ -932,7 +954,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
         const match = pathname.match(/^\/api\/local\/admin\/reports\/([^/]+)\/(action|dismiss)$/);
         const reportId = match?.[1];
         const actionType = match?.[2];
-        const r = REPORTS.find((x) => String(x.id) === String(reportId));
+        const r = LISTED_REPORTS.concat(REPORTS).find((x) => String(x.id) === String(reportId));
         if (r) {
             r.status = actionType === 'dismiss' ? 'reviewed' : 'actioned';
             r.outcome = actionType === 'dismiss' ? 'dismissed' : 'actioned';

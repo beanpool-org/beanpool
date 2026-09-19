@@ -1,7 +1,7 @@
 ---
 slug: reporting
 title: Reporting a problem
-summary: Tell your community's admins about a post, an event, a Pulse post or an enterprise.
+summary: Tell your community's moderators about a post, an event, a Pulse post or an enterprise.
 related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 ---
 
@@ -21,13 +21,13 @@ Then:
 
 ## A person or a message
 
-There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your admins. See "Blocking someone".
+There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See "Blocking someone".
 
 In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen.
 
 ## What happens next
 
-Your report goes to the people who run your community's server. They decide what to do. They can remove a post, or suspend a member while the community votes on it.
+Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, while the community votes on it.
 
 - **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
 - **A Pulse post, an enterprise or a person:** you are not told the outcome in the app.
@@ -35,7 +35,7 @@ Your report goes to the people who run your community's server. They decide what
 
 These alerts come under **Marketplace Activity** in your notification settings. See "Notifications".
 
-If one of your own posts is removed by the admins, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
+If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
 
 Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report.
 

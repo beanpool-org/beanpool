@@ -27,7 +27,16 @@ Admins sign in from the app's Manage button and can do the day-to-day work: memb
 
 ## Moderator
 
-You can give someone the moderator role, and it shows on their profile in Settings. Today it does nothing else: moderators cannot sign in to Settings, and no action checks for it. Give admin to people who need to moderate.
+Moderators look after reports, and nothing else. They sign in from the app's **Moderate** button (or on a computer, by scanning the code with the app) and see one screen, **Reports**, where they can:
+
+- read every report, filtered by open, handled or dismissed, with what the post says and who reported it;
+- take down the reported post, with a reason the author reads;
+- take a reported Pulse item off the Pulse;
+- dismiss a report, or mark it handled.
+
+That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
+
+A moderator whose role is taken away, or changed, is signed out straight away.
 
 ## Owners & admins
 
@@ -35,11 +44,11 @@ You can give someone the moderator role, and it shows on their profile in Settin
 
 - Owners, signed in with their key or with the admin password, see the list and can add and remove people.
 - Admins, signed in with their key, see the list but cannot change it.
-- Moderators and ordinary members cannot open Settings at all.
+- Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
 
 ![The Owners and Admins screen in Settings](images/people-roles.webp)
 
-Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. The app shows that button only to people the server says hold one of those roles.
+Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. Moderators see **🛡️ Moderate** and the community's name instead. The app shows the button only to people the server says hold one of these roles.
 
 ## Adding someone
 
@@ -52,7 +61,7 @@ Giving a new role replaces the old one.
 
 ## Removing someone
 
-Press **Remove** on their row. You are asked once more before anything happens. Removing an owner or admin takes away their access to Settings straight away; removing yourself signs you out.
+Press **Remove** on their row. You are asked once more before anything happens. Removing an owner, admin or moderator takes away their access to Settings straight away; removing yourself signs you out.
 
 You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke** to take the role away.
 

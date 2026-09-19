@@ -67,7 +67,8 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
-import { startKeySession, endKeySession, sectionTarget, type KeySession } from './lib/key-session';
+import { startKeySession, endKeySession, sectionTargetFor, isModeratorSession, type KeySession } from './lib/key-session';
+import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
 import { defaultSubTab } from './lib/sections';
@@ -154,6 +155,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [keySessionCsrf, setKeySessionCsrf] = useState<string | null>(null);
     const [keySessionChecked, setKeySessionChecked] = useState<boolean>(isFleetMode);
     const [keySessionNotice, setKeySessionNotice] = useState<string | null>(null);
+    /**
+     * A moderator's Settings is Reports only (ModeratorView). The owners' loaders (diagnostics, members' data,
+     * gateway, logs) never run for them: the node would refuse every one, and none of it is theirs to see.
+     */
+    const isModerator = !isFleetMode && isModeratorSession(keySession);
+    const moderatorRef = useRef(false);
+    moderatorRef.current = isModerator;
 
     // Where the member came from (the app, the web app or neither), read from the fragment before
     // startKeySession strips it, and the way back there (lib/came-from.ts). Single-node Settings only.
@@ -581,6 +589,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      * involved are `() => void`, so the compiler will not catch that for you.
      */
     const refreshFleetDiagnostics = async (opts?: { manual?: boolean }) => {
+        if (moderatorRef.current) return;
         profiles.forEach(async (p) => {
             // A node that rejected its password five seconds ago will reject it again
             // now, and retrying regardless did real harm. The server tarpits failed admin
@@ -701,7 +710,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     // Load gateway config
     const loadGateway = async () => {
-        if (!activeNode) return;
+        if (!activeNode || moderatorRef.current) return;
         setGatewayLoading(true);
         try {
             const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
@@ -719,7 +728,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     // Load member data
     const loadNodeData = async () => {
-        if (!activeNode) return;
+        if (!activeNode || moderatorRef.current) return;
         setNodeDataLoading(true);
         try {
             const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
@@ -745,7 +754,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     // Load logs
     const loadLogs = async () => {
-        if (!activeNode) return;
+        if (!activeNode || moderatorRef.current) return;
         try {
             // fetchNodeLogs already unwraps to the array (`data.logs || []`) and throws on a non-OK
             // response, so there is nothing left to unwrap or guard here. Indexing `.logs` again
@@ -787,8 +796,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         let cancelled = false;
         startKeySession().then((res) => {
             if (cancelled) return;
-            if (res.section) {
-                const target = sectionTarget(res.section);
+            // A moderator lands on Reports whatever the link named (their only screen).
+            const target = sectionTargetFor(res.kind === 'session' ? res.session.role : null, res.section);
+            if (target) {
                 setActiveTab(target.tab);
                 setNavSubTab(target.subTab);
             }
@@ -1035,6 +1045,17 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 }}
             />
             </div>
+        );
+    }
+
+    if (isModerator) {
+        return (
+            <ModeratorView
+                nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
+                communityName={effectiveCommunityName}
+                onLogout={handleLogout}
+                back={returnLinks?.back}
+            />
         );
     }
 

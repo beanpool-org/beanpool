@@ -883,18 +883,45 @@ export async function dismissNodeReport(
     return res.json();
 }
 
+/** The reasons a post can be removed for, as the author reads them (server: engine/moderation-notices.ts). */
+export const REMOVAL_REASONS: { id: string; label: string }[] = [
+    { id: 'spam', label: 'Spam or a scam' },
+    { id: 'offensive', label: 'Offensive content' },
+    { id: 'misleading', label: 'Misleading' },
+    { id: 'unsafe', label: 'Unsafe or illegal' },
+    { id: 'rules', label: "Against this community's rules" },
+];
+
+export type ReportStatusFilter = 'open' | 'actioned' | 'dismissed' | 'all';
+
+/** One report as fetchReports returns it: a NodeReport with the fields a triage list needs made definite. */
+export interface ListedReport extends NodeReport {
+    id: string;
+    reason: string;
+    outcome: 'open' | 'dismissed' | 'actioned';
+    createdAt?: string;
+    postDescription?: string | null;
+}
+
 export interface ReportsResponse {
     success?: boolean;
-    reports: NodeReport[];
+    reports: ListedReport[];
     total: number;
+    /** Reports still open, whatever the filter (the server counts them; the owners' and moderators' tabs both show it). */
     pendingCount: number;
     limit: number;
     offset: number;
 }
 
+const REPORT_OUTCOMES = new Set(['open', 'dismissed', 'actioned']);
+
+/**
+ * The reports list, filtered and paged, for both the owners' People & Safety tab and a moderator's Reports screen.
+ * A moderator's session is a cookie, so the request carries it (credentials: same-origin).
+ */
 export async function fetchReports(
     nodeUrl: string,
-    status: 'open' | 'dismissed' | 'actioned' | 'all' = 'open',
+    status: ReportStatusFilter = 'open',
     limit = 50,
     offset = 0,
     adminPassword?: string,
@@ -907,18 +934,22 @@ export async function fetchReports(
     });
     const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
     });
+    const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
-    const json = await res.json();
-    const reports: NodeReport[] = Array.isArray(json.reports) ? json.reports.map((r: any) => {
-        if (!r || typeof r !== 'object') return { id: '' };
+    const reports: ListedReport[] = Array.isArray(json.reports) ? json.reports.map((r: any): ListedReport => {
+        if (!r || typeof r !== 'object') return { id: '', reason: '', outcome: 'open' };
         const targetPubkey = normalizeKeeperPubkey(r.targetPubkey) || normalizeKeeperPubkey(r.target_pubkey);
         const reporterPubkey = normalizeKeeperPubkey(r.reporterPubkey) || normalizeKeeperPubkey(r.reporter_pubkey);
+        const outcome = REPORT_OUTCOMES.has(r.outcome)
+            ? r.outcome
+            : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open');
         return {
             ...r,
-            id: r.id !== undefined && r.id !== null ? String(r.id) : undefined,
+            id: r.id !== undefined && r.id !== null ? String(r.id) : '',
             targetPubkey,
             target_pubkey: targetPubkey,
             reporterPubkey,
@@ -926,7 +957,7 @@ export async function fetchReports(
             reason: typeof r.reason === 'string' ? r.reason : (typeof r.description === 'string' ? r.description : ''),
             severity: typeof r.severity === 'string' ? r.severity : 'Report',
             status: typeof r.status === 'string' ? r.status : 'pending',
-            outcome: typeof r.outcome === 'string' ? r.outcome : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open'),
+            outcome,
             title: r.title ?? r.postTitle ?? null,
             postTitle: r.postTitle ?? r.title ?? null,
             postId: typeof r.postId === 'string' ? r.postId : null,
@@ -942,6 +973,37 @@ export async function fetchReports(
         limit: typeof json.limit === 'number' ? json.limit : limit,
         offset: typeof json.offset === 'number' ? json.offset : offset,
     };
+}
+
+/**
+ * Acts on a report: takes the reported post down (the author is told, with the reason), takes a reported Pulse
+ * item off the feed, or neither (marks it handled). Never suspends anyone: that stays in People & Safety.
+ */
+export async function actionNodeReport(
+    nodeUrl: string,
+    reportId: string,
+    action: { deletePost?: boolean; removePulseItem?: boolean; reasonCategory?: string },
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<{ success: boolean; error?: string }> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('Valid report ID is required');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/action`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            deletePost: !!action.deletePost,
+            removePulseItem: !!action.removePulseItem,
+            ...(action.reasonCategory ? { reasonCategory: action.reasonCategory } : {}),
+            ...(adminPassword ? { password: adminPassword } : {}),
+        }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return data;
 }
 
 export async function generateNodeInvite(

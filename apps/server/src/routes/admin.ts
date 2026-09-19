@@ -246,7 +246,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature)
         const pubKeyHex = ctx.get('X-Public-Key');
         const signatureBase64 = ctx.get('X-Signature');
-        if (pubKeyHex && signatureBase64 && isNodeAdmin(pubKeyHex)) {
+        if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {
             const timestampHeader = ctx.get('X-Timestamp');
             const nonce = ctx.get('X-Nonce');
             const ts = Number(timestampHeader);
@@ -277,9 +277,10 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         }
     }
 
-    if (!targetPubkey || !isNodeAdmin(targetPubkey)) {
+    // Anyone who can hold a key session (owner, admin, moderator) can end their own.
+    if (!targetPubkey || !nodeRoleOf(targetPubkey)) {
         ctx.status = 401;
-        ctx.body = { error: 'Unauthorized or target member is not an admin' };
+        ctx.body = { error: 'Unauthorized or target member holds no node role' };
         return;
     }
 
@@ -838,6 +839,13 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): someone must have reported it.
+    if ((ctx.state as any)?.adminRole === 'moderator'
+        && !db.prepare('SELECT 1 FROM abuse_reports WHERE target_post_id = ? LIMIT 1').get(ctx.params.id)) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: 'Moderators can remove a post only when someone has reported it' };
+        return;
+    }
     try {
         // Optional: why, as one of the removal reason categories; the author reads it. Anything else is ignored.
         const { reasonCategory } = (ctx as any).requestBody || {};
@@ -1080,6 +1088,12 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { deletePost, suspendUser, removePulseItem, reasonCategory } = (ctx as any).requestBody || {};
+        // Moderators remove what was reported; suspending a member stays with owners and admins.
+        if (suspendUser && (ctx.state as any)?.adminRole === 'moderator') {
+            ctx.status = 403;
+            ctx.body = { success: false, error: 'Moderators cannot suspend members' };
+            return;
+        }
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
         if (!ok) {
             ctx.status = 404;

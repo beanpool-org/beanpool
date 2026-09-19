@@ -417,6 +417,7 @@ export interface AbuseReport {
     /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
     postId?: string | null;
     postAuthorCallsign?: string | null;
+    postDescription?: string | null;
     postRemoved?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
@@ -5102,7 +5103,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         SELECT ar.*, 
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
-               p.title as post_title,
+               p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
                mp.callsign as post_author_callsign,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
@@ -5141,6 +5142,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
         postId: r.post_row_id || null,
         postAuthorCallsign: r.post_row_id ? (r.post_author_callsign || null) : null,
+        // What the post says (its first 500 characters), so whoever triages the report can judge it from the report.
+        postDescription: r.post_row_id ? (r.post_description ?? null) : null,
         // A post the admins or its author already took down.
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,

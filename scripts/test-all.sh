@@ -330,6 +330,7 @@ run_federation_suites() {
       test-storage-health
       test-groups-isolation
       test-groups-routes
+      test-groups-invite-only-hidden
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat

@@ -186,7 +186,10 @@ is what someone holding a stolen session would want. A backup code counts so an 
 still turn it off. The code is checked under the password brake for every caller, key sessions included: a wrong one
 is a failure from that address (5 free, then 2 s, 4 s, … as for wrong passwords), a right one clears the address's
 record, and a braked address gets 429 without the code being checked. A wrong code also costs the tarpit. A 2FA
-session never clears the brake record or eases the tarpit: only a code checked now does.
+session never clears the brake record or eases the tarpit: only a code checked now does. It does not spend the
+node-wide allowance either: a request with the right password and a valid 2FA session hands its check back
+(`refundNodeCheck`), so after one mistyped code the dashboard's own polling (about 22 a minute, against 12) is never
+refused. A code the request goes on to check is admitted afresh, so each wrong code still costs one.
 
 **Request body:** `{ "code": "123456" }`
 

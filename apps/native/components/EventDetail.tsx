@@ -159,13 +159,13 @@ export function EventDetail({ post }: EventDetailProps) {
 
     const report = () => {
         if (!identity?.publicKey) return;
-        Alert.alert('Report this event?', 'An admin on this node will review it.', [
+        Alert.alert('Report this event?', "This community's moderators will review it.", [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Report', style: 'destructive', onPress: async () => {
                     try {
                         await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, 'Event reported from the event screen', post.id);
-                        Alert.alert('Reported', 'Thanks. An admin will take a look.');
+                        Alert.alert('Reported', 'Thanks. A moderator will take a look.');
                     } catch (e: any) {
                         Alert.alert('Not sent', e?.message || 'Could not reach the node.');
                     }

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 18,
-  "hash": "7d661ac9989d5d18cde07a663ba8a4cfffd1ab1225a888519937d717be3fbc3d",
+  "version": 19,
+  "hash": "0f38ecd5476d39c834e347cf4f1fbc8a0266c2799364fce2b7e7b101fabf41f3",
   "sections": [
     {
       "id": "setup",
@@ -191,7 +191,7 @@
     {
       "slug": "signing-in",
       "title": "Signing in to Settings",
-      "summary": "The three ways in: the admin password, the app's Manage button, or a computer signed in by scanning a code with the app. How long a sign-in lasts.",
+      "summary": "The three ways in: the admin password, the app's Manage (or Moderate) button, or a computer signed in by scanning a code with the app. How long a sign-in lasts.",
       "section": "setup",
       "related": [
         "access-and-security",
@@ -227,7 +227,7 @@
         },
         {
           "type": "p",
-          "text": "Owners and admins see **Manage** followed by the community's name in the phone app's Settings. Pressing it:"
+          "text": "Owners and admins see **Manage** followed by the community's name in the phone app's Settings; moderators see **Moderate** and the name, which opens their Reports screen. Pressing it:"
         },
         {
           "type": "ul",
@@ -252,8 +252,8 @@
         {
           "type": "ul",
           "items": [
-            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown.",
-            "Then, in the phone app, open **Settings** and tap **Sign in on a computer** (under Community admin, next to Manage; owners and admins only). Point the camera at the QR code.",
+            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://mullum.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
+            "Then, in the phone app, open **Settings** and tap **Sign in on a computer** (next to Manage or Moderate; owners, admins and moderators only). Point the camera at the QR code.",
             "The phone shows the 6-character code, your community and which browser asked (for example \"Firefox on Windows\"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.",
             "Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you."
           ]
@@ -268,7 +268,7 @@
             "A code lasts **2 minutes** and works once. The computer shows a new one by itself when it runs out, a few times, then waits for you to press **New code**.",
             "The code only signs in the browser that showed it. A photo of the QR code is no use on another computer.",
             "The app only accepts a code from its own community. A code from another server is refused, and the phone says which one it was.",
-            "Five refused tries on one code (wrong key, not an owner or admin, wrong 6-digit code) use it up.",
+            "Five refused tries on one code (wrong key, no role in this community, wrong 6-digit code) use it up.",
             "Each approval is written to the server's log, with who approved it and which browser signed in."
           ]
         },
@@ -278,7 +278,7 @@
         },
         {
           "type": "p",
-          "text": "A sign-in from the app, or from a computer you signed in with the app, belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button or Sign in on a computer, and cannot sign in to Settings at all."
+          "text": "A sign-in from the app, or from a computer you signed in with the app, belongs to a person. Everything you do is recorded against your name. A moderator signs in the same two ways and gets Reports only (see Owners, admins and moderators)."
         },
         {
           "type": "p",
@@ -295,7 +295,7 @@
         {
           "type": "ul",
           "items": [
-            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once, and signing in from the app (Manage, or Sign in on a computer) is not slowed down by wrong passwords. See Rate limits.",
+            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
             "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD, then set those things again. Members, posts and beans are not touched: they are in data/state.db."
           ]
         }
@@ -388,7 +388,7 @@
         },
         {
           "type": "p",
-          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins see the list but cannot change it. See Owners, admins and moderators."
+          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. Under Owners & admins, admins see the list but cannot change it. A moderator sees none of these screens: their Settings is one screen, Reports, with **Moderator** at the top. See Owners, admins and moderators."
         },
         {
           "type": "h2",
@@ -538,7 +538,24 @@
         },
         {
           "type": "p",
-          "text": "You can give someone the moderator role, and it shows on their profile in Settings. Today it does nothing else: moderators cannot sign in to Settings, and no action checks for it. Give admin to people who need to moderate."
+          "text": "Moderators look after reports, and nothing else. They sign in from the app's **Moderate** button (or on a computer, by scanning the code with the app) and see one screen, **Reports**, where they can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
+            "take down the reported post, with a reason the author reads;",
+            "take a reported Pulse item off the Pulse;",
+            "dismiss a report, or mark it handled."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work."
+        },
+        {
+          "type": "p",
+          "text": "A moderator whose role is taken away, or changed, is signed out straight away."
         },
         {
           "type": "h2",
@@ -553,12 +570,12 @@
           "items": [
             "Owners, signed in with their key or with the admin password, see the list and can add and remove people.",
             "Admins, signed in with their key, see the list but cannot change it.",
-            "Moderators and ordinary members cannot open Settings at all."
+            "Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all."
           ]
         },
         {
           "type": "p",
-          "text": "Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. The app shows that button only to people the server says hold one of those roles."
+          "text": "Owners and admins open Settings from the BeanPool app with their own key: **Settings**, then **🛡️ Manage** and the community's name. Moderators see **🛡️ Moderate** and the community's name instead. The app shows the button only to people the server says hold one of these roles."
         },
         {
           "type": "h2",
@@ -583,7 +600,7 @@
         },
         {
           "type": "p",
-          "text": "Press **Remove** on their row. You are asked once more before anything happens. Removing an owner or admin takes away their access to Settings straight away; removing yourself signs you out."
+          "text": "Press **Remove** on their row. You are asked once more before anything happens. Removing an owner, admin or moderator takes away their access to Settings straight away; removing yourself signs you out."
         },
         {
           "type": "p",
@@ -736,7 +753,7 @@
     {
       "slug": "reports-and-takedowns",
       "title": "Reports and takedowns",
-      "summary": "How members report posts, people and Pulse items, where the reports land, and what each action really does.",
+      "summary": "How members report posts, people and Pulse items, where the reports land, what moderators can do with them, and what each action really does.",
       "section": "safety",
       "related": [
         "pulse-and-announcements",
@@ -763,7 +780,7 @@
         },
         {
           "type": "p",
-          "text": "The report form tells members their note goes to moderators. In practice it goes to the owners and admins, because moderators cannot sign in to Settings."
+          "text": "The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators)."
         },
         {
           "type": "h2",
@@ -771,7 +788,7 @@
         },
         {
           "type": "p",
-          "text": "**People & Safety**, then **Triage & Moderation**. Any owner or admin can act on them."
+          "text": "Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below)."
         },
         {
           "type": "ul",
@@ -795,6 +812,29 @@
         },
         {
           "type": "h2",
+          "text": "If you are a moderator"
+        },
+        {
+          "type": "p",
+          "text": "You open Settings from the app's **🛡️ Moderate** button, or on a computer by scanning the code with the app. Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.",
+            "Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.",
+            "**Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.",
+            "**Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.",
+            "**Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.",
+            "**Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post that someone has reported."
+        },
+        {
+          "type": "h2",
           "text": "Taking a post down"
         },
         {
@@ -806,10 +846,10 @@
           "items": [
             "If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.",
             "Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.",
-            "**The author is told**: \"Your post \"…\" was removed by the community's admins\". It never says which admin, or who reported it.",
+            "**The author is told**: \"Your post \"…\" was removed by the community's moderators\", and the reason if one was chosen. It never says who removed it, or who reported it.",
             "**Everyone who reported it is told** \"The post you reported was removed\". Each hears only about their own report, never about the others. Every open report on that post is closed as handled.",
             "These come as an alert in the app and, if the member allows Marketplace notifications, on their phone.",
-            "Settings does not offer a reason yet. When it does, the reason you pick (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules) is added to the author's alert. To explain more, message them yourself."
+            "A moderator's **Remove the post** offers a reason (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules); the one you pick is added to the author's alert. The owners' posts list does not offer one yet. To explain more, message them yourself."
           ]
         },
         {

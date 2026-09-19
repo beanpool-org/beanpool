@@ -118,7 +118,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
         try {
             await onReport(item, reportReason);
             closeReport();
-            Alert.alert('Reported', "Thanks. This community's operators will review it.");
+            Alert.alert('Reported', "Thanks. This community's moderators will review it.");
         } catch (e: any) {
             Alert.alert('Could not report', e?.message || 'Please try again.');
         } finally {

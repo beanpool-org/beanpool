@@ -145,6 +145,46 @@ function header(headers: Record<string, string | string[] | undefined>, name: st
 }
 
 /**
+ * Peers that send forwarding headers we do not believe: most likely a self-hoster's reverse proxy on another host,
+ * left out of TRUSTED_PROXIES. Behind one, every member has the proxy's address, so every per-address limiter
+ * treats the whole community as one client. Remembered (by limiter key, newest last, at most MAX_FORWARDERS) so
+ * the password brake can cap the wait it puts on everyone (password-brake.ts, 5), and warned about once.
+ */
+const FORWARDING_HEADERS = ['x-forwarded-for', 'x-real-ip', 'forwarded', 'cf-connecting-ip'];
+const FORWARDER_MEMORY_MS = 24 * 60 * 60_000;
+const MAX_FORWARDERS = 1024;
+const untrustedForwarders = new Map<string, number>();
+let lastForwarderWarning = 0;
+
+function noteUntrustedForwarder(ip: string): void {
+    const key = limiterKeyForIp(ip);
+    const now = Date.now();
+    const known = untrustedForwarders.has(key);
+    untrustedForwarders.delete(key);
+    untrustedForwarders.set(key, now);
+    if (untrustedForwarders.size > MAX_FORWARDERS) untrustedForwarders.delete(untrustedForwarders.keys().next().value!);
+    if (!known && now - lastForwarderWarning > 10 * 60_000) {
+        lastForwarderWarning = now;
+        console.warn(`[client-ip] ${ip} sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from ${ip}. If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart; until then the members behind it share one set of rate limits and one admin-password brake.`);
+    }
+}
+
+/**
+ * Whether limiter key `key` is a peer that has recently forwarded for others without being trusted: one source
+ * standing for many people.
+ */
+export function isSharedSourceKey(key: string): boolean {
+    const seen = untrustedForwarders.get(key);
+    return seen !== undefined && Date.now() - seen <= FORWARDER_MEMORY_MS;
+}
+
+/** Tests only. */
+export function resetUntrustedForwardersForTests(): void {
+    untrustedForwarders.clear();
+    lastForwarderWarning = 0;
+}
+
+/**
  * The client's address for a request whose socket peer is `peer`.
  *
  * X-Forwarded-For is read right to left: each trusted proxy APPENDS the address it received from, so the
@@ -154,7 +194,10 @@ function header(headers: Record<string, string | string[] | undefined>, name: st
 export function resolveClientIp(peer: string | undefined, headers: Record<string, string | string[] | undefined>): string {
     const socketIp = normalizeIp(peer) || 'unknown';
     const fromLocalProxy = isTrustedProxy(socketIp);
-    if (!fromLocalProxy && !isCloudflareEdge(socketIp)) return socketIp;
+    if (!fromLocalProxy && !isCloudflareEdge(socketIp)) {
+        if (FORWARDING_HEADERS.some(h => headers[h] !== undefined)) noteUntrustedForwarder(socketIp);
+        return socketIp;
+    }
 
     const cf = normalizeIp(header(headers, 'cf-connecting-ip'));
     if (net.isIP(cf)) return cf;

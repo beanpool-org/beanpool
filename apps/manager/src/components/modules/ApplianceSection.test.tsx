@@ -514,6 +514,23 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText('Enabled')).toBeInTheDocument();
     });
 
+    it('Disable 2FA takes a backup code: no number-only keypad, and the code is sent as typed', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
+        const input = screen.getByLabelText('Current 2FA or backup code');
+        // Backup codes are 8 hex characters (a–f): a phone's numeric keypad could not type them.
+        expect(input.getAttribute('inputmode')).not.toBe('numeric');
+
+        await act(async () => {
+            fireEvent.change(input, { target: { value: 'a1b2c3d4' } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
+        });
+        expect(disableCalls()).toHaveLength(1);
+        expect(JSON.parse(disableCalls()[0][1].body)).toEqual({ code: 'a1b2c3d4' });
+    });
+
     it('surfaces error cleanly when update check returns HTTP error', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/admin/check-update')) {

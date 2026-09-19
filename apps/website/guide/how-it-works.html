@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How BeanPool works — BeanPool members' guide</title>
+    <meta name="description" content="Beans, trading, offers and needs, and credit, in plain words.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a></p>
+        <h1>How BeanPool works</h1>
+        <p class="lede">Beans, trading, offers and needs, and credit, in plain words.</p>
+        <h2>Beans</h2>
+        <p>Your community trades in <strong>beans</strong>. Beans are not money from a bank. They are a record of who has helped whom.</p>
+        <p>Everyone starts at zero. When you help someone, you earn beans. When someone helps you, you spend beans.</p>
+        <p>A rough guide: 40 beans is about one hour of someone's time. You and the other person agree the real price.</p>
+        <h2>Offers and Needs</h2>
+        <p>An <strong>Offer</strong> is something you can do or give: bread, a lift, an hour of gardening, a repair.</p>
+        <p>A <strong>Need</strong> is something you are looking for.</p>
+        <p>Before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something.</p>
+        <h2>How a trade works</h2>
+        <ul>
+            <li>You find an Offer you want and ask for it, or someone takes up your Need.</li>
+            <li>When the trade is agreed, the buyer's beans are held safely. Nobody can spend them while the trade is going on.</li>
+            <li>The job gets done.</li>
+            <li>The buyer confirms it is done. Then the beans go to the seller.</li>
+        </ul>
+        <p>If a trade gets stuck, an admin of your community can step in. They can pay the seller, give the beans back to the buyer, or split them. An admin cannot decide a trade they are part of.</p>
+        <h2>Gifts</h2>
+        <p>You can also send beans to someone as a gift, with no trade.</p>
+        <ul>
+            <li>A gift can only come from beans you have. It can never take you below zero.</li>
+            <li>You can send gifts once you have completed a trade in the market. A trade of only 1 or 2 beans is too small to count.</li>
+            <li>Gifts have no fee.</li>
+        </ul>
+        <h2>Going below zero: your credit line</h2>
+        <p>You can spend a little more than you have, and go below zero. This is your <strong>credit line</strong>. It is a promise to help others later.</p>
+        <p>Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans.</p>
+        <p>Your credit line grows with your <strong>trust</strong>:</p>
+        <ul>
+            <li>You earn trust by completing trades in the market. Gifts do not earn trust.</li>
+            <li>Trading with many different people builds more trust. Trade with any one person counts up to 500 beans.</li>
+            <li>Trust grows quickly at first, then more slowly.</li>
+            <li>Star ratings matter. If people rate you, your average rating scales the trust your trades earn: 5 stars keeps all of it, 1 star keeps 60%.</li>
+            <li>The deepest any credit line can go is 2,000 beans below zero.</li>
+        </ul>
+        <h2>Your Offers unlock your credit</h2>
+        <p>Trust sets how deep you <strong>could</strong> go. Your live Offers set how deep you <strong>may</strong> go right now. You get the smaller of the two.</p>
+        <ul>
+            <li>No live Offers: you cannot go below zero.</li>
+            <li>1 Offer: down to 200 below zero.</li>
+            <li>2 Offers: down to 500.</li>
+            <li>3 Offers: down to 1,000.</li>
+            <li>4 Offers: down to 1,500.</li>
+            <li>5 Offers: down to 2,000.</li>
+        </ul>
+        <p>If you take Offers down while you are below zero, you may owe more than your Offers now cover. Then you cannot spend more until you are back within your limit. You can still earn beans, and nothing is taken from you.</p>
+        <h2>Trust badges</h2>
+        <p>Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades.</p>
+        <ul>
+            <li>Resident from 200 trust.</li>
+            <li>Steward from 600 trust.</li>
+            <li>Elder from 1,400 trust.</li>
+        </ul>
+        <p>A badge is recognition, nothing more. It does not unlock anything. Everyone can trade, invite and vote, whatever their badge.</p>
+        <h2>Fees and the Commons</h2>
+        <p>Your community has a shared pool of beans called the <strong>Commons</strong>. Fees go into it. Members decide together how it is spent.</p>
+        <ul>
+            <li><strong>Market fee:</strong> 1.5% of every market payment goes to the Commons. It comes out of what the seller receives.</li>
+            <li><strong>Circulation fee:</strong> beans are meant to move, not sit still. The first 200 beans you hold are always free. Above that, a small monthly fee goes to the Commons: 1% a month on beans between 200 and 500, 1.5% between 500 and 1,000, 2% between 1,000 and 2,000, and 2.5% above 2,000.</li>
+            <li>Balances below zero never pay the circulation fee. Gifts never pay a fee.</li>
+        </ul>
+        <h2>Enterprises and groups</h2>
+        <p>An <strong>enterprise</strong> is a shared project that trades in its own name: a community garden, a bakery, a tool library. It is run by <strong>keepers</strong>, led by a <strong>lead keeper</strong>. Keepers can pledge some of their own trust to give the enterprise a credit line.</p>
+        <p>A <strong>group</strong> is a circle of members with its own chat and posts, run by one or more <strong>convenors</strong>.</p>
+        <p>You can read how keepers and convenors are chosen in &quot;Rules and how decisions work&quot;.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version 1.</p>
+    </main>
+</body>
+</html>

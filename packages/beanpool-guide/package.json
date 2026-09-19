@@ -1,0 +1,11 @@
+{
+  "name": "@beanpool/guide",
+  "version": "1.0.0",
+  "description": "The members' guide: one source (content/*.md) for the app's bundled copy and the website's member pages",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs --check && node --test test/guide.test.mjs"
+  }
+}

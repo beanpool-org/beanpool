@@ -35,7 +35,6 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
-    const keyboardVisible = lift.keyboardVisible;
     const [members, setMembers] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -120,9 +119,9 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
 
     return (
         <Modal visible={isOpen} animationType="slide" transparent onRequestClose={onClose}>
-            <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]} onLayout={lift.onLayout}>
+            <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[styles.sheet, {
-                    paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12),
+                    paddingBottom: Math.max(insets.bottom, 12),
                     maxHeight: lift.maxHeight, marginBottom: lift.lift,
                     // Tall enough to pick from when there is room; never taller than what is left above the keyboard.
                     minHeight: Math.min(lift.maxHeight, 360),

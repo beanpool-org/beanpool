@@ -11,8 +11,8 @@ import {
     ActivityIndicator,
 } from 'react-native';
 // No nested KeyboardProvider inside this <Modal>: on the emulator it left the root provider suspended after the
-// sheet closed, so the chat composer stayed under the keyboard. The sheet is lifted from the root provider's
-// keyboard state by useModalKeyboardLift.
+// sheet closed, so the chat composer stayed under the keyboard. The sheet fits the Modal's measured height
+// (useModalKeyboardLift): lifted by the keyboard's height.
 import { KeyboardController } from 'react-native-keyboard-controller';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,9 +54,8 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>('open');
     const [submitting, setSubmitting] = useState(false);
     const insets = useSafeAreaInsets();
-    // Measured lift, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
+    // Lifted by the keyboard's height, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
     const lift = useModalKeyboardLift(insets.top + 8);
-    const keyboardVisible = lift.keyboardVisible;
 
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -249,9 +248,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
         >
             <View
                 style={[styles.backdrop, { paddingTop: insets.top + 8 }]}
-                onLayout={lift.onLayout}
+               
             >
-                <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 0 : insets.bottom, maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
+                <View style={[styles.sheet, { paddingBottom: insets.bottom, maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
                         <Text style={styles.title}>Create a Group</Text>
                         <Pressable

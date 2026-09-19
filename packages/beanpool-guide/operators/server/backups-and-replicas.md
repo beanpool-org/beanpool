@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words, restoring, running a second server as a standby, taking over on it, and what happens if the old server comes back.
+summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words and phones, restoring, running a second server as a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -21,7 +21,7 @@ The simplest complete backup: stop the server, copy the whole data folder somewh
 
 ## Locked or not: the recovery code decides
 
-A backup from Settings is **locked** only when the server has a printed recovery code. Today the recovery code is the only way to open a locked backup; opening one with an owner's phone comes in a later update. So until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.
+A backup from Settings is **locked** only when the server has a printed recovery code. A locked backup opens with that code, or with any one owner's phone (see Restoring). Until you make a recovery code, the server keeps making the backups it always made: **not locked**, readable by anyone who has the file.
 
 A server with no recovery code says so every time. The download carries the words "Backups are not locked yet: make a recovery code to lock them." and the server's log repeats them. The fleet manager shows that server as "Partial: database, no keys", with "Make a recovery code on the node to lock its backups." In Settings, the **Who can unlock this community** card shows the same words (see below). The download button itself still says "✅ Backup downloaded", which is true, because the file opens.
 
@@ -38,6 +38,7 @@ A server with no recovery code says so every time. The download carries the word
 - If an owner is left out of the lock, a line names them and says why.
 - Whether backups are locked, and if not, why.
 - The recovery code's number and the day it was made, or "No printed recovery code".
+- Under it, **Owners' 12 words** lists each owner, and whether their phone opened the current lock (see Owners' 12 words and phones).
 
 Admins see all of this. Only an owner, or someone signed in with the admin password (which counts as an owner), sees the buttons below.
 
@@ -82,19 +83,28 @@ curl -k -X POST -H "X-Admin-Password: PASSWORD" -H "Content-Type: application/js
 
 **Database Integrity Verification**: checks the live database or a snapshot for damage.
 
-A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made: once opening with a phone arrives, an owner removed later can still open backups made while they were one.
+A locked backup is still private: whoever opens it can read everything in it, including how each member voted (see Privacy and what your server can see). It is locked to each owner of the day it was made, so **any one owner can open it with their phone**, and an owner removed later can still open backups made while they were one.
 
-If the recovery code is lost, no locked backup can be opened today. While the server is running that costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
+If the recovery code is lost, a locked backup still opens with the phone of any owner it was locked to. While the server is running a lost code costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
 
-## Owners' 12 words
+## Owners' 12 words and phones
 
-A locked backup and the locked take-over keys are locked to each owner's key, and will open for any one owner once opening with a phone arrives. Today only the recovery code opens them, so keep the printed code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
+A locked backup and the locked take-over keys are locked to each owner's key: **any one owner can open them with their phone**, and so can the recovery code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
 
 - **Backups & Restore** in Settings lists each owner with **12 words checked:** and a date, or **not yet**, and a line such as "1 of 3 owners have checked their 12 words in the last year".
 - An owner checks their words in the BeanPool app (phone or web), under **Settings**, **Community keys**. The app asks them once when they become an owner and again a year after their last check. They can always say Later.
 - The words are checked on the owner's own device and never reach the server. The server keeps only the owner's signed statement that they checked, and when. It cannot check the words itself, so the date is what the owner reported, nothing more.
 - Nothing waits on it: an owner who never checks can still do everything an owner does.
 - Removing an owner takes them off the list. Their date stays with their account, and shows again if they are made an owner again.
+
+Each owner's line also says whether **their phone opened the current lock**. Whenever the lock changes (an owner added or removed, a new recovery code, a changed setting), each owner's app checks by itself, with nobody asked anything: it opens its own part of the lock, throws the key away at once, and tells the server whether it worked. The line reads:
+
+- **their phone opened the current lock** and a date (green): that owner could open the keys and the backups today;
+- **their phone last opened an older lock**, before the last change: the app has not been opened since the lock changed. It checks next time;
+- **their phone could NOT open** the lock: something is wrong with that owner's key on that phone (for example an account brought back from the wrong words). Ask them to check their 12 words. Until it is fixed, don't count on their phone;
+- **their phone has not reported on the lock yet**: that owner's app is older, or has not been opened since they became an owner.
+
+Like the words, this is what the owner's phone reported; the server cannot check it. It gates nothing.
 
 ## Backups that are not locked
 
@@ -120,8 +130,12 @@ Otherwise it deletes nothing, and writes which of the three is missing into harv
 
 A backup is restored onto a server with that server's admin password. It replaces the database and restarts the server.
 
-- **A locked backup (.bpsealed)** needs the recovery code. The Restore Database Wizard in Settings does not ask for it yet. Until it does, on the server's own machine, in the folder that holds the file, run: curl -k -X POST --data-binary @FILE -H "X-Admin-Password: PASSWORD" -H "X-Recovery-Code: CODE" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.
-- It brings back everything in the file: the database, the server's keys, the community's genesis, its links with other communities, and its admin password and two-factor sign-in. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings.
+- **A locked backup (.bpsealed)** opens with the recovery code or with any one owner's phone. In the **Restore Database Wizard** (Appliance & Data, Backups & Restore), choose the file and press **Restore from Backup**. The wizard says the file is locked, when it was made and who can open it, and offers both ways.
+- **Open with an owner's phone**: the file waits on the server and a code appears. An owner scans it in the BeanPool app (**Settings**, **Community keys**, **Take over or restore with this phone**), or copies the link under it into the web app. Their phone shows what it is about to open and asks for its own unlock; then the server opens the file and restores it. The phone never sees what is in the file. The code works once, for 10 minutes.
+- **Or type the printed recovery code**, then press **Open with the code and restore**.
+- Without Settings, on the server's own machine, in the folder that holds the file: curl -k -X POST --data-binary @FILE -H "X-Admin-Password: PASSWORD" -H "X-Recovery-Code: CODE" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.
+- This works on a **fresh server** too: install BeanPool, sign in to its Settings with its own admin password, and restore. The whole community comes back onto it.
+- It brings back everything in the file: the database, the server's keys, the community's genesis, its links with other communities, and its admin password and two-factor sign-in. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)
 - If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. If you know the machine, send the same command again with -H "X-Accept-Signer: NAME", putting the name it gave. A file let through this way brings back its **database only**: the server never takes keys or an admin password from it. Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.
 - **A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key and the other key files back by hand if they were lost.
 - Stop and think before restoring over a live community: everything since the backup is lost.
@@ -139,7 +153,7 @@ A second server can follow yours as a read-only standby, copying changes about e
 - To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.
 - Copying goes one way only. Your main server never takes data from the standby.
 - **The standby keeps the locked take-over keys.** Each time it copies, it also asks your server for takeover-envelope.json, with the token only. If nothing changed, your server answers "no change" and nothing is sent. The standby keeps the last 5 in the folder data/held-takeover-envelopes on its own disk. A sixth deletes only the oldest, so a bad copy from your server can't wipe out a good one.
-- The standby **can't open them**. It has no owner's key and no recovery code. Only an owner or the recovery code opens them, as with a locked backup. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.
+- The standby **can't open them**. It has no owner's key and no recovery code. Only an owner's phone or the recovery code opens them, as with a locked backup, and only when you take over. It keeps the files exactly as they came, and nothing from inside them is ever on the standby's disk.
 - The standby only keeps a copy signed by the server it copies from (the one it was set up to trust). It refuses any other copy, keeps what it had, and writes a line to its log starting "Refused a take-over envelope".
 - On the standby, **Live Backup Server** says what it holds: when the newest copy was locked and who can open it. If the owners or the recovery code changed since the copy before, it says who was added or removed.
 - On your server, **Replication Access** says which standby holds which copy. When an owner is added or removed, a standby shows as holding keys "from before the latest change" until it next copies, about a minute later.
@@ -149,20 +163,24 @@ A second server can follow yours as a read-only standby, copying changes about e
 
 ## Taking over on the standby
 
-If the main server is gone for good (a dead disk, a lost machine), the standby can become the community's main server with the printed recovery code. The community stays itself: the same identity, the same owners and admins, the same links with other communities, the same admin password and two-factor sign-in, and the same web address. Members change nothing.
+If the main server is gone for good (a dead disk, a lost machine), the standby can become the community's main server with the printed recovery code or **any one owner's phone**. The community stays itself: the same identity, the same owners and admins, the same links with other communities, the same admin password and two-factor sign-in, and the same web address. Members change nothing.
 
 Do this only when the main server is really gone. Two servers with one identity compete with each other, so **never start the old main server again** afterwards (if it starts anyway, see If the old main server comes back).
 
 You need:
 
 - the standby's own Settings (its own admin password);
-- the paper with the recovery code. The code on it must be one the standby's copy of the keys was locked to: the screen says which number it needs.
+- **either** the paper with the recovery code (the code on it must be one the standby's copy of the keys was locked to: the screen says which number it needs), **or** an owner with the BeanPool app on their phone, who can scan a code on your screen. Any owner the keys were locked to will do; the app must be the newest version. The web app works too, by pasting a link, if it still opens: it lives at the community's own address, which may be down with the main server.
+- If the standby's Settings only answer certain internet addresses (the admin IP allowlist under **Gateway & Peers**), the owner's phone must be on one of them too.
+
+When one person runs the standby and is also an owner, they do it alone. When a friend hosts the standby, it takes both of you: their Settings and your phone.
 
 On the standby: **Appliance & Data**, then **Backups & Restore**, then **Take over as the main server** at the bottom.
 
-- **Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, settings the main server kept in its own database other than its web address (such as what it lists in the directory), and anything that changed after the standby last copied. Press **I understand, continue**.
-- **Step 2.** Type the recovery code and press **Open the keys**. A mistyped letter is caught at once. A wrong code counts like a wrong password, and after a few the standby makes you wait before the next try, whatever admin password you signed in with.
-- **Step 3.** The next screen shows what the keys hold: when they were locked, the identity the server will keep, the owners, how many admins, how many links with other communities, the web address, whether the tunnel for it comes back, whether the main server still answers, and when the standby last copied from it. If the main server still answers, it says so in amber: stop and check. Tick **The main server is gone, and nobody will start it again**, then press **Take over now**.
+- **Step 1.** The first screen says what will happen and **what will be missing**: Decisions and their votes, enterprise pledges and keeper changes, invites, members' notification settings, settings the main server kept in its own database other than its web address (such as what it lists in the directory), and anything that changed after the standby last copied. Press **I understand: use an owner's phone**, or **I understand, continue** for the recovery code.
+- **Step 2, with a phone.** A code appears, with the owners who can open the keys. The owner opens the BeanPool app, **Settings**, **Community keys**, **Take over or restore with this phone**, and scans it (or opens the link under it on their phone, or pastes it into the web app). Their phone shows the community, this server, and warns in red if the main server still answers; then it asks for its own unlock. The phone opens its own part of the keys and hands it to the standby, locked so only the standby can read it: **the phone never sees the keys**. Your screen moves on by itself. The code works once, for 10 minutes: **Make a new code** if it runs out. The standby offers the newest copy of the keys it holds that an owner can open.
+- **Step 2, with the recovery code.** Type the code and press **Open the keys**. A mistyped letter is caught at once. A wrong code counts like a wrong password, and after a few the standby makes you wait before the next try, whatever admin password you signed in with.
+- **Step 3.** The next screen shows what the keys hold: when they were locked and who opened them (the code's number, or the owner's phone), the identity the server will keep, the owners, how many admins, how many links with other communities, the web address, whether the tunnel for it comes back, whether the main server still answers, and when the standby last copied from it. If the main server still answers, it says so in amber: stop and check. Tick **The main server is gone, and nobody will start it again**, then press **Take over now**.
 - **Step 4.** The standby works through its steps, restarts itself, and carries on after the restart. The screen follows each step and says "restarting" while the server is starting again. At the end it says **This server is now the community's main server**, whether the ledger adds up, and what to do next.
 
 What the standby does, in order. Each step is written to data/takeover-journal.json before the next starts. If the power goes or the server stops part-way, it carries on from the first step not done the next time it starts; nothing is done twice.
@@ -175,21 +193,21 @@ What the standby does, in order. Each step is written to data/takeover-journal.j
 - becomes the main server in its own settings (local-config.json), so NODE_ROLE=backup left in its .env does not matter and a later update cannot turn it back into a standby;
 - stops copying from the old main server, and restarts;
 - checks once that the ledger adds up, before members trade on it;
-- posts a notice, "This community moved to a new server", with the date and the code's number. Only people connected at that moment see it live; there are no push notifications, because a standby has no copy of phones' notification tokens;
+- posts a notice, "This community moved to a new server", with the date and who opened the keys: the recovery code and its number, or the owner by name. Only people connected at that moment see it live; there are no push notifications, because a standby has no copy of phones' notification tokens;
 - locks the keys again, on this server, to the owners and the same recovery code, and deletes the copies it held from the old main server;
 - starts the tunnel for the web address.
 
 Afterwards:
 
 - Sign in to Settings with **the community's** admin password, or an owner's key. The standby's own admin password no longer works.
-- **Make a new recovery code.** The one you typed is spent: until you replace it, Who can unlock this community says "Your recovery code was used. Make a new one". Anyone holding that paper can open the community's keys.
-- If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. The standby looks in the older copies it held for a token before giving up.
+- **If you used the recovery code, make a new one.** The one you typed is spent: until you replace it, Who can unlock this community says "Your recovery code was used. Make a new one". Anyone holding that paper can open the community's keys. An owner's phone spends nothing: their key is still theirs, and the new main server locks to them again.
+- If the result says the tunnel did not come back, the keys had no tunnel token. With PUBLIC_ADDRESS_NAME set, the server asks for the address again within a few minutes: it has the same identity, so the name is still its own. Otherwise claim the address again under Public Address. With the recovery code, the standby looks in the older copies it held for a token before giving up; a phone opens only the newest copy.
 - Other standbys trust the new main server already, because it has the same identity. Make a replication token on it and paste it into each of them.
 - Keep making file backups.
 
 If something went wrong, the standby's own files from before are in the pre-takeover- folder. The step that failed is named on the screen and in data/takeover-journal.json.
 
-The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing.
+The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server.
 
 ## If the old main server comes back
 

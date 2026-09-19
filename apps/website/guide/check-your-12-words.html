@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checking your 12 words (owners) — BeanPool members' guide</title>
-    <meta name="description" content="For a community's owners. Why the app asks you to check your 12 words, how the check works, and what it sends.">
+    <title>Your 12 words and the server's keys (owners) — BeanPool members' guide</title>
+    <meta name="description" content="For a community's owners. Checking your 12 words, taking over or restoring the server with your phone, and the check your phone makes by itself.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,12 +55,12 @@
 
     <main class="legal-content glass-panel guide">
         <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#settings">Settings and safety</a></p>
-        <h1>Checking your 12 words (owners)</h1>
-        <p class="lede">For a community's owners. Why the app asks you to check your 12 words, how the check works, and what it sends.</p>
+        <h1>Your 12 words and the server's keys (owners)</h1>
+        <p class="lede">For a community's owners. Checking your 12 words, taking over or restoring the server with your phone, and the check your phone makes by itself.</p>
         <h2>Who this is for</h2>
         <p>Only a community's <strong>owners</strong>. If you are not an owner, you won't see any of this.</p>
         <h2>Why owners are asked</h2>
-        <p>Your community's server keeps a locked copy of its keys, for moving the community to another server if its own is lost, and its backups are locked too. They are locked to the owners' accounts. If you lose your phone, your 12 words bring your account back, and with it your key to the server's lock and its backups. That matters most on the day the server itself is gone.</p>
+        <p>Your community's server keeps a locked copy of its keys, for moving the community to another server if its own is lost, and its backups are locked too. They are locked to the owners' accounts: any one owner can open them with their phone (see Taking over or restoring with your phone, below). If you lose your phone, your 12 words bring your account back, and with it your key to the server's lock and its backups. That matters most on the day the server itself is gone.</p>
         <p>So the app asks each owner, now and then, to check they still have the right 12 words. You can say <strong>Later</strong>. Nothing is ever blocked, and you can keep doing everything an owner does.</p>
         <h2>When the app asks</h2>
         <ul>
@@ -82,12 +82,26 @@
             <li>When the words are right, your phone tells your community's server only that you checked, and when, signed with your account.</li>
             <li>Owners and admins see, in the server's Settings, each owner's &quot;12 words checked&quot; date, or &quot;not yet&quot;. It is your own statement: the server cannot see or check your words.</li>
         </ul>
+        <h2>Taking over or restoring with your phone</h2>
+        <p>If your community's server is lost, whoever runs its standby server (or a new server restoring a backup) can ask an owner to open the locked keys. Any one owner is enough. You need the newest version of the BeanPool app. The web app works too if it still opens, but it lives at your community's own address, which may be down with the server: the phone app is the one to count on.</p>
+        <ul>
+            <li>On the server's Settings, they choose <strong>Take over with an owner's phone</strong>, or <strong>Open with an owner's phone</strong> when restoring a backup. A code appears on their screen.</li>
+            <li>In the app: <strong>Settings</strong>, under <strong>Community keys</strong>, tap <strong>Take over or restore with this phone</strong>, and point the camera at the code. If the server's page is open on your own phone, tapping its link does the same. In the web app, copy the link from their screen and paste it under <strong>Take over or restore with this browser</strong> in <strong>Settings</strong>.</li>
+            <li>The app shows which community, which server, and what will happen. If your main server still answers, it says so in red: a take-over is only for a server that is really gone.</li>
+            <li>Tap <strong>Unlock for the take-over</strong> (or <strong>Unlock the backup</strong>). Your phone asks for its own unlock first: fingerprint, face or PIN. The web app has no such step, which is why the phone app is the safer place for an owner's key.</li>
+            <li>Your phone opens its own part of the lock and hands the key to that server, locked so only that server can read it. Your phone never sees the server's keys or the backup.</li>
+            <li>On a take-over, the person at the server then confirms on their screen. The community is told it moved, and that you opened the keys.</li>
+        </ul>
+        <p>The app refuses, and says why, if the lock belongs to another community, if it is not locked to you, if the server's code has run out (it lasts 10 minutes and works once), or if the keys were not locked by your community's own server.</p>
+        <h2>Your phone checks the lock by itself</h2>
+        <p>Each time your community's lock changes (an owner is added or removed, a new recovery code is made), your app checks, quietly, that it could still open its part. It opens it, throws the key away at once, and tells the server whether it worked. Nothing is asked of you.</p>
+        <p>Owners and admins see it in the server's Settings, next to your 12 words date: <strong>their phone opened the current lock</strong>, with the date, or that it last opened an older one. If it says your phone <strong>could NOT open</strong> the lock, check your 12 words, and ask another owner to look at the server's Settings.</p>
         <h2 class="guide-related">Related</h2>
         <ul class="guide-list">
             <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.</span></a></li>
             <li><a href="recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 16.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 17.</p>
     </main>
 </body>
 </html>

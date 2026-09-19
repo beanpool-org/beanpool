@@ -594,6 +594,18 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
     });
 
+    it("fetchNodeRoles passes the node's own refusal through", async () => {
+        fetchMock.mockResolvedValueOnce({
+            ok: false,
+            status: 403,
+            json: async () => ({ error: 'Break-glass mode active: password authentication restricted to key enrolment only' }),
+        });
+        await expect(fetchNodeRoles('https://node.example.com', 'adminpass')).rejects.toThrow('Break-glass mode active');
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new Error('not json'); } });
+        await expect(fetchNodeRoles('https://node.example.com', 'adminpass')).rejects.toThrow('Failed to fetch node roles (HTTP 502)');
+    });
+
     it('fetchNodeSnapshots, createNodeSnapshot, and deleteNodeSnapshot handle snapshot management', async () => {
         const mockSnapshot = { name: 'snap-1.db', sizeBytes: 1024, createdAt: '2026-01-01' };
 

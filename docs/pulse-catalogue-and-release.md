@@ -4,6 +4,9 @@
 Replaces the 2026-09-02 draft, which proposed five things; two were built since, two are dropped,
 one stands. Nothing in the "Decision" section is built yet unless it says so.
 
+**Status (2026-09-19):** §2, report and operator removal, is built (#857). §1, the connect picker, and §3,
+per-node category policy, are decided but not built; this note is their record until a lane picks them up.
+
 ## The problem
 
 When a member connects TikTok or Instagram in the native app, the app fetches their newest posts
@@ -55,7 +58,7 @@ goes out.
 
 A member can report a Pulse item. A node operator (admin level of `node_roles`) can remove any
 member's item. Removal tombstones it the same way the owner's own delete does; the member is not
-penalised. **Being built now** on `feat/pulse-report-takedown`.
+penalised. **Built:** #857.
 
 Today the only tools are: the owner can hide or delete their own item, the member can disconnect,
 the operator can add curated channels. Viewers cannot hide items: the "Hide from feed" action on

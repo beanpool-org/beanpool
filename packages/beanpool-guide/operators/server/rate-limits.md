@@ -21,15 +21,15 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 This one slows down anyone guessing the admin password, without ever letting them lock you out.
 
 - It counts wrong passwords per internet address. The first 5 from an address cost nothing. After that, that address has to wait before its next try: 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits; nobody else is slowed down by it.
-- A wrong two-factor code after the right password counts as a wrong password too.
-- A right password from the address (with its two-factor code, if that is on) clears its count. So does a day with no wrong password from it.
+- A wrong two-factor code counts as a wrong password too: after the right password, and when switching two-factor sign-in off or moving it to a new authenticator, however you are signed in.
+- A right password from the address (with its two-factor code, if that is on) clears its count, and so does a right code in either of those places. So does a day with no wrong password from it. Being signed in already does not clear it.
 - An address with no wrong password in the last day is always checked straight away, whatever anyone else is doing. So if you are kept waiting, try from another network (mobile data, another wifi) and the right password works at once.
 - Addresses that have got it wrong recently share a limit for the whole server of 12 checks a minute. If you mistyped once or twice, and your neighbourhood of addresses (the same /24, or the same IPv6 /48) has had at most 3 wrong passwords today, a check is kept for you while the server is busy with someone else's guesses. You usually get in on your next try, within a minute.
 - Someone guessing from many networks can stretch that wait. Each network they use can take the kept check away 2 times on their first day, and up to 4 times a day if they primed it the day before. So against N networks you wait about 1 + 2N to 1 + 4N minutes.
 - Someone on your own /24 or /48 can take the kept check away with 3 wrong passwords. Then, and after three or more mistypes of your own, nothing is kept for you. The way out is another network, or signing in from the app.
 - Many wrong passwords (20 in a day) from one neighbourhood of addresses take away the "straight away" promise for the rest of that neighbourhood.
 
-Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code.
+Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app.
 
 If it keeps happening, someone is guessing your password. The logs say which address. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
 

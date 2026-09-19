@@ -34,4 +34,4 @@ The same guide is on the website at beanpool.org/guide.
 
 ## Videos
 
-Some pages may show **Watch:** and the name of a video. That link only appears when your community has a matching video in the Pulse, under **Learn**. Every page is complete without the video.
+Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn**. Videos members add to Learn never show on a guide page. Every page is complete without the video.

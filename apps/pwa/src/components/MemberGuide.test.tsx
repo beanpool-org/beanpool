@@ -93,7 +93,7 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
 
     it('links a Learn video whose title is the page title', async () => {
         api.getPulseFeed.mockResolvedValue({
-            items: [{ id: 'item_curated_abcdefghijk', category: 'learn', title: 'Sending a gift', url: 'https://www.youtube.com/watch?v=abcdefghijk' }],
+            items: [{ id: 'item_curated_abcdefghijk', category: 'learn', title: 'Sending a gift', url: 'https://www.youtube.com/watch?v=abcdefghijk', source: 'curated' }],
             nextCursor: null,
         });
         render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
@@ -101,6 +101,27 @@ describe('MemberGuide (Settings → BeanPool → Help & how it works)', () => {
         fireEvent.click(screen.getByText('Sending a gift'));
         const link = await screen.findByText('Watch: Sending a gift');
         expect(link.closest('a')).toHaveAttribute('href', 'https://www.youtube.com/watch?v=abcdefghijk');
+    });
+
+    // Review round 1 (B1): any member can put items in the Learn lane, with any title and (via RSS) any https link.
+    it('links only the curated YouTube video on the 12-words page, never a member item titled like it', async () => {
+        api.getPulseFeed.mockResolvedValue({
+            items: [
+                { id: 'm1', category: 'learn', title: 'Your 12 words', url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', source: 'autolist' },
+                { id: 'm2', category: 'learn', title: 'YOUR 12 WORDS!!', url: 'https://evil.example/x', source: 'autolist' },
+                { id: 'm3', category: 'learn', title: 'Your 12 words', url: 'https://evil.example/watch?v=AAAAAAAAAAA', source: 'curated' },
+                // Last in the list: the members' items above would win if they were allowed to match.
+                { id: 'c1', category: 'learn', title: 'Your 12 words', url: 'https://www.youtube.com/watch?v=CCCCCCCCCCC', source: 'curated' },
+            ],
+            nextCursor: null,
+        });
+        render(<MemberGuide onBack={() => {}} feedbackLive={false} />);
+        fireEvent.click(screen.getByText('Getting started'));
+        fireEvent.click(screen.getByText('Your 12 words'));
+        const link = await screen.findByText('Watch: Your 12 words');
+        expect(link.closest('a')).toHaveAttribute('href', 'https://www.youtube.com/watch?v=CCCCCCCCCCC');
+        expect(document.querySelector('a[href*="evil.example"]')).toBeNull();
+        expect(document.querySelector('a[href*="AAAAAAAAAAA"]')).toBeNull();
     });
 });
 

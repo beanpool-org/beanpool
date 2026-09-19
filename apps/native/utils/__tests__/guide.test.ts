@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
     validateGuide, getBundledGuide, loadLocalGuide, refreshGuideFromWebsite, splitBold, findGuidePage,
-    searchGuide, relatedPages, manualSections, sectionPages, findGuideVideo, beanPoolSettingsEntries, beanPoolSheetEntries,
+    searchGuide, relatedPages, manualSections, sectionPages, findGuideVideo, learnVideosFromFeed, youtubeWatchId, beanPoolSettingsEntries, beanPoolSheetEntries,
     GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_URL, type Guide,
 } from '../guide';
 import { FEEDBACK_LIVE } from '@beanpool/core';
@@ -216,25 +216,90 @@ describe('the manual', () => {
 
 describe('Learn videos (extra, never required)', () => {
     const page = { ...findGuidePage(getBundledGuide(), 'gifts')! };
+    const curated = (title: string, url: string) => ({ title, url, source: 'curated' });
 
     it('no videos, no link', () => {
         expect(findGuideVideo(page, [])).toBeNull();
     });
 
-    it('matches a video titled like the page, ignoring case and punctuation', () => {
-        const v = { title: 'SENDING a gift!', url: 'https://www.youtube.com/watch?v=abcdefghijk' };
-        expect(findGuideVideo(page, [{ title: 'Other', url: 'https://x.org/v' }, v])).toBe(v);
+    it('matches a curated video titled like the page, ignoring case and punctuation', () => {
+        const v = curated('SENDING a gift!', 'https://www.youtube.com/watch?v=abcdefghijk');
+        expect(findGuideVideo(page, [curated('Other', 'https://www.youtube.com/watch?v=zzzzzzzzzzz'), v])).toBe(v);
     });
 
     it('matches the YouTube id the page names, from the link', () => {
-        const v = { title: 'Anything', url: 'https://www.youtube.com/watch?v=tgsN2LiUVa0' };
+        const v = curated('Anything', 'https://www.youtube.com/watch?v=tgsN2LiUVa0');
         expect(findGuideVideo({ ...page, video: 'tgsN2LiUVa0' }, [v])).toBe(v);
         expect(findGuideVideo({ ...page, video: 'tgsN2LiUVa0' }, [{ ...v, url: 'https://youtu.be/tgsN2LiUVa0' }])).not.toBeNull();
         expect(findGuideVideo({ ...page, video: 'tgsN2LiUVa0' }, [{ ...v, url: 'https://www.youtube.com/watch?v=otherid1234' }])).toBeNull();
     });
 
     it('never links anything that is not http(s)', () => {
-        expect(findGuideVideo(page, [{ title: 'Sending a gift', url: 'javascript:alert(1)' }])).toBeNull();
+        expect(findGuideVideo(page, [curated('Sending a gift', 'javascript:alert(1)')])).toBeNull();
+    });
+
+    // Review round 1 (B1): any member can put items in the Learn lane, and an RSS channel picks any title and link.
+    it('a member-sourced item with the exact page title never links, on any page', () => {
+        const g = getBundledGuide();
+        for (const slug of ['your-12-words', 'recovery', 'joining', 'gifts']) {
+            const p = findGuidePage(g, slug)!;
+            expect(p).toBeTruthy();
+            const url = 'https://www.youtube.com/watch?v=AAAAAAAAAAA';
+            for (const source of ['autolist', 'manual', 'member', '', undefined, null]) {
+                expect(findGuideVideo(p, [{ title: p.title, url, source }])).toBeNull();
+            }
+            expect(findGuideVideo(p, [{ title: p.title, url }])).toBeNull();
+            expect(findGuideVideo(p, [curated(p.title, url)])).not.toBeNull();
+        }
+    });
+
+    it('a member item naming the id a page asks for does not link either', () => {
+        const v = { title: 'x', url: 'https://www.youtube.com/watch?v=tgsN2LiUVa0', source: 'autolist' };
+        expect(findGuideVideo({ ...page, video: 'tgsN2LiUVa0' }, [v])).toBeNull();
+    });
+
+    it('a curated item whose link is not a YouTube watch or youtu.be link does not link', () => {
+        for (const url of [
+            'https://evil.example/x',
+            'https://evil.example/watch?v=abcdefghijk',
+            'https://youtube.com.evil.example/watch?v=abcdefghijk',
+            'https://evil.example/?next=https://www.youtube.com/watch?v=abcdefghijk',
+            'https://www.youtube.com.evil.example/watch?v=abcdefghijk',
+            'https://user@evil.example/watch?v=abcdefghijk',
+            'https://www.youtube.com@evil.example/watch?v=abcdefghijk',
+            'http://www.youtube.com/watch?v=abcdefghijk',
+            'https://www.youtube.com/redirect?q=https://evil.example&v=abcdefghijk',
+            'https://www.youtube.com/watch?v=short',
+            'https://youtu.be/abcdefghijk/extra',
+            'https://notyoutu.be/abcdefghijk',
+        ]) {
+            expect(findGuideVideo(page, [curated('Sending a gift', url)])).toBeNull();
+        }
+    });
+
+    it('youtubeWatchId reads only real watch and youtu.be links', () => {
+        expect(youtubeWatchId('https://www.youtube.com/watch?v=tgsN2LiUVa0')).toBe('tgsN2LiUVa0');
+        expect(youtubeWatchId('https://youtube.com/watch?v=tgsN2LiUVa0&t=30')).toBe('tgsN2LiUVa0');
+        expect(youtubeWatchId('https://m.youtube.com/watch?v=tgsN2LiUVa0')).toBe('tgsN2LiUVa0');
+        expect(youtubeWatchId('https://youtu.be/tgsN2LiUVa0?si=abc')).toBe('tgsN2LiUVa0');
+        expect(youtubeWatchId('not a url')).toBeNull();
+        expect(youtubeWatchId('https://evil.example/youtu.be/tgsN2LiUVa0')).toBeNull();
+    });
+
+    it('the feed mapping the app uses keeps source, so a member item from the feed never links', () => {
+        const title = findGuidePage(getBundledGuide(), 'your-12-words')!.title;
+        const feed = [
+            { id: 'a', category: 'learn', title, url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', source: 'autolist' },
+            { id: 'b', category: 'learn', title: 'your 12 WORDS!!', url: 'https://evil.example/x', source: 'autolist' },
+            { id: 'c', category: 'music', title, url: 'https://www.youtube.com/watch?v=BBBBBBBBBBB', source: 'curated' },
+        ];
+        const videos = learnVideosFromFeed(feed);
+        expect(videos.map(v => v.source)).toEqual(['autolist', 'autolist']);
+        const p = findGuidePage(getBundledGuide(), 'your-12-words')!;
+        expect(findGuideVideo(p, videos)).toBeNull();
+        const official = learnVideosFromFeed([{ ...feed[0], source: 'curated' }]);
+        expect(findGuideVideo(p, official)?.url).toBe('https://www.youtube.com/watch?v=AAAAAAAAAAA');
+        expect(learnVideosFromFeed(undefined)).toEqual([]);
     });
 });
 

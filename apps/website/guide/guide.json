@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 2,
-  "hash": "3bb9c5dfeee96cf2c58e4bac4434b709428a283f95f639bf6129fb2bdbde8bbe",
+  "version": 3,
+  "hash": "d6c9f934e934f1ccf345823f4c9c000db39246b321fef9eb0951306161da6742",
   "sections": [
     {
       "id": "about",
@@ -1116,7 +1116,7 @@
         },
         {
           "type": "p",
-          "text": "Some pages may show **Watch:** and the name of a video. That link only appears when your community has a matching video in the Pulse, under **Learn**. Every page is complete without the video."
+          "text": "Some pages may show **Watch:** and the name of a video. That link only appears when BeanPool has made a video for that page and your community has it in the Pulse, under **Learn**. Videos members add to Learn never show on a guide page. Every page is complete without the video."
         }
       ]
     },
@@ -2446,7 +2446,7 @@
         },
         {
           "type": "p",
-          "text": "Members can add their own how-to channels to Learn too, by choosing the subject **How it works** when they add a channel."
+          "text": "Members can add their own how-to channels to Learn too, by choosing the subject **How it works** when they add a channel. Those videos are the members' own, not BeanPool's: check who posted a video before you follow its advice."
         },
         {
           "type": "h2",
@@ -2458,7 +2458,11 @@
         },
         {
           "type": "p",
-          "text": "When a guide page has a matching video in your community's Learn lane, the page shows **Watch:** and the video's name at the top. Tap it to open the video. If there is no match, or you are offline, the link simply does not show."
+          "text": "When BeanPool has made a video for a guide page, and it is in your community's Learn lane, the page shows **Watch:** and the video's name at the top. Tap it to open the video on YouTube. If there is no video for that page, or you are offline, the link simply does not show."
+        },
+        {
+          "type": "p",
+          "text": "Only BeanPool's own videos ever appear on a guide page. A video a member adds to Learn never shows there, whatever it is called."
         },
         {
           "type": "h2",
@@ -2468,7 +2472,7 @@
           "type": "ul",
           "items": [
             "Your phone is offline, or cannot reach your community's server.",
-            "Your community's server has not picked up a new video yet.",
+            "A new BeanPool video only appears on guide pages after your community's server is updated.",
             "There is no video for that page yet."
           ]
         }

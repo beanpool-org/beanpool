@@ -327,34 +327,68 @@ export function searchGuide(guide: Guide, query: string, limit = 20): GuideSearc
 
 // ─── Learn videos ────────────────────────────────────────────────────────────
 // Videos are extra: every page works fully from its text. A page shows "Watch: <title>" only when the member's
-// community has a matching video in the Pulse's Learn lane. A video matches a page when EITHER
+// community has a matching BeanPool video in the Pulse's Learn lane.
+//
+// Only BeanPool's own videos can link from the guide. Any member can add a channel to the Learn lane, and an RSS
+// channel lets them pick any title and any https link, so a member's item titled like a guide page must never turn
+// into an unattributed "Watch:" on, say, "Your 12 words". A video counts only when the feed marks it
+// source === 'curated' (the items the server seeds from CURATED_LEARN_ITEMS) AND its link is a YouTube watch or
+// youtu.be link. The resolver does NOT mark new items from the BeanPool channel as curated, so a new official video
+// links from the guide only once it has been added to CURATED_LEARN_ITEMS.
+//
+// A curated video matches a page when EITHER
 //   - the page names the video's YouTube id (`video:` in the page's front matter), or
-//   - the video's title is the page's title (ignoring case, spaces and punctuation), so a video uploaded to the
-//     BeanPool channel under a page's exact title links itself with no guide update.
+//   - the video's title is the page's title (ignoring case, spaces and punctuation).
 
 export interface LearnVideo {
     title: string;
     url: string;
-    externalId?: string | null;
+    /** The feed item's `source`. Only 'curated' (BeanPool's own) videos ever link from the guide. */
+    source?: string | null;
 }
 
 const titleKey = (s: string) => words(s).join(' ');
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 
-function youtubeIdOf(v: LearnVideo): string | null {
-    if (v.externalId) return v.externalId;
-    const m = /(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{6,20})/.exec(v.url);
-    return m ? m[1] : null;
+/** The video id of a YouTube watch link (https://www.youtube.com/watch?v=ID) or https://youtu.be/ID, else null. */
+export function youtubeWatchId(url: string): string | null {
+    let u: URL;
+    try { u = new URL(url); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+    const host = u.hostname.toLowerCase();
+    let id: string | null = null;
+    if (host === 'youtu.be') {
+        const parts = u.pathname.split('/').filter(Boolean);
+        id = parts.length === 1 ? parts[0] : null;
+    } else if (host === 'www.youtube.com' || host === 'youtube.com' || host === 'm.youtube.com') {
+        id = u.pathname === '/watch' ? u.searchParams.get('v') : null;
+    }
+    return id && YOUTUBE_ID.test(id) ? id : null;
 }
 
-/** The Learn video that goes with this page, or null. Only http(s) links are ever returned. */
+/** Learn-lane feed items as LearnVideos, keeping `source` so findGuideVideo can tell BeanPool's videos from members'. */
+export function learnVideosFromFeed(items: unknown): LearnVideo[] {
+    if (!Array.isArray(items)) return [];
+    const out: LearnVideo[] = [];
+    for (const i of items as Array<Record<string, unknown> | null>) {
+        if (!i || i.category !== 'learn' || typeof i.url !== 'string' || typeof i.title !== 'string') continue;
+        out.push({ title: i.title, url: i.url, source: typeof i.source === 'string' ? i.source : null });
+    }
+    return out;
+}
+
+/** The BeanPool video that goes with this page, or null. Only curated YouTube links are ever returned. */
 export function findGuideVideo(page: GuidePage, videos: readonly LearnVideo[]): LearnVideo | null {
-    const safe = videos.filter(v => v && typeof v.url === 'string' && /^https?:\/\//i.test(v.url) && isText(v.title, 300));
+    const safe = videos
+        .filter(v => v && v.source === 'curated' && typeof v.url === 'string' && isText(v.title, 300))
+        .map(v => ({ v, id: youtubeWatchId(v.url) }))
+        .filter(x => x.id !== null);
     if (page.video) {
-        const byId = safe.find(v => youtubeIdOf(v) === page.video);
-        if (byId) return byId;
+        const byId = safe.find(x => x.id === page.video);
+        if (byId) return byId.v;
     }
     const key = titleKey(page.title);
-    return safe.find(v => titleKey(v.title) === key) ?? null;
+    return safe.find(x => titleKey(x.v.title) === key)?.v ?? null;
 }
 
 // ─── The "BeanPool" entry points ─────────────────────────────────────────────

@@ -11,7 +11,7 @@ import { validateGuide, type Guide } from '@beanpool/core';
 export {
     GUIDE_SCHEMA, GUIDE_URL, GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_ABOUT_SECTION,
     validateGuide, newerGuide, refreshGuideFromWebsite, findGuidePage, findGuideSection, sectionPages,
-    manualSections, relatedPages, splitBold, searchGuide, findGuideVideo,
+    manualSections, relatedPages, splitBold, searchGuide, findGuideVideo, learnVideosFromFeed, youtubeWatchId,
     BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, beanPoolSheetEntries,
 } from '@beanpool/core';
 export type {

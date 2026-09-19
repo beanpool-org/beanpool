@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import bundledGuide from '@beanpool/guide/generated/guide.json';
 import {
     validateGuide, loadLocalGuide, refreshGuideFromWebsite,
-    type Guide, type GuideStorage, type LoadedGuide, type LearnVideo,
+    learnVideosFromFeed, type Guide, type GuideStorage, type LoadedGuide, type LearnVideo,
 } from '@beanpool/core';
 import { getPulseFeed } from './api';
 
@@ -70,15 +70,14 @@ export function useGuide(): LoadedGuide {
 
 // The videos in this community's Pulse → Learn lane, for the guide's "Watch" links. Extra only: an empty list
 // (offline, no community) just hides the link. An empty answer is not remembered, so a later page can try again.
+// Each item keeps its `source`: findGuideVideo only links BeanPool's own (curated) videos, never a member's item.
 let learnVideos: LearnVideo[] | null = null;
 let learnPending: Promise<LearnVideo[]> | null = null;
 
 export function loadLearnVideos(): Promise<LearnVideo[]> {
     if (learnVideos) return Promise.resolve(learnVideos);
     learnPending ??= getPulseFeed({ category: 'learn', limit: 50 })
-        .then(res => (Array.isArray(res?.items) ? res.items : [])
-            .filter(i => i && i.category === 'learn' && typeof i.url === 'string' && typeof i.title === 'string')
-            .map(i => ({ title: i.title as string, url: i.url as string })))
+        .then(res => learnVideosFromFeed(res?.items))
         .catch(() => [] as LearnVideo[])
         .then(list => {
             if (list.length > 0) learnVideos = list;

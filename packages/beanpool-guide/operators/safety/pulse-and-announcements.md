@@ -11,9 +11,13 @@ These are under **Bulletin & News**.
 
 An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. It is not kept anywhere, so someone who has notifications off will not see it later. Keep it short and use it rarely.
 
+![The Announcements screen in Settings](images/bulletin-announcements.webp)
+
 ## The Pulse
 
 The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Anyone can see the Pulse feed, even without joining, so it is part of your community's public face.
+
+![The Pulse Channels screen in Settings](images/bulletin-pulse.webp)
 
 - Members add their own channels, and can hide or delete their own items.
 - The server checks each channel every **5 minutes** and keeps the newest **20** items from each.

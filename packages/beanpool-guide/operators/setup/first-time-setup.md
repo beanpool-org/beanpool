@@ -29,6 +29,8 @@ Go to your server's address followed by **/settings**, for example https://examp
 
 While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only.
 
+![The first-time setup wizard in Settings](images/cold-start.webp)
+
 What it does:
 
 - **Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓. If two-factor sign-in is already on and you have not typed a code this session, it asks for one with **Enter 2FA code**, then saves.

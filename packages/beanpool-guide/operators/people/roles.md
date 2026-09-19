@@ -33,6 +33,8 @@ You can give someone the moderator role, and it shows on their profile in Settin
 
 **People & Safety**, then **Owners & admins**, lists everyone who holds a role, what it is and who gave it.
 
+![The Owners and Admins screen in Settings](images/people-roles.webp)
+
 - Owners, signed in with their key or with the admin password, see the list and can add and remove people.
 - Admins, signed in with their key, see the list but cannot change it.
 - Moderators and ordinary members cannot open Settings at all.

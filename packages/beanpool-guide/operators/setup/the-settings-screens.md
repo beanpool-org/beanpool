@@ -2,7 +2,7 @@
 slug: the-settings-screens
 title: Finding your way around Settings
 summary: The five screens in Settings, what each is for, how to get around on a phone or a laptop, how to get back to BeanPool, and how to get help on any of them.
-related: first-time-setup, signing-in, roles, troubleshooting
+related: settings-map, first-time-setup, signing-in, roles, troubleshooting
 ---
 
 Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar (on a phone, in the **☰** menu) opens the whole manual.
@@ -14,6 +14,8 @@ Settings is where owners and admins run the community's server. Members never se
 - **Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.
 - **Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security.
+
+![The Settings Home screen showing community health and shortcuts](images/home.webp)
 
 ## Getting back to BeanPool
 

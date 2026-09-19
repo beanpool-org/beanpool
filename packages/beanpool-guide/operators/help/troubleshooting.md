@@ -27,6 +27,8 @@ The BeanPool source code has a small watchdog for Linux machines (ops/watchdog).
 
 ## The disk is full
 
+![Diagnostics and system resources in Settings](images/appliance-diagnostics.webp)
+
 - Appliance & Data, then Diagnostics & Logs, shows how full it is and what is using it.
 - Run **Clean Orphaned Media & Compress Logs**, and delete old snapshots after copying them off.
 - On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.

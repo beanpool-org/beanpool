@@ -11,6 +11,8 @@ There are two ways into Settings. The password is one shared secret for the whol
 
 Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app.
 
+![The sign-in screen in node Settings](images/sign-in.webp)
+
 - The password counts as an **owner**. Whoever has it can do everything an owner can.
 - Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.
 - Your browser keeps the password for this tab only. Close the tab and you sign in again.

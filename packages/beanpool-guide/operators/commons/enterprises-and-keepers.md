@@ -11,6 +11,8 @@ An enterprise is a shared project with its own account: a community garden, a to
 
 **Shared Projects & Economy**, then **Enterprises**. Owners and admins can:
 
+![The Enterprises screen in Settings](images/economy-enterprises.webp)
+
 - make an enterprise. One made here starts with a credit line of 0;
 - set its **working capital ceiling**, the most it can owe;
 - add or remove keepers;
@@ -31,5 +33,7 @@ A keeper acts for the enterprise from their own app.
 ## The commons pool
 
 The commons pool is the community's shared beans. The **Commons Pool** tab does not show it yet: its figures ("240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift", "0 queued") are placeholders that never change, so do not rely on them. The beans come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons.
+
+![The Commons Pool screen in Settings](images/economy-pool.webp)
 
 Settings has no button to put beans into the commons, or pay them out, by hand. The setup wizard's commons step only explains this; it moves no beans.

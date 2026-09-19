@@ -516,9 +516,19 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
 });
 
 /**
- * POST /api/local/admin/2fa/verify — Verifies initial setup code and enables 2FA.
+ * POST /api/local/admin/2fa/verify — Verifies the setup code (`code` or `totpCode`, from the NEW authenticator) and
+ * makes the secret from /2fa/setup the active one.
+ *
+ * While 2FA is already on this replaces the authenticator, so it asks for the same proof as turning 2FA off: a code
+ * that is right now from the CURRENT authenticator, or a backup code, in `currentCode` or X-Admin-TOTP
+ * (requireCurrentSecondFactor: a 2FA session or key session alone is not enough, and wrong codes are braked).
+ * Otherwise anyone holding a stolen owner session could enrol their own authenticator, then use it to turn 2FA off.
+ *
+ * With 2FA on and no setup in progress, `code` is checked against the active authenticator, under the same brake,
+ * and a right one only issues a 2FA session: nothing changes.
  */
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
+    if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA on')) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -530,19 +540,39 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
     }
 
     const config = getLocalConfig();
-    // Check pending secret first (from /2fa/setup), fallback to active secret if verifying an active 2FA
-    const secretToVerify = config.totpPendingSecret || config.totpSecret;
-    if (!secretToVerify) {
-        ctx.status = 400;
-        ctx.body = { success: false, error: 'No 2FA setup in progress — call /2fa/setup first' };
+    const alreadyOn = !!(config.totpEnabled && config.totpSecret);
+    if (!config.totpPendingSecret) {
+        if (!alreadyOn) {
+            ctx.status = 400;
+            ctx.body = { success: false, error: 'No 2FA setup in progress — call /2fa/setup first' };
+            return;
+        }
+        if (!(await requireCurrentSecondFactor(ctx, code, 'to confirm'))) return;
+        const tfaSessionToken = issue2faSessionToken();
+        ctx.set('X-Admin-2FA-Session', tfaSessionToken);
+        ctx.body = { success: true, message: '2FA is already on', totpEnabled: true, tfaSessionToken, sessionToken: tfaSessionToken };
         return;
     }
+    const secretToVerify = config.totpPendingSecret;
 
     const valid = verifyTotpCode(String(code).trim(), secretToVerify);
     if (!valid) {
         ctx.status = 400;
         ctx.body = { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' };
         return;
+    }
+
+    if (alreadyOn) {
+        const current = body.currentCode
+            || (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-totp') : null);
+        if (!(await requireCurrentSecondFactor(ctx, current, 'from the authenticator you are replacing, to replace it'))) return;
+        // The wait for the brake may have let a concurrent verify or disable through: promote only what this
+        // request checked.
+        if (getLocalConfig().totpPendingSecret !== secretToVerify) {
+            ctx.status = 409;
+            ctx.body = { success: false, error: '2FA setup changed while this was being checked — start again' };
+            return;
+        }
     }
 
     // Promote pending secret & backup code hashes to active configuration
@@ -560,7 +590,9 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
     });
     const tfaSessionToken = issue2faSessionToken();
     ctx.set('X-Admin-2FA-Session', tfaSessionToken);
-    console.log('🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
+    console.log(alreadyOn
+        ? '🔒 [AdminAuth] TOTP 2FA authenticator replaced (current code checked)'
+        : '🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
     ctx.body = {
         success: true,
         message: '2FA enabled successfully',

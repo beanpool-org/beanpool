@@ -33,6 +33,7 @@ import type { SsoProvider } from '../../utils/sso-signin';
 import { signedPost, anchorUrl as getAnchorUrl, purgeAccountOnNode } from '../../utils/node-post';
 import { parseArchetype, FEEDBACK_LIVE, type QuizResult } from '@beanpool/core';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
+import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -1419,6 +1420,8 @@ export default function SettingsScreen() {
                     screen. An active recovery against this account must be visible
                     without first navigating into a sub-screen. */}
                 <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
+                {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} />
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">

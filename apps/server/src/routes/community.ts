@@ -327,7 +327,13 @@ router.post('/api/local/change-password', async (ctx) => {
     // The current password is asked for even under a key session. A key session proves who you are, not that you
     // know the password; without this, a phone left signed in could set a password its holder has never known, and
     // with it sign in anywhere the password works.
-    const pwCheck = await checkAdminPassword(ctx, currentPassword);
+    // When checkAdminAuth has just verified this very string as the node password (a password caller, or a body-only
+    // client whose currentPassword was its sign-in), that is the proof: checking it again would only run scrypt and
+    // take the brake a second time. Anything else (a key session, a break-glass code, a different string) is checked.
+    const proven = typeof ctx.state?.verifiedAdminPassword === 'string' ? Buffer.from(ctx.state.verifiedAdminPassword) : null;
+    const given = typeof currentPassword === 'string' ? Buffer.from(currentPassword) : null;
+    const alreadyProven = !!proven && !!given && proven.length === given.length && crypto.timingSafeEqual(proven, given);
+    const pwCheck = alreadyProven ? 'ok' : await checkAdminPassword(ctx, currentPassword);
     if (pwCheck === 'braked') return;
     if (pwCheck !== 'ok') {
         ctx.status = 401;

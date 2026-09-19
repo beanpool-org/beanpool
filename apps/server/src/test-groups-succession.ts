@@ -27,6 +27,8 @@ import {
     GROUP_SUCCESSION_WINDOW_MS, GroupSystemType,
 } from './state-engine.js';
 import { createGroupRoutes } from './routes/groups.js';
+import { proposeGroupConvenor as proposeWithCb } from './engine/group-succession.js';
+import { setChatMute } from './engine/chat-mutes.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -254,6 +256,47 @@ async function main(): Promise<void> {
     inviteGroupMember(hidden.id, ga, gb);
     assert((await dispatch(router, 'GET', `/api/groups/${hidden.id}/succession`, out)).status === 404, 'an invite-only group is 404 to an outsider');
     assert((await dispatch(router, 'POST', `/api/groups/${hidden.id}/succession/propose`, out, { candidatePubkey: out })).status === 404, 'for writes too');
+
+    // ── 9. The sitting convenor is told once (PR #924 review, item 3) ───────────────────────
+    console.log('\n--- 9. A push to the convenor when a vote to replace them opens ---');
+    const pushes: { targets: string[]; actor: string; title: string; body: string; data: any; category: string }[] = [];
+    const cb = {
+        broadcast: () => { },
+        dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: any, category: string) => {
+            pushes.push({ targets, actor, title, body, data, category });
+        },
+    };
+    const pa = makeMember('Pia'); const pb = makeMember('Pat'); const pc = makeMember('Pen'); const pd = makeMember('Pip');
+    const g10 = groupOf('Seed Swap', pa, [pb, pc, pd]);
+    silence(pa);
+    setChatMute(g10, pa, 'always'); // a muted group chat does not hide a vote on the convenor's own role
+    const p10 = proposeWithCb(cb as any, g10, pb, pc);
+    const toConvenor = pushes.filter(x => x.targets.includes(pa));
+    assert(p10.proposal.status === 'active' && toConvenor.length === 1, `the silent convenor gets exactly one push (got ${toConvenor.length})`);
+    assert(pushes.length === 1 && toConvenor[0]?.targets.length === 1, 'and nobody else is pushed for the vote opening');
+    assert(toConvenor[0]?.category === 'chat' && toConvenor[0]?.actor === pb, 'through the normal chat push path, from the proposer');
+    assert(toConvenor[0]?.data?.groupId === g10 && toConvenor[0]?.data?.screen === 'chat', 'it opens the group');
+    assert(/convenor/i.test(toConvenor[0]?.body ?? ''), 'and says what it is about');
+    voteGroupConvenor(p10.proposal.id, pd, 'no');
+    assert(pushes.filter(x => x.targets.includes(pa)).length === 1, 'a vote being cast pushes nobody');
+
+    // ── 10. A lost race for the one open vote is a clean 409 (PR #924 review, item 7) ──────
+    console.log('\n--- 10. Two proposals at once ---');
+    const ra = makeMember('Rae'); const rb = makeMember('Rex'); const rc = makeMember('Rio');
+    const g11 = groupOf('Book Club', ra, [rb, rc]);
+    silence(ra);
+    // Stand in for the other request that won: its proposal lands between our check and our insert.
+    db.exec(`CREATE TEMP TRIGGER race_winner BEFORE INSERT ON group_convenor_proposals
+             WHEN NEW.id != 'race-winner' AND NEW.group_id = '${g11}'
+             BEGIN
+               INSERT INTO group_convenor_proposals (id, group_id, convenor_pubkey, candidate_pubkey, proposer_pubkey, status, created_at, deadline_at)
+               VALUES ('race-winner', NEW.group_id, NEW.convenor_pubkey, NEW.proposer_pubkey, NEW.proposer_pubkey, 'active', NEW.created_at, NEW.deadline_at);
+             END`);
+    const lost = await dispatch(router, 'POST', `/api/groups/${g11}/succession/propose`, rb, { candidatePubkey: rc });
+    db.exec('DROP TRIGGER race_winner');
+    assert(lost.status === 409, `the loser gets 409 (got ${lost.status})`);
+    assert(!/UNIQUE|constraint|SQLITE/i.test(lost.body?.error ?? '') && /already open/.test(lost.body?.error ?? ''),
+        `with a human message, not the database's (got "${lost.body?.error}")`);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

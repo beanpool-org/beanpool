@@ -215,6 +215,13 @@ export function cancelGroupSuccessionIfConvenorActive(cb: MessagingCallbacks, co
     return n;
 }
 
+const VOTE_ALREADY_OPEN = 'A vote on a new convenor is already open for this group';
+const ALREADY_VOTED = 'You have already voted on this proposal';
+
+/** SQLite's words for a lost insert race on a unique key: never shown to a member (PR #924 review, item 7). */
+const isUniqueViolation = (e: any): boolean =>
+    e?.code === 'SQLITE_CONSTRAINT_UNIQUE' || e?.code === 'SQLITE_CONSTRAINT_PRIMARYKEY' || /UNIQUE constraint failed/.test(e?.message ?? '');
+
 /** Propose a member as the group's convenor. The proposal is the proposer's yes. */
 export function proposeGroupConvenor(
     cb: MessagingCallbacks,
@@ -227,7 +234,7 @@ export function proposeGroupConvenor(
 
     const existing = db.prepare("SELECT * FROM group_convenor_proposals WHERE group_id = ? AND status = 'active'").get(groupId) as any;
     if (existing && settle(cb, existing, false, new Date().toISOString()) === 'open') {
-        throw new Error('A vote on a new convenor is already open for this group');
+        throw new Error(VOTE_ALREADY_OPEN);
     }
 
     const silence = getConvenorSilence(groupId);
@@ -242,14 +249,21 @@ export function proposeGroupConvenor(
     const id = crypto.randomUUID();
     const nowIso = new Date().toISOString();
     const deadlineAt = new Date(Date.now() + GROUP_SUCCESSION_WINDOW_MS).toISOString();
-    db.transaction(() => {
-        db.prepare(`
-            INSERT INTO group_convenor_proposals (id, group_id, convenor_pubkey, candidate_pubkey, proposer_pubkey, status, created_at, deadline_at)
-            VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
-        `).run(id, groupId, silence.convenorPubkey, candidatePubkey, proposerPubkey, nowIso, deadlineAt);
-        db.prepare("INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice, voted_at) VALUES (?, ?, 'yes', ?)")
-            .run(id, proposerPubkey, nowIso);
-    })();
+    try {
+        db.transaction(() => {
+            db.prepare(`
+                INSERT INTO group_convenor_proposals (id, group_id, convenor_pubkey, candidate_pubkey, proposer_pubkey, status, created_at, deadline_at)
+                VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+            `).run(id, groupId, silence.convenorPubkey, candidatePubkey, proposerPubkey, nowIso, deadlineAt);
+            db.prepare("INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice, voted_at) VALUES (?, ?, 'yes', ?)")
+                .run(id, proposerPubkey, nowIso);
+        })();
+    } catch (e: any) {
+        // Another proposal for this group landed between the check above and this insert: the partial unique
+        // index on (group_id) WHERE status = 'active' refused ours. Same answer as the check (409 at the route).
+        if (isUniqueViolation(e)) throw new Error(VOTE_ALREADY_OPEN);
+        throw e;
+    }
 
     const who = proposerPubkey === candidatePubkey
         ? `${callsignOf(proposerPubkey)} offered to be convenor`
@@ -260,6 +274,22 @@ export function proposeGroupConvenor(
 
     const row = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;
     const outcome = settle(cb, row, false, nowIso);
+
+    // Tell the sitting convenor once (PR #924 review, item 3). "Silent" means no signed writes, so a convenor who
+    // reads every day can still be the subject; one push gives them the chance to come back, which cancels the
+    // vote. The normal chat push path, so their notify_chat preference applies — but not a mute of the group's
+    // chat: like an @mention, a vote on their own role gets through. No names or text in the push.
+    const groupName = (db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as any)?.name ?? 'Your group';
+    cb.dispatchPushNotification(
+        [silence.convenorPubkey],
+        proposerPubkey,
+        `👥 ${groupName}`,
+        outcome === 'passed'
+            ? 'Members chose a new convenor while you were away'
+            : 'Members opened a vote on a new convenor. Open the group to see it.',
+        { screen: 'chat', conversationId: groupId, groupId },
+        'chat',
+    );
     const after = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;
     return { proposal: toInfo(after, proposerPubkey), executed: outcome === 'passed' };
 }
@@ -283,10 +313,15 @@ export function voteGroupConvenor(
         throw new Error('Only an active member of this group may vote on its convenor');
     }
     if (db.prepare('SELECT 1 FROM group_convenor_votes WHERE proposal_id = ? AND voter_pubkey = ?').get(proposalId, voterPubkey)) {
-        throw new Error('You have already voted on this proposal');
+        throw new Error(ALREADY_VOTED);
     }
-    db.prepare('INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice, voted_at) VALUES (?, ?, ?, ?)')
-        .run(proposalId, voterPubkey, choice, nowIso);
+    try {
+        db.prepare('INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice, voted_at) VALUES (?, ?, ?, ?)')
+            .run(proposalId, voterPubkey, choice, nowIso);
+    } catch (e: any) {
+        if (isUniqueViolation(e)) throw new Error(ALREADY_VOTED);
+        throw e;
+    }
     const outcome = settle(cb, cur, false, nowIso);
     const after = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(proposalId) as any;
     return { proposal: toInfo(after, voterPubkey), executed: outcome === 'passed' };

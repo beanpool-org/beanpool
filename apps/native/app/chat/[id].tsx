@@ -1474,7 +1474,7 @@ function ChatScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <StatusBar style="dark" />
+            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             
             {/* Header */}
             <View style={styles.header}>

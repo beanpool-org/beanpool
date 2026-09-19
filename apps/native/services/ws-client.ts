@@ -101,9 +101,9 @@ class WebSocketSyncClient {
             if (identity && identity.callsign) {
                 params.push(`callsign=${encodeURIComponent(identity.callsign)}`);
             }
-            // Forward-compatible WS connect auth (SRV-4): additive signed params,
-            // ignored by nodes that don't yet enforce WS auth. Lets the
-            // unauthenticated /ws state feed be closed later without another release.
+            // WS connect auth (SRV-4): a member-signed socket gets the full feed; an
+            // unsigned one gets only public doorbells (and is refused under
+            // ENFORCE_WS_AUTH=true). Sent by every build since v1.1.56.
             if (identity && identity.privateKey && identity.publicKey) {
                 try {
                     params.push(await buildSignedWsParams('/ws', identity.privateKey, identity.publicKey));

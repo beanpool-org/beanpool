@@ -928,14 +928,28 @@ export function removeWsClient(ws: any): void {
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
+// SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
+// Deny by default: only changes to things anyone can already read unsigned — the public
+// marketplace board, commons projects, decisions, enterprise map pins — and only as a bare
+// `{ type }` doorbell with no payload, which is all a client uses them for (it re-fetches what
+// it may see). Everything else — messages, trades, amounts, members, profiles, announcements,
+// groups — goes to member sockets only. An event scoped with `recipients` never reaches a
+// socket without a member, whatever its type.
+export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
+    'new_post', 'post_updated', 'post_removed',
+    'project_created', 'project_updated', 'project_deleted',
+    'decision_created', 'decision_updated', 'decision_vote_cast', 'decision_halted',
+    'enterprise_location_updated', 'enterprise_wound_up',
+    'state_synced',
+]);
+
 // A2-20: the /ws feed is global — every connected member receives every broadcast.
 // For privacy-sensitive events (a ledger transfer reveals who paid whom + amounts),
-// pass `recipients` so the event is delivered ONLY to sockets whose authenticated
-// member is a party. Scoping requires per-socket identity, which exists only under
-// ENFORCE_WS_AUTH (anonymous sockets are rejected at upgrade); when a socket has no
-// identity (flag off) we fall back to the prior broadcast-to-all behavior. General
-// community events (new_post, member_joined, profile_updated) pass no recipients and
-// stay global, as intended.
+// pass `recipients` so the event is delivered ONLY to sockets whose verified member
+// is a party. General community events (new_post, member_joined, profile_updated)
+// pass no recipients and reach every member socket; sockets with no verified member
+// get only PUBLIC_WS_EVENTS, as a bare doorbell, unless the operator chose the open
+// feed (ENFORCE_WS_AUTH=false), where they get every event without recipients.
 export function broadcast(event: any, recipients?: string[]): void {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -983,9 +997,29 @@ export function broadcast(event: any, recipients?: string[]): void {
         }
     }
     const msg = JSON.stringify(event);
+    const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
+        ? event.member.publicKey.toLowerCase() : null;
+    let doorbell: string | null = null;
     for (const ws of wsClients) {
+        // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now.
+        if (joinedPubkey && !ws._memberPubkey && ws._pendingMemberPubkey === joinedPubkey) {
+            ws._memberPubkey = event.member.publicKey;
+            ws._pendingMemberPubkey = null;
+        }
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) continue;
-        try { ws.send(msg); } catch { wsClients.delete(ws); }
+        let out = msg;
+        if (!ws._memberPubkey && !ws._openFeed) {
+            if (!PUBLIC_WS_EVENTS.has(event?.type)) continue;
+            out = doorbell ??= JSON.stringify({ type: event.type });
+        }
+        try { ws.send(out); } catch { wsClients.delete(ws); }
+    }
+    // A pruned member's open socket stops being a member socket: from now on it gets what a stranger gets.
+    if (event?.type === 'user_pruned' && typeof event.publicKey === 'string') {
+        const pruned = event.publicKey.toLowerCase();
+        for (const ws of wsClients) {
+            if (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === pruned) ws._memberPubkey = null;
+        }
     }
 }
 

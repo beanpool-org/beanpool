@@ -134,6 +134,25 @@ async function child(): Promise<void> {
     await initTls();
     const port = 20000 + Math.floor(Math.random() * 20000);
     await startHttpsServer(port);
+    // Before the restore, on this fresh server: its backups are readable until it has a recovery code, and the
+    // operator manual's make-a-code line (password header, JSON body) makes one, after which they are locked.
+    let makeCode: any = null;
+    if (mode === 'sealed') {
+        const backupLocked = async () => {
+            resetAdminAuthTarpit();
+            const r = await fetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: { 'X-Admin-Password': pw } });
+            const b = Buffer.from(await r.arrayBuffer());
+            return { status: r.status, locked: r.headers.get('x-backup-locked'), why: r.headers.get('x-backup-not-locked'), gzip: b[0] === 0x1f && b[1] === 0x8b };
+        };
+        const beforeCode = await backupLocked();
+        resetAdminAuthTarpit();
+        const made = await fetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
+            method: 'POST', headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/json' }, body: '{}',
+        });
+        const madeBody: any = await made.json();
+        const afterCode = await backupLocked();
+        makeCode = { beforeCode, status: made.status, looksLikeCode: /^BPRC-\d+ /.test(madeBody?.code || ''), afterCode };
+    }
     resetAdminAuthTarpit();
     const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
@@ -150,7 +169,7 @@ async function child(): Promise<void> {
     const localConfig = JSON.parse(read('local-config.json')?.toString() || '{}');
     const leftovers = fs.readdirSync(dataDir).filter((f) => f.startsWith('.restore') || f.startsWith('uploaded-backup') || f.includes('.tmp-'));
     console.log('CHILD_RESULT ' + JSON.stringify({
-        status: res.status, body, before,
+        status: res.status, body, before, makeCode,
         after: {
             key: read('libp2p_key') ? sha(read('libp2p_key')!) : null,
             communityKey: read('community.key') ? sha(read('community.key')!) : null,
@@ -251,6 +270,12 @@ async function main(): Promise<void> {
     // ── 1. Round trip onto a fresh server ──
     console.log('\n— 1. seal → restore on a fresh data dir —');
     const rt = runChild('sealed', backupFile, code.code);
+    const mc = rt.makeCode;
+    assert(mc?.beforeCode.status === 200 && mc.beforeCode.gzip && mc.beforeCode.locked === 'no'
+        && mc.beforeCode.why === 'Backups are not locked yet: make a recovery code to lock them.',
+        `1. a fresh server with no recovery code sends a readable backup over HTTPS, flagged not locked (${JSON.stringify(mc?.beforeCode)})`);
+    assert(mc?.status === 200 && mc.looksLikeCode, `1. the operator manual's make-a-code request (password header, JSON body) makes a code over HTTPS (got ${mc?.status})`);
+    assert(mc?.afterCode.status === 200 && !mc.afterCode.gzip && mc.afterCode.locked === 'yes', `1. …after which its backups are locked (${JSON.stringify(mc?.afterCode)})`);
     assert(rt.status === 200 && rt.body.success === true && rt.body.sealed === true && rt.body.restoredKeys === true,
         `1. the fresh server restores the sealed backup (got ${rt.status}: ${JSON.stringify(rt.body).slice(0, 200)})`);
     assert(rt.before.key !== main.key && rt.before.communityId !== main.communityId, '1. (the fresh server started with its own key and community)');

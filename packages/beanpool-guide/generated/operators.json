@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 6,
-  "hash": "7082534932c0c4ff81b133c9b809ffc1cf41aea5af98137b46a34ebc1d9af796",
+  "version": 7,
+  "hash": "02b80f1478d288f32446151ded1bfa8ebc2a85059bb70351fa02a93c26035c8d",
   "sections": [
     {
       "id": "setup",
@@ -1484,8 +1484,10 @@
           "items": [
             "Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.",
             "Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.",
-            "The live-updates channel tells the apps about changes as they happen. Only members get the full stream: every version of the BeanPool app signs its connection. Anyone else who connects is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
-            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false opens the full stream to anyone who can reach your server, as it was before. Do not use false."
+            "The live-updates channel tells the apps about changes as they happen. Every version of the BeanPool app signs its connection, so the server knows which member is listening.",
+            "A member hears about changes to the whole community, such as new posts, new members and announcements. They also hear about the private things they are part of: their own messages, their own trades, and the groups and event chats they are in. They never hear another member's messages or trades. When someone else's trade changes the market, for example a listing is taken, other members are told only that something changed, so their app can check again.",
+            "Anyone who is not a member is told only that something public changed, such as a post on the market or a pin on the map. They are never told what changed or who changed it. This is on by default.",
+            "The setting is ENFORCE_WS_AUTH. The value true goes further and turns away anyone who is not a signed-in member. The value false sends the community-wide changes to anyone who can reach your server, as it was before, but never anyone's messages or trades. Do not use false."
           ]
         },
         {

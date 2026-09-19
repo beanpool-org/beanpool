@@ -9,6 +9,7 @@ import { useGuide } from '../utils/use-guide';
 import { findGuidePage, GUIDE_SLUGS, type GuidePage } from '../utils/guide';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getSavedNodes, isGuestNode } from '../utils/nodes';
+import { FEEDBACK_LIVE } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -51,7 +52,7 @@ function useCommunity(): { name: string | null; status: CommunityStatus } {
     return { name, status };
 }
 
-// "BeanPool: help and how it works" — the members' sheet. Opened from Settings today; the header redesign
+// "BeanPool: help and how it works" — the members' sheet. Opened from Settings → BeanPool today; the header redesign
 // will also open it from the electric bean. Guides render from useGuide (bundled, cached or newer from
 // beanpool.org) and never wait on the network.
 export default function BeanPoolSheet() {
@@ -153,20 +154,23 @@ export default function BeanPoolSheet() {
 
                 <Text style={styles.sectionLabel}>THE BEANPOOL PROJECT</Text>
                 <View style={styles.group}>
-                    <Pressable
-                        style={styles.row}
-                        onPress={() => router.push('/suggest-change')}
-                        accessibilityRole="button"
-                        accessibilityLabel="Suggest a change to BeanPool"
-                    >
-                        <MaterialCommunityIcons name="message-draw" size={24} color={colors.brand.primary} />
-                        <View style={styles.rowText}>
-                            <Text style={styles.rowTitle}>Suggest a change</Text>
-                            <Text style={styles.rowSub} numberOfLines={2}>Ideas and problems go to the BeanPool project team</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
-                    </Pressable>
-                    <GuideRow page={page(GUIDE_SLUGS.whatsNew)} icon="new-box" />
+                    {/* Hidden until the feedback Worker is live (FEEDBACK_LIVE, @beanpool/core feedback.ts). */}
+                    {FEEDBACK_LIVE && (
+                        <Pressable
+                            style={styles.row}
+                            onPress={() => router.push('/suggest-change')}
+                            accessibilityRole="button"
+                            accessibilityLabel="Suggest a change to BeanPool"
+                        >
+                            <MaterialCommunityIcons name="message-draw" size={24} color={colors.brand.primary} />
+                            <View style={styles.rowText}>
+                                <Text style={styles.rowTitle}>Suggest a change</Text>
+                                <Text style={styles.rowSub} numberOfLines={2}>Ideas and problems go to the BeanPool project team</Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
+                        </Pressable>
+                    )}
+                    <GuideRow page={page(GUIDE_SLUGS.whatsNew)} icon="new-box" first={!FEEDBACK_LIVE} />
                     <View style={[styles.row, styles.rowDivider]}>
                         <Pressable
                             style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 }}

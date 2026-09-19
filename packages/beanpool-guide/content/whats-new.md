@@ -10,8 +10,9 @@ Some of these changes live on your community's server. You get them when your co
 
 ### New
 
-- **This BeanPool sheet.** Guides to how BeanPool works, the rules, common questions and what's new. They work without a connection.
-- **Suggest a change.** Send an idea or a problem straight to the BeanPool project team. It has moved from Settings into this sheet.
+- **This BeanPool sheet.** Guides to how BeanPool works, the rules, common questions and what's new. They work without a connection. Open it from Settings → BeanPool.
+- **Light or dark.** The app now follows your phone's light or dark setting. To choose for yourself, go to Settings → Appearance: Same as phone, Light or Dark.
+- **Badges.** Every screen now uses the same trust levels as your community's server: Resident from 200 trust, Steward from 600, Elder from 1,400. Some screens used to show the wrong badge. The Newcomer badge is easier to read.
 
 ### Voting
 
@@ -25,14 +26,14 @@ Some of these changes live on your community's server. You get them when your co
 ### Enterprises
 
 - When the lead keeper adds or removes a keeper, the other keepers have 3 days to object.
-- Any keeper can step down.
+- A keeper can step down, unless they are the only keeper.
 - Choosing a new lead now has a 14-day limit, and keepers can vote No.
 - If the lead leaves, the longest-serving keeper takes over at once.
 
 ### Groups
 
-- Every group is getting its own chat. The old group chats in Chats have been removed. The new group chat screens come in the next update.
-- If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. This also comes with the next update.
+- The old group chats in Chats have been removed, with their messages.
+- If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update.
 
 ### Safety
 

@@ -34,7 +34,7 @@ On a Decision or a Poll, yes, until the vote closes. On a keeper or convenor vot
 
 ## Can anyone see how I voted?
 
-On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server, so someone who can open the server's files directly could look it up. On a Poll: yes, everyone can see. Polls are an open show of hands.
+On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. On a Poll: yes, everyone can see. Polls are an open show of hands.
 
 ## I lost my phone. Is my account gone?
 
@@ -54,4 +54,4 @@ You can delete your account in Settings. First finish or cancel any open trades.
 
 ## Something is wrong or could be better. Who do I tell?
 
-For problems with a person or a trade, talk to the admins of your community. For ideas about the app itself, use "Suggest a change" in this BeanPool sheet. It goes to the BeanPool project team, not to your community. It does not include your name unless you write it.
+For problems with a person or a trade, talk to the admins of your community. For ideas about the app itself, visit beanpool.org.

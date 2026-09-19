@@ -45,7 +45,7 @@ Your credit line starts at zero. It opens when you complete your first trade in 
 
 Your credit line grows with your **trust**:
 
-- Only completed trades in the market build trust. Gifts do not.
+- You earn trust by completing trades in the market. Gifts do not earn trust.
 - Trading with many different people builds more trust. Trade with any one person counts up to 500 beans.
 - Trust grows quickly at first, then more slowly.
 - Star ratings matter. If people rate you, your average rating scales the trust your trades earn: 5 stars keeps all of it, 1 star keeps 60%.
@@ -66,7 +66,7 @@ If you take Offers down while you are below zero, you may owe more than your Off
 
 ## Trust badges
 
-Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder.
+Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades.
 
 - Resident from 200 trust.
 - Steward from 600 trust.

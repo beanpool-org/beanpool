@@ -79,7 +79,7 @@
             <li>You can change your vote at any time until the vote closes.</li>
         </ul>
         <h2>Secret ballots</h2>
-        <p>The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. Someone who can open the server's files directly could look it up.</p>
+        <p>The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. The owners and admins who run the server can take a copy of its files, and could look up your vote there.</p>
         <p>Polls are different: a Poll is an open show of hands, and everyone can see who picked what.</p>
         <h2>How long a vote runs</h2>
         <p>Every Decision runs for exactly 7 days. Voting opens at once. When the 7 days are up, your community's server counts the votes and acts on the result.</p>
@@ -102,7 +102,8 @@
         <h2>When a Decision passes</h2>
         <ul>
             <li>Your community's server checks that it still makes sense: the member still exists, the Commons has enough beans. Then it acts.</li>
-            <li>If the Commons is short of beans for a grant, the grant waits in a queue until there is enough. Only one grant can wait at a time. It gives up after 90 days.</li>
+            <li>If the Commons is short of beans for a grant, the grant waits until there is enough. It gives up after 90 days.</li>
+            <li>Only one grant can wait at a time. If a second grant passes while the Commons is still short, it does not wait: it closes for good, and the community must vote again.</li>
             <li>If the person or enterprise is already gone, the Decision closes without doing anything.</li>
         </ul>
         <h2>Removing a member</h2>
@@ -124,17 +125,17 @@
         <p>Your community's server has owners and admins. They look after it.</p>
         <ul>
             <li>An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.</li>
-            <li>If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.</li>
+            <li>If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away. If the member being removed is an owner or admin of the server, only an owner can do either.</li>
             <li>Admins can give members the right to vouch for newcomers.</li>
             <li>Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.</li>
             <li>Admins sort out stuck trades, but never one they are part of.</li>
         </ul>
         <h2>Polls</h2>
         <ul>
-            <li>Any active member can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.</li>
+            <li>Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.</li>
             <li>You can have one open Poll at a time. Your community can have 5 open Polls at once.</li>
             <li>A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.</li>
-            <li>You can change your answer until the Poll closes. The person who started it can close it early.</li>
+            <li>Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.</li>
         </ul>
         <h2>Enterprises and keepers</h2>
         <p>An enterprise is run by its keepers. One of them is the lead keeper.</p>
@@ -142,11 +143,12 @@
             <li><strong>Joining:</strong> you ask to become a keeper and say how much of your earned trust you pledge (it can be 0). You cannot pledge more trust than you have earned by trading, across all your enterprises. The lead keeper approves or declines.</li>
             <li><strong>Objection window:</strong> when an enterprise already has more than one keeper, the lead's approval waits 3 days. Any other keeper can object in that time, and one objection cancels it.</li>
             <li><strong>Removing a keeper:</strong> the lead can remove an ordinary keeper. The same 3-day window applies, and any other keeper can object.</li>
+            <li><strong>Community admins:</strong> an admin of your community who is not a keeper of the enterprise can approve a keeper, or remove an ordinary keeper, at once, with no 3-day window. This is so a stuck enterprise can be helped.</li>
             <li><strong>Stepping down:</strong> any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.</li>
             <li><strong>Your pledge</strong> backs the enterprise's credit line. It is never taken from your own balance or your own credit line.</li>
             <li><strong>A quiet lead:</strong> if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. Keeper votes cannot be changed.</li>
             <li><strong>If the lead leaves or is removed,</strong> the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.</li>
-            <li><strong>Winding up:</strong> only the lead can start closing an enterprise. There is then a 7-day wait, and any keeper can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons.</li>
+            <li><strong>Winding up:</strong> the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons.</li>
         </ul>
         <h2>Groups and convenors</h2>
         <p>A group is run by its convenors.</p>

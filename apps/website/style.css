@@ -1513,7 +1513,7 @@ footer {
 }
 
 /* ======================== HOME PAGE (member-first rewrite) ======================== */
-/* Phone menu. Only the home page and the Help Centre have a .nav-menu; other pages keep their nav as it was. */
+/* Phone menu. Pages whose nav has .has-menu carry a .nav-menu; the rest (privacy, data deletion) keep their nav as it was. */
 .nav-menu { display: none; position: relative; }
 .nav-menu summary {
     list-style: none;
@@ -1711,14 +1711,14 @@ footer {
 /* a:hover is amber; keep the GitHub icon white (YouTube and Reddit set their own fill) */
 .hero-social-btn:hover { color: #ffffff; }
 
-/* The home page's desktop nav stays on one line down to 1024px (below that its menu takes over):
+/* A .has-menu desktop nav stays on one line down to 1024px (below that its menu takes over):
    nav words never break, and the spacing tightens first */
 .nav-inner.has-menu .nav-links a { white-space: nowrap; }
 @media (max-width: 1200px) {
     .nav-inner.has-menu .nav-links { gap: 1rem; }
     .nav-inner.has-menu .nav-cta { padding: 0.625rem 1.1rem !important; }
 }
-/* The other pages keep their desktop row down to 769px; tighter spacing keeps Get Started on screen */
+/* Pages without a menu keep their desktop row down to 769px; tighter spacing keeps Get Started on screen */
 @media (max-width: 1023px) {
     .nav-links { gap: 1rem; }
     .nav-cta { padding: 0.625rem 1.1rem !important; }

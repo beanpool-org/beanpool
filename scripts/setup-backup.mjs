@@ -115,8 +115,9 @@ async function mintTokenIfNone(primary, adminPw) {
     };
     const status = await post('/api/local/admin/replication-token/status');
     if (status.hasToken) {
-        die('The primary already has a replication token. Copy it from Settings → Replication Access and pass it with --token.\n' +
-            '(Making a new one here would cut off any standby already using the current one.)');
+        die('The primary already has a replication token, and it shows a token only once. If you saved it when it was made, pass it with --token.\n' +
+            'If not, make a new one in Settings → Replication Access, paste it into every standby of that primary, and pass it here with --token.\n' +
+            '(This script will not make one itself: that would cut off any standby already using the current one.)');
     }
     const gen = await post('/api/local/admin/replication-token/generate');
     if (!gen.token) die('The primary did not return a replication token.');

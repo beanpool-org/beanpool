@@ -61,7 +61,7 @@ function envelopePath(): string {
 // ── What is sealed (§2.1) ──────────────────────────────────────────────────────────────────
 
 /** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials. */
-const BUNDLED_LOCAL_CONFIG_FIELDS = [
+export const BUNDLED_LOCAL_CONFIG_FIELDS = [
     'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode',
 ] as const;
 
@@ -70,7 +70,7 @@ const BUNDLED_LOCAL_CONFIG_FIELDS = [
  * Never in the bundle: the replication token hash, a standby's `backupReplicationToken`, the legacy plain-text
  * `backupAdminPassword` (§2.1).
  */
-const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json'] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json'] as const;
 
 export interface TakeoverBundle {
     v: 1;
@@ -88,7 +88,7 @@ export interface TakeoverBundle {
     recoveryCode: RecoveryCodeRecord | null;
 }
 
-interface NodeIdentity {
+export interface NodeIdentity {
     seed: Uint8Array;
     peerId: string;
 }
@@ -113,6 +113,17 @@ function loadNodeIdentity(keyBytes: Buffer): NodeIdentity {
         throw new Error('data/libp2p_key does not hold a consistent Ed25519 key pair');
     }
     return { seed, peerId: peerIdFromPrivateKey(priv).toString() };
+}
+
+/** This node's identity from data/libp2p_key, or null when there is none yet. Throws on a malformed key. */
+export function readNodeIdentity(): NodeIdentity | null {
+    const keyBytes = readFileOrNull('libp2p_key');
+    return keyBytes ? loadNodeIdentity(keyBytes) : null;
+}
+
+/** The PeerId a libp2p_key file's bytes belong to. Throws when they are not an Ed25519 key. */
+export function peerIdOfKeyFile(keyBytes: Buffer): string {
+    return loadNodeIdentity(keyBytes).peerId;
 }
 
 function readPublicAddress(): unknown {
@@ -328,14 +339,22 @@ function serial<T>(fn: () => Promise<T>): Promise<T> {
     return run;
 }
 
-async function doEnsure(reason: string): Promise<TakeoverStatus> {
-    if (standby) {
-        return statusWithout('standby', 'This is a standby: it holds no take-over keys of its own.');
+/**
+ * Everything a seal needs, read from disk and the database now: the node's signing identity, its community, who
+ * to lock to, and the take-over bundle. Shared by the take-over envelope and sealed backups (§6.1), so a backup
+ * is always locked to exactly the people the envelope is.
+ */
+export type SealingInputs =
+    | {
+        ok: true; identity: NodeIdentity; communityId: string; owners: OwnerRecipient[]; skipped: SkippedOwner[];
+        code: RecoveryCodeRecord | null; bundle: TakeoverBundle;
     }
+    | { ok: false; state: 'no-identity' | 'no-genesis' | 'no-recipients'; message: string; skipped: SkippedOwner[] };
+
+export function readSealingInputs(): SealingInputs {
     const keyBytes = readFileOrNull('libp2p_key');
     if (!keyBytes) {
-        if (removeStored()) logger.warn('SYS', '[Takeover] Removed the take-over envelope: data/libp2p_key is missing, so it no longer matches this node');
-        return statusWithout('no-identity', 'No take-over keys to lock yet: this server has not created its node key (data/libp2p_key).');
+        return { ok: false, state: 'no-identity', skipped: [], message: 'this server has not created its node key (data/libp2p_key)' };
     }
     const genesisBytes = readFileOrNull('genesis.json');
     let communityId: string | null = null;
@@ -343,21 +362,17 @@ async function doEnsure(reason: string): Promise<TakeoverStatus> {
         communityId = genesisBytes ? JSON.parse(genesisBytes.toString('utf-8'))?.communityId ?? null : null;
     } catch { communityId = null; }
     if (!communityId || typeof communityId !== 'string') {
-        if (removeStored()) logger.warn('SYS', '[Takeover] Removed the take-over envelope: genesis.json is missing or unreadable');
-        return statusWithout('no-genesis', 'No take-over keys to lock yet: this server has no readable genesis.json.');
+        return { ok: false, state: 'no-genesis', skipped: [], message: 'this server has no readable genesis.json' };
     }
     const identity = loadNodeIdentity(keyBytes);
 
     const { owners, skipped } = currentOwners();
     const code: RecoveryCodeRecord | null = (getLocalConfig() as any).recoveryCode ?? null;
     if (owners.length === 0 && !code) {
-        if (removeStored()) {
-            logger.warn('SYS', '[Takeover] Removed the take-over envelope: this server now has no owner and no recovery code to lock it to');
-        }
         const why = skipped.length
             ? `this server's owner${skipped.length === 1 ? "'s key is" : "s' keys are"} not usable and there is no recovery code`
             : 'this server has no owner and no recovery code';
-        return statusWithout('no-recipients', `No take-over envelope: ${why}, so there is nobody to lock its keys to. Make someone an owner, or make a recovery code.`, skipped);
+        return { ok: false, state: 'no-recipients', skipped, message: why };
     }
 
     const files = {} as TakeoverBundle['files'];
@@ -365,7 +380,29 @@ async function doEnsure(reason: string): Promise<TakeoverStatus> {
         const b = f === 'libp2p_key' ? keyBytes : f === 'genesis.json' ? genesisBytes : readFileOrNull(f);
         files[f] = b ? b.toString('base64') : null;
     }
-    const bundle = buildBundle(files);
+    return { ok: true, identity, communityId, owners, skipped, code, bundle: buildBundle(files) };
+}
+
+async function doEnsure(reason: string): Promise<TakeoverStatus> {
+    if (standby) {
+        return statusWithout('standby', 'This is a standby: it holds no take-over keys of its own.');
+    }
+    const inputs = readSealingInputs();
+    if (!inputs.ok) {
+        if (inputs.state === 'no-identity') {
+            if (removeStored()) logger.warn('SYS', '[Takeover] Removed the take-over envelope: data/libp2p_key is missing, so it no longer matches this node');
+            return statusWithout('no-identity', 'No take-over keys to lock yet: this server has not created its node key (data/libp2p_key).');
+        }
+        if (inputs.state === 'no-genesis') {
+            if (removeStored()) logger.warn('SYS', '[Takeover] Removed the take-over envelope: genesis.json is missing or unreadable');
+            return statusWithout('no-genesis', 'No take-over keys to lock yet: this server has no readable genesis.json.');
+        }
+        if (removeStored()) {
+            logger.warn('SYS', '[Takeover] Removed the take-over envelope: this server now has no owner and no recovery code to lock it to');
+        }
+        return statusWithout('no-recipients', `No take-over envelope: ${inputs.message}, so there is nobody to lock its keys to. Make someone an owner, or make a recovery code.`, inputs.skipped);
+    }
+    const { identity, communityId, owners, skipped, code, bundle } = inputs;
     const fingerprint = fingerprintOf(identity.seed, owners, code, bundle);
 
     const stored = readStored();

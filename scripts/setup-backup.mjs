@@ -4,7 +4,8 @@
  *
  * Run this ON THE WOULD-BE BACKUP HOST (the second machine), NOT on the primary.
  * It enrolls a fresh node as a one-directional, read-only backup of an existing
- * primary: it pulls the primary's community identity, wipes any stale local state
+ * primary: it pulls the primary's public community identity (genesis.json and its PeerId,
+ * never a key), wipes any stale local state
  * so the backup rebuilds cleanly under a brand-new PeerId, and writes the env +
  * connector config the backup needs to start pulling.
  *
@@ -163,7 +164,7 @@ async function main() {
             '(For a self-signed-CA LAN primary, set NODE_EXTRA_CA_CERTS to its CA pem.)');
     }
 
-    const { communityId, genesis, communityKey, primaryPeerId, primaryUrl } = bundle;
+    const { communityId, genesis, primaryPeerId, primaryUrl } = bundle;
     if (!genesis || !primaryPeerId) {
         die('Enrollment bundle is incomplete (missing genesis or primaryPeerId). Is the primary fully booted?');
     }
@@ -175,14 +176,15 @@ async function main() {
     // 2. Ensure the data dir exists.
     fs.mkdirSync(dataDir, { recursive: true });
 
-    // 3. Write genesis.json + decoded community.key.
+    // 3. Write genesis.json. No key comes with it: a standby never needed community.key, and the main
+    //    server's keys reach a standby only sealed to the owners (sealed-keys.md §1.1, §6.1). A stale
+    //    community.key from an earlier install is removed, so this machine holds no key of another server.
     fs.writeFileSync(path.join(dataDir, 'genesis.json'), JSON.stringify(genesis, null, 2));
     console.log('  • wrote genesis.json');
-    if (communityKey) {
-        fs.writeFileSync(path.join(dataDir, 'community.key'), Buffer.from(communityKey, 'base64'));
-        console.log('  • wrote community.key');
-    } else {
-        console.log('  • (primary did not expose community.key — continuing without it)');
+    const staleCommunityKey = path.join(dataDir, 'community.key');
+    if (fs.existsSync(staleCommunityKey)) {
+        fs.unlinkSync(staleCommunityKey);
+        console.log('  • removed an old community.key (a standby holds no key of the main server)');
     }
 
     // 4. Delete libp2p_key so the backup boots a FRESH PeerId (must not share the

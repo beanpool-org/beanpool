@@ -22,6 +22,12 @@
         .guide .guide-list li { margin: 0 0 0.75rem; }
         .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
         .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
         .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
         .guide-nav .nav-links { gap: 1.25rem; }
         /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
@@ -44,7 +50,7 @@
     </nav>
 
     <main class="legal-content glass-panel guide">
-        <p class="kicker"><a href="index.html">Members' guide</a></p>
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#about">About BeanPool</a></p>
         <h1>Questions</h1>
         <p class="lede">Short answers to the questions members ask most.</p>
         <h2>Who runs my community?</h2>
@@ -73,7 +79,16 @@
         <p>You can delete your account in Settings. First finish or cancel any open trades. When you delete your account, any beans you hold go to your community's Commons, and if you are below zero, the Commons covers it. This cannot be undone, even with your 12 words.</p>
         <h2>Something is wrong or could be better. Who do I tell?</h2>
         <p>For problems with a person or a trade, talk to the admins of your community. For ideas about the app itself, visit beanpool.org.</p>
-        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version 1.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.</span></a></li>
+            <li><a href="recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>More than one community</strong><span>Belong to several communities with one account, and switch between them.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Getting help</strong><span>Where to look when you are stuck, and who to ask.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 2.</p>
     </main>
 </body>
 </html>

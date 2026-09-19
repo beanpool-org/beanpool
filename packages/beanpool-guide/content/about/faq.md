@@ -2,6 +2,7 @@
 slug: faq
 title: Questions
 summary: Short answers to the questions members ask most.
+related: your-12-words, recovery, communities, holiday-mode, leaving-or-deleting, getting-help
 ---
 
 ## Who runs my community?

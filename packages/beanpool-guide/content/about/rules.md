@@ -2,6 +2,7 @@
 slug: rules
 title: Rules and how decisions work
 summary: Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers and convenors.
+related: decisions, proposing-a-decision, polls, keepers, groups, people
 ---
 
 ## Two ways to ask the community

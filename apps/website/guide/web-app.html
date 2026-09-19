@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using BeanPool in a web browser — BeanPool members' guide</title>
+    <meta name="description" content="The web app does most of what the phone app does. Where its buttons have different names.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#getting-started">Getting started</a></p>
+        <h1>Using BeanPool in a web browser</h1>
+        <p class="lede">The web app does most of what the phone app does. Where its buttons have different names.</p>
+        <h2>The same account, a different screen</h2>
+        <p>Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.</p>
+        <h2>Different names and places</h2>
+        <ul>
+            <li><strong>Tabs:</strong> the web app has <strong>Market</strong>, <strong>Pulse</strong>, <strong>Map</strong>, <strong>Commons</strong>, <strong>Chat</strong>, <strong>People</strong> and <strong>Ledger</strong>. What the phone app calls <strong>Talk</strong> is <strong>Chat</strong> on the web, and <strong>People</strong> has its own tab.</li>
+            <li><strong>Settings and your profile:</strong> the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.</li>
+            <li><strong>Posting an Offer or a Need:</strong> use <strong>New Post</strong> on the <strong>Map</strong> page.</li>
+            <li><strong>Appearance:</strong> the choice is called <strong>Same as device</strong> instead of &quot;Same as phone&quot;.</li>
+            <li><strong>Blocking:</strong> Settings says <strong>Manage Blocked Members</strong>.</li>
+            <li><strong>Chats:</strong> the web chat has <strong>Report</strong> and <strong>Block</strong> buttons at the top.</li>
+        </ul>
+        <h2>What the web app does not have</h2>
+        <ul>
+            <li>Signing in with Google, Facebook, GitHub or Apple to get your account back. On the web, your 12 words are the only way back.</li>
+            <li>The Pulse's <strong>Learn</strong> lane.</li>
+            <li>The phone's app lock.</li>
+        </ul>
+        <h2>Using your phone account on a computer</h2>
+        <ul>
+            <li>In the web app on the computer, choose to link with the mobile app. It shows a QR code.</li>
+            <li>On the phone, open <strong>Settings</strong> and tap <strong>Link Another Device</strong>.</li>
+            <li>Point the phone's camera at the QR code and tap <strong>Confirm &amp; Link Device</strong>.</li>
+        </ul>
+        <h2>Installing it</h2>
+        <p>The web app may offer <strong>Install BeanPool</strong> so it opens from your home screen like an app. If your browser cannot do that, tap <strong>How?</strong> for steps.</p>
+        <h2>Keep your 12 words</h2>
+        <p>Browsers sometimes clear saved data, for example Safari after a week without a visit. Until you have looked at your 12 words, the web app shows a warning with <strong>View &amp; Save Recovery Phrase</strong>. Do it, and write them down.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-bean.html"><strong>This guide</strong><span>Where to find this guide, how to search it, and how it stays up to date.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Your 12 words</strong><span>The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.</span></a></li>
+            <li><a href="joining.html"><strong>Joining with an invite</strong><span>How to join a community with an invite, and how to invite someone else.</span></a></li>
+            <li><a href="messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply and react, and what is private.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 2.</p>
+    </main>
+</body>
+</html>

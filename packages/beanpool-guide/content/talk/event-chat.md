@@ -1,0 +1,28 @@
+---
+slug: event-chat
+title: Event chat
+summary: Talk with the host and everyone going to an event.
+related: events, messages, pin-locations, reporting
+---
+
+## Who is in it
+
+Every event has its own chat. The host and everyone who has tapped **Going** can read it and write in it. If you change to **Interested** or **Not going**, you leave the chat. The host is always in it.
+
+## Opening it
+
+- Open the event and tap **Open event chat**.
+- Or find it in **Talk**, under **Messages**, with your other chats.
+
+At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap **View event** to go back to the event.
+
+## Writing
+
+Type in **Message everyone going…** and tap **Send**. You can send up to 30 messages a minute.
+
+## Good to know
+
+- Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so at the bottom.
+- The host can remove any message. It then says "removed by the host".
+- Messages cannot be edited, and there are no reactions.
+- When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away.

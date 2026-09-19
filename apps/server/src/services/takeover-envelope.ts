@@ -325,6 +325,9 @@ function sealedStatus(s: StoredEnvelope, skipped: SkippedOwner[]): TakeoverStatu
 
 // ── Re-seal ────────────────────────────────────────────────────────────────────────────────
 
+// Read once, at boot (index.ts, from getNodeRole()). Nothing changes a node's role while it runs today; if a standby is
+// ever promoted without a restart, this must be updated too, or the promoted node goes on refusing to make a code
+// (RecoveryCodeOnStandbyError, 409) and sealing nothing.
 let standby = false;
 let queue: Promise<unknown> = Promise.resolve();
 const pendingReasons = new Set<string>();
@@ -582,6 +585,13 @@ export class RecoveryCodeExistsError extends Error {
     }
 }
 
+/** A standby seals nothing of its own (§3), so a code made there would open nothing. */
+export class RecoveryCodeOnStandbyError extends Error {
+    constructor() {
+        super('This server is a standby: it seals nothing, so a recovery code made here would open nothing. Make the code in the main server\'s Settings.');
+    }
+}
+
 /**
  * Make (or, with `replace`, rotate) the recovery code. The code is in the return value and nowhere else: only
  * its public record is saved, then the envelope is re-sealed to it before this resolves.
@@ -590,6 +600,7 @@ export function makeRecoveryCode(opts: { replace?: boolean } = {}): Promise<{
     code: string; codeId: number; createdAt: string; replacedCodeId: number | null; status: TakeoverStatus;
 }> {
     return serial(async () => {
+        if (standby) throw new RecoveryCodeOnStandbyError();
         const config = getLocalConfig() as any;
         const current: RecoveryCodeRecord | null = config.recoveryCode ?? null;
         if (current && !opts.replace) throw new RecoveryCodeExistsError(current.codeId);

@@ -14,12 +14,15 @@
  * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no controls
  * overlap each other, no text runs under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
- * each close it too, and Back does not leave Settings.
+ * each close it too, and Back does not leave Settings — except a card marked `holdsOpen` (one showing a one-time
+ * secret, such as the recovery code), which all three must leave open.
  *
  * Text is set in a bundled Verdana-width font (see HARNESS_FONT in harness.mjs), so a Mac and CI measure the same.
  *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
+/* global console, process, document, window, getComputedStyle, NodeFilter -- Node, plus page.evaluate callbacks run in the browser */
+import { FAKE_RECOVERY_CODE } from './fixtures.mjs';
 import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT, ALL_MODALS, openModal, topModal, closeControl } from './harness.mjs';
 
 const WIDTH = 320;
@@ -383,7 +386,14 @@ try {
                                 // Back must close the modal and stay on the same screen, not go to the one before.
                                 const stillSettings = p.url().includes('/settings') && await p.locator('main').count() > 0
                                     && await p.locator('header').first().innerText().catch(() => '') === where;
-                                const closed = stillSettings && await p.locator('.fixed.inset-0').count() === n - 1;
+                                const left = await p.locator('.fixed.inset-0').count();
+                                if (modal.holdsOpen) {
+                                    // A card showing a one-time secret: a stray tap, Escape or Back must not throw it away.
+                                    if (!stillSettings || left !== n) fail(`${how} closed a card that holds a one-time secret${stillSettings ? '' : ' (Back left the screen)'}`);
+                                    else console.log(`  ✓ ${modal.name} ${at}: ${how} leaves it open (it holds a one-time secret)`);
+                                    continue;
+                                }
+                                const closed = stillSettings && left === n - 1;
                                 if (!closed) fail(`${how} does not close it${stillSettings ? '' : ' (Back left the screen)'}`);
                                 else console.log(`  ✓ ${modal.name} ${at}: ${how} closes it`);
                             } finally {
@@ -398,6 +408,40 @@ try {
                     await context.close().catch(() => {});
                 }
             }
+        }
+    }
+
+    // The printed recovery code: exactly one A4 page, with the code on it once. Chromium repeats a `position: fixed`
+    // element on every printed page, and the modal is one, so a page that is still tall behind it printed three
+    // copies of the secret (Fable, PR #979). The page count is read from the PDF itself; "once" is read from the
+    // print-media render (the code blocks left visible), since the repo has no PDF text parser.
+    const PRINT = ALL_MODALS.find((m) => m.name === 'recovery-code-print');
+    for (const width of [360, 800, 1280]) {
+        const at = `@${width}`;
+        const { context, page, errors } = await openSettings(browser, origin, { width, screen: PRINT.screen, overrides: PRINT.overrides });
+        try {
+            await openModal(page, PRINT);
+            await page.emulateMedia({ media: 'print' });
+            const pdf = await page.pdf({ format: 'A4', printBackground: true });
+            const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-zA-Z])/g) || []).length;
+            const painted = await page.locator('[data-testid="recovery-code"]').evaluateAll((els) => els.filter((el) => {
+                const s = getComputedStyle(el);
+                const r = el.getBoundingClientRect();
+                return s.visibility === 'visible' && r.width > 0 && r.height > 0;
+            }).map((el) => el.textContent.replace(/\s+/g, '')));
+            const code = FAKE_RECOVERY_CODE.replace(/\s+/g, '');
+            checks++;
+            if (pages !== 1 || painted.length !== 1 || painted[0] !== code) {
+                failures.push(`print recovery code ${at}: ${pages} A4 page(s) and ${painted.length} painted code block(s) [${painted.join(' | ')}], expected 1 page with ${code} once`);
+                console.log(`  ✗ print recovery code ${at}: ${pages} page(s), ${painted.length} code(s)`);
+            } else {
+                console.log(`  ✓ print recovery code ${at}: 1 page, the code once`);
+            }
+        } catch (e) {
+            failures.push(`print recovery code ${at}: error: ${String(e.message || e).split('\n')[0]}`);
+        } finally {
+            if (errors.length) failures.push(`print recovery code ${at}: page errors: ${errors.join(' | ')}`);
+            await context.close().catch(() => {});
         }
     }
 

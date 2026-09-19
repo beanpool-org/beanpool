@@ -276,6 +276,12 @@ export const ALL_MODALS = [
         { in: 'modal', fill: '#takeover-code', value: 'BPRC-2 0000-0000-0000-0000-0000-0000-0000' }, { in: 'modal', button: /^Open the keys$/ },
     ] },
     { name: 'remove-replication-token', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Remove Token$/ }] },
+    // The recovery code (sealed keys). The code is shown once, so its card `holdsOpen`: the backdrop, Escape and Back
+    // must NOT close it (only its ✕ and Done do). phone-width.mjs checks the opposite of the usual for these.
+    { name: 'recovery-code-replace', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Replace it$/ }] },
+    { name: 'recovery-code-shown', screen: { tab: 'appliance', sub: 'backups' }, holdsOpen: true, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Replace it$/ }, { in: 'modal', button: /^Make a new code$/ }] },
+    { name: 'recovery-code-print', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Replace it$/ }, { in: 'modal', button: /^Make a new code$/ }, { in: 'modal', button: /Print$/ }] },
+    { name: 'recovery-code-check', screen: { tab: 'appliance', sub: 'backups' }, overrides: { '/api/local/admin/backup-status': (json) => ({ ...json, role: 'primary' }) }, steps: [{ in: 'main', button: /^Check a code$/ }] },
 ];
 
 /** The topmost open modal overlay, and its card (the overlay's first child). */

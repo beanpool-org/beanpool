@@ -39,6 +39,7 @@ import {
 } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
+import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 
 // ===================== TYPES =====================
 
@@ -209,6 +210,9 @@ export function issueRekeyCode(
     } catch {
         // Ignored if member is not an admin
     }
+
+    // The old key is suspended, so an owner re-keying drops out of the take-over lock until the new key is bound.
+    noteTakeoverInputsChanged('member re-key started');
 
     broadcast({ type: 'profile_updated', publicKey: cleanOld });
     logger.info('AUTH', `[Rekey] Re-enrolment code ${code} issued for ${member.callsign} by ${cleanOperator}`);
@@ -449,6 +453,10 @@ export function completeRekey(
     } catch {
         // Ignored
     }
+
+    // node_roles.member_pubkey moved to the new key above: an owner's take-over lock must follow it now, not at the
+    // next periodic check (sealed-keys.md §4).
+    noteTakeoverInputsChanged('member re-keyed');
 
     broadcast({ type: 'profile_updated', publicKey: cleanNew });
     broadcast({ type: 'member_rekeyed', oldPublicKey: cleanOld, newPublicKey: cleanNew });

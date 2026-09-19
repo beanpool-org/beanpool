@@ -68,16 +68,21 @@ export function slugifyGroupName(name: string): string {
         .slice(0, 50) || 'group';
 }
 
-export function ensureUniqueSlug(db: Db, baseSlug: string, existingGroupId?: string): string {
-    let slug = baseSlug;
-    let count = 1;
+const SLUG_SUFFIX_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
+
+/**
+ * A new group's slug: the name's slug plus a random suffix, on every group. A counter only on a clash
+ * ("quiet-circle-2") told whoever made a group that a group they cannot see already had that name: an invite-only
+ * group's existence confirmed by guessing its name. With a suffix on every slug, a taken name and a fresh one come
+ * back looking alike, and a clash on the whole slug just draws again. Slugs made before this keep their form.
+ */
+export function ensureUniqueSlug(db: Db, baseSlug: string): string {
+    const base = baseSlug.slice(0, 43);
     while (true) {
-        const row = db.prepare("SELECT id FROM groups WHERE slug = ?").get(slug) as any;
-        if (!row || (existingGroupId && row.id === existingGroupId)) {
-            return slug;
-        }
-        count++;
-        slug = `${baseSlug.slice(0, 44)}-${count}`;
+        const bytes = crypto.getRandomValues(new Uint8Array(6));
+        const suffix = Array.from(bytes, b => SLUG_SUFFIX_ALPHABET[b & 31]).join('');
+        const slug = `${base}-${suffix}`;
+        if (!db.prepare("SELECT 1 FROM groups WHERE slug = ?").get(slug)) return slug;
     }
 }
 

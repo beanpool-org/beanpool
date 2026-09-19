@@ -25,6 +25,8 @@ import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import { TakeoverPanel } from './TakeoverPanel';
+import { TakeoverLockPanel } from './TakeoverLockPanel';
+import type { RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -49,6 +51,8 @@ interface ApplianceSectionProps {
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
     isStandby?: boolean;
+    /** Who is signed in: decides whether the recovery-code buttons show (owners only; the password is owner level). */
+    rolesViewer?: RolesViewer;
 }
 
 export function ApplianceSection({
@@ -69,6 +73,7 @@ export function ApplianceSection({
     initialSubTab = 'diagnostics',
     onSubTabChange,
     isStandby: propIsStandby,
+    rolesViewer = { kind: 'password' },
 }: ApplianceSectionProps) {
     const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
@@ -944,6 +949,10 @@ export function ApplianceSection({
             {/* Subtab: Backups & Restore */}
             {subTab === 'backups' && (
                 <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Who can unlock this community" resetKey={activeNode.id}>
+                        <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName} />
+                    </SectionErrorBoundary>
+
                     {/* Database Download and Restore Wizard */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Download Database Backup */}

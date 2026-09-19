@@ -711,6 +711,7 @@ const BACKUP_STATUS = {
     lastSuccess: '2026-09-19T00:00:00.000Z',
     failStreak: 0,
     isSynced: true,
+    backupLock: { locked: true, codeId: 2, message: 'Backups are locked to recovery code #2 and 2 owners.' },
 };
 
 const TAKEOVER_MISSING = [
@@ -743,6 +744,26 @@ const TAKEOVER_PREVIEW = {
     missing: TAKEOVER_MISSING,
     afterwards: [],
 };
+
+// The take-over lock (sealed keys). Callsigns long enough to wrap at 320px × 1.3.
+const TAKEOVER_STATUS = {
+    state: 'sealed',
+    message: "This server's take-over keys are locked to 2 owners and recovery code #2; any one of them can open them.",
+    envelopeId: '0123456789abcdef0123456789abcdef',
+    sealedAt: '2026-09-18T04:02:00.000Z',
+    sealReason: 'owner role granted',
+    recipients: {
+        owners: [
+            { pubkey: 'a'.repeat(64), callsign: 'margaret_riverbend_founder' },
+            { pubkey: 'b'.repeat(64), callsign: 'ben' },
+        ],
+        codes: [{ codeId: 2, createdAt: '2026-09-10T00:00:00.000Z' }],
+    },
+    skippedOwners: [],
+    recoveryCode: { codeId: 2, createdAt: '2026-09-10T00:00:00.000Z' },
+};
+/** An obviously FAKE recovery code in the printed shape. Never a real one. */
+export const FAKE_RECOVERY_CODE = 'BPRC-3  FAKE-FAKE-FAKE-FAKE-FAKE-FAKE-FAKE';
 
 const REPLICATION_CONFIG = { primaryUrl: 'https://primary-riverbend.example.org', hasPassword: true, hasToken: true };
 
@@ -922,6 +943,15 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/takeover/progress') return ok(TAKEOVER_PROGRESS);
     if (pathname === '/api/local/admin/takeover/open') return ok({ success: true, preview: TAKEOVER_PREVIEW });
     if (pathname === '/api/local/admin/takeover/cancel') return ok({ success: true });
+
+    // ---- take-over lock & recovery code ----
+    if (pathname === '/api/local/admin/takeover/status') return ok(TAKEOVER_STATUS);
+    if (pathname === '/api/local/admin/takeover/recovery-code') {
+        const at = '2026-09-20T01:00:00.000Z';
+        const status = { ...TAKEOVER_STATUS, recipients: { ...TAKEOVER_STATUS.recipients, codes: [{ codeId: 3, createdAt: at }] }, recoveryCode: { codeId: 3, createdAt: at } };
+        return ok({ success: true, code: FAKE_RECOVERY_CODE, codeId: 3, createdAt: at, replacedCodeId: 2, status });
+    }
+    if (pathname === '/api/local/admin/takeover/recovery-code/check') return ok({ matches: true, codeId: 2 });
     if (pathname === '/api/local/admin/backup-config') return ok({ success: true });
     if (pathname === '/api/local/admin/backup/verify') return ok({ success: true, ok: true, verifiedAt: '2026-09-19T00:00:00.000Z', result: [] });
     if (pathname === '/api/local/admin/backup') return ok({});

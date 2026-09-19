@@ -17,6 +17,9 @@
  *  9. Owner-only: an admin's key session cannot make or check a code.
  * 10. The owner header route over real HTTPS: signed by an owner 200, by a member 403, unsigned 401.
  * 11. Boot is idempotent: an unchanged node keeps its envelopeId.
+ * 12. Re-key (engine/member-wizards.ts): starting one drops the old key from the lock, completing one re-seals to
+ *     the owner's new key — both through their chokepoints, with the periodic check parked.
+ * 13. A standby refuses to make a recovery code (409), since it seals nothing the code could open.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-envelope.ts
@@ -422,6 +425,40 @@ async function main() {
     const tokOverHttp = await fetch(`https://localhost:${PORT}/api/local/admin/takeover-envelope`, { headers: { 'X-Replication-Token': repToken } });
     const tokBytes = Buffer.from(await tokOverHttp.arrayBuffer());
     assert(tokOverHttp.status === 200 && tokOverHttp.headers.get('etag') === `"${current.envelopeId}"` && tokBytes.equals(Buffer.from(current.envelope, 'base64')), '10. the envelope route over real HTTPS serves the sealed bytes to the token');
+
+    // ── 12. Re-key: the lock follows an owner's new key through the chokepoint, not the periodic check ──
+    console.log('\n— 12. re-key an owner —');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const fay = member('Fay');
+    addMember(fay);
+    grantNodeRole(fay.pub, 'owner', anna.pub);
+    await sleep(150);
+    assert(ownersIn(headerNow()).includes(fay.pub), '12. (setup) Fay is an owner and a recipient');
+    const fayNew = member('Fay');
+    const rk = issueRekeyCode(fay.pub, anna.pub);
+    await sleep(150); // > debounce; the periodic check is still parked
+    assert(!ownersIn(headerNow()).includes(fay.pub), '12. starting a re-key (old key suspended) drops the old key from the lock');
+    assert(/member re-key started/.test(stored().reason), `12. …through its own chokepoint ("${stored().reason}")`);
+    const beforeComplete = stored().envelopeId;
+    completeRekey(fay.pub, fayNew.pub, rk.code, anna.pub);
+    await sleep(150);
+    assert(stored().envelopeId !== beforeComplete, '12. completing a re-key re-seals');
+    // The session-epoch bump inside completeRekey also notes a change today (even though the old key no longer has
+    // a row), so the reason is what shows the re-key's own chokepoint fired, not a side effect of another one.
+    assert(/member re-keyed/.test(stored().reason), `12. …through the re-key's own chokepoint ("${stored().reason}")`);
+    assert(ownersIn(headerNow()).includes(fayNew.pub) && !ownersIn(headerNow()).includes(fay.pub), '12. …to the owner\'s NEW key, not the old one');
+    assert(!!(await opens(envelopeBytes(), { type: 'owner', privateKey: fayNew.seed })), '12. Fay\'s new key opens the file on disk');
+    assert((await opens(envelopeBytes(), { type: 'owner', privateKey: fay.seed })) === null, '12. Fay\'s old key cannot');
+
+    // ── 13. A standby makes no code: it seals nothing, so the paper would open nothing ──
+    console.log('\n— 13. standby —');
+    const recordBefore = JSON.stringify((getLocalConfig() as any).recoveryCode);
+    await svc.startTakeoverEnvelopeService({ standby: true, checkIntervalMs: 3_600_000 });
+    const onStandby = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin, body: { replace: true } });
+    assert(onStandby.status === 409 && onStandby.body.standby === true && !onStandby.body.code, `13. making a code on a standby → 409, no code (got ${onStandby.status})`);
+    assert(/main server/.test(onStandby.body.error || ''), `13. …and says where to make it: "${onStandby.body.error}"`);
+    assert(JSON.stringify((getLocalConfig() as any).recoveryCode) === recordBefore, '13. …and the stored record is unchanged');
+    await svc.startTakeoverEnvelopeService({ checkIntervalMs: 3_600_000 });
 
     // ── 1 again: removing the last recipient removes the envelope ──
     console.log('\n— 1b. back to nobody —');

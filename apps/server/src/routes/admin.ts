@@ -839,11 +839,12 @@ router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): someone must have reported it.
+    // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): the post needs an open
+    // report. A dismissed ('reviewed') or actioned one no longer counts.
     if ((ctx.state as any)?.adminRole === 'moderator'
-        && !db.prepare('SELECT 1 FROM abuse_reports WHERE target_post_id = ? LIMIT 1').get(ctx.params.id)) {
+        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
         ctx.status = 403;
-        ctx.body = { success: false, error: 'Moderators can remove a post only when someone has reported it' };
+        ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
         return;
     }
     try {
@@ -1093,6 +1094,17 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.status = 403;
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
+        }
+        // A moderator removes a post or Pulse item only through a report that is still open, as on
+        // posts/:id/delete: once dismissed ('reviewed') or actioned, only an owner or admin can take it down.
+        // Marking a report handled with no removal is not gated.
+        if ((deletePost || removePulseItem) && (ctx.state as any)?.adminRole === 'moderator') {
+            const report = db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(ctx.params.id) as any;
+            if (report && report.status !== 'pending' && report.status != null) {
+                ctx.status = 403;
+                ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
+                return;
+            }
         }
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
         if (!ok) {

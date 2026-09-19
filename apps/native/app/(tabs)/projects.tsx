@@ -29,6 +29,7 @@ export default function ProjectsScreen() {
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
     // The signer's voice credits for votes on community money — the number the node checks (answer H).
     const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
+    const [nodeSaysCanPropose, setNodeSaysCanPropose] = useState<boolean | null>(null);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
 
@@ -191,6 +192,7 @@ export default function ProjectsScreen() {
             const decData = await getDecisions();
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
+            setNodeSaysCanPropose(decData.canPropose);
         } catch (err) {
             console.error('[Projects] Failed loading decisions:', err);
         }
@@ -213,7 +215,8 @@ export default function ProjectsScreen() {
         }
     }, []);
 
-    const canProposeDecision = (balanceState.earnedCredit || 0) > 0;
+    // The node's rule (earned standing, or a node admin); earned credit only when the node hasn't said.
+    const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
         return decisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
@@ -521,12 +524,14 @@ export default function ProjectsScreen() {
                                 </View>
                             </View>
                             <View style={styles.statCard} testID="voice-credits-card">
-                                <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits for money votes</Text>
+                                {/* Half-width card: at 320dp and 1.3x text the label has ~110dp, room for two short words.
+                                    What the credits are for goes in the hint, which wraps freely. */}
+                                <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits</Text>
                                 <Text style={styles.statCardAmount} numberOfLines={1}>{Math.floor(myPoolVoting?.voiceCredits ?? 0)}</Text>
                                 <Text style={styles.statCardHint}>
                                     {myPoolVoting && !myPoolVoting.hasCompletedTrade
-                                        ? 'Opens after your first completed trade'
-                                        : 'From completed trades · N votes cost N×N'}
+                                        ? 'For money votes · opens after your first completed trade'
+                                        : 'For money votes · from completed trades · N votes cost N×N'}
                                 </Text>
                             </View>
                         </View>

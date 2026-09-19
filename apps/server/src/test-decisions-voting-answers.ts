@@ -238,6 +238,14 @@ async function run() {
         'a no-trade member is told 0 credits and no trade, so the card can say so before they try');
     const listUnsigned = await callRouter(commons, 'GET', '/api/commons/decisions');
     assert(listUnsigned.body.myPoolVoting === null, 'an unsigned caller gets no voice credits');
+    // Who may propose, served so the apps gate on the node's rule: earned standing, or a node admin.
+    const noStanding = makeMember('NoStanding', { earnedCredit: 0 });
+    const bareAdmin = makeMember('BareAdmin', { earnedCredit: 0 });
+    grantNodeRole(bareAdmin, 'admin', owner);
+    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: trader })).body.canPropose === true, 'a member with earned standing may propose');
+    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: noStanding })).body.canPropose === false, 'a member with no earned standing may not');
+    assert((await callRouter(commons, 'GET', '/api/commons/decisions', { actor: bareAdmin })).body.canPropose === true, 'a node admin with no trades may');
+    assert(listUnsigned.body.canPropose === false, 'an unsigned caller may not');
 
     // ── I. Secret ballots ─────────────────────────────────────────────────
     console.log('\n--- I. Secret ballots ---');

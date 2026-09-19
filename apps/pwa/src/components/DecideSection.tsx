@@ -156,7 +156,7 @@ export function DecideSection({
                                 <span className="text-xs text-nature-400 font-medium">No bond required</span>
                             </div>
                             <p className="text-nature-400 text-xs sm:text-sm mt-1 max-w-xl">
-                                Binding decisions execute automatically upon passing (§3.7). Open to anyone who has completed a trade.
+                                Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
                             </p>
                             {!canPropose && (
                                 <p className="text-amber-400 text-xs font-semibold mt-1">

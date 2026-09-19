@@ -11,6 +11,7 @@ import {
     createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision, tickDecisions,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
+    checkProposalStanding,
 } from '../state-engine.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -131,6 +132,9 @@ router.get('/api/commons/decisions', async (ctx) => {
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
         myPoolVoting: myPoolVoting(actor),
+        // Whether the signer may propose (earned standing, or a node admin). The one-open-Decision limit is
+        // left to the apps, which already know the signer's open Decisions.
+        canPropose: actor ? checkProposalStanding(actor).ok : false,
     };
 });
 

@@ -355,6 +355,24 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
  * - Max 1 open decision per author.
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
+    const standing = checkProposalStanding(authorPubkey);
+    if (!standing.ok) return standing;
+
+    const openCount = (db.prepare(
+        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open'"
+    ).get(authorPubkey) as any)?.c || 0;
+    if (openCount >= 1) {
+        return { ok: false, error: 'Member already has an open decision (limit 1)' };
+    }
+
+    return { ok: true };
+}
+
+/**
+ * Whether a member may propose at all — every rule of checkCanProposeDecision except the one-open-Decision
+ * limit. The Decisions list serves it (canPropose) so the apps gate the Propose button on the node's rule.
+ */
+export function checkProposalStanding(authorPubkey: string): { ok: boolean; error?: string } {
     const member = getMember(authorPubkey);
     if (!member) return { ok: false, error: 'Member not found' };
     if (member.status !== 'active') return { ok: false, error: 'Member is not active' };
@@ -367,14 +385,6 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
     if (tradeVal <= 0 && (member.earnedCredit || 0) <= 0 && !isAdmin) {
         return { ok: false, error: 'Proposing a Decision requires earned trade standing (earnedCredit > 0)' };
     }
-
-    const openCount = (db.prepare(
-        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open'"
-    ).get(authorPubkey) as any)?.c || 0;
-    if (openCount >= 1) {
-        return { ok: false, error: 'Member already has an open decision (limit 1)' };
-    }
-
     return { ok: true };
 }
 

@@ -592,14 +592,14 @@ export function DecideSection({
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
                 <>
-                    {/* Propose Decision Banner (open to anyone who has completed a trade; 1 open per author; no bond) */}
+                    {/* Propose Decision Banner (earned standing or a node admin; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
                             <Text style={styles.proposeTitle}>🌱 Propose Community Action</Text>
                             <Text style={{ fontSize: 12, color: colors.text.muted }}>No bond required</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            Binding decisions execute automatically upon passing (§3.7). Open to anyone who has completed a trade.
+                            Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.
                         </Text>
                         <Pressable
                             accessibilityRole="button"

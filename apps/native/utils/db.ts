@@ -2315,7 +2315,6 @@ export interface Decision {
     executionError: string | null;
     executionReason: string | null;
     adminHaltedAt: string | null;
-    adminHaltedBy: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
 }
@@ -2353,24 +2352,30 @@ export interface MyPoolVoting {
     hasCompletedTrade: boolean;
 }
 
-export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null }> {
+/**
+ * canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule.
+ * Null when the list loaded unsigned, so the caller falls back rather than blocking a member who may.
+ */
+export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose: boolean | null }> {
     const rawUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!rawUrl) return { decisions: [], myPoolVoting: null };
+    if (!rawUrl) return { decisions: [], myPoolVoting: null, canPropose: null };
     try {
         const path = `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`;
         // The list is a public read. It is signed only so the node can return this member's own vote on each card
         // and their voice credits for money votes.
         let res = await signedGet(path);
         // A phone whose clock is off gets 401 for the signature; the list still loads unsigned, just without "you voted".
-        if (res.status === 401) res = await fetch(`${rawUrl}${path}`, { headers: { 'Accept': 'application/json' } });
-        if (!res.ok) return { decisions: [], myPoolVoting: null };
+        const signed = res.status !== 401;
+        if (!signed) res = await fetch(`${rawUrl}${path}`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return { decisions: [], myPoolVoting: null, canPropose: null };
         const data = await res.json();
         return {
             decisions: data.decisions || [],
             myPoolVoting: data.myPoolVoting ?? null,
+            canPropose: signed && typeof data.canPropose === 'boolean' ? data.canPropose : null,
         };
     } catch {
-        return { decisions: [], myPoolVoting: null };
+        return { decisions: [], myPoolVoting: null, canPropose: null };
     }
 }
 

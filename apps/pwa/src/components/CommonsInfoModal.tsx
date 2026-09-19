@@ -277,7 +277,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>Process</div>
                                 <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    1. Any member with a completed trade can propose a Decision<br />
+                                    1. Members with a completed trade or earned standing, and node admins, can propose a Decision<br />
                                     2. Voting opens at once and runs for 7 days; members who joined before it opened can vote<br />
                                     3. Ballots are secret — everyone sees the totals and their own vote<br />
                                     4. Votes on community money cost voice credits from your completed trades; other Decisions are one member, one vote<br />

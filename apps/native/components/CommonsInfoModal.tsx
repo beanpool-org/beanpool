@@ -391,7 +391,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance, initialTab }
                     <View style={styles.processContainer}>
                         <Text style={styles.processLabel}>PROCESS</Text>
                         <Text style={styles.processText}>
-                            1. Any member with a completed trade can open a binding Decision{'\n'}
+                            1. Members with a completed trade or earned standing, and node admins, can open a binding Decision{'\n'}
                             2. Voting opens at once and runs for 7 days; members who joined before it opened can vote{'\n'}
                             3. Ballots are secret — everyone sees the totals and their own vote{'\n'}
                             4. Votes on community money cost voice credits; other Decisions are one member, one vote{'\n'}

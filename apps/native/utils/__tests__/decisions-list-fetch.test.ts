@@ -50,10 +50,15 @@ describe('getDecisions (native)', () => {
         expect(res.myPoolVoting).toEqual({ voiceCredits: 16, hasCompletedTrade: true });
     });
 
+    it('passes on whether the node says the signer may propose', async () => {
+        fetchMock.mockResolvedValueOnce(reply(200, { decisions: [], myPoolVoting: null, canPropose: true }));
+        expect((await getDecisions()).canPropose).toBe(true);
+    });
+
     it('when the signature is refused (a phone clock that is off), loads the list unsigned', async () => {
         fetchMock
             .mockResolvedValueOnce(reply(401, { error: 'Request timestamp is too far from server time' }))
-            .mockResolvedValueOnce(reply(200, { decisions: [card()], myPoolVoting: null }));
+            .mockResolvedValueOnce(reply(200, { decisions: [card()], myPoolVoting: null, canPropose: false }));
         const res = await getDecisions('open');
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -62,6 +67,8 @@ describe('getDecisions (native)', () => {
         expect(init.headers['X-Signed']).toBeUndefined();
         expect(res.decisions.map(d => d.id)).toEqual(['d1']);
         expect(res.decisions[0].myVote).toBeUndefined();
+        // Unsigned, the node cannot say whether you may propose: null, so the app falls back instead of blocking.
+        expect(res.canPropose).toBeNull();
     });
 
     it('does not retry on other failures', async () => {
@@ -69,6 +76,6 @@ describe('getDecisions (native)', () => {
         const res = await getDecisions();
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(res).toEqual({ decisions: [], myPoolVoting: null });
+        expect(res).toEqual({ decisions: [], myPoolVoting: null, canPropose: null });
     });
 });

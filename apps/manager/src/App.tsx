@@ -1113,6 +1113,7 @@ export function App({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } =
                                             }
                                         }}
                                         initialSubTab={(navSubTab as any) || 'directory'}
+                                        rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                     />
                                 </SectionErrorBoundary>
                             )}

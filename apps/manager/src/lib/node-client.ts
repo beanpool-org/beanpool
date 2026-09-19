@@ -960,7 +960,9 @@ export async function fetchNodeRoles(
         headers: buildAdminHeaders(adminPassword, tfaToken),
     });
     if (!res.ok) {
-        throw new Error('Failed to fetch node roles');
+        // Pass the node's own words through (e.g. break-glass mode, an expired key session).
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `Failed to fetch node roles (HTTP ${res.status})`);
     }
     const data = await res.json();
     return data.roles || [];

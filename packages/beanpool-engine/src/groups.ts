@@ -156,14 +156,25 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
 
     let viewerRole: GroupRole | undefined;
     let viewerStatus: GroupMemberStatus | undefined;
+    let viewerInvitedBy: { pubkey: string; callsign?: string; avatarUrl?: string } | undefined;
     if (viewerPubkey) {
-        const membership = db.prepare(
-            "SELECT role, status FROM group_members WHERE group_id = ? AND member_pubkey = ?"
-        ).get(row.id, viewerPubkey) as any;
+        const membership = db.prepare(`
+            SELECT gm.role, gm.status, gm.invited_by, inv.callsign AS inviter_callsign, inv.avatar_url AS inviter_avatar
+            FROM group_members gm LEFT JOIN members inv ON inv.public_key = gm.invited_by
+            WHERE gm.group_id = ? AND gm.member_pubkey = ?
+        `).get(row.id, viewerPubkey) as any;
         if (membership) {
             // A removed row is a record, not a membership: no role, so no app lists it among "your groups".
             viewerRole = membership.status === 'removed' ? undefined : membership.role as GroupRole;
             viewerStatus = membership.status as GroupMemberStatus;
+            // Who asked them, for the invite landing (groups slice 2). Only ever the viewer's own invitation.
+            if (membership.status === 'invited' && membership.invited_by) {
+                viewerInvitedBy = {
+                    pubkey: membership.invited_by,
+                    callsign: membership.inviter_callsign || undefined,
+                    avatarUrl: membership.inviter_avatar || undefined,
+                };
+            }
         }
     }
 
@@ -183,7 +194,8 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
         convenorCallsign: row.convenor_callsign || undefined,
         convenorAvatarUrl: row.convenor_avatar_url || undefined,
         viewerRole,
-        viewerStatus
+        viewerStatus,
+        viewerInvitedBy,
     };
 }
 

@@ -78,6 +78,8 @@ export interface Group {
     currentUserRole?: GroupRole | null;
     currentUserStatus?: GroupMemberStatus | null;
     viewerRole?: GroupRole | null;
+    /** The viewer's own open invitation: who sent it (invite landing, groups slice 2). */
+    viewerInvitedBy?: { pubkey: string; callsign?: string; avatarUrl?: string };
     viewerStatus?: GroupMemberStatus | null;
     convenorPubkey?: string;
     convenorCallsign?: string;

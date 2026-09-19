@@ -362,6 +362,21 @@ async function main() {
     assert(getRes.body.conversation.id === bakery, 'GET returns conversation');
     assert(Array.isArray(getRes.body.messages), 'GET returns messages array');
     assert(getRes.body.readOnly === false, 'GET returns readOnly = false for active enterprise');
+    assert(getRes.body.mute === null, 'GET returns mute = null when the caller never muted the thread');
+
+    // A keeper's mute comes back with the thread, so the phone shows it (and offers Unmute) on the next visit
+    // (PR #963 review round 1, B2: the thread read carried no mute, so an Always mute could never be undone).
+    const muteRes = await signedFetch('POST', '/api/messages/mute', leadAlice, { conversationId: bakery, duration: 'always' });
+    assert(muteRes.status === 200, `Keeper Alice mutes the Bakery thread (got ${muteRes.status})`);
+    const aliceGet = await signedFetch('GET', `/api/treasury/${bakery}/thread`, leadAlice);
+    assert(aliceGet.body.mute?.conversationId === bakery && aliceGet.body.mute?.always === true,
+        `GET returns Alice's own Always mute (got ${JSON.stringify(aliceGet.body.mute)})`);
+    const danAfter = await signedFetch('GET', `/api/treasury/${bakery}/thread`, danActive);
+    assert(danAfter.body.mute === null, "GET never returns another member's mute (Dan sees null)");
+    const unmuteRes = await signedFetch('POST', '/api/messages/mute', leadAlice, { conversationId: bakery, duration: 'off' });
+    assert(unmuteRes.status === 200, `Keeper Alice unmutes the Bakery thread (got ${unmuteRes.status})`);
+    const aliceAfter = await signedFetch('GET', `/api/treasury/${bakery}/thread`, leadAlice);
+    assert(aliceAfter.body.mute === null, 'GET returns mute = null after Unmute');
 
     // GET alias /api/enterprises/:treasury/thread
     const getAliasRes = await signedFetch('GET', `/api/enterprises/${bakery}/thread`, danActive);

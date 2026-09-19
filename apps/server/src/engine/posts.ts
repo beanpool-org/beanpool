@@ -277,8 +277,13 @@ export function createPost(
         if (!options?.targetGroupId) {
             throw new Error('targetGroupId is required when audienceScope is group');
         }
-        const grp = db.prepare("SELECT id FROM groups WHERE id = ?").get(options.targetGroupId) as any;
-        if (!grp) {
+        const grp = db.prepare("SELECT id, join_policy FROM groups WHERE id = ?").get(options.targetGroupId) as any;
+        // An invite-only group the author has no live row in does not exist as far as they can tell (the #828
+        // rule): same words as a missing id, never the membership refusal below that would confirm it.
+        const hidden = grp?.join_policy === 'invite_only' && !db.prepare(
+            "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'"
+        ).get(options.targetGroupId, authorPublicKey);
+        if (!grp || hidden) {
             throw new Error('Group not found');
         }
         const isMem = db.prepare(

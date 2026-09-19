@@ -23,4 +23,4 @@ Check that your phone allows notifications for BeanPool, in your phone's own set
 
 ## One chat at a time
 
-Muting a single chat is coming soon. See "Muting a chat".
+You can mute one group's or enterprise's chat for 8 hours, a week or for good. See "Muting a chat".

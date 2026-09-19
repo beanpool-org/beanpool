@@ -77,12 +77,25 @@ describe('What needs you: which kinds show', () => {
             .toMatchObject({ kind: 'message', count: 1, target: { to: 'chat', conversationId: 'c1' } });
     });
 
-    it('groups skip muted chats, read chats, and enterprise chats (no screen for them in the app yet)', () => {
+    it('groups skip muted chats and read chats', () => {
         const e = buildNeedsYou(quiet({ groupChats: [
-            group('g1', 3), group('g2', 0), group('g3', 5, { mute: { always: true } }), group('ent', 2, { kind: 'enterprise' }),
+            group('g1', 3), group('g2', 0), group('g3', 5, { mute: { always: true } }),
         ] }));
         expect(e).toHaveLength(1);
-        expect(e[0]).toMatchObject({ kind: 'group', count: 1, target: { to: 'chat', conversationId: 'g1' } });
+        expect(e[0]).toMatchObject({ kind: 'group', count: 1, target: { to: 'chat', conversationId: 'g1', thread: 'group' } });
+    });
+
+    it('a mute that has run out is no longer a mute', () => {
+        const lapsed = { conversationId: 'g3', mutedUntil: new Date(NOW - H).toISOString(), always: false };
+        const running = { conversationId: 'g4', mutedUntil: new Date(NOW + H).toISOString(), always: false };
+        const e = buildNeedsYou(quiet({ groupChats: [group('g3', 5, { mute: lapsed }), group('g4', 5, { mute: running })] }));
+        expect(e).toHaveLength(1);
+        expect(e[0].target).toEqual({ to: 'chat', conversationId: 'g3', thread: 'group' });
+    });
+
+    it('an enterprise discussion thread counts, and opens as one (groups slice 2 gave it a screen)', () => {
+        const e = buildNeedsYou(quiet({ groupChats: [group('ent', 2, { kind: 'enterprise' })] }));
+        expect(e[0]).toMatchObject({ kind: 'group', count: 1, target: { to: 'chat', conversationId: 'ent', thread: 'enterprise' } });
     });
 
     it('a source that failed to load is left out, the rest still show', () => {
@@ -158,7 +171,8 @@ describe('What needs you: where a tap lands', () => {
         expect(buildNeedsYou(quiet({ transactions: [tx('a', 'requested'), tx('b', 'pending')] }))[0].target).toEqual({ to: 'my-deals' });
         expect(buildNeedsYou(quiet({ conversations: [dm('c1', 1)] }))[0].target).toEqual({ to: 'chat', conversationId: 'c1' });
         expect(buildNeedsYou(quiet({ conversations: [dm('c1', 1), dm('c2', 1)] }))[0].target).toEqual({ to: 'unread-messages' });
-        expect(buildNeedsYou(quiet({ groupChats: [group('g1', 1), group('g2', 1)] }))[0].target).toEqual({ to: 'unread-messages' });
+        // Several group chats land on Talk → Groups: since groups slice 2 they are not listed under Messages.
+        expect(buildNeedsYou(quiet({ groupChats: [group('g1', 1), group('g2', 1)] }))[0].target).toEqual({ to: 'your-groups' });
     });
 
     it('an event chat opens as an event chat', () => {

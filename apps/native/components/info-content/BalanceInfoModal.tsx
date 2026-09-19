@@ -209,6 +209,7 @@ export function BalanceInfoModal({ isOpen, onClose }: Props) {
             title="Available Balance"
             icon={<MaterialCommunityIcons name="wallet" size={24} color={colors.brand.primary} />}
             tabs={tabs}
+            testID="bean-sheet"
         />
     );
 }

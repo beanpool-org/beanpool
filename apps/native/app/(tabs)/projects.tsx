@@ -8,7 +8,9 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
-import { CreateGroupModal } from '../../components/CreateGroupModal';
+import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
+import { groupsYouCouldJoin, chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -24,6 +26,11 @@ export default function ProjectsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
+    // Commons → Groups = "Your groups" (the same rows and chats as Talk — the same copy, without unread badges) +
+    // "Groups you could join" (decision 7).
+    const yourGroupsLive = useYourGroups(identity?.publicKey);
+    const yourGroupsState = yourGroupsPaneState(yourGroupsLive.items, yourGroupsLive.error);
+    const yourGroups = useMemo(() => yourGroupsLive.items || [], [yourGroupsLive.items]);
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
@@ -34,6 +41,12 @@ export default function ProjectsScreen() {
     // clear the param so a later visit keeps its place.
     const sectionParam = useLocalSearchParams<{ section?: string }>().section;
     useEffect(() => {
+        // Talk's "Find a group to join" lands on Groups (decision 7).
+        if (sectionParam === 'groups') {
+            setActiveSection('groups');
+            router.setParams({ section: '' });
+            return;
+        }
         if (sectionParam !== 'decide') return;
         setActiveSection('decide');
         setActiveDecideView('open');
@@ -50,8 +63,7 @@ export default function ProjectsScreen() {
     // Groups states
     const [groups, setGroups] = useState<GroupItem[]>([]);
     const [loadingGroups, setLoadingGroups] = useState(false);
-    const [groupCategoryFilter, setGroupCategoryFilter] = useState<'all' | 'my_groups' | GroupCategory>('all');
-    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [groupCategoryFilter, setGroupCategoryFilter] = useState<'all' | GroupCategory>('all');
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<GroupItem | null>(null);
 
     // Filter & sort states
@@ -95,6 +107,8 @@ export default function ProjectsScreen() {
 
 
         filterRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 4 },
+        groupsHeading: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8 },
+        groupsNone: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
         filterBtnActive: { backgroundColor: colors.brand.primary, borderColor: colors.brand.dark },
         filterBtnText: { fontSize: 12, color: colors.text.secondary, fontWeight: '600' },
@@ -216,6 +230,8 @@ export default function ProjectsScreen() {
             console.error('[Projects] Failed loading members:', err);
         }
 
+        yourGroupsStore.refresh();
+
         try {
             setLoadingGroups(true);
             const g = await fetchGroups();
@@ -270,14 +286,14 @@ export default function ProjectsScreen() {
     };
 
     const filteredGroups = useMemo(() => {
-        let list = [...groups];
-        if (groupCategoryFilter === 'my_groups') {
-            list = list.filter(g => g.viewerRole || g.viewerStatus === 'active' || g.viewerStatus === 'pending_approval');
-        } else if (groupCategoryFilter !== 'all') {
+        const mine = new Set(yourGroups.filter(y => y.kind === 'group').map(y => y.id));
+        let list = groupsYouCouldJoin(groups, mine);
+        if (groupCategoryFilter !== 'all') {
             list = list.filter(g => g.category === groupCategoryFilter);
         }
         return list;
-    }, [groups, groupCategoryFilter]);
+    }, [groups, yourGroups, groupCategoryFilter]);
+    const createGroup = useCreateGroupFlow(() => loadData());
 
     const filteredEnterprises = useMemo(() => {
         let list = [...enterprises];
@@ -436,20 +452,28 @@ export default function ProjectsScreen() {
         const isMember = item.viewerRole === 'member';
         const isObserver = item.viewerRole === 'observer';
         const isPending = item.viewerStatus === 'pending_approval';
+        // An open invitation is not a membership yet: say so, and open the invite landing rather than the detail.
+        const isInvited = item.viewerStatus === 'invited';
 
         return (
             <Pressable
                 accessibilityRole="button"
                 style={styles.card}
-                onPress={() => setSelectedGroupForDetail(item)}
+                onPress={() => isInvited ? router.push(inviteLandingHref(item) as any) : setSelectedGroupForDetail(item)}
             >
                 <View style={styles.cardHeader}>
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={{ fontSize: 20 }}>👥</Text>
+                        <Text style={{ fontSize: 20 }}>{chatEmoji('group', item.category)}</Text>
                     </View>
                     <View style={styles.cardTitleCol}>
                         <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-                        {item.viewerRole ? (
+                        {isInvited ? (
+                            <View style={styles.badgeRow}>
+                                <View style={[styles.badge, { backgroundColor: colors.brand.primary }]}>
+                                    <Text style={styles.badgeFundedText} numberOfLines={1}>INVITED</Text>
+                                </View>
+                            </View>
+                        ) : item.viewerRole ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, isConvenor ? styles.badgeFunded : styles.badgeOngoing]}>
                                     <Text style={[styles.badgeFundedText, !isConvenor && styles.badgeOngoingText]} numberOfLines={1}>
@@ -513,7 +537,7 @@ export default function ProjectsScreen() {
                         <View style={styles.headerInfo}>
                             {/* The page's one large title, first thing in the list, so it scrolls away with it.
                                 The list pads the sides, hence inset 0. */}
-                            <PageTitle title="Commons" inset={0} right={
+                            <PageTitle title="Commons" inset={0} testID="page-title-commons" right={
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"
@@ -655,14 +679,29 @@ export default function ProjectsScreen() {
                                     </Text>
                                 </View>
 
+                                <Text style={styles.groupsHeading}>Your groups</Text>
+                                {yourGroupsState === 'loading' && <YourGroupsLoading flush />}
+                                {yourGroupsState === 'error' && (
+                                    <YourGroupsError message={yourGroupsLive.error || 'Could not load your groups.'} onRetry={yourGroupsLive.refresh} />
+                                )}
+                                {yourGroupsState === 'list' && (
+                                    <View style={{ marginHorizontal: 0 }}>
+                                        <YourGroupsRows items={yourGroups} myPubkey={identity?.publicKey} flush />
+                                    </View>
+                                )}
+                                {yourGroupsState === 'empty' && (
+                                    <Text style={styles.groupsNone}>You're not in any groups yet. Join one below, or start one with +.</Text>
+                                )}
+
+                                <Text style={styles.groupsHeading}>Groups you could join</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
                                     {[
-                                        { key: 'all', label: 'All Groups' },
-                                        { key: 'my_groups', label: 'My Groups' },
+                                        { key: 'all', label: 'All' },
+                                        { key: 'social', label: '🌻 Social' },
+                                        { key: 'general', label: '💬 General' },
                                         { key: 'working_group', label: '🤝 Working Groups' },
-                                        { key: 'project', label: '🛠️ Projects' },
+                                        { key: 'project', label: '🛠️ Project Teams' },
                                         { key: 'guild', label: '🛡️ Guilds' },
-                                        { key: 'social', label: '☕ Social' },
                                     ].map(option => (
                                         <Pressable
                                             key={option.key}
@@ -751,16 +790,16 @@ export default function ProjectsScreen() {
                         ) : (
                             <View style={styles.emptyState}>
                                 <Text style={styles.emptyEmoji}>👥</Text>
-                                <Text style={styles.emptyTitle}>No groups found</Text>
+                                <Text style={styles.emptyTitle}>No other groups to join</Text>
                                 <Text style={styles.emptyDesc}>
-                                    {groupCategoryFilter === 'my_groups'
-                                        ? 'You have not joined any groups yet.'
-                                        : 'Start a working group, guild, or team to coordinate discussions.'}
+                                    {groupCategoryFilter === 'all'
+                                        ? 'Start one: a social circle, a working group, a guild.'
+                                        : 'None in this category yet.'}
                                 </Text>
                                 <Pressable
                                     accessibilityRole="button"
                                     style={styles.emptyBtn}
-                                    onPress={() => setShowCreateGroupModal(true)}
+                                    onPress={createGroup.open}
                                 >
                                     <Text style={styles.emptyBtnText}>+ Create a Group</Text>
                                 </Pressable>
@@ -815,7 +854,7 @@ export default function ProjectsScreen() {
                 style={styles.fab}
                 onPress={async () => {
                     if (activeSection === 'groups') {
-                        setShowCreateGroupModal(true);
+                        createGroup.open();
                         return;
                     }
                     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -860,11 +899,7 @@ export default function ProjectsScreen() {
                 members={membersList}
             />
 
-            <CreateGroupModal
-                isOpen={showCreateGroupModal}
-                onClose={() => setShowCreateGroupModal(false)}
-                onCreated={() => loadData()}
-            />
+            {createGroup.modal}
 
             <GroupDetailModal
                 group={selectedGroupForDetail}

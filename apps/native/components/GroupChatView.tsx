@@ -15,6 +15,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, TextInput, ActivityIndicator, Alert, Modal } from 'react-native';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,6 +23,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import {
     getGroupChat, postGroupChatMessage, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi, fetchGroupDetails,
+    markConversationRead,
     type GroupItem,
 } from '../utils/db';
 import { decodeEventChatText } from '../utils/events';
@@ -49,7 +51,7 @@ const MUTE_CHOICES: Array<{ key: '8h' | '1w' | 'always'; label: string }> = [
 
 export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     const keyboardVisible = useKeyboardState(s => s.isVisible);
@@ -58,6 +60,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     const [view, setView] = useState<any | null>(null);
     const [group, setGroup] = useState<GroupItem | null>(null);
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
+    const [invitedCount, setInvitedCount] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [draft, setDraft] = useState('');
     const [sending, setSending] = useState(false);
@@ -81,16 +84,20 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     setMemberKeys(new Set(details.members
                         .filter(m => m.status === 'active' || m.status === 'invited')
                         .map(m => m.memberPubkey)));
+                    setInvitedCount(details.members.filter(m => m.status === 'invited').length);
                 }
             } else {
                 const chat = await getEnterpriseChat(id);
                 setView({ ...chat, canPost: !chat.readOnly, notice: "Visible to this enterprise's keepers and this node's operator." });
             }
             setError(null);
+            // Opening the chat reads it: the node moves the member's cursor (a keeper's own one for an enterprise),
+            // so Talk's Groups count drops. Commons never shows counts, so it never clears one (decision 7).
+            if (me) markConversationRead(id, me).catch(() => { });
         } catch (e: any) {
             setError(e?.message || 'Could not open this chat.');
         }
-    }, [kind, id]);
+    }, [kind, id, me]);
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
@@ -100,14 +107,16 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/chats'); };
 
-    const name = view?.group?.name || group?.name || initialName || (kind === 'group' ? 'Group' : 'Enterprise');
+    const name = view?.group?.name || group?.name || view?.conversation?.name || initialName || (kind === 'group' ? 'Group' : 'Enterprise');
     const category = view?.group?.category || group?.category || null;
     const messages: any[] = view?.messages || [];
     const spoken = messages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM');
     const isConvenor = !!view?.isConvenor;
     const activeCount = group?.memberCount ?? null;
     const aloneInGroup = kind === 'group' && isConvenor && (activeCount ?? 0) <= 1;
-    const showInvitePrompt = kind === 'group' && !inviteSkipped && (justCreated || aloneInGroup) && spoken.length === 0;
+    // The big prompt is for a convenor still alone with nobody asked yet; once invitations are out it steps aside
+    // and the empty chat says who is on the way.
+    const showInvitePrompt = kind === 'group' && !inviteSkipped && invitedCount === 0 && (justCreated || aloneInGroup) && spoken.length === 0;
     const muted = isMuted(mute);
 
     const detail = useMemo(() => {
@@ -175,6 +184,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     if (error && !view) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
                 <Text style={styles.errorText} accessibilityRole="alert">{error}</Text>
             </View>
@@ -183,6 +193,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
     if (!view) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
                 {header}
                 <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
             </View>
@@ -227,6 +238,7 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
 
     return (
         <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top }]} behavior="padding">
+            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             {header}
 
             {!!view.readOnly && (
@@ -248,7 +260,13 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
                     keyExtractor={(m: any) => m.id}
                     contentContainerStyle={styles.listContent}
                     onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-                    ListEmptyComponent={<Text style={styles.empty}>No messages yet. Say hello.</Text>}
+                    ListEmptyComponent={
+                        <Text style={styles.empty}>
+                            {invitedCount > 0 && aloneInGroup
+                                ? `${invitedCount} ${invitedCount === 1 ? 'invitation' : 'invitations'} sent. You'll see people here as they join.`
+                                : 'No messages yet. Say hello.'}
+                        </Text>
+                    }
                     renderItem={({ item, index }) => {
                         if (item.type === 'system' || item.authorPubkey === 'SYSTEM') return <SystemLine item={item} styles={styles} />;
                         const mine = item.authorPubkey === me;

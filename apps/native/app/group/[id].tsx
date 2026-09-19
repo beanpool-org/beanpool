@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles, type ThemeContextType } from '../ThemeContext';
@@ -32,7 +33,7 @@ const POLICY_WORDS: Record<string, string> = {
 export default function GroupInviteLanding() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     const [group, setGroup] = useState<GroupItem | null>(null);
@@ -55,7 +56,8 @@ export default function GroupInviteLanding() {
     const mine = members.find(m => m.memberPubkey === me);
     const viewerStatus = group?.viewerStatus ?? mine?.status ?? null;
     const active = members.filter(m => m.status === 'active');
-    const inviter = mine?.invitedBy ? members.find(m => m.memberPubkey === mine.invitedBy) : null;
+    const invitedBy = group?.viewerInvitedBy;
+    const inviter = invitedBy ? { memberPubkey: invitedBy.pubkey, callsign: invitedBy.callsign, avatarUrl: invitedBy.avatarUrl ?? null } : null;
     const convenor = active.find(m => m.role === 'convenor');
     const action = group ? inviteLandingAction({ joinPolicy: group.joinPolicy, viewerStatus }) : null;
 
@@ -83,6 +85,7 @@ export default function GroupInviteLanding() {
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.topBar}>
                 <Pressable onPress={close} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
                     <MaterialCommunityIcons name="close" size={26} color={colors.text.body} />

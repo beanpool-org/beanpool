@@ -14,7 +14,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 import { initialTalkView, type TalkView } from '../../utils/talk-views';
-import { type YourChat, unreadLabel } from '../../utils/your-groups';
+import { type YourChat, unreadLabel, isMuted } from '../../utils/your-groups';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 
 export default function ChatsScreen() {
@@ -41,7 +41,8 @@ export default function ChatsScreen() {
     // switch can show the Groups unread total while Messages is open.
     const [yourGroups, setYourGroups] = useState<YourChat[] | null>(null);
     const [yourGroupsError, setYourGroupsError] = useState<string | null>(null);
-    const groupsUnread = React.useMemo(() => (yourGroups || []).reduce((n, g) => n + (g.unreadCount || 0), 0), [yourGroups]);
+    // A muted chat keeps its own grey count but does not add to the switch's total (WhatsApp's rule).
+    const groupsUnread = React.useMemo(() => (yourGroups || []).reduce((n, g) => n + (isMuted(g.mute) ? 0 : (g.unreadCount || 0)), 0), [yourGroups]);
     const [deals, setDeals] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'recent' | 'unread' | 'credits_desc' | 'credits_asc'>('recent');

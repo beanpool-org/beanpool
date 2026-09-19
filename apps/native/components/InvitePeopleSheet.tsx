@@ -15,7 +15,7 @@ import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { getAllCommunityMembers, inviteGroupMemberApi } from '../utils/db';
+import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
 import { MemberAvatar } from './MemberAvatar';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 
@@ -34,7 +34,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const keyboardVisible = useKeyboardState(s => s.isVisible);
-    const [members, setMembers] = useState<{ publicKey: string; callsign: string }[]>([]);
+    const [members, setMembers] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
     const [sending, setSending] = useState(false);
@@ -43,7 +43,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         if (!isOpen) return;
         setPicked(new Set());
         setQuery('');
-        getAllCommunityMembers().then(setMembers).catch(() => setMembers([]));
+        getInvitablePeople().then(setMembers).catch(() => setMembers([]));
     }, [isOpen]);
 
     const shown = useMemo(() => {
@@ -157,7 +157,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                                     accessibilityState={{ checked: on, disabled: already }}
                                     accessibilityLabel={`${item.callsign}${already ? ', already in the group' : ''}`}
                                 >
-                                    <MemberAvatar avatarUrl={null} pubkey={item.publicKey} callsign={item.callsign} size={36} />
+                                    <MemberAvatar avatarUrl={item.avatarUrl} pubkey={item.publicKey} callsign={item.callsign} size={36} />
                                     <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
                                     {already && <Text style={styles.already}>In the group</Text>}
                                     <MaterialCommunityIcons

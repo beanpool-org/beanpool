@@ -4926,6 +4926,8 @@ export interface GroupItem {
     memberCount?: number;
     viewerRole?: GroupRole | null;
     viewerStatus?: GroupMemberStatus | null;
+    /** The viewer's own open invitation: who sent it. */
+    viewerInvitedBy?: { pubkey: string; callsign?: string; avatarUrl?: string };
     convenorPubkey?: string;
     convenorCallsign?: string;
     convenorAvatarUrl?: string | null;
@@ -5197,6 +5199,28 @@ export async function getEnterpriseChat(treasury: string, limit = 50): Promise<a
 
 export async function postEnterpriseChatMessage(treasury: string, text: string, clientId?: string): Promise<any> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
+}
+
+/**
+ * People who can be invited to a group: the node's own directory (it already leaves out enterprises and other
+ * treasury accounts), without the system account. Falls back to the phone's copy when offline.
+ */
+export async function getInvitablePeople(): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
+    const notPeople = (pk: string) => pk === 'SYSTEM' || pk.startsWith('escrow_');
+    try {
+        const res = await signedGet('/api/community/members');
+        if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows)) {
+                return rows
+                    .filter((m: any) => m?.publicKey && !notPeople(m.publicKey) && m.status !== 'pruned')
+                    .map((m: any) => ({ publicKey: m.publicKey, callsign: m.callsign || m.publicKey.slice(0, 8), avatarUrl: m.avatarUrl ?? null }))
+                    .sort((a, b) => a.callsign.localeCompare(b.callsign, undefined, { sensitivity: 'base' }));
+            }
+        }
+    } catch { /* offline: the phone's copy below */ }
+    const local = await getAllCommunityMembers();
+    return local.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
 }
 
 /** Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). */

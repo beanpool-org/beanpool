@@ -135,7 +135,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
-    const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: fs.readFileSync(file) });
+    const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
     const body = await res.json();
 
     const read = (f: string) => { try { return fs.readFileSync(path.join(dataDir, f)); } catch { return null; } };
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
     const restore = async (bytes: Buffer, headers: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
         const res = await fetch(base + '/api/local/admin/restore', {
-            method: 'POST', headers: { 'X-Admin-Password': PW, 'Content-Type': 'application/octet-stream', ...headers }, body: bytes,
+            method: 'POST', headers: { 'X-Admin-Password': PW, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
         });
         return { status: res.status, body: await res.json() as any };
     };

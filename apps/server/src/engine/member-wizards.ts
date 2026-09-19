@@ -337,6 +337,8 @@ export function completeRekey(
         // (o) member_preferences
         db.prepare('UPDATE member_preferences SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE chat_mutes SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE OR IGNORE thread_read_cursors SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('DELETE FROM thread_read_cursors WHERE member_pubkey = ?').run(cleanOld);
 
         // (o2) Commons groups: membership (and so the group's chat), and convenor votes
         db.prepare('UPDATE group_members SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);

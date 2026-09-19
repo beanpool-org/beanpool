@@ -307,6 +307,7 @@ run_federation_suites() {
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat
+      test-keeper-read-cursor
       test-groups-chat-sync
       test-groups-succession
       test-member-wizards

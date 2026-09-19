@@ -1324,6 +1324,18 @@ CREATE TABLE IF NOT EXISTS chat_mutes (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_mutes_member ON chat_mutes(member_pubkey);
 
+-- A keeper's read cursor on their enterprise's thread, for the unread count in "Your groups". Deliberately NOT a
+-- conversation_participants row: the generic messaging routes read a participant row as the right to post, and an
+-- enterprise thread is written only through its own route (engine/enterprise-thread.ts). Node-local, like mutes.
+CREATE TABLE IF NOT EXISTS thread_read_cursors (
+    conversation_id TEXT NOT NULL,
+    member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    last_read_at    DATETIME NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (conversation_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_thread_read_cursors_member ON thread_read_cursors(member_pubkey);
+
 -- Convenor succession (answer B): when a group's only convenor has shown no node activity for 30 days, any
 -- member may propose a member as convenor. Members vote yes or no for 14 days; more than half of those who
 -- answer must say yes. Cancelled if the convenor comes back. One open proposal per group.

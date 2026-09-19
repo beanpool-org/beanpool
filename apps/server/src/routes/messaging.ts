@@ -14,26 +14,18 @@ import {
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, canReadGroupThread, syncGroupThreadMembership } from '../engine/group-thread.js';
-import { isKeeperOfEnterprise } from '../engine/enterprise-thread.js';
+import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
-import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
-
-/** A keeper's read cursor on their enterprise's thread: a participant row, read up to now. */
-function ensureThreadReadCursor(conversationId: string, pubkey: string): void {
-    db.prepare(
-        'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)'
-    ).run(conversationId, pubkey, new Date().toISOString());
-}
 
 /** May this member open (and so mute) this chat? The same rules as reading it. */
 function canOpenChat(conv: { id: string; type: string; participants: string[] }, actor: string): boolean {
     if (conv.type === GROUP_THREAD_TYPE) return canReadGroupThread(conv.id, actor);
-    if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id) || conv.participants.includes(actor);
+    if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id);
     if (conv.type === 'event_thread') {
         try {
             const row = loadEventForThread(conv.id);
@@ -280,8 +272,9 @@ router.post('/api/messages/mark-read', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
-    // A group chat's read cursor lives on the member's participant row, which follows the group; a keeper's
-    // lives on one made the first time they read their enterprise's thread ("Your groups" counts from it).
+    // A group chat's read cursor lives on the member's participant row, which follows the group. A keeper's lives
+    // in thread_read_cursors, never on a participant row: that would let the generic send route write into the
+    // enterprise thread (PR #924 review, B1). Only a current keeper has one to move.
     if (conv.type === GROUP_THREAD_TYPE) {
         if (!canReadGroupThread(conversationId, actor)) {
             ctx.status = 403;
@@ -289,8 +282,15 @@ router.post('/api/messages/mark-read', async (ctx) => {
             return;
         }
         syncGroupThreadMembership(conversationId, actor);
-    } else if (conv.type === 'enterprise_thread' && isKeeperOfEnterprise(actor, conversationId)) {
-        ensureThreadReadCursor(conversationId, actor);
+    } else if (conv.type === 'enterprise_thread') {
+        if (!isKeeperOfEnterprise(actor, conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'Only the keepers of this enterprise have a read marker on its thread' };
+            return;
+        }
+        markKeeperThreadRead(conversationId, actor);
+        ctx.body = { success: true };
+        return;
     } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };

@@ -9,7 +9,10 @@
 import { db } from '../db/db.js';
 import { COUNTS_AS_UNREAD_SQL, isEventHost } from '@beanpool/engine';
 import { ensureGroupThread, syncGroupThreadMembership, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
-import { ensureEnterpriseThread, isKeeperOfEnterprise, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly } from './enterprise-thread.js';
+import {
+    ensureEnterpriseThread, isKeeperOfEnterprise, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
+    ensureKeeperReadCursor, getKeeperReadCursor,
+} from './enterprise-thread.js';
 import {
     canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
@@ -89,7 +92,8 @@ function lastMessageOf(conversationId: string, removedText: string): YourChatLas
     };
 }
 
-function readCursor(conversationId: string, pubkey: string): { lastReadAt: string | null; since: string | null } | null {
+function readCursor(kind: YourChatKind, conversationId: string, pubkey: string): { lastReadAt: string | null; since: string | null } | null {
+    if (kind === 'enterprise') return getKeeperReadCursor(conversationId, pubkey);
     const r = db.prepare('SELECT last_read_at, updated_at FROM conversation_participants WHERE conversation_id = ? AND public_key = ?')
         .get(conversationId, pubkey) as any;
     return r ? { lastReadAt: r.last_read_at ?? null, since: r.updated_at ?? null } : null;
@@ -118,7 +122,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     // event, the enterprise's creation for its thread (the keeper's read cursor is made lazily and would float
     // every quiet enterprise to the top).
     const finish = (base: Omit<YourChat, 'lastMessage' | 'unreadCount' | 'mute' | 'lastActivityAt'>, removedText: string, since?: string | null) => {
-        const cursor = readCursor(base.conversationId, pubkey);
+        const cursor = readCursor(base.kind, base.conversationId, pubkey);
         const lastMessage = lastMessageOf(base.conversationId, removedText);
         items.push({
             ...base,
@@ -153,10 +157,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     for (const e of enterprises) {
         if (isEnterpriseThreadHidden(e.status) || !isKeeperOfEnterprise(pubkey, e.id)) continue;
         ensureEnterpriseThread(e.id);
-        // The keeper's read cursor: made read-up-to-now the first time, so a new keeper is not handed the
-        // thread's whole history as unread.
-        db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)')
-            .run(e.id, pubkey, new Date().toISOString());
+        ensureKeeperReadCursor(e.id, pubkey);
         finish({
             kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
             avatarUrl: avatarFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',

@@ -135,6 +135,10 @@ export function sendMessage(
             throw toGroupChatMessagingError(e);
         }
     }
+    // An enterprise thread is written only through its own route (engine/enterprise-thread.ts), which applies
+    // the read-only state after wind-up, the frozen-author block, the 2000-character cap and plaintext text
+    // only. No participant row is authority to post here (PR #924 review, B1).
+    if (directConv?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_SEND_ERROR, 403);
     let effectiveConvId = conversationId;
     let participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
     
@@ -183,6 +187,7 @@ export function sendMessage(
     // participants mirror alone is not authority to post (docs/events-on-the-map.md §2.2).
     const targetConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
     if (targetConv?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_SEND_ERROR, 403);
+    if (targetConv?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_SEND_ERROR, 403);
 
     if (clientId) {
         const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
@@ -247,6 +252,11 @@ export function toggleMessageReaction(
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) return null;
 
+    // An enterprise thread has no reactions, and nobody's participant row there is authority to write (B1).
+    // Refused before the participant check: the thread is readable by members, so this hides nothing.
+    const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
+    if (convType?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_REACT_ERROR, 403);
+
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
     if (!participants.some((p: any) => p.public_key === authorPubkey)) {
         return null;
@@ -254,7 +264,6 @@ export function toggleMessageReaction(
 
     // An event chat carries text the host can remove and nothing else, and it is read-only once the event
     // ends — a reaction would be a write this route cannot rule on.
-    const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
     // A group chat carries text and system lines only in this slice; reactions come with the chat features.
     if (convType?.type === GROUP_THREAD_TYPE) throw new MessagingError(GROUP_CHAT_REACT_ERROR, 403);
@@ -307,6 +316,8 @@ export const THREAD_MESSAGE_EDIT_ERROR = 'Messages in an enterprise discussion t
 export const EVENT_THREAD_EDIT_ERROR = 'Messages in an event chat cannot be edited';
 export const EVENT_THREAD_SEND_ERROR = 'Post to an event chat through the event, not this route';
 export const EVENT_THREAD_REACT_ERROR = 'Reactions are not part of an event chat';
+export const ENTERPRISE_THREAD_SEND_ERROR = "Post to an enterprise's discussion through the enterprise, not this route";
+export const ENTERPRISE_THREAD_REACT_ERROR = 'Reactions are not part of an enterprise discussion';
 
 export function editMessage(
     cb: MessagingCallbacks,

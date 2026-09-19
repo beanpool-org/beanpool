@@ -203,6 +203,7 @@ export const lightColors = {
     market: {
         offer: { fg: palette.emerald700, bg: palette.emerald100 },
         need: { fg: palette.orange700, bg: palette.orange100 },
+        author: palette.gray600, // seller name on listing cards
     },
 
     // Trust tiers — one warm "gold" family that deepens with tier; the
@@ -323,6 +324,7 @@ export const earthColors = {
     market: {
         offer: { fg: '#434e43', bg: '#eef1ee' },  // nature.800 / nature.100
         need: { fg: '#a3472e', bg: '#fcedea' },   // terra.700 / terra.100
+        author: palette.gray600,
     },
 
     // Trust tiers (using warm amber/gold, matches PWA perfectly)
@@ -439,6 +441,7 @@ export const slateColors = {
     market: {
         offer: { fg: '#1e40af', bg: '#dbeafe' },  // blue.800 / blue.100
         need: { fg: '#4f46e5', bg: '#e0e7ff' },   // indigo.600 / indigo.100
+        author: palette.gray600,
     },
 
     // Trust tiers (using warm amber/gold, matches PWA perfectly)
@@ -555,6 +558,7 @@ export const darkColors = {
     market: {
         offer: { fg: palette.emerald400, bg: palette.emerald950 },
         need: { fg: palette.orange300, bg: palette.orange800 },
+        author: palette.gray300,
     },
 
     // Trust tiers

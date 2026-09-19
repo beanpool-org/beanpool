@@ -88,7 +88,11 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- Protocol v1 Admin Genesis Invites. Declared here as well as in db.ts's ALTER because the
     -- ALTER now runs BEFORE this file is exec'd: on a fresh database the table does not exist yet,
     -- the ALTER fails into its empty catch, and this line is the only thing that creates the column.
-    genesis_type TEXT DEFAULT 'standard'
+    genesis_type TEXT DEFAULT 'standard',
+    -- Who issued an admin (seed) invite: the owner/admin's pubkey under a key session, 'owner:password' under the
+    -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
+    -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
+    issued_by TEXT
 );
 
 -- 3. Ledger Accounts & Transactions

@@ -7,6 +7,9 @@
  * 3. Redeeming the seed invite code creates a new member.
  * 4. Existing node (>0 members): generates tiered seed invite codes ('standard', 'trusted', 'ambassador', 'elder')
  *    from the genesis/admin member, defaulting invalid tier names to 'standard'.
+ * 5. Key-signed sessions (the app's 'Manage' button): an admin's session issues an invite that redeems, and the
+ *    invite records who issued it; a member with no role, or a moderator, cannot get a session and a made-up session
+ *    is refused; an admin removed from node_roles loses the power at once.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -18,6 +21,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { db } from './db/db.js';
 
 const PORT = 8593;
 const BASE = `https://localhost:${PORT}`;
@@ -29,10 +33,10 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
 }
 
-async function postJson(path: string, body: any): Promise<{ status: number; body: any }> {
+async function postJson(path: string, body: any, headers: Record<string, string> = {}): Promise<{ status: number; body: any }> {
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify(body),
     });
     let resBody: any = {};
@@ -44,6 +48,29 @@ function makeKeypair() {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     return { publicKey, privateKey, pubKeyHex };
+}
+
+/** Signs the node's challenge with the member's key, as the app does, and returns the verify-challenge response. */
+async function solveChallenge(kp: ReturnType<typeof makeKeypair>): Promise<{ status: number; body: any }> {
+    const chal = await postJson('/api/local/admin/auth/challenge', {});
+    const signature = crypto.sign(null, Buffer.from(chal.body.challenge, 'utf-8'), kp.privateKey).toString('hex');
+    return postJson('/api/local/admin/auth/verify-challenge', {
+        challengeId: chal.body.challengeId, memberPubkey: kp.pubKeyHex, signature,
+    });
+}
+
+/** Full key sign-in: challenge → signature → handshake token → admin session id. */
+async function keySession(kp: ReturnType<typeof makeKeypair>): Promise<string> {
+    const solved = await solveChallenge(kp);
+    if (solved.status !== 200) throw new Error(`verify-challenge refused: ${solved.status} ${JSON.stringify(solved.body)}`);
+    const ex = await postJson('/api/local/admin/auth/exchange', { token: solved.body.handshakeToken });
+    if (ex.status !== 200) throw new Error(`exchange refused: ${ex.status}`);
+    return ex.body.sessionId;
+}
+
+function issuedByOf(code: string): string | null {
+    const row = db.prepare('SELECT issued_by FROM invite_codes WHERE code = ?').get(code) as { issued_by: string | null } | undefined;
+    return row ? row.issued_by : null;
 }
 
 async function main() {
@@ -87,6 +114,46 @@ async function main() {
     const invalidTierRes = await postJson('/api/admin/seed-invite', { password: PW, type: 'superduper' });
     assert(invalidTierRes.status === 200 && invalidTierRes.body.success === true, 'Invalid tier name defaults to standard');
     assert(invalidTierRes.body.type === 'standard', 'Returned invite type is standard');
+    assert(issuedByOf(elderRes.body.code) === 'owner:password', "Password-issued invite records issued_by = 'owner:password'");
+
+    // 5. Key-signed sessions
+    const pwHeader = { 'X-Admin-Password': PW };
+    const bob = makeKeypair();      // will be admin
+    const mo = makeKeypair();       // will be moderator
+    const charlie = makeKeypair();  // member, no role
+    for (const [kp, callsign] of [[bob, 'BobAdmin'], [mo, 'MoModerator'], [charlie, 'CharlieMember']] as const) {
+        const inv = await postJson('/api/admin/seed-invite', { password: PW });
+        const red = await postJson('/api/invite/redeem', { code: inv.body.code, publicKey: kp.pubKeyHex, callsign });
+        assert(red.status === 200 && red.body.success === true, `${callsign} joins the node`);
+    }
+    const grantBob = await postJson('/api/local/admin/node-roles', { pubkey: bob.pubKeyHex, role: 'admin' }, pwHeader);
+    assert(grantBob.status === 200, 'Owner (password) makes Bob an admin');
+    const grantMo = await postJson('/api/local/admin/node-roles', { pubkey: mo.pubKeyHex, role: 'moderator' }, pwHeader);
+    assert(grantMo.status === 200, 'Owner (password) makes Mo a moderator');
+
+    const bobSession = await keySession(bob);
+    const keyRes = await postJson('/api/admin/seed-invite', { type: 'trusted' }, { 'x-admin-session': bobSession });
+    assert(keyRes.status === 200 && keyRes.body.success === true, 'Admin key session (no password) → seed-invite 200');
+    assert(typeof keyRes.body.code === 'string' && keyRes.body.code.length > 0, 'Admin key session gets a code');
+    assert(keyRes.body.type === 'trusted', 'Admin key session invite has the requested tier');
+    assert(issuedByOf(keyRes.body.code) === bob.pubKeyHex, "Key-issued invite records the admin's own key as issued_by");
+    const dave = makeKeypair();
+    const daveRedeem = await postJson('/api/invite/redeem', { code: keyRes.body.code, publicKey: dave.pubKeyHex, callsign: 'DaveViaKey' });
+    assert(daveRedeem.status === 200 && daveRedeem.body.success === true, 'The code from the key session redeems');
+
+    const charlieSolve = await solveChallenge(charlie);
+    assert(charlieSolve.status === 403, 'Member without a role cannot get an admin session (403)');
+    const moSolve = await solveChallenge(mo);
+    assert(moSolve.status === 403, 'Moderator cannot get an admin session (403)');
+    const fakeSession = await postJson('/api/admin/seed-invite', {}, { 'x-admin-session': 'not-a-real-session' });
+    assert(fakeSession.status === 401, 'Made-up admin session → seed-invite 401');
+    assert(!fakeSession.body.code, 'Made-up admin session gets no code');
+
+    const demote = await fetch(`${BASE}/api/local/admin/node-roles/${bob.pubKeyHex}/admin`, { method: 'DELETE', headers: pwHeader });
+    assert(demote.status === 200, "Owner removes Bob's admin role");
+    const afterDemote = await postJson('/api/admin/seed-invite', {}, { 'x-admin-session': bobSession });
+    assert(afterDemote.status === 401, 'Removed admin: the same session → seed-invite 401');
+    assert(!afterDemote.body.code, 'Removed admin gets no code');
 
     console.log(`\n========================================`);
     console.log(`Test Results: ${passed}/${run} assertions passed`);

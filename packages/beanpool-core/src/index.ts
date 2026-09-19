@@ -26,3 +26,4 @@ export * from './groups.js';
 export * from './geo.js';
 export * from './address-lookup.js';
 export * from './feedback.js';
+export * from './member-guide.js';

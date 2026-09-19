@@ -22,6 +22,12 @@
         .guide .guide-list li { margin: 0 0 0.75rem; }
         .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
         .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
         .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
         .guide-nav .nav-links { gap: 1.25rem; }
         /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
@@ -44,7 +50,7 @@
     </nav>
 
     <main class="legal-content glass-panel guide">
-        <p class="kicker"><a href="index.html">Members' guide</a></p>
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#about">About BeanPool</a></p>
         <h1>How BeanPool works</h1>
         <p class="lede">Beans, trading, offers and needs, and credit, in plain words.</p>
         <h2>Beans</h2>
@@ -111,7 +117,16 @@
         <p>An <strong>enterprise</strong> is a shared project that trades in its own name: a community garden, a bakery, a tool library. It is run by <strong>keepers</strong>, led by a <strong>lead keeper</strong>. Keepers can pledge some of their own trust to give the enterprise a credit line.</p>
         <p>A <strong>group</strong> is a circle of members with its own chat and posts, run by one or more <strong>convenors</strong>.</p>
         <p>You can read how keepers and convenors are chosen in &quot;Rules and how decisions work&quot;.</p>
-        <p class="guide-foot">The same guide is in the BeanPool app: open Settings, then "BeanPool: help &amp; how it works". Guide version 1.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Guide version 4.</p>
     </main>
 </body>
 </html>

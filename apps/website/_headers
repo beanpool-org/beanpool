@@ -1,0 +1,7 @@
+# Cloudflare Pages response headers.
+#
+# The members' guide JSON is fetched by the web app, which each community serves from its own address, so the
+# browser needs permission to read it across sites. It is public, read-only text; the apps check it before use.
+/guide/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600

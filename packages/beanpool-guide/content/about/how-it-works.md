@@ -2,6 +2,7 @@
 slug: how-it-works
 title: How BeanPool works
 summary: Beans, trading, offers and needs, and credit, in plain words.
+related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
 ---
 
 ## Beans

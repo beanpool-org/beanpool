@@ -426,6 +426,49 @@ try {
         record(`hand-off ${section} @${WIDTH} ×1.3`, await horizontalOverflow(page));
         await context.close();
     }
+
+    // A moderator's Settings (Reports only), from a hand-off link that names another section: it lands on Reports, fits
+    // 320px at both text sizes with the reason chooser open, every button is a 48px target, and so is the manual.
+    console.log(`\nmoderator at ${WIDTH}px`);
+    for (const textScale of TEXT_SCALES) {
+        const at = `@${WIDTH}${textScale !== 1 ? ` ×${textScale}` : ''}`;
+        const { context, page, errors } = await openSettings(browser, origin, {
+            width: WIDTH, textScale, signedIn: false, handoffRole: 'moderator', hash: `#handoff=${'ab'.repeat(16)}&section=disputes`,
+        });
+        await page.getByTestId('moderator-view').waitFor({ timeout: 20000 });
+        await page.getByTestId('moderator-report').first().waitFor();
+        await settle(page);
+        checks++;
+        const header = await page.locator('header').first().innerText();
+        const onlyReports = /Moderator/.test(header) && await page.getByRole('heading', { level: 1, name: /Reports/ }).count() === 1
+            && await page.getByRole('button', { name: 'Menu' }).count() === 0;
+        if (!onlyReports) {
+            failures.push(`moderator ${at}: expected the Reports screen with "Moderator" in the top bar (got "${header.replace(/\n/g, ' / ')}")`);
+            console.log(`  ✗ moderator lands on Reports ${at}`);
+        } else {
+            console.log(`  ✓ moderator lands on Reports ${at} (link named disputes)`);
+        }
+        record(`moderator reports ${at}`, await horizontalOverflow(page));
+        await page.getByTestId('moderator-report').first().getByRole('button', { name: 'Remove the post' }).click();
+        await settle(page);
+        record(`moderator remove-reason ${at}`, await horizontalOverflow(page));
+        checks++;
+        const small = await page.getByTestId('moderator-view').evaluate((root) => [...root.querySelectorAll('button, a[href], select')]
+            .map((el) => ({ r: el.getBoundingClientRect(), t: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30) }))
+            .filter(({ r }) => r.width > 0 && r.height < 47.5)
+            .map(({ r, t }) => `"${t}" ${Math.round(r.width)}×${Math.round(r.height)}`));
+        if (small.length) {
+            failures.push(`moderator ${at}: targets under 48px: ${small.join(', ')}`);
+            console.log(`  ✗ moderator targets ${at}`);
+        } else {
+            console.log(`  ✓ moderator targets ≥ 48px ${at}`);
+        }
+        await page.getByRole('button', { name: 'Manual', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Operator manual' }).waitFor();
+        record(`moderator manual ${at}`, await horizontalOverflow(page));
+        if (errors.length) failures.push(`moderator ${at}: page errors: ${errors.join(' | ')}`);
+        await context.close();
+    }
 } finally {
     await browser.close();
     await server.close();

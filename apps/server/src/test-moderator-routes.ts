@@ -254,10 +254,10 @@ async function main() {
 
         // ── 3. The allowlist, for real ──
         console.log('\n3. Reports and reported posts');
-        const postA = createPost('offer', 'other', 'Rude offer', 'Something rude', 10, 'fixed', oscar.pubKeyHex);
-        const postB = createPost('offer', 'other', 'Spam offer', 'Buy now buy now', 10, 'fixed', oscar.pubKeyHex);
-        const postC = createPost('offer', 'other', 'Fine offer', 'Nothing wrong here', 10, 'fixed', oscar.pubKeyHex);
-        const postD = createPost('offer', 'other', 'Other offer', 'Reported, then taken down directly', 10, 'fixed', oscar.pubKeyHex);
+        const postA = createPost('offer', 'other', 'Rude offer', 'Something rude', 10, 'fixed', oscar.pubKeyHex)!;
+        const postB = createPost('offer', 'other', 'Spam offer', 'Buy now buy now', 10, 'fixed', oscar.pubKeyHex)!;
+        const postC = createPost('offer', 'other', 'Fine offer', 'Nothing wrong here', 10, 'fixed', oscar.pubKeyHex)!;
+        const postD = createPost('offer', 'other', 'Other offer', 'Reported, then taken down directly', 10, 'fixed', oscar.pubKeyHex)!;
         const repA = submitReport(rita.pubKeyHex, oscar.pubKeyHex, 'Rude', postA.id)!;
         const repB = submitReport(rita.pubKeyHex, oscar.pubKeyHex, 'Spam', postB.id)!;
         const repC = submitReport(rita.pubKeyHex, oscar.pubKeyHex, 'Not sure', postC.id)!;
@@ -276,7 +276,7 @@ async function main() {
         const suspend = await call('POST', `/api/local/admin/reports/${repA.id}/action`, asMod, { deletePost: true, suspendUser: true });
         assert(suspend.status === 403, `the moderator cannot suspend the member from a report (got ${suspend.status})`);
         assert(getMember(oscar.pubKeyHex)?.status === 'active', 'the author is still active');
-        const takeDown = await call('POST', `/api/local/admin/reports/${repA.id}/action`, asMod, { deletePost: true, reasonCategory: 'harassment' });
+        const takeDown = await call('POST', `/api/local/admin/reports/${repA.id}/action`, asMod, { deletePost: true, reasonCategory: 'offensive' });
         assert(takeDown.status === 200, `the moderator takes the reported post down from its report (got ${takeDown.status})`);
         const postARow = db.prepare('SELECT active FROM posts WHERE id = ?').get(postA.id) as any;
         assert(postARow?.active === 0, 'the post is down');
@@ -284,7 +284,7 @@ async function main() {
         assert(markOnly.status === 200, `the moderator marks a report actioned (got ${markOnly.status})`);
         const direct = await call('POST', `/api/local/admin/posts/${postD.id}/delete`, asMod, { reasonCategory: 'spam' });
         assert(direct.status === 200, `the moderator removes a reported post by the takedown route (got ${direct.status})`);
-        const postE = createPost('offer', 'other', 'Unreported', 'Nobody reported this', 10, 'fixed', oscar.pubKeyHex);
+        const postE = createPost('offer', 'other', 'Unreported', 'Nobody reported this', 10, 'fixed', oscar.pubKeyHex)!;
         const unreported = await call('POST', `/api/local/admin/posts/${postE.id}/delete`, asMod, {});
         assert(unreported.status === 403, `…but not a post nobody reported (got ${unreported.status})`);
         assert((db.prepare('SELECT active FROM posts WHERE id = ?').get(postE.id) as any)?.active === 1, 'which stays up');

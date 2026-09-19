@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotScheduleConfig, BackupVerificationResult, DiskHealth, StorageCleanPreview, StorageCleanResult } from '../../lib/node-client';
 import {
@@ -42,6 +44,8 @@ interface ApplianceSectionProps {
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
     initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
     isStandby?: boolean;
 }
 
@@ -61,9 +65,10 @@ export function ApplianceSection({
     onRunLedgerAudit,
     auditState,
     initialSubTab = 'diagnostics',
+    onSubTabChange,
     isStandby: propIsStandby,
 }: ApplianceSectionProps) {
-    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab);
+    const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
 
     useEffect(() => {
@@ -536,7 +541,7 @@ export function ApplianceSection({
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>⚙️</span>
@@ -548,10 +553,12 @@ export function ApplianceSection({
                     </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={true}>
                     <button
                         onClick={() => setSubTab('diagnostics')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="diagnostics"
+                        aria-current={subTab === 'diagnostics' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'diagnostics'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -561,7 +568,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('backups')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="backups"
+                        aria-current={subTab === 'backups' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'backups'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -571,7 +580,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('gateway')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="gateway"
+                        aria-current={subTab === 'gateway' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'gateway'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -581,7 +592,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('network')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="network"
+                        aria-current={subTab === 'network' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'network'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -591,7 +604,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('identity')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="identity"
+                        aria-current={subTab === 'identity' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'identity'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -601,7 +616,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('access')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="access"
+                        aria-current={subTab === 'access' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'access'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -609,7 +626,7 @@ export function ApplianceSection({
                     >
                         Access &amp; Security
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
             {/* Read-only Version / Update-Available / Last-Backup Card (per admin-surface §4.3) */}

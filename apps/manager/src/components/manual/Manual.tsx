@@ -20,8 +20,28 @@ export function useManual(): ManualApi | null {
 
 export function ManualProvider({ children }: { children: React.ReactNode }) {
     const [state, setState] = useState<{ open: boolean; slug: string | null }>({ open: false, slug: null });
+    const openRef = useRef(false);
+    openRef.current = state.open;
+    // The open manual is a history entry, so a phone's Back button closes it instead of leaving Settings.
     const openManual = useCallback((slug?: string) => {
+        if (!openRef.current && typeof window !== 'undefined') {
+            window.history.pushState({ ...(window.history.state ?? {}), bpManual: true }, '');
+        }
         setState({ open: true, slug: slug && manualPage(slug) ? slug : null });
+    }, []);
+    const closeManual = useCallback(() => {
+        setState({ open: false, slug: null });
+        // Drop its history entry too, or the next Back would land on the closed manual and seem to do nothing.
+        if (typeof window !== 'undefined' && (window.history.state as { bpManual?: boolean } | null)?.bpManual) {
+            window.history.back();
+        }
+    }, []);
+    useEffect(() => {
+        const onPop = (e: PopStateEvent) => {
+            if (!(e.state as { bpManual?: boolean } | null)?.bpManual) setState({ open: false, slug: null });
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
     }, []);
     const api = useMemo(() => ({ openManual }), [openManual]);
     return (
@@ -31,7 +51,7 @@ export function ManualProvider({ children }: { children: React.ReactNode }) {
                 <ManualPanel
                     slug={state.slug}
                     onNavigate={(slug) => setState({ open: true, slug })}
-                    onClose={() => setState({ open: false, slug: null })}
+                    onClose={closeManual}
                 />
             )}
         </ManualContext.Provider>

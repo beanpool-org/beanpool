@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import { Avatar } from '../common/Avatar';
 import {
@@ -28,6 +30,8 @@ interface EconomySectionProps {
     tfaToken?: string;
     onRefresh: () => void;
     initialSubTab?: 'enterprises' | 'decisions' | 'pool' | 'disputes';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'enterprises' | 'decisions' | 'pool' | 'disputes') => void;
 }
 
 interface CommonsProject {
@@ -68,15 +72,10 @@ export function EconomySection({
     tfaToken,
     onRefresh,
     initialSubTab = 'enterprises',
+    onSubTabChange,
 }: EconomySectionProps) {
     const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
-    const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab);
-
-    useEffect(() => {
-        if (initialSubTab) {
-            setSubTab(initialSubTab);
-        }
-    }, [initialSubTab]);
+    const [subTab, setSubTab] = useSectionSubTab<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab, onSubTabChange);
 
     // Enterprises state
     const [treasuries, setTreasuries] = useState<NodeTreasury[]>([]);
@@ -427,7 +426,7 @@ export function EconomySection({
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>🏛️</span>
@@ -439,10 +438,12 @@ export function EconomySection({
                     </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={false}>
                     <button
                         onClick={() => setSubTab('enterprises')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="enterprises"
+                        aria-current={subTab === 'enterprises' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'enterprises'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -452,7 +453,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('decisions')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="decisions"
+                        aria-current={subTab === 'decisions' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'decisions'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -462,7 +465,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('pool')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="pool"
+                        aria-current={subTab === 'pool' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'pool'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -472,7 +477,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('disputes')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="disputes"
+                        aria-current={subTab === 'disputes' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 ${
                             subTab === 'disputes'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -480,7 +487,7 @@ export function EconomySection({
                     >
                         ⚖️ Escrow Disputes{typeof nodeData?.escrowDisputesCount === 'number' && nodeData.escrowDisputesCount > 0 ? ` (${nodeData.escrowDisputesCount})` : ''}
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
             {/* Subtab: Enterprises */}

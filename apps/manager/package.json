@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:phone-width": "node e2e/phone-width.mjs",
+    "screenshots": "node e2e/screenshots.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",
@@ -30,6 +32,7 @@
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.4.27",
     "jsdom": "^30.0.1",
+    "playwright": "1.63.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.6.3",

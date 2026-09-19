@@ -848,6 +848,9 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/auth/session') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/exchange') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/logout') return ok({ success: true });
+    // Sign in with your phone: a pairing that just keeps waiting (the page answers each poll at most once a second).
+    if (pathname === '/api/local/admin/auth/pairing') return ok({ pairingId: 'ab'.repeat(32), shortCode: 'K7F3QX', expiresAt: Date.now() + 120000, ttlMs: 120000 });
+    if (/^\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(pathname)) return ok({ status: 'waiting', expiresAt: Date.now() + 120000 });
     if (pathname === '/api/local/admin/csrf-token') return ok({ csrfToken: `csrf_${longToken('csrf', 24)}` });
     if (pathname === '/api/local/verify-password' || pathname === '/api/verify-password') return ok({ success: true });
     if (pathname === '/api/local/change-password') return ok({ success: true });

@@ -17,6 +17,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 - **About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.
 - **About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.
 - **Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.
+- **Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Sign in on a computer** and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**.
 
 ## When something is not right
 

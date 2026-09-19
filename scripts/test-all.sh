@@ -246,6 +246,7 @@ run_federation_suites() {
       test-admin-auth
       test-admin-key-auth
       test-app-admin-handoff
+      test-settings-qr-signin
       test-challenge-token-leak
       test-backend-monitors
       test-backup-hardening

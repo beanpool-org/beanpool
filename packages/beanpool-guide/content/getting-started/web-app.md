@@ -23,6 +23,7 @@ Your community can also be used in a web browser, on a computer or a phone. This
 - Signing in with Google, Facebook, GitHub or Apple to get your account back. On the web, your 12 words are the only way back.
 - The Pulse's **Learn** lane.
 - The phone's app lock.
+- Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**).
 
 ## Using your phone account on a computer
 

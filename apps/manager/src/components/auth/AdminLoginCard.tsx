@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { loginToNode, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
+import type { KeySession } from '../../lib/key-session';
+import { PhoneSignIn } from './PhoneSignIn';
 
 interface AdminLoginCardProps {
     nodeUrl: string;
     onAuthenticated: (password: string, sessionToken?: string) => void;
+    /** Offers "Sign in with your phone" (a QR for the BeanPool app) when given. Single-node /settings only. */
+    onKeySession?: (session: KeySession, csrfToken: string) => void;
 }
 
-export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps) {
+export function AdminLoginCard({ nodeUrl, onAuthenticated, onKeySession }: AdminLoginCardProps) {
+    const [mode, setMode] = useState<'password' | 'phone'>('password');
     const [password, setPassword] = useState('');
     const [totpCode, setTotpCode] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -97,6 +102,10 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps
                     <HelpLink screen="login" />
                 </div>
 
+                {mode === 'phone' && onKeySession ? (
+                    <PhoneSignIn onSignedIn={onKeySession} onUsePassword={() => setMode('password')} />
+                ) : (
+                <>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {error && (
                         <div className="p-3.5 rounded-xl bg-red-950/70 border border-red-800/60 text-red-200 text-xs flex items-center gap-2">
@@ -168,6 +177,27 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated }: AdminLoginCardProps
                         )}
                     </button>
                 </form>
+
+                {onKeySession && (
+                    <div className="mt-4">
+                        <div className="flex items-center gap-3 my-4 text-xs text-nature-500 uppercase tracking-wider" aria-hidden="true">
+                            <span className="flex-1 border-t border-nature-800" />or<span className="flex-1 border-t border-nature-800" />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setMode('phone')}
+                            className="w-full min-h-[48px] px-4 rounded-xl border border-nature-700 bg-nature-950 hover:border-terra-500 text-white font-bold text-sm flex items-center justify-center gap-2"
+                        >
+                            <span aria-hidden="true">📱</span>
+                            <span>Sign in with your phone</span>
+                        </button>
+                        <p className="text-xs text-nature-400 mt-2 mb-0 text-center leading-relaxed">
+                            Owners and admins: scan a code with the BeanPool app. No password needed.
+                        </p>
+                    </div>
+                )}
+                </>
+                )}
 
                 <div className="mt-6 text-center">
                     <a

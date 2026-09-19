@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 13,
-  "hash": "5c799a00365cc66e30e00957cb3bfdba6f16fbc4a32f13c6a9f25f69bd0a90c8",
+  "version": 14,
+  "hash": "8009046effdb277db2df7fc0dfd143151e846d3cb32b8c88f00705ac099fe700",
   "sections": [
     {
       "id": "about",
@@ -1337,7 +1337,8 @@
             "**About a trade:** message the other person first. Most problems are misunderstandings. On the post, tap **Message** and their name.",
             "**About a person or a trade that has gone wrong:** talk to the admins of your community. They look after its server, and they can step in on a stuck trade.",
             "**About the app itself:** visit beanpool.org. You can open it from **Settings**, under **BeanPool**.",
-            "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar."
+            "**Running a community yourself:** the owners and admins who run a community's server have their own manual, in that server's Settings: sign in and press **Manual** in the side bar.",
+            "**Getting into Settings:** owners and admins see **Community admin** in the phone app's **Settings**. **Manage** opens Settings on the phone. On a computer, open Settings in a web browser and choose **Sign in with your phone**, then in the app tap **Sign in on a computer** and scan the code. Check the 6-character code on the phone matches the one on the computer before you tap **Sign in**."
           ]
         },
         {
@@ -1479,7 +1480,8 @@
           "items": [
             "Signing in with Google, Facebook, GitHub or Apple to get your account back. On the web, your 12 words are the only way back.",
             "The Pulse's **Learn** lane.",
-            "The phone's app lock."
+            "The phone's app lock.",
+            "Signing in to your community's Settings with your own key, for owners and admins. The web app's **Manage** link opens Settings, but a browser has no unlock of its own. On the computer, choose **Sign in with your phone** in Settings and scan the code with the phone app (**Settings**, then **Sign in on a computer**)."
           ]
         },
         {

@@ -86,6 +86,9 @@ export interface TakeoverBundle {
     publicAddress: unknown;
     /** The public record of the current code, so the new main server can keep sealing to it. */
     recoveryCode: RecoveryCodeRecord | null;
+    /** How many take-overs this identity has been through (services/identity-epoch.ts). A take-over writes this + 1.
+     *  Absent in a bundle sealed before slice 8: read as 0. */
+    identityEpoch?: number;
 }
 
 export interface NodeIdentity {
@@ -151,6 +154,7 @@ function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
         nodeRoles,
         publicAddress: readPublicAddress(),
         recoveryCode: config.recoveryCode ?? null,
+        identityEpoch: Number.isSafeInteger(config.identityEpoch) && config.identityEpoch > 0 ? config.identityEpoch : 0,
     };
 }
 

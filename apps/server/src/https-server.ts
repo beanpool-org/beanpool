@@ -101,6 +101,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
+import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createGroupRoutes } from './routes/groups.js';
@@ -266,6 +267,7 @@ const PUBLIC_READ_EXACT = new Set<string>([
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
+    '/api/node/identity-epoch',      // split-brain guard: the signed take-over count an old main server reads at its own address (services/identity-epoch.ts)
 ]);
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
@@ -907,6 +909,10 @@ export async function startHttpsServer(port: number): Promise<void> {
         }
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
+
+    // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
+    // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
+    app.use(identityReadOnlyGuard);
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {

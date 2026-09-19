@@ -23,11 +23,17 @@
  *
  * ## What is kept, and why (§1.3)
  *
- * scripts/restore-primary.mjs deletes libp2p_key and connectors.json "for a fresh PeerId". A promoted standby with a
- * fresh PeerId loses its web address (the registrar binds the name to the key), every federation link (peers key
- * trust and the bridge on our PeerId), and every other standby (their mirror pin is the old PeerId). So the node
- * key and the connectors are WRITTEN here, never deleted. The passive mirror connector (this standby's pin on the
+ * The old scripts/restore-primary.mjs (deleted in slice 8) deleted libp2p_key and connectors.json "for a fresh
+ * PeerId". A promoted standby with a fresh PeerId loses its web address (the registrar binds the name to the key),
+ * every federation link (peers key trust and the bridge on our PeerId), and every other standby (their mirror pin
+ * is the old PeerId). So the node key and the connectors are WRITTEN here, never deleted. The passive mirror connector (this standby's pin on the
  * old main server) goes with the standby's old connectors.json: after the take-over this server imports from nobody.
+ *
+ * ## Two servers with one identity (slice 8)
+ *
+ * Keeping the node key means a revived old main server would be a second node with the same identity. The step
+ * "role" also writes the identity epoch, one more than the keys were sealed at; services/identity-epoch.ts serves
+ * it signed and makes an old main server that sees it at its own address go read-only.
  *
  * ## The tunnel token (967 follow-up #2)
  *
@@ -60,6 +66,7 @@ import { checkBundle } from './sealed-backup.js';
 import { loadConnectors } from '../connector-manager.js';
 import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
 import { restartSidecar } from './public-address-agent.js';
+import { getReplacedInfo, type ReplacedInfo } from './identity-epoch.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -504,6 +511,11 @@ function connectorsFrom(bundle: TakeoverBundle): any[] | null {
     }
 }
 
+function bundleEpoch(bundle: TakeoverBundle): number {
+    const n = Number(bundle.identityEpoch);
+    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
 const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', 'tunnel-token'];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
@@ -584,8 +596,14 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             return pa ? `${pa.hostname || pa.name}; ${plan.tunnel.message}` : 'no web address from the registrar';
         }
         case 'role': {
-            updateLocalConfig({ nodeRole: 'primary', promotionAuditPending: true });
-            return 'nodeRole = primary (local-config.json, over NODE_ROLE in .env)';
+            // The split-brain guard (identity-epoch.ts): one more take-over than the keys were sealed at. Computed
+            // from the bundle, so running this step again writes the same number.
+            const epoch = bundleEpoch(bundle) + 1;
+            updateLocalConfig({
+                nodeRole: 'primary', promotionAuditPending: true,
+                identityEpoch: epoch, identityEpochSince: j.startedAt, identityReplaced: null,
+            });
+            return `nodeRole = primary (local-config.json, over NODE_ROLE in .env); identity epoch ${epoch}`;
         }
         case 'pull-config': {
             stopBackupPuller();
@@ -819,6 +837,8 @@ export interface TakeoverProgress {
     afterwards: readonly string[];
     /** "Your recovery code was used. Make a new one." while the used code is still the current one. */
     codeUsed: { codeId: number; at: string; message: string } | null;
+    /** The split-brain guard (identity-epoch.ts): another server took over from this one, which is now read-only. */
+    replaced: ReplacedInfo | null;
 }
 
 export function getTakeoverProgress(): TakeoverProgress {
@@ -844,6 +864,7 @@ export function getTakeoverProgress(): TakeoverProgress {
         missing: WHAT_WILL_BE_MISSING,
         afterwards: AFTER_A_TAKEOVER,
         codeUsed,
+        replaced: getReplacedInfo(),
     };
 }
 

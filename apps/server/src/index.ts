@@ -43,13 +43,14 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, promotionSanityCheck, createTreasury } from './state-engine.js';
+import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury } from './state-engine.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
+import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
@@ -95,13 +96,7 @@ async function main() {
     // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over
     // NODE_ROLE in .env), and run the ledger conservation audit once if a take-over left it pending. Never blocks
     // the boot; a failure is in data/takeover-journal.json and Settings.
-    const takeover = resumeTakeoverAtBoot();
-
-    // Step 2.61: The same audit for a promotion done by hand with scripts/restore-primary.mjs, where the operator
-    // sets PROMOTED_FROM_BACKUP=true for that one boot. Not twice in one boot.
-    if (process.env.PROMOTED_FROM_BACKUP === 'true' && !takeover.auditRan) {
-        promotionSanityCheck();
-    }
+    resumeTakeoverAtBoot();
 
     // Step 3: TLS certificates (LE or self-signed)
     await initTls();
@@ -126,6 +121,11 @@ async function main() {
         // Step 7.2: after a take-over: tell the community, lock the keys again here, bring the tunnel back.
         .then(() => finishTakeoverAfterBoot())
         .catch((e) => console.warn('[Takeover] Finishing the take-over failed:', e?.message || e));
+
+    // Step 7.3: the split-brain guard (sealed-keys.md §5.4). A main server asks its own public address, now and
+    // hourly, whether another server has taken over its identity; if so it refuses members' writes. Not awaited:
+    // the boot never waits on the network, and an unreachable address changes nothing.
+    void startIdentityEpochWatch();
 
     // Step 8: Connector manager + Handshake + Federation protocols
     initConnectorManager(p2pNode);

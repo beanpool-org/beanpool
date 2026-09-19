@@ -2862,6 +2862,18 @@
                     credBanner.style.display = warning ? 'block' : 'none';
                 }
 
+                // A standby: the main server's take-over keys it holds (locked; it cannot open them).
+                const keysBox = document.getElementById('backup-takeover-keys');
+                const keysText = document.getElementById('backup-takeover-keys-text');
+                if (keysBox && keysText) {
+                    const t = isBackup ? d.takeoverEnvelopes : null;
+                    keysBox.style.display = t ? 'block' : 'none';
+                    if (t) {
+                        keysText.textContent = (t.recipientsChanged ? '⚠️ ' : '') + t.message;
+                        keysText.style.color = t.recipientsChanged || !t.newest ? '#fcd34d' : '#cbd5e1';
+                    }
+                }
+
                 const accessPanel = document.getElementById('replication-access-panel');
                 if (!isBackup) {
                     // A primary runs no puller — the health metrics don't apply, but the
@@ -3222,6 +3234,19 @@
                         ? `${d.totalRejected}${d.lastRejectedAt ? ' · last ' + relativeTime(d.lastRejectedAt) : ''}`
                         : '0';
                     rejected.style.color = d.totalRejected ? '#f87171' : '#e2e8f0';
+                }
+                // Which standby holds which take-over envelope; one sentence each, from the server.
+                const holders = document.getElementById('rep-envelope-holders');
+                if (holders) {
+                    const list = (d.envelopeHolders || []).slice(0, 4);
+                    holders.textContent = '';
+                    for (const h of list) {
+                        const line = document.createElement('div');
+                        line.textContent = (h.current ? '🔐 ' : '⚠️ ') + h.message + ' Last checked ' + relativeTime(h.lastFetchAt) + '.';
+                        line.style.color = h.current ? '#cbd5e1' : '#fcd34d';
+                        holders.appendChild(line);
+                    }
+                    holders.style.display = list.length ? 'block' : 'none';
                 }
                 const recent = document.getElementById('rep-recent');
                 if (recent) {

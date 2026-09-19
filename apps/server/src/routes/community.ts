@@ -30,6 +30,7 @@ import {
     createTreasury,
     purgeMemberSelf,
     getMembersVersion,
+    lastActiveForViewer,
 } from '../state-engine.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
@@ -737,6 +738,7 @@ router.get('/api/community/members', async (ctx) => {
         .filter(m => !m.isTreasury)
         .map(m => ({
             ...m,
+            lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             avatarUrl: m.avatarUrl
                 ? (m.avatarUrl.startsWith('bundled://')

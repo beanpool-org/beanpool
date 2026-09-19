@@ -11,6 +11,13 @@
  * L. Emergency suspension: an admin suspends at once and a 7-day "Keep this suspension?" Decision opens in the
  *    same step; not passing lifts it; the admin halt works from the settings app (password auth) with a reason.
  *
+ * Follow-ups from the review of #921:
+ * - L: a plain admin cannot emergency-suspend an owner; a suspension that is lifted (voted down, unresolved,
+ *   halted, lifted by hand) gives back exactly the node role the member held; a kept one does not.
+ * - K: node-written ledger rows FROM a member (the circulation fee) are not member activity.
+ * - I: lastActiveAt is served to the UTC day to everyone but the member; admin keys (params.suspendedBy,
+ *   adminHaltedBy) are not served to members.
+ *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-decisions-voting-answers.ts
  */
@@ -34,6 +41,7 @@ import {
 import * as decisionsEngine from './decisions-engine.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { createCommunityRoutes } from './routes/community.js';
 import { db } from './db/db.js';
 import { setCommonsBalance } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
@@ -91,6 +99,9 @@ async function callRouter(
         requestBody: opts.body ?? {},
         params,
         query: {},
+        querystring: '',
+        set: () => {},
+        get: () => '',
         status: 200,
         body: undefined,
         throw: (status: number, message: string) => {
@@ -146,6 +157,17 @@ function closeForTick(id: string): void {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
 
+function roleRow(pk: string): any {
+    return db.prepare('SELECT role, granted_at, granted_by, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?').get(pk);
+}
+
+/** The role row, bar the session epoch, which a restore moves on by one (old admin sessions stay dead). */
+function sameRole(before: any, after: any): boolean {
+    return !!before && !!after && before.role === after.role && before.granted_at === after.granted_at
+        && before.granted_by === after.granted_by && before.break_glass_hash === after.break_glass_hash
+        && after.session_epoch === before.session_epoch + 1;
+}
+
 function statusOf(pk: string): string {
     return (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status;
 }
@@ -166,6 +188,7 @@ async function run() {
     const commons = createCommonsRoutes(deps);
     const admin = createAdminRoutes(deps);
 
+    const community = createCommunityRoutes(deps);
     const owner = makeMember('Owner', { lastActiveAt: new Date().toISOString() });
     grantNodeRole(owner, 'owner');
     const secondOwner = makeMember('SecondOwner');
@@ -287,6 +310,19 @@ async function run() {
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at) VALUES (?, 'offer', 'food', 'Eggs', 'Fresh eggs', 5, ?, ?)`)
         .run('post-' + crypto.randomUUID(), restoredPoster, new Date(kNow - 3 * DAY).toISOString());
     assert(getActiveMembersCount30d() === 12, `a stale last_active_at is backed by the trade and post records a backup carries (got ${getActiveMembersCount30d()})`);
+    // The node writes the daily circulation fee as a ledger row FROM the member (engine/audit.ts), unsigned by
+    // them. A member whose only recent row is that fee did nothing and is not active.
+    const demurrageOnly = makeMember('DemurrageOnly');
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 0.05, 0, 'Circulation fee (demurrage, 1d)', ?)`)
+        .run(`demurrage_${demurrageOnly.slice(0, 16)}_1_2`, demurrageOnly, new Date(kNow - DAY).toISOString());
+    assert(getActiveMembersCount30d() === 12, `a member whose only ledger row is the node's circulation fee is not active (got ${getActiveMembersCount30d()})`);
+    // A payment the member signed (auth_signer = them) is activity even with a stale last_active_at.
+    const signedSender = makeMember('SignedSender', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, 2, 0, 'Thanks for the eggs', ?, ?)`)
+        .run('tx-' + crypto.randomUUID(), signedSender, signedOnly[0], new Date(kNow - DAY).toISOString(), signedSender);
+    assert(getActiveMembersCount30d() === 13, `a payment the member signed counts (got ${getActiveMembersCount30d()})`);
+    db.prepare('DELETE FROM transactions WHERE from_pubkey = ?').run(signedSender);
+    assert(getActiveMembersCount30d() === 12, 'back to 12 without it');
 
     const kSubject = makeMember('KSubject');
     const kDecision = createDecision({ authorPubkey: signedOnly[1], title: 'Suspend KSubject', description: 'Turnout test', touches: 'member', effect: 'suspend_member', subject: kSubject });
@@ -319,6 +355,9 @@ async function run() {
     quietEveryone();
     const voters = Array.from({ length: 5 }, (_, i) => makeMember(`LVoter${i}`, { lastActiveAt: new Date().toISOString() }));
     const troll = makeMember('Troll', { lastActiveAt: new Date().toISOString() });
+    // Troll is an admin: each suspension that does not hold must give that role back exactly.
+    grantNodeRole(troll, 'admin', owner);
+    const trollRole = roleRow(troll);
 
     const noReason = await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'bad' } });
     assert(noReason.status === 400 && statusOf(troll) === 'active', 'a suspension needs a reason of at least 10 characters');
@@ -351,8 +390,17 @@ async function run() {
         createDecision({ authorPubkey: voters[0], title: 'Keep?', description: 'A member trying the system effect', touches: 'member', effect: 'keep_suspension', subject: troll2 });
     } catch (e: any) { memberRefused = e.message; }
     assert(/opened by the node/.test(memberRefused), 'a member cannot propose a keep_suspension Decision');
-    const ownerSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { body: { reason: 'Trying to lock out the other owner' } });
-    assert(ownerSuspend.status === 200, 'with two owners, one owner can be suspended (and the vote decides)');
+    // node_roles: only an owner may take an owner's role, and a suspension takes it. A plain admin cannot.
+    const plainAdmin = makeMember('PlainAdmin');
+    grantNodeRole(plainAdmin, 'admin', owner);
+    const byPlainAdmin = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { actor: plainAdmin, body: { reason: 'An admin trying to strip a co-owner' } });
+    assert(byPlainAdmin.status === 403 && statusOf(secondOwner) === 'active' && roleRow(secondOwner)?.role === 'owner',
+        `a plain admin cannot emergency-suspend an owner (got ${byPlainAdmin.status} ${JSON.stringify(byPlainAdmin.body)})`);
+    assert(!(db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(secondOwner)), 'and no vote opens');
+    const secondOwnerRole = roleRow(secondOwner);
+    const ownerSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { actor: owner, body: { reason: 'Trying to lock out the other owner' } });
+    assert(ownerSuspend.status === 200, 'with two owners, another owner can suspend one (and the vote decides)');
+    assert(!roleRow(secondOwner), 'while suspended they hold no node role');
     const nonAdmin = await callRouter(admin, 'POST', `/api/local/admin/users/${voters[4]}/suspend`, { actor: voters[3], body: { reason: 'A key session without an admin role' } });
     assert(nonAdmin.status === 403 && statusOf(voters[4]) === 'active', 'a key session whose member holds no admin role is refused');
     const enterpriseSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${enterprise}/suspend`, { body: { reason: 'An enterprise is not a person' } });
@@ -365,6 +413,8 @@ async function run() {
     assert(keepAfter.status === 'unresolved' && statusOf(troll) === 'active',
         `unresolved on quorum lifts the suspension (status ${keepAfter.status}, member ${statusOf(troll)})`);
     assert(/lifted/.test(keepAfter.executionReason || ''), 'the record says it was lifted');
+    assert(sameRole(trollRole, roleRow(troll)), `unresolved gives back exactly the admin role Troll held (was ${JSON.stringify(trollRole)}, now ${JSON.stringify(roleRow(troll))})`);
+    const trollRole2 = roleRow(troll);
 
     // Voted down → it lifts.
     const downVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Second incident, same person' } })).body.decision;
@@ -373,6 +423,7 @@ async function run() {
     closeForTick(downVote.id);
     tickDecisions();
     assert(getDecision(downVote.id)!.status === 'failed' && statusOf(troll) === 'active', 'voted down (25% yes) lifts the suspension');
+    assert(sameRole(trollRole2, roleRow(troll)), 'and gives the role back exactly');
 
     // Kept → stays suspended.
     const keptVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Third incident, same person' } })).body.decision;
@@ -380,9 +431,14 @@ async function run() {
     closeForTick(keptVote.id);
     tickDecisions();
     assert(getDecision(keptVote.id)!.status === 'executed' && statusOf(troll) === 'disabled', 'kept by 60%+ → the suspension stays');
+    assert(!roleRow(troll), 'kept: the node role stays gone');
+    assert(!(db.prepare('SELECT 1 FROM suspended_node_roles WHERE decision_id = ?').get(keptVote.id)), 'and nothing is held aside for it any more');
 
     // The admin halt from the settings app: password auth, written reason required; halting the vote lifts it.
     const halt = second.body.decision;
+    // Troll2 was a moderator before their suspension (set up here: the role row is what was held aside).
+    db.prepare(`INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                VALUES (?, ?, 'moderator', '2026-01-01T00:00:00.000Z', ?, 3, NULL)`).run(halt.id, troll2, owner);
     const haltNoReason = await callRouter(admin, 'POST', `/api/local/admin/decisions/${halt.id}/halt`, { body: { reason: 'short' } });
     assert(haltNoReason.status === 400 && getDecision(halt.id)!.status === 'open', 'halting needs a written reason (10+ characters)');
     const halted = await callRouter(admin, 'POST', `/api/local/admin/decisions/${halt.id}/halt`, { body: { reason: 'Suspended the wrong account by mistake' } });
@@ -390,12 +446,18 @@ async function run() {
     const haltedRow = getDecision(halt.id)!;
     assert(haltedRow.status === 'admin_halted' && haltedRow.adminHaltReason === 'Suspended the wrong account by mistake', 'halted with the public reason');
     assert(statusOf(troll2) === 'active', 'halting the ratifying vote lifts the suspension');
+    const troll2Role = roleRow(troll2);
+    assert(troll2Role?.role === 'moderator' && troll2Role.granted_by === owner && troll2Role.granted_at === '2026-01-01T00:00:00.000Z' && troll2Role.session_epoch === 4,
+        `halting gives back the role held aside (got ${JSON.stringify(troll2Role)})`);
 
     // An admin lifting by hand closes the open vote.
     const ownerKeep = ownerSuspend.body.decision;
     const lifted = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/status`, { body: { status: 'active' } });
     assert(lifted.status === 200 && statusOf(secondOwner) === 'active', 'an admin can lift a suspension');
     assert(getDecision(ownerKeep.id)!.status === 'admin_halted', 'and the open "Keep?" vote closes with it');
+    assert(sameRole(secondOwnerRole, roleRow(secondOwner)), `lifting by hand gives the owner role back exactly (was ${JSON.stringify(secondOwnerRole)}, now ${JSON.stringify(roleRow(secondOwner))})`);
+    const plainAgain = await callRouter(admin, 'POST', `/api/local/admin/users/${secondOwner}/suspend`, { actor: plainAdmin, body: { reason: 'Still an owner after the restore' } });
+    assert(plainAgain.status === 403, 'restored, they are an owner again: a plain admin still cannot suspend them');
 
     // Key session admin: attributed to their key.
     const keyAdmin = voters[2];
@@ -407,6 +469,49 @@ async function run() {
     db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").run(secondOwner);
     const soleOwner = await callRouter(admin, 'POST', `/api/local/admin/users/${owner}/suspend`, { body: { reason: 'Trying to suspend the only owner' } });
     assert(soleOwner.status === 400 && statusOf(owner) === 'active', "the node's only owner cannot be suspended");
+
+    // ── I. What members are served ────────────────────────────────────────
+    console.log('\n--- I. No timing side channel, no admin keys ---');
+    const exactAt = '2026-09-18T13:47:12.345Z';
+    const timed = makeMember('Timed', { lastActiveAt: exactAt });
+    const dayOnly = '2026-09-18T00:00:00.000Z';
+    const trustByOther = await callRouter(community, 'POST', '/api/trust/profile', { actor: voters[0], body: { targetPubkey: timed } });
+    assert(trustByOther.status === 200 && trustByOther.body.lastActiveAt === dayOnly,
+        `another member sees the UTC day only (got ${trustByOther.body.lastActiveAt})`);
+    const trustBySelf = await callRouter(community, 'POST', '/api/trust/profile', { actor: timed, body: { targetPubkey: timed } });
+    assert(trustBySelf.body.lastActiveAt === exactAt, `the member sees their own exact time (got ${trustBySelf.body.lastActiveAt})`);
+    const directory = await callRouter(community, 'GET', '/api/community/members');
+    const dirRow = (JSON.parse(directory.body) as any[]).find(m => m.publicKey === timed);
+    assert(dirRow?.lastActiveAt === dayOnly, `the member directory serves the day only (got ${dirRow?.lastActiveAt})`);
+    assert(!String(directory.body).includes(exactAt), 'the exact time appears nowhere in the directory');
+    const adminData = await callRouter(admin, 'POST', '/api/local/admin/data');
+    const adminRow = adminData.body.members.find((m: any) => m.publicKey === timed);
+    assert(adminRow?.lastActiveAt === dayOnly, `the admin member list serves the day only too (got ${adminRow?.lastActiveAt})`);
+
+    const suspendedCard = byKey.body.decision;
+    const memberList = await callRouter(commons, 'GET', '/api/commons/decisions', { actor: voters[0] });
+    const memberCard = memberList.body.decisions.find((d: any) => d.id === suspendedCard.id);
+    assert(memberCard && !('suspendedBy' in (memberCard.params || {})) && memberCard.params.reason === 'Signed admin session suspension',
+        'members see the reason on the keep-suspension card, not which admin key suspended');
+    const listJson2 = JSON.stringify(memberList.body);
+    assert(!listJson2.includes(keyAdmin) && !listJson2.includes('owner:password'), 'no admin key anywhere in the member list');
+    const haltedCard = memberList.body.decisions.find((d: any) => d.id === halt.id);
+    assert(haltedCard && !('adminHaltedBy' in haltedCard) && haltedCard.adminHaltReason === 'Suspended the wrong account by mistake',
+        'a halted card carries the public reason, not the halting admin');
+    const memberDetail = await callRouter(commons, 'GET', `/api/commons/decisions/${suspendedCard.id}`, { actor: voters[0] });
+    assert(memberDetail.status === 200 && !JSON.stringify(memberDetail.body).includes(keyAdmin), 'nor in the detail response');
+    const adminDecisions = await callRouter(admin, 'POST', '/api/local/admin/decisions');
+    const adminCard = adminDecisions.body.decisions.find((d: any) => d.id === suspendedCard.id);
+    assert(adminCard?.params?.suspendedBy === keyAdmin, 'the admin Decisions list still says who suspended');
+    const heard: any[] = [];
+    const listener = { send: (m: string) => heard.push(JSON.parse(m)), readyState: 1 };
+    addWsClient(listener);
+    const wsTarget = makeMember('WsTarget');
+    const wsSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${wsTarget}/suspend`, { actor: keyAdmin, body: { reason: 'Broadcast carries no admin key' } });
+    await callRouter(admin, 'POST', `/api/local/admin/decisions/${wsSuspend.body.decision.id}/halt`, { actor: keyAdmin, body: { reason: 'Checking the halt broadcast too' } });
+    removeWsClient(listener);
+    assert(heard.some(e => e.type === 'decision_created') && heard.some(e => e.type === 'decision_halted'), 'the created and halted events went out');
+    assert(!JSON.stringify(heard).includes(keyAdmin), `no broadcast carries the admin key (got ${heard.map(e => e.type).join(',')})`);
 
     // ── J/K. joined_at and last activity survive a backup restore ─────────
     console.log('\n--- J/K. Backup restore keeps joined_at ---');

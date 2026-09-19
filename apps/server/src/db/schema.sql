@@ -820,6 +820,20 @@ CREATE TABLE IF NOT EXISTS node_roles (
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 
+-- 22b. A node role held aside during an admin's emergency suspension (answer L).
+-- Suspending removes the member's node role; if the "Keep this suspension?" vote does not keep it
+-- (fails, misses quorum, is halted, or an admin lifts the suspension) the exact row comes back.
+-- If the community keeps the suspension the row is dropped. Never served by any route.
+CREATE TABLE IF NOT EXISTS suspended_node_roles (
+    decision_id      TEXT NOT NULL PRIMARY KEY,
+    member_pubkey    TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
+    granted_at       DATETIME,
+    granted_by       TEXT,
+    session_epoch    INTEGER NOT NULL DEFAULT 0,
+    break_glass_hash TEXT
+);
+
 -- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
 -- A keeper payment refused by Rule 5 (in deficit) or Rule 6 (capped by earned surplus)
 -- is recorded here and paid automatically the moment the enterprise can legitimately pay

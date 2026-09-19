@@ -39,6 +39,7 @@ import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { isNodeOwner } from './engine/node-roles.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
@@ -180,6 +181,23 @@ function rowToDecision(r: any): Decision {
     };
 }
 
+/** A Decision as members see it: see publicDecision. */
+export type PublicDecision = Omit<Decision, 'adminHaltedBy'>;
+
+/**
+ * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
+ * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
+ * Admin routes (/api/local/admin/*) serve the full Decision.
+ */
+export function publicDecision(decision: Decision): PublicDecision {
+    const { adminHaltedBy: _haltedBy, ...rest } = decision;
+    if (rest.params && typeof rest.params === 'object' && 'suspendedBy' in rest.params) {
+        const { suspendedBy: _suspendedBy, ...params } = rest.params;
+        return { ...rest, params };
+    }
+    return rest;
+}
+
 /**
  * Maps what a decision touches to its mandatory franchise (§3.6):
  * - pool -> quadratic on earned trade
@@ -270,6 +288,9 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
  * replica it can lag. The durable records of signed actions that DO travel with every backup — ledger
  * payments the member signed, marketplace trades, posts — and local Decision votes are therefore counted too,
  * so a restored node never under-counts a member who was plainly active.
+ *
+ * Ledger rows count by `auth_signer`, never `from_pubkey`: the node writes rows FROM a member that the member
+ * never signed (the daily circulation fee, engine/audit.ts), and those must not make an idle member active.
  */
 export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null): number {
     const asOf = asOfTime ?? Date.now();
@@ -287,7 +308,7 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
           AND (
                 julianday(m.last_active_at) >= julianday(@cutoff)
              OR EXISTS (SELECT 1 FROM transactions t
-                        WHERE t.from_pubkey = m.public_key AND julianday(t.timestamp) >= julianday(@cutoff))
+                        WHERE t.auth_signer = m.public_key AND julianday(t.timestamp) >= julianday(@cutoff))
              OR EXISTS (SELECT 1 FROM marketplace_transactions mt
                         WHERE mt.buyer_pubkey = m.public_key AND julianday(mt.created_at) >= julianday(@cutoff))
              OR EXISTS (SELECT 1 FROM marketplace_transactions mt
@@ -504,7 +525,7 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     );
 
     const decision = getDecision(id)!;
-    broadcast({ type: 'decision_created', decision });
+    broadcast({ type: 'decision_created', decision: publicDecision(decision) });
     return decision;
 }
 
@@ -793,7 +814,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         db.prepare(
             "UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(now, preflight.reason || 'Subject dead', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: false, status: 'execution_void', error: preflight.reason };
     }
 
@@ -806,14 +827,14 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             db.prepare(
                 "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
             ).run(now, decisionId);
-            broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
             return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
         }
 
         db.prepare(
             "UPDATE decisions SET status = 'passed_queued_for_funds', execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Queued for pool funds', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: true, status: 'passed_queued_for_funds' };
     }
 
@@ -821,7 +842,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Preflight blocked', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: false, status: 'execution_blocked', error: preflight.reason };
     }
 
@@ -843,7 +864,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 `).run(graceEndsAt, now, decisionId);
             });
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
-            broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
             return { success: true, status: 'execution_pending_grace' };
         } catch (e: any) {
             db.prepare(
@@ -914,7 +935,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     break;
                 }
                 case 'keep_suspension': {
-                    // The admin's emergency suspension is already in force; passing keeps it. Nothing to flip.
+                    // The admin's emergency suspension is already in force; passing keeps it. The node role it
+                    // held aside is gone for good — the community kept the suspension.
+                    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
                     break;
                 }
                 case 'remove_lead_keeper': {
@@ -1041,19 +1064,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         }
         for (const pk of touchedProfiles) broadcast({ type: 'profile_updated', publicKey: pk });
         for (const cid of cancelledDecisionIds) {
-            broadcast({ type: 'decision_updated', decision: getDecision(cid)! });
+            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(cid)!) });
         }
 
         if (decision.subject) {
             broadcast({ type: 'profile_updated', publicKey: decision.subject });
         }
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: true, status: 'executed' };
     } catch (e: any) {
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(e?.message || String(e), now, decisionId);
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: false, status: 'execution_blocked', error: e?.message };
     }
 }
@@ -1105,7 +1128,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     if (decision.subject) {
         broadcast({ type: 'profile_updated', publicKey: decision.subject });
     }
-    broadcast({ type: 'decision_halted', decisionId, adminPubkey, reason });
+    broadcast({ type: 'decision_halted', decisionId, reason });
     return { success: true };
 }
 
@@ -1137,7 +1160,7 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
                 updated_at = ?
             WHERE id = ?
         `).run(now, now, decisionId);
-        broadcast({ type: 'decision_updated', decision: getDecision(decisionId)! });
+        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
@@ -1159,15 +1182,34 @@ export function isAdminActor(actor: string | null | undefined): boolean {
 export const EMERGENCY_SUSPENSION_DAYS = 7;
 
 /**
+ * Give back the node role an emergency suspension held aside — the same role, grant record and break-glass
+ * hash. The session epoch moves on by one, so admin sessions opened before the suspension stay dead and the
+ * member signs in again. Call inside a transaction, after the member is active again.
+ */
+function restoreSuspendedNodeRole(decisionId: string): void {
+    const held = db.prepare('SELECT * FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as {
+        member_pubkey: string; role: string; granted_at: string | null; granted_by: string | null;
+        session_epoch: number; break_glass_hash: string | null;
+    } | undefined;
+    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decisionId);
+    if (!held) return;
+    db.prepare(`
+        INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(member_pubkey) DO NOTHING
+    `).run(held.member_pubkey, held.role, held.granted_at, held.granted_by, held.session_epoch + 1, held.break_glass_hash);
+}
+
+/**
  * Lift an emergency suspension whose ratifying Decision did not pass. Call inside a transaction.
  * The member stays suspended if something else holds them there: a pending community removal, or a
- * suspend_member Decision that passed after this suspension began.
+ * suspend_member Decision that passed after this suspension began. Lifted, they get back exactly the node
+ * role they held; held elsewhere, the community has acted and the role stays gone.
  */
 function liftEmergencySuspensionRow(decision: Decision): boolean {
     if (!decision.subject) return false;
     const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(decision.subject) as { status: string } | undefined;
-    if (!row || row.status !== 'disabled') return false;
-    const heldElsewhere = db.prepare(`
+    const heldElsewhere = row?.status === 'disabled' && db.prepare(`
         SELECT 1 FROM decisions
         WHERE subject = ? AND id != ? AND (
             (effect = 'remove_member' AND status = 'execution_pending_grace')
@@ -1175,8 +1217,12 @@ function liftEmergencySuspensionRow(decision: Decision): boolean {
         )
         LIMIT 1
     `).get(decision.subject, decision.id, decision.opensAt);
-    if (heldElsewhere) return false;
+    if (!row || row.status !== 'disabled' || heldElsewhere) {
+        db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+        return false;
+    }
     setUserStatusRow(decision.subject, 'active');
+    restoreSuspendedNodeRole(decision.id);
     return true;
 }
 
@@ -1192,7 +1238,7 @@ function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolve
         `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
     })();
     if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
-    broadcast({ type: 'decision_updated', decision: getDecision(decision.id)! });
+    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
 }
 
 export interface EmergencySuspendResult {
@@ -1224,6 +1270,12 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
+    // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
+    // who thinks an owner must go proposes a member-removal Decision instead.
+    const actorIsOwner = adminActor === 'owner:password' || isNodeOwner(adminActor);
+    if (isNodeOwner(subjectPubkey) && !actorIsOwner) {
+        return { success: false, status: 403, error: 'Only an owner can suspend an owner. Propose a Decision to remove them instead' };
+    }
 
     const id = crypto.randomUUID();
     const now = new Date();
@@ -1233,6 +1285,13 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason };
 
     db.transaction(() => {
+        // Hold the member's node role aside before the suspension deletes it, so a suspension the
+        // community does not keep gives it back exactly.
+        db.prepare(`
+            INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+            SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
+            FROM node_roles WHERE member_pubkey = ?
+        `).run(id, subjectPubkey);
         setUserStatusRow(subjectPubkey, 'disabled');
         db.prepare(`
             INSERT INTO decisions (
@@ -1255,7 +1314,7 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 
     const decision = getDecision(id)!;
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    broadcast({ type: 'decision_created', decision });
+    broadcast({ type: 'decision_created', decision: publicDecision(decision) });
     return { success: true, decision };
 }
 
@@ -1281,6 +1340,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     db.transaction(() => {
         setUserStatusRow(subjectPubkey, 'active');
         for (const k of openKeeps) {
+            restoreSuspendedNodeRole(k.id);
             db.prepare(`
                 UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
                     admin_halt_reason = 'An admin lifted the suspension before the vote closed', updated_at = ?
@@ -1289,7 +1349,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
         }
     })();
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    for (const k of openKeeps) broadcast({ type: 'decision_updated', decision: getDecision(k.id)! });
+    for (const k of openKeeps) broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(k.id)!) });
     return { success: true };
 }
 
@@ -1347,7 +1407,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
-                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
                 continue;
             }
 
@@ -1363,7 +1423,7 @@ export function tickDecisions(asOfTime?: number): {
                     now,
                     r.id
                 );
-                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
                 continue;
             }
 
@@ -1383,7 +1443,7 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(err?.message || String(err), now, r.id);
-            broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
         }
     }
 
@@ -1419,7 +1479,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(now, now, r.id);
-                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
             } catch (e: any) {
                 db.prepare(`
                     UPDATE decisions SET
@@ -1428,7 +1488,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(e?.message || String(e), now, r.id);
-                broadcast({ type: 'decision_updated', decision: getDecision(r.id)! });
+                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
             }
         }
     }
@@ -1454,7 +1514,7 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(nowIso, top.id);
-            broadcast({ type: 'decision_updated', decision: getDecision(top.id)! });
+            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(top.id)!) });
         } else {
             let requiredAmount = 0;
             if (top.effect === 'write_off_deficit' && top.subject) {

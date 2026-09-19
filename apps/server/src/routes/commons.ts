@@ -8,7 +8,7 @@ import {
     getProjects, getAllProjects,
     getCommonsBalance,
     adminRejectProject,
-    createDecision, getDecision, getAllDecisions, getOpenDecisions,
+    createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision, tickDecisions,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
 } from '../state-engine.js';
@@ -126,7 +126,7 @@ router.get('/api/commons/decisions', async (ctx) => {
     const ownVotes = actor ? getOwnDecisionVotes(actor) : null;
     ctx.body = {
         decisions: decisions.map(d => ({
-            ...d,
+            ...publicDecision(d),
             tally: tallyDecision(d.id),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
@@ -142,7 +142,7 @@ router.get('/api/commons/decisions/:id', async (ctx) => {
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
-    ctx.body = { decision, tally, voiceCredits, myVote };
+    ctx.body = { decision: publicDecision(decision), tally, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
@@ -175,7 +175,7 @@ router.post('/api/commons/decisions', async (ctx) => {
             params,
             closesAt: closesAtOverride,
         });
-        ctx.body = { success: true, decision };
+        ctx.body = { success: true, decision: publicDecision(decision) };
     } catch (err: any) {
         ctx.status = 400;
         ctx.body = { error: err.message };

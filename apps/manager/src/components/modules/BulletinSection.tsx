@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface BulletinSectionProps {
     activeNode: NodeProfile;
     onRefresh: () => void;
+    initialSubTab?: 'announcements' | 'pulse';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'announcements' | 'pulse') => void;
 }
 
 interface PulseChannel {
@@ -21,8 +27,8 @@ interface PulseChannel {
     enabled?: boolean;
 }
 
-export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps) {
-    const [subTab, setSubTab] = useState<'announcements' | 'pulse'>('announcements');
+export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announcements', onSubTabChange }: BulletinSectionProps) {
+    const [subTab, setSubTab] = useSectionSubTab<'announcements' | 'pulse'>(initialSubTab, onSubTabChange);
 
     // Announcements state
     const [title, setTitle] = useState('');
@@ -150,7 +156,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>📢</span>
@@ -162,10 +168,12 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                     </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={false}>
                     <button
                         onClick={() => setSubTab('announcements')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="announcements"
+                        aria-current={subTab === 'announcements' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'announcements'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -175,7 +183,9 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                     </button>
                     <button
                         onClick={() => setSubTab('pulse')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="pulse"
+                        aria-current={subTab === 'pulse' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pulse'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -183,7 +193,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                     >
                         Pulse Channels ({channels.length})
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
             {/* Subtab: Announcements */}
@@ -220,7 +230,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
 
                         <div>
                             <label className="block text-xs font-bold text-nature-300 mb-1">Severity Level</label>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setSeverity('info')}
@@ -290,8 +300,8 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
             {/* Subtab: Pulse Channels */}
             {subTab === 'pulse' && (
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
+                        <div className="min-w-0">
                             <h3 className="text-base font-bold text-white m-0">Curated Pulse RSS Channels</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
                                 Feeds distributed through the community Pulse reader tab
@@ -331,7 +341,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                                     key={c.id}
                                     className="p-4 rounded-xl bg-nature-900/80 border border-nature-800 flex items-center justify-between gap-3 shadow-md"
                                 >
-                                    <div>
+                                    <div className="min-w-0 lg:min-w-[auto] break-words">
                                         <h4 className="text-sm font-bold text-white m-0">{c.title || c.handle || c.url}</h4>
                                         <span className="text-[11px] font-mono text-nature-400 truncate block max-w-xs sm:max-w-sm mt-0.5">
                                             {c.url || c.feedUrl}
@@ -355,8 +365,8 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
 
             {/* Add Channel Modal */}
             {showAddChannelModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
+                <ModalBackdrop onClose={() => setShowAddChannelModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">📚 Add Curated Pulse Feed</h3>
                         <form onSubmit={handleAddChannel} className="space-y-3">
                             <div>
@@ -417,7 +427,7 @@ export function BulletinSection({ activeNode, onRefresh }: BulletinSectionProps)
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import { Avatar } from '../common/Avatar';
 import {
@@ -21,6 +23,7 @@ import {
 import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -28,6 +31,8 @@ interface EconomySectionProps {
     tfaToken?: string;
     onRefresh: () => void;
     initialSubTab?: 'enterprises' | 'decisions' | 'pool' | 'disputes';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'enterprises' | 'decisions' | 'pool' | 'disputes') => void;
 }
 
 interface CommonsProject {
@@ -68,15 +73,10 @@ export function EconomySection({
     tfaToken,
     onRefresh,
     initialSubTab = 'enterprises',
+    onSubTabChange,
 }: EconomySectionProps) {
     const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
-    const [subTab, setSubTab] = useState<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab);
-
-    useEffect(() => {
-        if (initialSubTab) {
-            setSubTab(initialSubTab);
-        }
-    }, [initialSubTab]);
+    const [subTab, setSubTab] = useSectionSubTab<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab, onSubTabChange);
 
     // Enterprises state
     const [treasuries, setTreasuries] = useState<NodeTreasury[]>([]);
@@ -427,7 +427,7 @@ export function EconomySection({
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>🏛️</span>
@@ -439,10 +439,12 @@ export function EconomySection({
                     </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={false}>
                     <button
                         onClick={() => setSubTab('enterprises')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="enterprises"
+                        aria-current={subTab === 'enterprises' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'enterprises'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -452,7 +454,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('decisions')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="decisions"
+                        aria-current={subTab === 'decisions' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'decisions'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -462,7 +466,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('pool')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="pool"
+                        aria-current={subTab === 'pool' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pool'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -472,7 +478,9 @@ export function EconomySection({
                     </button>
                     <button
                         onClick={() => setSubTab('disputes')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="disputes"
+                        aria-current={subTab === 'disputes' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'disputes'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -480,14 +488,14 @@ export function EconomySection({
                     >
                         ⚖️ Escrow Disputes{typeof nodeData?.escrowDisputesCount === 'number' && nodeData.escrowDisputesCount > 0 ? ` (${nodeData.escrowDisputesCount})` : ''}
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
             {/* Subtab: Enterprises */}
             {subTab === 'enterprises' && (
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div>
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
+                        <div className="min-w-0">
                             <h3 className="text-base font-bold text-white m-0">Shared Community Enterprises</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
                                 Co-operatives, shared tools, community garden, and food initiatives
@@ -646,14 +654,14 @@ export function EconomySection({
                                             )}
                                         </div>
 
-                                        <div className="border-t border-nature-800/80 pt-3 flex items-center justify-between">
+                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 lg:gap-0">
                                             <div>
                                                 <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
                                                 <div className="text-sm font-bold text-white font-mono">
                                                     {t.balance ?? '0.00'} beans
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                                 <button
                                                     onClick={() => setEditingLocationPubkey(editingLocationPubkey === pubkeyStr ? null : pubkeyStr)}
                                                     className="px-2.5 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
@@ -699,9 +707,9 @@ export function EconomySection({
                                 {commonsData.proposed.map((p) => (
                                     <div
                                         key={p.id}
-                                        className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3"
+                                        className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3"
                                     >
-                                        <div>
+                                        <div className="min-w-0 break-words">
                                             <h4 className="text-sm font-bold text-white m-0">{p.title}</h4>
                                             <p className="text-xs text-nature-400 m-0 mt-0.5">{p.description}</p>
                                             {p.requestedAmount && (
@@ -756,8 +764,8 @@ export function EconomySection({
 
             {/* Create Enterprise Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <ModalBackdrop onClose={() => setShowCreateModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0">🌾 Create Community Enterprise</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
@@ -896,15 +904,15 @@ export function EconomySection({
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Manage Keepers Modal */}
             {manageKeepersTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <ModalBackdrop onClose={() => setManageKeepersTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>{manageKeepersTreasury.avatar || '🌾'}</span>
                                     <span>Manage Keepers — {manageKeepersTreasury.name}</span>
@@ -915,8 +923,9 @@ export function EconomySection({
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={() => setManageKeepersTreasury(null)}
-                                className="w-8 h-8 rounded-full bg-nature-800 hover:bg-nature-700 text-nature-300 flex items-center justify-center text-sm font-bold"
+                                className="shrink-0 w-8 h-8 rounded-full bg-nature-800 hover:bg-nature-700 text-nature-300 flex items-center justify-center text-sm font-bold"
                             >
                                 ✕
                             </button>
@@ -1079,13 +1088,13 @@ export function EconomySection({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Seed Offer Modal */}
             {seedOfferTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
+                <ModalBackdrop onClose={() => setSeedOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">
                             Post Initial Offer for {seedOfferTreasury.name}
                         </h3>
@@ -1148,7 +1157,7 @@ export function EconomySection({
                             </div>
                         </form>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Subtab: Escrow Disputes */}

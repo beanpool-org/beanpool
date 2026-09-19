@@ -10,7 +10,7 @@ related: mute, messages, my-deals, holiday-mode, the-top-bar
 - Open **Settings**. Under **App Settings**, tap **Notification Preferences**.
 - Switch each kind on or off:
 - **Direct Messages:** when someone messages you.
-- **Marketplace Activity:** requests, approvals and refusals on your deals.
+- **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed.
 - **Held in Trust & System:** beans held, released or in question.
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.

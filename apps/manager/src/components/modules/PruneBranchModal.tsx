@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { MemberItem } from './MembersModule';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface PruneBranchModalProps {
     rootMember: MemberItem | null | undefined;
@@ -130,18 +131,6 @@ export function PruneBranchModal({
 
     const isMatch = confirmText.trim() === rootName.trim() && rootName.trim().length > 0;
 
-    // Keyboard accessibility: Escape closes modal
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !isPruning) {
-                e.preventDefault();
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose, isPruning]);
-
     const handlePrune = async () => {
         if (!isMatch || isPruning || !rootPubkey) return;
         setIsPruning(true);
@@ -156,18 +145,17 @@ export function PruneBranchModal({
     };
 
     return (
-        <div
+        <ModalBackdrop
+            onClose={onClose}
+            dismissable={!isPruning}
             role="dialog"
             aria-modal="true"
             aria-labelledby="prune-branch-title"
             className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto"
-            onClick={(e) => {
-                if (e.target === e.currentTarget && !isPruning) onClose();
-            }}
         >
-            <div className="bg-nature-900 border border-red-700/80 rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 text-nature-100 font-sans my-auto">
+            <div className="m-auto bg-nature-900 border border-red-700/80 rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 text-nature-100 font-sans my-auto">
                 <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                    <div>
+                    <div className="min-w-0 flex-1">
                         <h3 id="prune-branch-title" className="text-base sm:text-lg font-black text-white flex items-center gap-2 m-0 text-red-300">
                             <span>⚠️</span>
                             <span>Prune Invite Branch</span>
@@ -181,7 +169,7 @@ export function PruneBranchModal({
                         onClick={() => { if (!isPruning) onClose(); }}
                         disabled={isPruning}
                         aria-label="Close prune branch dialog"
-                        className="text-nature-400 hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-nature-800 transition-colors disabled:opacity-50"
+                        className="shrink-0 text-nature-400 hover:text-white p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-nature-800 transition-colors disabled:opacity-50"
                     >
                         ✕
                     </button>
@@ -260,7 +248,7 @@ export function PruneBranchModal({
                 {/* Type-To-Confirm Safeguard */}
                 <div className="space-y-2">
                     <label htmlFor="prune-branch-confirm-input" className="block text-xs font-bold text-nature-300">
-                        To confirm, type the branch root name <span className="text-terra-400 font-mono font-black">&quot;{rootName}&quot;</span> below:
+                        To confirm, type the branch root name <span className="text-terra-400 font-mono font-black break-all">&quot;{rootName}&quot;</span> below:
                     </label>
                     <input
                         id="prune-branch-confirm-input"
@@ -303,6 +291,6 @@ export function PruneBranchModal({
                     </button>
                 </div>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

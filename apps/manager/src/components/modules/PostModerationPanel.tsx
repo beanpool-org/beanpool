@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { getTfaSessionToken, deleteNodePost } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface PostModerationItem {
     id: string;
@@ -309,18 +310,17 @@ export function PostModerationPanel({
 
             {/* Single Post Deletion Confirmation Modal */}
             {deletingPost && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setDeletingPost(null)}
+                    dismissable={!isDeleting}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="delete-post-dialog-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget && !isDeleting) setDeletingPost(null);
-                    }}
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <h3 id="delete-post-dialog-title" className="text-base font-bold text-red-300 flex items-center gap-2 m-0">
+                            <h3 id="delete-post-dialog-title" className="text-base font-bold text-red-300 flex items-center gap-2 m-0 min-w-0 flex-1">
                                 <span>⚠️</span>
                                 <span>Confirm Post Deletion</span>
                             </h3>
@@ -330,7 +330,7 @@ export function PostModerationPanel({
                                     if (!isDeleting) setDeletingPost(null);
                                 }}
                                 disabled={isDeleting}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                className="shrink-0 text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close delete confirmation"
                             >
                                 ✕
@@ -379,7 +379,7 @@ export function PostModerationPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

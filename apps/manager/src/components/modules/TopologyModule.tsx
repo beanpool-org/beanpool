@@ -20,6 +20,7 @@ import {
     type SnapshotItem,
     type RegistrarAllocation,
 } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface TopologyModuleProps {
     activeNode: NodeProfile;
@@ -550,8 +551,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* Nodes Table */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between">
-                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
+                            <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0 min-w-0">
                                 Harvested Node Replicas & Identity Bundles
                             </h4>
                             <span className="text-xs text-nature-400 font-mono">Auto-prunes history archives &gt;30d</span>
@@ -636,9 +637,14 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                         </span>
                                                     )}
                                                     {state?.identityStatus === 'partial' && (
-                                                        <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold text-[10px]">
-                                                            Partial
-                                                        </span>
+                                                        <div className="space-y-1">
+                                                            <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800 font-bold text-[10px]">
+                                                                Partial: database, no keys
+                                                            </span>
+                                                            {state.identityNote && (
+                                                                <p className="text-[10px] text-amber-300/80 max-w-[16rem] leading-snug">{state.identityNote}</p>
+                                                            )}
+                                                        </div>
                                                     )}
                                                     {(!state || state.identityStatus === 'missing') && (
                                                         <span className="px-2 py-0.5 rounded bg-nature-900 text-nature-400 border border-nature-700 font-bold text-[10px]">
@@ -906,6 +912,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <div className="font-bold text-sky-400 text-sm">Step 1: Download Node Backups from Manager</div>
                             <p className="text-nature-400">
                                 Click <strong className="text-white">⬇ DB</strong> and <strong className="text-white">🔑 Identity</strong> on the Harvested Fleet Backups tab to download the latest SQLite database (<code className="text-amber-400">state.db</code>) and cryptographic keys (<code className="text-emerald-400">identity-bundle.tar.gz</code>).
+                                The keys are collected only for nodes whose admin password is saved here: a replication token copies the database but never the keys, so a token-only node shows <strong className="text-amber-400">Partial</strong>.
                             </p>
                         </div>
 
@@ -1015,8 +1022,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* SECTION 1: PENDING DOMAIN CLAIMS */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden shadow-md">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between bg-nature-900/30">
-                            <div className="flex items-center gap-2">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 bg-nature-900/30">
+                            <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-base">⏳</span>
                                 <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider m-0">
                                     Pending Name Claims (Tier: Gated / Awaiting Approval)
@@ -1141,8 +1148,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
                     {/* SECTION 2: ACTIVE ALLOCATIONS */}
                     <div className="bg-nature-950/60 border border-nature-800 rounded-2xl overflow-hidden shadow-md">
-                        <div className="px-5 py-4 border-b border-nature-800 flex items-center justify-between bg-nature-900/30">
-                            <div className="flex items-center gap-2">
+                        <div className="px-5 py-4 border-b border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 bg-nature-900/30">
+                            <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-base">🌐</span>
                                 <h4 className="text-xs font-extrabold text-terra-400 uppercase tracking-wider m-0">
                                     Active Registrar Allocations
@@ -1270,15 +1277,16 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
             {/* HISTORY MODAL */}
             {selectedHistoryNode && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h4 className="text-sm font-bold text-white m-0">
+                <ModalBackdrop onClose={() => setSelectedHistoryNode(null)} className="fixed inset-0 overflow-y-auto z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
+                        <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <h4 className="text-sm font-bold text-white m-0 min-w-0 flex-1">
                                 📅 30-Day Historical Archives ({selectedHistoryNode.name})
                             </h4>
                             <button
+                                aria-label="Close"
                                 onClick={() => setSelectedHistoryNode(null)}
-                                className="text-nature-400 hover:text-white font-bold text-lg leading-none"
+                                className="shrink-0 text-nature-400 hover:text-white font-bold text-lg leading-none"
                             >
                                 ✕
                             </button>
@@ -1331,7 +1339,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

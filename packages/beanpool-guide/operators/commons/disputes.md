@@ -36,6 +36,11 @@ Any owner or admin, with two exceptions:
 
 This is why a community needs more than one admin.
 
-## Know this
+## What the two people see
 
-The notification the two people receive shows who ruled as a long key, or as "owner:password" if you used the password. They can see it was an admin, not which one by name.
+The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:
+
+- **Signed in with your own key:** your callsign.
+- **Signed in with the admin password:** "a community admin".
+
+They never show a key or "owner:password". Settings still records exactly who ruled, for the other admins.

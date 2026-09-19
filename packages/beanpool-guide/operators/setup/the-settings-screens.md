@@ -1,11 +1,11 @@
 ---
 slug: the-settings-screens
 title: Finding your way around Settings
-summary: The five screens in Settings, what each is for, and how to get help on any of them.
+summary: The five screens in Settings, what each is for, how to get around on a phone, and how to get help on any of them.
 related: first-time-setup, signing-in, roles, troubleshooting
 ---
 
-Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar opens the whole manual.
+Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar (on a phone, in the **☰** menu) opens the whole manual.
 
 ## The screens
 
@@ -14,6 +14,16 @@ Settings is where owners and admins run the community's server. Members never se
 - **Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.
 - **Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security.
+
+## On a phone
+
+Settings opened from the app's Manage button is laid out for the phone. So is any window narrower than a laptop screen.
+
+- The side bar folds away. The bar across the top always names the screen you are on, for example "People & Safety › Owners & admins".
+- Press **☰** at the top left for the menu: the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.
+- A screen's tabs sit in one row under its title. Slide the row sideways to see them all.
+- Tables become one card per row. Long keys and addresses are shortened to fit. A member's page shows their whole key, with a button to copy it.
+- The phone's Back button goes back through the screens and tabs you opened. It closes the menu or the manual first, and only leaves Settings from the first screen.
 
 ## Who sees what
 

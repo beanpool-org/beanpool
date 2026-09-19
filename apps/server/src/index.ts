@@ -48,6 +48,7 @@ import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initPublicAddress } from './services/public-address-agent.js';
 import { initBackupPuller } from './services/backup-puller.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
@@ -111,6 +112,12 @@ async function main() {
 
     // Step 7: libp2p (persistent identity, no auto-discovery)
     const p2pNode = await startP2P(PORT_P2P, PORT_P2P_WS);
+
+    // Step 7.1: the take-over envelope (sealed-keys.md §4) — the node's keys sealed to its owners and recovery
+    // code. After libp2p, which creates data/libp2p_key on first boot. Never blocks boot: a failure is logged and
+    // shown in the status. A standby seals nothing of its own.
+    startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup' })
+        .catch((e) => console.warn('[Takeover] Envelope check at boot failed:', e?.message || e));
 
     // Step 8: Connector manager + Handshake + Federation protocols
     initConnectorManager(p2pNode);

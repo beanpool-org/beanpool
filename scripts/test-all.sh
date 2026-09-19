@@ -116,6 +116,13 @@ run_check "deploy_health" bash scripts/test-deploy-health.sh
 # is explicitly declared in its package.json so workspace hoisting does not mask missing dependencies.
 run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 
+# Node Settings on a phone. Owners open /settings from the app's Manage button, in the phone's own browser, so every
+# screen has to work at 320px wide with large text. apps/manager/e2e/phone-width.mjs builds Settings into a temp
+# folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
+# a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
+# The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
+
 # Federation settlement suites (#104). These are script-style checks under apps/server/src, not vitest,
 # so `turbo run test` does not see them — they were only ever run by hand. Wired in here because the
 # invariants they pin (beans never minted unbacked, a peer's reach bounded by its cap) are exactly the
@@ -242,6 +249,7 @@ run_federation_suites() {
       test-backend-monitors
       test-backup-hardening
       test-backup-identity-bundle
+      test-takeover-envelope
       test-backup-topology
       test-standby-token-only
       test-cash-also-needed
@@ -302,6 +310,7 @@ run_federation_suites() {
       test-ws-http-port
       test-ws-auth-default
       test-ws-feed-parties
+      test-moderation-notifications
       test-polls
       test-events
       test-event-chat

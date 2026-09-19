@@ -365,7 +365,7 @@ export function postGroupThreadMessage(
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
 
     broadcastToChat(cb, groupId, msg);
-    pushGroupMessage(cb, group, authorPubkey, sender?.callsign || authorPubkey.slice(0, 8), mentions);
+    pushGroupMessage(cb, group, authorPubkey, sender?.callsign || 'A member', mentions);
     return msg;
 }
 

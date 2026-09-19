@@ -6,7 +6,11 @@
  * - Two franchises:
  *     - 1m1v (one member, one vote) for member decisions.
  *     - Quadratic on earned trade standing for pool/treasury decisions.
- * - Quorum: 30% of members active in the last 30 days, floor 3 (25% for member removal).
+ * - Who votes: active, unfrozen members who joined BEFORE the Decision opened (no mid-vote stacking).
+ * - Ballots are secret: only totals and the caller's own vote are ever served; votes stay stored against
+ *   keys for dedup and verification.
+ * - Quorum: 30% of the Decision's electorate active in the last 30 days (any signed activity), floor 3
+ *   (25% for member removal).
  * - Pass rules (§3.4):
  *     - 60% supermajority standard.
  *     - 66% supermajority for member removal.
@@ -27,6 +31,8 @@
  *     - Dead subjects halt permanently at execution_void.
  *     - Reinstatements cancel pending removals.
  *     - Admin brake: adminHaltDecision (requires public signed reason) or adminAccelerateDecision.
+ * - Emergency suspension: an admin suspends at once and the node opens a 7-day "Keep this suspension?"
+ *   Decision in the same transaction. If it does not pass (or misses quorum) the suspension lifts itself.
  */
 
 import crypto from 'node:crypto';
@@ -76,6 +82,8 @@ export type DecisionEffect =
     | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
+    // Opened only by an admin's emergency suspension, never proposed by a member
+    | 'keep_suspension'
     // Member destructive
     | 'remove_member'
     // Pool money
@@ -122,6 +130,10 @@ export interface DecisionTally {
     decisionId: string;
     status: DecisionStatus;
     totalVoters: number;
+    /** Members who could vote on this Decision and were active in the last 30 days — the turnout base. */
+    electorate: number;
+    /** Share of the electorate that must vote (0.30, or 0.25 for removing a member). */
+    quorumRatio: number;
     quorumRequired: number;
     quorumMet: boolean;
     yesWeight: number;
@@ -191,7 +203,31 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     grant_voucher: 'member',
     revoke_voucher: 'member',
     remove_lead_keeper: 'member',
+    keep_suspension: 'member',
 };
+
+/** Effects the node opens by itself; a member can never propose one. */
+const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
+
+/** The node's impersonal voice: author of Decisions it opens by itself (emergency-suspension ratification). */
+export const SYSTEM_AUTHOR = 'SYSTEM';
+
+export const NO_TRADE_POOL_VOTE_ERROR = 'Voting on community money opens after your first completed trade.';
+export const JOINED_AFTER_OPEN_ERROR = 'Only members who joined before this Decision opened can vote on it.';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Parse a stored timestamp. Rows written by the code are ISO-8601 with a Z; rows written by SQLite's
+ * datetime() are 'YYYY-MM-DD HH:MM:SS' with no zone, which Date.parse would read as LOCAL time.
+ * Both are UTC.
+ */
+export function parseDbTime(value: string | null | undefined): number {
+    if (!value) return NaN;
+    const s = String(value);
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) return Date.parse(s.replace(' ', 'T') + 'Z');
+    return Date.parse(s);
+}
 
 /**
  * Returns required pass threshold per §3.4:
@@ -222,45 +258,72 @@ export function quorumRatioForEffect(effect: DecisionEffect, _touches?: Decision
 }
 
 /**
- * Count distinct accounts with a trade, transfer, or settlement in the last 30 days (§3.4).
- * Excludes SYSTEM, COMMONS_POOL, escrow wallets, and enterprise accounts.
+ * The turnout base (§3.4, answer K): members who could vote and were ACTIVE in the 30 days before
+ * `asOfTime` — any signed activity, not only trades.
+ *
+ * "Could vote" is the same test checkVoterEligibility applies: active, unfrozen, not an enterprise, and —
+ * when `joinedBefore` is given (a Decision's opensAt) — joined before the Decision opened.
+ *
+ * Activity signal: `members.last_active_at`, stamped from the verified signer of every signed write
+ * (https-server requireSignature → recordActivity). It is NOT carried by delta backup (the members touch
+ * trigger deliberately skips it, so a heartbeat doesn't resend the row), so on a node restored from a delta
+ * replica it can lag. The durable records of signed actions that DO travel with every backup — ledger
+ * payments the member signed, marketplace trades, posts — and local Decision votes are therefore counted too,
+ * so a restored node never under-counts a member who was plainly active.
  */
-export function getActiveMembersCount30d(asOfTime?: number): number {
-    const cutoff = asOfTime
-        ? new Date(asOfTime - 30 * 24 * 60 * 60 * 1000).toISOString()
-        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null): number {
+    const asOf = asOfTime ?? Date.now();
+    const cutoff = new Date(asOf - 30 * DAY_MS).toISOString();
+    const joinedBeforeIso = joinedBefore ? new Date(parseDbTime(joinedBefore)).toISOString() : null;
 
     const row = db.prepare(`
-        SELECT COUNT(DISTINCT member_pubkey) AS count FROM (
-            SELECT from_pubkey AS member_pubkey FROM transactions
-            WHERE timestamp >= ?
-              AND from_pubkey NOT LIKE 'escrow_%'
-              AND from_pubkey NOT IN ('SYSTEM', 'COMMONS_POOL')
-            UNION
-            SELECT to_pubkey AS member_pubkey FROM transactions
-            WHERE timestamp >= ?
-              AND to_pubkey NOT LIKE 'escrow_%'
-              AND to_pubkey NOT IN ('SYSTEM', 'COMMONS_POOL')
-            UNION
-            SELECT buyer_pubkey AS member_pubkey FROM marketplace_transactions
-            WHERE created_at >= ?
-            UNION
-            SELECT seller_pubkey AS member_pubkey FROM marketplace_transactions
-            WHERE created_at >= ?
-        )
-        WHERE member_pubkey IN (SELECT public_key FROM members WHERE COALESCE(is_treasury, 0) = 0)
-    `).get(cutoff, cutoff, cutoff, cutoff) as any;
+        SELECT COUNT(*) AS count FROM members m
+        WHERE m.status = 'active'
+          AND COALESCE(m.is_treasury, 0) = 0
+          AND COALESCE(m.credit_frozen, 0) = 0
+          AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
+          AND m.public_key NOT LIKE 'escrow_%'
+          AND (@joinedBefore IS NULL OR (m.joined_at IS NOT NULL AND julianday(m.joined_at) < julianday(@joinedBefore)))
+          AND (
+                julianday(m.last_active_at) >= julianday(@cutoff)
+             OR EXISTS (SELECT 1 FROM transactions t
+                        WHERE t.from_pubkey = m.public_key AND julianday(t.timestamp) >= julianday(@cutoff))
+             OR EXISTS (SELECT 1 FROM marketplace_transactions mt
+                        WHERE mt.buyer_pubkey = m.public_key AND julianday(mt.created_at) >= julianday(@cutoff))
+             OR EXISTS (SELECT 1 FROM marketplace_transactions mt
+                        WHERE mt.seller_pubkey = m.public_key AND julianday(mt.created_at) >= julianday(@cutoff))
+             OR EXISTS (SELECT 1 FROM posts p
+                        WHERE p.author_pubkey = m.public_key AND julianday(p.created_at) >= julianday(@cutoff))
+             OR EXISTS (SELECT 1 FROM decision_votes dv
+                        WHERE dv.voter_pubkey = m.public_key AND julianday(dv.updated_at) >= julianday(@cutoff))
+          )
+    `).get({ cutoff, joinedBefore: joinedBeforeIso }) as any;
 
     return row?.count || 0;
 }
 
+/** When a Decision's turnout is measured: now while it is open, its closing moment once closed. */
+function electorateAsOf(decision: { closesAt?: string }, asOfTime?: number): number {
+    const at = asOfTime ?? Date.now();
+    const closes = parseDbTime(decision.closesAt);
+    return Number.isFinite(closes) ? Math.min(at, closes) : at;
+}
+
+/**
+ * The electorate a Decision's turnout is measured against: members who could vote on it (joined before it
+ * opened) and were active in the 30 days before it closes (or now, while it is open).
+ */
+export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: string }, asOfTime?: number): number {
+    return getActiveMembersCount30d(electorateAsOf(decision, asOfTime), decision.opensAt ?? null);
+}
+
 /**
  * Computes required quorum for a decision:
- * quorum = max( K_min, ceil(ratio * activeMembers_30d) ), K_min = 3.
+ * quorum = max( K_min, ceil(ratio * electorate) ), K_min = 3.
  */
-export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch }, asOfTime?: number, activeMembersCount?: number): number {
+export function getQuorumRequired(decision: Decision | { effect: DecisionEffect; touches: DecisionTouch; opensAt?: string; closesAt?: string }, asOfTime?: number, activeMembersCount?: number): number {
     const ratio = quorumRatioForEffect(decision.effect, decision.touches);
-    const active = activeMembersCount !== undefined ? activeMembersCount : getActiveMembersCount30d(asOfTime);
+    const active = activeMembersCount !== undefined ? activeMembersCount : getDecisionElectorate(decision, asOfTime);
     return Math.max(3, Math.ceil(ratio * active));
 }
 
@@ -295,17 +358,44 @@ export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; er
 }
 
 /**
- * Check if a member is eligible to vote on decisions (§3.3):
+ * Check if a member is eligible to vote on decisions (§3.3, answer J):
  * - Account active, not frozen, not an enterprise.
+ * - Joined BEFORE the Decision opened (pass the Decision) — a block of members invited mid-vote can't
+ *   swing it. No 14-day or vouch rule at launch.
+ *
+ * joined_at is written once at registration and never overwritten: the backup importer copies it on insert
+ * and leaves it alone on update, and a full-file restore carries the row as-is (test-decisions-voting-answers).
  */
-export function checkVoterEligibility(voterPubkey: string): { ok: boolean; error?: string } {
+export function checkVoterEligibility(voterPubkey: string, decision?: { opensAt: string } | null): { ok: boolean; error?: string } {
     const member = getMember(voterPubkey);
     if (!member) return { ok: false, error: 'Member not found' };
     if (member.status !== 'active') return { ok: false, error: 'Voter account is not active' };
-    const frozenRow = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(voterPubkey) as any;
-    if (frozenRow?.credit_frozen === 1) return { ok: false, error: 'Voter credit is frozen' };
+    const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
+    if (row?.credit_frozen === 1) return { ok: false, error: 'Voter credit is frozen' };
     if (member.isTreasury) return { ok: false, error: 'Enterprise accounts cannot vote' };
+    if (decision) {
+        const joined = parseDbTime(row?.joined_at);
+        const opened = parseDbTime(decision.opensAt);
+        if (!Number.isFinite(joined) || !Number.isFinite(opened) || joined >= opened) {
+            return { ok: false, error: JOINED_AFTER_OPEN_ERROR };
+        }
+    }
     return { ok: true };
+}
+
+/** Has this member ever completed a marketplace trade (either side)? */
+export function hasCompletedTrade(pubkey: string): boolean {
+    return !!db.prepare(
+        "SELECT 1 FROM marketplace_transactions WHERE status = 'completed' AND (buyer_pubkey = ? OR seller_pubkey = ?) AND buyer_pubkey != seller_pubkey LIMIT 1"
+    ).get(pubkey, pubkey);
+}
+
+/**
+ * Voice credits for pool Decisions (answer H): the number the server checks a quadratic vote against —
+ * qualifiedTradeValue, rounded to cents. A fresh allowance on every pool Decision, never a shared budget.
+ */
+export function getVoiceCredits(pubkey: string): number {
+    return Math.round(engine.qualifiedTradeValue(db, pubkey) * 100) / 100;
 }
 
 /**
@@ -317,7 +407,7 @@ export function getDecisionVoiceCredits(decisionId: string, voterPubkey: string)
     usedCredits: number;
     availableCredits: number;
 } {
-    const totalCredits = Math.round(engine.qualifiedTradeValue(db, voterPubkey) * 100) / 100;
+    const totalCredits = getVoiceCredits(voterPubkey);
     // Credits used by this voter on this decision
     const voteRow = db.prepare(
         'SELECT credits_used FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?'
@@ -359,6 +449,9 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
 
     if (!Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) {
         throw new Error(`Unknown decision effect '${opts.effect}'`);
+    }
+    if (SYSTEM_ONLY_EFFECTS.has(opts.effect)) {
+        throw new Error(`'${opts.effect}' Decisions are opened by the node when an admin suspends someone, not proposed`);
     }
 
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
@@ -448,11 +541,11 @@ export function castDecisionVote(
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
     if (decision.status !== 'open') return { success: false, creditsUsed: 0, error: `Decision is ${decision.status}` };
-    if (new Date(decision.closesAt).getTime() <= Date.now()) {
+    if (parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
     }
 
-    const elig = checkVoterEligibility(voterPubkey);
+    const elig = checkVoterEligibility(voterPubkey, decision);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
 
     const num = Number(voteCount);
@@ -466,12 +559,15 @@ export function castDecisionVote(
     if (decision.franchise === 'quadratic_trade') {
         creditCost = count * count;
         weight = count;
-        const credits = getDecisionVoiceCredits(decisionId, voterPubkey);
-        if (creditCost > credits.totalCredits) {
+        const credits = getVoiceCredits(voterPubkey);
+        if (credits <= 0 && !hasCompletedTrade(voterPubkey)) {
+            return { success: false, creditsUsed: 0, error: NO_TRADE_POOL_VOTE_ERROR };
+        }
+        if (creditCost > credits) {
             return {
                 success: false,
                 creditsUsed: 0,
-                error: `Insufficient voice credits: ${count} votes costs ${creditCost} credits, but you have ${credits.totalCredits.toFixed(0)}`,
+                error: `${count} ${count === 1 ? 'vote costs' : 'votes cost'} ${creditCost} voice credits, and you have ${Math.floor(credits)}.`,
             };
         }
     }
@@ -498,14 +594,9 @@ export function castDecisionVote(
         now
     );
 
-    broadcast({
-        type: 'decision_vote_cast',
-        decisionId,
-        voterPubkey,
-        support,
-        weight,
-        creditCost,
-    });
+    // Secret ballot (answer I): the announcement says only that the tally moved. Who voted, which way and
+    // with what weight never leave the node; clients refetch the totals.
+    broadcast({ type: 'decision_vote_cast', decisionId });
 
     return { success: true, creditsUsed: creditCost };
 }
@@ -557,13 +648,15 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 /**
  * Tally votes for a decision.
  */
-export function tallyDecision(decisionId: string, asOfTime?: number, activeMembersCount?: number): DecisionTally {
+export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
 
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
-    const quorumRequired = getQuorumRequired(decision, asOfTime, activeMembersCount);
+    const electorate = getDecisionElectorate(decision, asOfTime);
+    const quorumRatio = quorumRatioForEffect(decision.effect, decision.touches);
+    const quorumRequired = getQuorumRequired(decision, asOfTime, electorate);
     const quorumMet = totalVoters >= quorumRequired;
 
     let yesWeight = 0;
@@ -583,6 +676,8 @@ export function tallyDecision(decisionId: string, asOfTime?: number, activeMembe
         decisionId,
         status: decision.status,
         totalVoters,
+        electorate,
+        quorumRatio,
         quorumRequired,
         quorumMet,
         yesWeight,
@@ -818,6 +913,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     db.prepare('UPDATE members SET can_vouch = 0 WHERE public_key = ?').run(decision.subject!);
                     break;
                 }
+                case 'keep_suspension': {
+                    // The admin's emergency suspension is already in force; passing keeps it. Nothing to flip.
+                    break;
+                }
                 case 'remove_lead_keeper': {
                     // Answer G (2026-09-19): the removed lead's place goes at once to the longest-serving remaining
                     // active keeper, who may then be replaced by the other keepers' succession without the 30-day
@@ -966,7 +1065,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
  * Requires an authenticated admin pubkey and a signed, public reason (§3.7).
  */
 export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string } {
-    if (!adminPubkey || !isNodeAdmin(adminPubkey)) {
+    if (!isAdminActor(adminPubkey)) {
         return { success: false, error: 'Unauthorized: admin required to halt decision' };
     }
     if (!reason || reason.trim().length < 10) {
@@ -996,6 +1095,11 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
         }
+        // Halting the ratifying vote takes away the only thing that could keep an emergency suspension,
+        // so it lifts — an admin can't park a suspension forever by stopping its vote.
+        if (decision.effect === 'keep_suspension') {
+            liftEmergencySuspensionRow(decision);
+        }
     });
 
     if (decision.subject) {
@@ -1009,7 +1113,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
  * Admin accelerate: fires a pending grace removal immediately (§3.7).
  */
 export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string } {
-    if (!adminPubkey || !isNodeAdmin(adminPubkey)) {
+    if (!isAdminActor(adminPubkey)) {
         return { success: false, error: 'Unauthorized: admin required to accelerate decision' };
     }
 
@@ -1038,6 +1142,155 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
     }
+}
+
+// ── Emergency Suspension (§3.8, answer L) ───────────────────────────────
+
+/**
+ * Who may use the admin brake and emergency suspension: a node admin or owner (node_roles), or the
+ * password — which only owners hold, so a password-authenticated admin route acts as 'owner:password'.
+ * Routes pass the authenticated actor only, never one read from a request body.
+ */
+export function isAdminActor(actor: string | null | undefined): boolean {
+    if (!actor) return false;
+    return actor === 'owner:password' || isNodeAdmin(actor);
+}
+
+export const EMERGENCY_SUSPENSION_DAYS = 7;
+
+/**
+ * Lift an emergency suspension whose ratifying Decision did not pass. Call inside a transaction.
+ * The member stays suspended if something else holds them there: a pending community removal, or a
+ * suspend_member Decision that passed after this suspension began.
+ */
+function liftEmergencySuspensionRow(decision: Decision): boolean {
+    if (!decision.subject) return false;
+    const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(decision.subject) as { status: string } | undefined;
+    if (!row || row.status !== 'disabled') return false;
+    const heldElsewhere = db.prepare(`
+        SELECT 1 FROM decisions
+        WHERE subject = ? AND id != ? AND (
+            (effect = 'remove_member' AND status = 'execution_pending_grace')
+            OR (effect = 'suspend_member' AND status = 'executed' AND julianday(executed_at) >= julianday(?))
+        )
+        LIMIT 1
+    `).get(decision.subject, decision.id, decision.opensAt);
+    if (heldElsewhere) return false;
+    setUserStatusRow(decision.subject, 'active');
+    return true;
+}
+
+/**
+ * Close a "Keep this suspension?" Decision that did not pass and lift the suspension, atomically.
+ */
+function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string): void {
+    let lifted = false;
+    db.transaction(() => {
+        lifted = liftEmergencySuspensionRow(decision);
+        db.prepare(`
+            UPDATE decisions SET status = ?, execution_reason = ?, updated_at = ? WHERE id = ?
+        `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
+    })();
+    if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
+    broadcast({ type: 'decision_updated', decision: getDecision(decision.id)! });
+}
+
+export interface EmergencySuspendResult {
+    success: boolean;
+    error?: string;
+    status?: number;
+    decision?: Decision;
+}
+
+/**
+ * An admin suspends a member at once (answer L). In the same transaction the node opens a 7-day
+ * "Keep this suspension?" Decision — member-touching rules: one member one vote, the usual quorum, 60%.
+ * If it does not pass, or misses quorum, the suspension lifts by itself on the tick.
+ *
+ * The reason is shown to members on the Decision card, so they can judge it.
+ */
+export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
+    // Guards first, outside any transaction.
+    if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can suspend a member' };
+    const cleanReason = String(reason || '').trim();
+    if (cleanReason.length < 10) {
+        return { success: false, status: 400, error: 'A reason members can read (at least 10 characters) is required to suspend someone' };
+    }
+    if (cleanReason.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
+    if (!subjectPubkey || subjectPubkey === SYSTEM_AUTHOR) return { success: false, status: 400, error: 'Member not found' };
+    const member = getMember(subjectPubkey);
+    if (!member) return { success: false, status: 404, error: 'Member not found' };
+    if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
+    if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
+    if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
+
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const opensAt = now.toISOString();
+    const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
+    const memberName = member.callsign || subjectPubkey.slice(0, 8);
+    const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason };
+
+    db.transaction(() => {
+        setUserStatusRow(subjectPubkey, 'disabled');
+        db.prepare(`
+            INSERT INTO decisions (
+                id, author_pubkey, title, description, touches, effect, subject, params,
+                franchise, status, opens_at, closes_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'member', 'keep_suspension', ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+        `).run(
+            id,
+            SYSTEM_AUTHOR,
+            `Keep ${memberName}'s suspension?`,
+            `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${cleanReason}`,
+            subjectPubkey,
+            JSON.stringify(params),
+            opensAt,
+            closesAt,
+            opensAt,
+            opensAt,
+        );
+    })();
+
+    const decision = getDecision(id)!;
+    broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
+    broadcast({ type: 'decision_created', decision });
+    return { success: true, decision };
+}
+
+/**
+ * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
+ * decide, so it closes as halted, with the lift recorded as the reason.
+ */
+export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
+    if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
+    const member = getMember(subjectPubkey);
+    if (!member) return { success: false, status: 404, error: 'Member not found' };
+    if (member.status !== 'disabled') return { success: false, status: 409, error: 'Member is not suspended' };
+    const pendingRemoval = db.prepare(
+        "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
+    ).get(subjectPubkey);
+    if (pendingRemoval) {
+        return { success: false, status: 409, error: 'The community voted to remove this member; halt that Decision instead' };
+    }
+    const nowIso = new Date().toISOString();
+    const openKeeps = db.prepare(
+        "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
+    ).all(subjectPubkey) as { id: string }[];
+    db.transaction(() => {
+        setUserStatusRow(subjectPubkey, 'active');
+        for (const k of openKeeps) {
+            db.prepare(`
+                UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
+                    admin_halt_reason = 'An admin lifted the suspension before the vote closed', updated_at = ?
+                WHERE id = ?
+            `).run(nowIso, adminActor, nowIso, k.id);
+        }
+    })();
+    broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
+    for (const k of openKeeps) broadcast({ type: 'decision_updated', decision: getDecision(k.id)! });
+    return { success: true };
 }
 
 // ── Tick Engine ─────────────────────────────────────────────────────────
@@ -1077,6 +1330,14 @@ export function tickDecisions(asOfTime?: number): {
             }
 
             const tally = tallyDecision(r.id, asOfTime);
+
+            if (r.effect === 'keep_suspension' && !tally.passed) {
+                const why = !tally.quorumMet
+                    ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
+                    : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
+                closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now);
+                continue;
+            }
 
             if (!tally.quorumMet) {
                 db.prepare(`

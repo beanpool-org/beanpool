@@ -259,6 +259,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                 })}
             </View>
 
+            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
+            <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
+                👁️ Your vote is visible to members
+            </Text>
+
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
                 <Text style={styles.turnoutText}>
@@ -492,6 +497,13 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         optionVotes: {
             fontSize: 11,
             color: colors.text.secondary,
+        },
+        openBallotNote: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.muted,
+            marginTop: 4,
+            marginBottom: 2,
         },
         turnoutRow: {
             flexDirection: 'row',

@@ -18,6 +18,7 @@ import {
     getTfaSessionToken,
 } from '../../lib/node-client';
 import { EscrowDisputesPanel } from './EscrowDisputesPanel';
+import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 
 interface EconomySectionProps {
@@ -682,6 +683,8 @@ export function EconomySection({
             {/* Subtab: Commons proposals */}
             {subTab === 'decisions' && (
                 <div className="space-y-6">
+                    <DecisionsAdminPanel activeNode={activeNode} tfaToken={effectiveTfaToken} />
+
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                         <h3 className="text-base font-bold text-white m-0">Pending Commons Proposals ({commonsData.proposed.length})</h3>

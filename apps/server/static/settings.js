@@ -1783,6 +1783,30 @@
             }
         }
 
+        // Emergency suspension: takes effect at once and opens a 7-day "Keep this suspension?" community vote.
+        // If the vote does not pass, the suspension lifts by itself. The reason is shown to members.
+        async function suspendMember(pubkey) {
+            const reason = prompt('Suspend now. Members vote over 7 days on whether to keep it; if they do not, it lifts by itself.\n\nReason (members will see this, at least 10 characters):');
+            if (reason === null) return;
+            if (reason.trim().length < 10) { alert('Please give a reason of at least 10 characters.'); return; }
+            try {
+                const res = await fetch('/api/local/admin/users/' + encodeURIComponent(pubkey) + '/suspend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason.trim(), password: authToken })
+                });
+                const body = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    alert('Suspended. A 7-day community vote on keeping it is now open.');
+                    loadAdminData();
+                } else {
+                    alert('Suspend failed: ' + (body.error || res.status));
+                }
+            } catch (err) {
+                alert('Network error.');
+            }
+        }
+
         // Tier-badge picker handler. Uses its own confirm (not adminAction's generic one) so that a
         // cancel or failure can re-render the member list, snapping the <select> back to the stored
         // tier instead of leaving it showing an unapplied choice.
@@ -2332,7 +2356,7 @@
                                     <div class="member-actions">
                                         ${statsBtn}
                                         <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); viewMemberPosts('${pubkey}')" title="View posts by this member">📦 Posts</button>
-                                        ${!isGenesis && !isPruned ? `<button class="btn btn-sm ${isActive?'btn-outline':'btn-primary'}" onclick="event.preventDefault(); adminAction('/users/${pubkey}/status', {status:'${isActive?'disabled':'active'}'})">${isActive?'Pause':'Resume'}</button>` : ''}
+                                        ${!isGenesis && !isPruned ? `<button class="btn btn-sm ${isActive?'btn-outline':'btn-primary'}" onclick="event.preventDefault(); ${isActive ? `suspendMember('${pubkey}')` : `adminAction('/users/${pubkey}/status', {status:'active'})`}">${isActive?'Suspend':'Lift suspension'}</button>` : ''}
                                         ${!isSystemAccount && !isPruned ? `<select class="tier-select" onclick="event.stopPropagation();" onchange="setMemberTier('${pubkey}', this.value)" title="Tier badge — sets this member's credit floor (Resident −200, Steward −600, Elder −1400; Newcomer clears the grant). This widens/narrows their credit limit only — their balance is never touched.">
                                             <option value="Newcomer" ${badgeTier==='Newcomer'?'selected':''}>🥚 Newcomer</option>
                                             <option value="Resident" ${badgeTier==='Resident'?'selected':''}>🏠 Resident</option>

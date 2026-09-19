@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, Alert, DeviceEventEmitter, RefreshControl, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
+import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem, type GroupCategory } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
@@ -27,7 +27,8 @@ export default function ProjectsScreen() {
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>('decide');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
-    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    // The signer's voice credits for votes on community money — the number the node checks (answer H).
+    const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
 
@@ -67,6 +68,7 @@ export default function ProjectsScreen() {
         statCardLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
         statCardValueRow: { flexDirection: 'row', alignItems: 'center' },
         statCardAmount: { fontSize: 20, color: colors.text.heading, fontWeight: '800' },
+        statCardHint: { fontSize: 11, color: colors.text.muted, marginTop: 4, lineHeight: 15 },
 
         // Three equal pills share ~288dp at 320dp wide, ~88dp each. "Enterprises" beside its icon
         // needs ~110dp at 1.2x font, so the icon sits ABOVE the label and the label caps its scale.
@@ -188,7 +190,7 @@ export default function ProjectsScreen() {
         try {
             const decData = await getDecisions();
             setDecisions(decData.decisions || []);
-            setActiveMembers30d(decData.activeMembers30d || 0);
+            setMyPoolVoting(decData.myPoolVoting ?? null);
         } catch (err) {
             console.error('[Projects] Failed loading decisions:', err);
         }
@@ -518,9 +520,14 @@ export default function ProjectsScreen() {
                                     <CurrencyDisplay amount={(balanceState.commons || 0).toFixed(2)} style={styles.statCardAmount} />
                                 </View>
                             </View>
-                            <View style={styles.statCard}>
-                                <Text style={styles.statCardLabel} numberOfLines={2}>My Available Governance Credits</Text>
-                                <Text style={styles.statCardAmount} numberOfLines={1}>{balanceState.earnedCredit || 0}</Text>
+                            <View style={styles.statCard} testID="voice-credits-card">
+                                <Text style={styles.statCardLabel} numberOfLines={2}>Voice credits for money votes</Text>
+                                <Text style={styles.statCardAmount} numberOfLines={1}>{Math.floor(myPoolVoting?.voiceCredits ?? 0)}</Text>
+                                <Text style={styles.statCardHint}>
+                                    {myPoolVoting && !myPoolVoting.hasCompletedTrade
+                                        ? 'Opens after your first completed trade'
+                                        : 'From completed trades · N votes cost N×N'}
+                                </Text>
                             </View>
                         </View>
 
@@ -601,7 +608,7 @@ export default function ProjectsScreen() {
                         {activeSection === 'decide' ? (
                             <DecideSection
                                 decisions={decisions}
-                                activeMembers30d={activeMembers30d}
+                                myPoolVoting={myPoolVoting}
                                 identity={identity}
                                 balanceState={balanceState}
                                 onRefresh={loadData}

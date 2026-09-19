@@ -392,7 +392,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
 
             vi.spyOn(api, 'getAllMembers').mockResolvedValue([]);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: mockTreasuries });
-            vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [], activeMembers30d: 5 } as any);
+            vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [], myPoolVoting: null } as any);
             vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance: 1000 } as any);
             vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, earnedCredit: 50 } as any);
 

@@ -5,6 +5,10 @@ import { Avatar } from '../common/Avatar';
 import { RekeyMemberWizard } from './RekeyMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { useTimeout } from '../../lib/use-timeout';
+import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
+
+/** The node demands a reason of at least this many characters; members see it on the vote. */
+export const MIN_SUSPEND_REASON = 10;
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 
@@ -55,6 +59,8 @@ interface MemberDetailModalProps {
     hasKeyAuth?: boolean;
     onRekeySuccess?: (newPubkey: string) => void;
     onOffboardSuccess?: () => void;
+    /** Called after an emergency suspension or a lift, so the roster can refresh. */
+    onSuspensionChanged?: () => void;
     onClose: () => void;
 }
 
@@ -82,6 +88,7 @@ export function MemberDetailModal({
     hasKeyAuth,
     onRekeySuccess,
     onOffboardSuccess,
+    onSuspensionChanged,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
@@ -94,8 +101,53 @@ export function MemberDetailModal({
     const [roleLoading, setRoleLoading] = useState(false);
     const [roleError, setRoleError] = useState<string | null>(null);
     const [roleSuccess, setRoleSuccess] = useState<string | null>(null);
+    const [showSuspend, setShowSuspend] = useState(false);
+    const [suspendReason, setSuspendReason] = useState('');
+    const [suspendBusy, setSuspendBusy] = useState(false);
+    const [suspendError, setSuspendError] = useState<string | null>(null);
+    const [suspendDone, setSuspendDone] = useState<string | null>(null);
+    const [localStatus, setLocalStatus] = useState<string | undefined>(undefined);
 
     const pubkey = member?.publicKey || member?.pubkey || '';
+    const memberStatus = localStatus ?? (member?.status ? String(member.status) : 'active');
+    const isSuspended = memberStatus === 'disabled' || memberStatus === 'suspended';
+    const canSuspendHere = Boolean(nodeUrl) && (memberStatus === 'active' || isSuspended);
+    const suspendReasonTrimmed = suspendReason.trim();
+
+    const handleSuspend = async () => {
+        if (!nodeUrl || suspendReasonTrimmed.length < MIN_SUSPEND_REASON) return;
+        setSuspendBusy(true);
+        setSuspendError(null);
+        try {
+            const res = await emergencySuspendMember(nodeUrl, pubkey, suspendReasonTrimmed, adminPassword, tfaToken);
+            const closes = res.decision?.closesAt ? new Date(res.decision.closesAt).toLocaleDateString() : 'in 7 days';
+            setLocalStatus('disabled');
+            setShowSuspend(false);
+            setSuspendReason('');
+            setSuspendDone(`Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
+            onSuspensionChanged?.();
+        } catch (e: any) {
+            setSuspendError(e?.message || 'Failed to suspend');
+        } finally {
+            setSuspendBusy(false);
+        }
+    };
+
+    const handleLift = async () => {
+        if (!nodeUrl) return;
+        setSuspendBusy(true);
+        setSuspendError(null);
+        try {
+            await liftMemberSuspension(nodeUrl, pubkey, adminPassword, tfaToken);
+            setLocalStatus('active');
+            setSuspendDone('Suspension lifted. Any open vote about it has closed.');
+            onSuspensionChanged?.();
+        } catch (e: any) {
+            setSuspendError(e?.message || 'Failed to lift the suspension');
+        } finally {
+            setSuspendBusy(false);
+        }
+    };
     const [localRole, setLocalRole] = useState<MemberNodeRole | null>(
         () => (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null
     );
@@ -438,6 +490,70 @@ export function MemberDetailModal({
 
                 {/* Action Controls */}
                 <div className="space-y-3 border-t border-nature-800 pt-4">
+                    {canSuspendHere && (
+                        <div className="p-3 rounded-2xl bg-nature-900/60 border border-nature-800 space-y-2 text-xs" data-testid="suspend-panel">
+                            {suspendDone && <p className="m-0 text-emerald-300 font-semibold">{suspendDone}</p>}
+                            {suspendError && <p className="m-0 text-red-300 font-semibold">{suspendError}</p>}
+                            {isSuspended ? (
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-amber-300 font-semibold">⏸️ Suspended</span>
+                                    <button
+                                        onClick={handleLift}
+                                        disabled={suspendBusy}
+                                        className="px-3 py-2 rounded-xl font-bold border bg-emerald-950 text-emerald-300 border-emerald-800 hover:bg-emerald-900 text-[11px] disabled:opacity-50"
+                                    >
+                                        Lift suspension
+                                    </button>
+                                </div>
+                            ) : showSuspend ? (
+                                <div className="space-y-2">
+                                    <p className="m-0 text-nature-300">
+                                        Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on keeping it; if they
+                                        don't, it lifts by itself.
+                                    </p>
+                                    <label htmlFor="suspend-reason" className="block font-bold text-nature-300">
+                                        Reason (members will see this)
+                                    </label>
+                                    <textarea
+                                        id="suspend-reason"
+                                        value={suspendReason}
+                                        onChange={(e) => setSuspendReason(e.target.value)}
+                                        rows={3}
+                                        className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                                    />
+                                    <p className={`m-0 text-[11px] ${suspendReasonTrimmed.length >= MIN_SUSPEND_REASON ? 'text-nature-500' : 'text-amber-400'}`}>
+                                        At least {MIN_SUSPEND_REASON} characters ({suspendReasonTrimmed.length} so far)
+                                    </p>
+                                    <div className="flex justify-end gap-2">
+                                        <button
+                                            onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); }}
+                                            disabled={suspendBusy}
+                                            className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSuspend}
+                                            disabled={suspendBusy || suspendReasonTrimmed.length < MIN_SUSPEND_REASON}
+                                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {suspendBusy ? 'Suspending…' : 'Suspend now'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-nature-400">Emergency: suspend now, the community decides whether it stays.</span>
+                                    <button
+                                        onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
+                                        className="px-3 py-2 rounded-xl font-bold border bg-amber-950/70 hover:bg-amber-900 text-amber-300 border-amber-800/80 text-[11px] whitespace-nowrap"
+                                    >
+                                        ⏸️ Suspend
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {showPruneConfirm ? (
                         <div className="p-3.5 bg-red-950/90 border border-red-800 rounded-2xl space-y-2 text-xs animate-fade-in">
                             <span className="font-bold text-red-200 block">⚠️ Confirm Permanent Prune / Delete</span>

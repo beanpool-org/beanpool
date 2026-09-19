@@ -255,6 +255,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile }: PollC
                 })}
             </div>
 
+            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
+            <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
+                👁️ Your vote is visible to members
+            </p>
+
             {/* Error Message */}
             {error && (
                 <div className="mb-2 p-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400 text-center">

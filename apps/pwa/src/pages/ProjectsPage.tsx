@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
     getTreasuries, getBalance, type Treasury, type BalanceInfo,
     createEnterprise,
-    getDecisions, type DecisionWithTally,
+    getDecisions, type DecisionWithTally, type MyPoolVoting,
     getCommonsBalance,
     getAllMembers, type MemberSummary,
     getGroups, type Group,
@@ -40,7 +40,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [activeSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
     const [activeDecideView, setActiveDecideView] = useState<'open' | 'history'>('open');
     const [decisions, setDecisions] = useState<DecisionWithTally[]>([]);
-    const [activeMembers30d, setActiveMembers30d] = useState<number>(0);
+    // The signer's voice credits for votes on community money — the number the node checks (answer H).
+    const [myPoolVoting, setMyPoolVoting] = useState<MyPoolVoting | null>(null);
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -85,13 +86,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setError(null);
             const [tresData, decData, commonsData, membersData] = await Promise.all([
                 getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
-                getDecisions ? getDecisions().catch(() => ({ decisions: [], activeMembers30d: 0 })) : { decisions: [], activeMembers30d: 0 },
+                getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
                 getAllMembers ? getAllMembers().catch(() => []) : [],
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
-            setActiveMembers30d(decData.activeMembers30d || 0);
+            setMyPoolVoting(decData.myPoolVoting ?? null);
             setCommonsBalance(commonsData.balance || 0);
             if (Array.isArray(membersData)) {
                 setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
@@ -296,12 +297,17 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
                         </div>
                     </div>
-                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
+                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
-                            My Governance Credits
+                            Voice credits for money votes
                         </div>
                         <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
-                            {balanceInfo?.earnedCredit ?? 0}
+                            {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
+                        </div>
+                        <div className="text-[10px] text-nature-400 mt-0.5 leading-snug">
+                            {myPoolVoting && !myPoolVoting.hasCompletedTrade
+                                ? 'Opens after your first completed trade'
+                                : 'From completed trades · N votes cost N×N'}
                         </div>
                     </div>
                 </div>
@@ -394,7 +400,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <DecideSection
                         decisions={decisions}
-                        activeMembers30d={activeMembers30d}
+                        myPoolVoting={myPoolVoting}
                         identity={identity}
                         commonsBalance={commonsBalance}
                         onRefresh={fetchEnterprises}

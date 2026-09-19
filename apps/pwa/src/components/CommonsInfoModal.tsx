@@ -263,7 +263,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             <div style={{ marginTop: 16 }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>How Credits Are Earned</div>
                                 <p style={{ fontSize: 13, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    Your governance credits are earned through <strong style={{ color: '#fff' }}>community participation</strong> — the total beans you've transacted (energy cycled).
+                                    Voice credits come from your <strong style={{ color: '#fff' }}>completed trades</strong> — the beans you have traded with other members, counted up to a cap per trading partner. You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.
                                     The more you trade and contribute, the more voice you earn in shaping community projects.
                                 </p>
                             </div>
@@ -277,10 +277,11 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                             }}>
                                 <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>Process</div>
                                 <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    1. Any active trader can propose a Decision<br />
-                                    2. 7-day open voting window with 48h discussion<br />
-                                    3. Members vote using earned trade standing (voice credits)<br />
-                                    4. Voting closes → passed Decisions execute automatically<br />
+                                    1. Any member with a completed trade can propose a Decision<br />
+                                    2. Voting opens at once and runs for 7 days; members who joined before it opened can vote<br />
+                                    3. Ballots are secret — everyone sees the totals and their own vote<br />
+                                    4. Votes on community money cost voice credits from your completed trades; other Decisions are one member, one vote<br />
+                                    5. Voting closes → passed Decisions execute automatically<br />
                                     <em style={{ color: '#9ca3af' }}>Fund release is self-executing by the node when quorum and majority are met.</em>
                                 </div>
                             </div>

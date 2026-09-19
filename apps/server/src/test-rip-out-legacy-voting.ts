@@ -117,7 +117,7 @@ function main() {
     assert(/CHECK constraint failed/.test(refused), `a 'rule' Decision can no longer be stored (${refused || 'accepted'})`);
 
     const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='decisions' AND name LIKE 'idx_%'").all() as { name: string }[]).map(r => r.name);
-    assert(indexes.includes('idx_decisions_author_open') && indexes.includes('idx_decisions_tick_open'),
+    assert(indexes.includes('idx_decisions_member_author_open') && indexes.includes('idx_decisions_tick_open'),
         `the decisions indexes are rebuilt (got ${indexes.join(', ')})`);
     let dupOpen = '';
     try { insert.run('dup-open', 'author-keep', 'Second', 'member', 'grant_voucher', '1m1v', 'open'); } catch (e: any) { dupOpen = e.message; }

@@ -83,7 +83,7 @@ export function ripOutLegacyVoting(targetDb: Database.Database): void {
             CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
             CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_author_open ON decisions(author_pubkey) WHERE status = 'open';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
             CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
         `);
     })();

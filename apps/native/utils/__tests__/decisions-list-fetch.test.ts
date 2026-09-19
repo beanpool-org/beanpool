@@ -39,7 +39,7 @@ beforeEach(() => {
 
 describe('getDecisions (native)', () => {
     it('signs the list so the node can return your own vote', async () => {
-        fetchMock.mockResolvedValueOnce(reply(200, { decisions: [card({ support: true, voteCount: 1 })], activeMembers30d: 4 }));
+        fetchMock.mockResolvedValueOnce(reply(200, { decisions: [card({ support: true, voteCount: 1 })], myPoolVoting: { voiceCredits: 16, hasCompletedTrade: true } }));
         const res = await getDecisions();
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -47,13 +47,13 @@ describe('getDecisions (native)', () => {
         expect(url).toBe('https://test.beanpool.org/api/commons/decisions');
         expect(init.headers['X-Signed']).toBe('GET /api/commons/decisions');
         expect(res.decisions[0].myVote).toEqual({ support: true, voteCount: 1 });
-        expect(res.activeMembers30d).toBe(4);
+        expect(res.myPoolVoting).toEqual({ voiceCredits: 16, hasCompletedTrade: true });
     });
 
     it('when the signature is refused (a phone clock that is off), loads the list unsigned', async () => {
         fetchMock
             .mockResolvedValueOnce(reply(401, { error: 'Request timestamp is too far from server time' }))
-            .mockResolvedValueOnce(reply(200, { decisions: [card()], activeMembers30d: 4 }));
+            .mockResolvedValueOnce(reply(200, { decisions: [card()], myPoolVoting: null }));
         const res = await getDecisions('open');
 
         expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -69,6 +69,6 @@ describe('getDecisions (native)', () => {
         const res = await getDecisions();
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(res).toEqual({ decisions: [], activeMembers30d: 0 });
+        expect(res).toEqual({ decisions: [], myPoolVoting: null });
     });
 });

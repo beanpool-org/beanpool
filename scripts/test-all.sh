@@ -300,6 +300,7 @@ run_federation_suites() {
       test-ws-pong-watchdog
       test-ws-http-port
       test-ws-auth-default
+      test-ws-feed-parties
       test-polls
       test-events
       test-event-chat

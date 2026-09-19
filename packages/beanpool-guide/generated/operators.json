@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 23,
-  "hash": "92c47fd882dbb037c13132163bac78bb1fe0423f43f08ff2ec47a9acb08bbdaa",
+  "version": 24,
+  "hash": "a6e0c8a2d4833e7a5c05a6f82b5b3f39925000869910620c4c12e853a37d2518",
   "sections": [
     {
       "id": "setup",
@@ -263,7 +263,7 @@
         {
           "type": "ul",
           "items": [
-            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://mullum.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
+            "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
             "Then, in the phone app, open **Settings** and tap **Sign in on a computer** (next to Manage or Moderate; owners, admins and moderators only). Point the camera at the QR code.",
             "The phone shows the 6-character code, your community and which browser asked (for example \"Firefox on Windows\"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.",
             "Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you."
@@ -724,8 +724,8 @@
           "type": "ul",
           "items": [
             "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
-            "take down the reported post, with a reason the author reads;",
-            "take a reported Pulse item off the Pulse;",
+            "take down the reported post while its report is still open, with a reason the author reads;",
+            "take a reported Pulse item off the Pulse, again while its report is still open;",
             "dismiss a report, or mark it handled."
           ]
         },
@@ -736,6 +736,10 @@
         {
           "type": "p",
           "text": "A moderator whose role is taken away, or changed, is signed out straight away."
+        },
+        {
+          "type": "p",
+          "text": "If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role."
         },
         {
           "type": "h2",
@@ -1040,7 +1044,7 @@
         },
         {
           "type": "p",
-          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post that someone has reported."
+          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that."
         },
         {
           "type": "h2",

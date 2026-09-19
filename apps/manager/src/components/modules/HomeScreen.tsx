@@ -136,7 +136,7 @@ export function HomeScreen({
                                 {communityName || 'Sovereign Community'}
                             </h1>
                             <HelpLink screen="home" />
-                            <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold max-w-full truncate">
+                            <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold max-w-full truncate lg:overflow-visible lg:shrink-0">
                                 {publicDomain || 'local'}
                             </span>
                         </div>

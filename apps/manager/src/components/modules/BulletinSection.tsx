@@ -340,7 +340,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                     key={c.id}
                                     className="p-4 rounded-xl bg-nature-900/80 border border-nature-800 flex items-center justify-between gap-3 shadow-md"
                                 >
-                                    <div className="min-w-0 break-words">
+                                    <div className="min-w-0 lg:min-w-[auto] break-words">
                                         <h4 className="text-sm font-bold text-white m-0">{c.title || c.handle || c.url}</h4>
                                         <span className="text-[11px] font-mono text-nature-400 truncate block max-w-xs sm:max-w-sm mt-0.5">
                                             {c.url || c.feedUrl}

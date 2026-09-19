@@ -576,7 +576,7 @@ export function MembersModule({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map((t) => (
                             <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex items-center gap-3 min-w-0 lg:min-w-[auto]">
                                     <Avatar
                                         src={t.avatar}
                                         alt={t.name}

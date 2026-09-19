@@ -653,7 +653,7 @@ export function EconomySection({
                                             )}
                                         </div>
 
-                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
+                                        <div className="border-t border-nature-800/80 pt-3 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 lg:gap-0">
                                             <div>
                                                 <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
                                                 <div className="text-sm font-bold text-white font-mono">

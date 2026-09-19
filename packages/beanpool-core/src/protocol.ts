@@ -51,7 +51,7 @@ export const PROTOCOL_CONSTANTS = {
     CIRCULATION_EPOCH_DAYS: 30,
 
     // === Tier Thresholds ===
-    GHOST_THRESHOLD: -200,             // floor > this = Ghost
+    GHOST_THRESHOLD: -200,             // floor > this = Newcomer
     RESIDENT_THRESHOLD: -600,          // -200 ≥ floor > -600 = Resident
     STEWARD_THRESHOLD: -1400,          // -600 ≥ floor > -1400 = Steward
     // floor ≤ -1400 = Elder
@@ -82,12 +82,10 @@ export const PER_COUNTERPARTY_VOLUME_CAP = PROTOCOL_CONSTANTS.PER_COUNTERPARTY_V
 export type TierName = 'Newcomer' | 'Resident' | 'Steward' | 'Elder';
 export type GenesisInviteType = 'standard' | 'trusted' | 'ambassador' | 'elder';
 
+/** A tier is a merit badge: it names how much trust backs a member's floor and gates nothing. */
 export interface TierInfo {
     name: TierName;
     emoji: string;
-    color: string;
-    canGift: boolean;
-    canInvite: boolean;
 }
 
 export interface TrustStats {
@@ -133,21 +131,44 @@ export function calculateDynamicFloor(stats: TrustStats): number {
 }
 
 /**
- * Returns the identity tier for a given dynamic floor value.
+ * The four tiers, lowest first, with the credit each one starts at. `minCredit` is the credit that
+ * backs the floor — vouch + earned + granted, i.e. CREDIT_BASE_FLOOR − floor — not the earned lane
+ * on its own. Derived from the floor thresholds, so the apps, the server and admin views can never
+ * disagree about where a tier starts. Colours stay in the apps.
  */
-export function getTier(floor: number): TierInfo {
-    const c = PROTOCOL_CONSTANTS;
+export interface TierLevel extends TierInfo {
+    minCredit: number;
+}
 
-    if (floor > c.GHOST_THRESHOLD) {
-        return { name: 'Newcomer', emoji: '🥚', color: '#6b7280', canGift: false, canInvite: true };
+export const TIER_LEVELS: readonly TierLevel[] = [
+    { name: 'Newcomer', emoji: '🌱', minCredit: 0 },
+    { name: 'Resident', emoji: '🏠', minCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - PROTOCOL_CONSTANTS.GHOST_THRESHOLD },     // 200
+    { name: 'Steward', emoji: '🏛️', minCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD },  // 600
+    { name: 'Elder', emoji: '⛰️', minCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - PROTOCOL_CONSTANTS.STEWARD_THRESHOLD },     // 1400
+];
+
+/** Index into TIER_LEVELS (0 = Newcomer … 3 = Elder) for a credit (CREDIT_BASE_FLOOR − floor). */
+export function tierIndexForCredit(credit: number): number {
+    for (let i = TIER_LEVELS.length - 1; i > 0; i--) {
+        if (credit >= TIER_LEVELS[i].minCredit) return i;
     }
-    if (floor > c.RESIDENT_THRESHOLD) {
-        return { name: 'Resident', emoji: '🏠', color: '#3b82f6', canGift: true, canInvite: true };
-    }
-    if (floor > c.STEWARD_THRESHOLD) {
-        return { name: 'Steward', emoji: '🏛️', color: '#8b5cf6', canGift: true, canInvite: true };
-    }
-    return { name: 'Elder', emoji: '⛰️', color: '#f59e0b', canGift: true, canInvite: true };
+    return 0;   // also NaN / negative
+}
+
+/** The tier for a credit (CREDIT_BASE_FLOOR − floor). */
+export function tierForCredit(credit: number): TierLevel {
+    return TIER_LEVELS[tierIndexForCredit(credit)];
+}
+
+/** Index into TIER_LEVELS for a tier name; -1 when the name is not a tier. */
+export function tierIndexForName(name: string | null | undefined): number {
+    return TIER_LEVELS.findIndex(t => t.name === name);
+}
+
+/** The tier for a credit floor (≤ 0). Same answer as tierForCredit(CREDIT_BASE_FLOOR − floor). */
+export function getTier(floor: number): TierInfo {
+    const { name, emoji } = tierForCredit(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor);
+    return { name, emoji };
 }
 
 /**

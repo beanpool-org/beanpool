@@ -211,7 +211,7 @@ export const lightColors = {
     // earned yet). Single source of truth for PostAuthorTrust, the Ledger,
     // and the Trust info modal.
     trust: {
-        newcomer: { fg: palette.gray500, bg: palette.gray100, border: palette.gray300 },
+        newcomer: { fg: palette.gray600, bg: palette.gray100, border: palette.gray300 }, // fg 6.87:1 on bg (gray500 was 4.39)
         parent: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200 },
         resident: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200 },
         steward: { fg: palette.amber700, bg: palette.amber100, border: palette.amber300 },
@@ -329,7 +329,7 @@ export const earthColors = {
 
     // Trust tiers (using warm amber/gold, matches PWA perfectly)
     trust: {
-        newcomer: { fg: '#897864', bg: '#ebe6df', border: '#dfd7c9' }, // oat.700, oat.200, oat.300
+        newcomer: { fg: '#6f6254', bg: '#ebe6df', border: '#dfd7c9' }, // oat.800, oat.200, oat.300 — fg 4.76:1 on bg (oat.700 was 3.43)
         resident: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200 },
         steward: { fg: palette.amber700, bg: palette.amber100, border: palette.amber300 },
         elder: { fg: palette.amber800, bg: palette.amber200, border: palette.amber500 },
@@ -446,7 +446,7 @@ export const slateColors = {
 
     // Trust tiers (using warm amber/gold, matches PWA perfectly)
     trust: {
-        newcomer: { fg: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' }, // slate.500, slate.100, slate.200
+        newcomer: { fg: '#475569', bg: '#f1f5f9', border: '#e2e8f0' }, // slate.600, slate.100, slate.200 — fg 6.92:1 on bg (slate.500 was 4.34)
         resident: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200 },
         steward: { fg: palette.amber700, bg: palette.amber100, border: palette.amber300 },
         elder: { fg: palette.amber800, bg: palette.amber200, border: palette.amber500 },

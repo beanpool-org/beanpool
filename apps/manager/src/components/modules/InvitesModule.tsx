@@ -88,7 +88,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const getTierBadge = (t: InviteTier) => {
         switch (t) {
             case 'standard':
-                return '🥚 Newcomer';
+                return '🌱 Newcomer';
             case 'trusted':
                 return '🏠 Resident';
             case 'ambassador':
@@ -249,7 +249,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             onChange={(e) => setInviteTier(e.target.value as InviteTier)}
                             className="w-full bg-nature-950 border border-nature-800 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-terra-500"
                         >
-                            <option value="standard">🥚 Newcomer (Standard Membership)</option>
+                            <option value="standard">🌱 Newcomer (Standard Membership)</option>
                             <option value="trusted">🏠 Resident (Pre-verified Member)</option>
                             <option value="ambassador">🏛️ Steward (Community Ambassador)</option>
                             <option value="elder">⛰️ Elder (Genesis Sovereign Elder)</option>

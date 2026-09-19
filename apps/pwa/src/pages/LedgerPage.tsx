@@ -14,7 +14,7 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
-import { PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 
@@ -28,27 +28,30 @@ interface Props {
     isMember?: boolean;
 }
 
-// Tiers are recognition milestones. `floor` is the credit floor reached on ENTERING the tier
-// (floors slide continuously between them). `min` = earned+granted credit needed.
-const TIERS = [
-    { name: 'Newcomer', emoji: '🌱', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0', min: 0,    floor: 0,
+// Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
+// `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
+// the tier (floors slide continuously between them). Only presentation lives here.
+const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: string; perks: string[] }> = {
+    Newcomer: { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0',
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
       perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
-    { name: 'Resident', emoji: '🏠', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', min: 180,  floor: -200,
+    Resident: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe',
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
       perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
-    { name: 'Steward',  emoji: '🏛️', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', min: 580,  floor: -600,
+    Steward:  { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe',
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
       perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
-    { name: 'Elder',    emoji: '⛰️', color: '#d97706', bg: '#fffbeb', border: '#fde68a', min: 1380, floor: -1400,
+    Elder:    { color: '#d97706', bg: '#fffbeb', border: '#fde68a',
       blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
       perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
-];
+};
+const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
+const TIERS = TIER_LEVELS.map(t => ({
+    name: t.name, emoji: t.emoji, ...TIER_LOOK[t.name], min: t.minCredit, floor: CREDIT_BASE_FLOOR - t.minCredit,
+}));
 
-// Trust curve (mirrors beanpool-core/protocol.ts): earned trust is a saturating function of
-// qualified, diversity-capped trade VALUE. Floors slide continuously; gifts build no trust.
-const CREDIT_MAX_EARNED = 1920;
-const TRUST_CURVE_K = 5000;
+// Trust curve (from @beanpool/core): earned trust is a saturating function of qualified,
+// diversity-capped trade VALUE. Floors slide continuously; gifts build no trust.
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP; // canonical 500 from @beanpool/core
 // Inverse of the curve: qualified value needed to reach a target earned credit.
 function valueForEarned(target: number): number {
@@ -246,9 +249,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
     const activated = balanceInfo?.activated;   // has a credit line at all (earned/vouched/granted)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
-    const granted = balanceInfo?.grantedCredit ?? 0;   // vouch/genesis/admin (separate lane)
-    const totalCredit = Math.min(CREDIT_MAX_EARNED, earned + granted);
+    // What backs the floor & tier: vouch + earned + granted = CREDIT_BASE_FLOOR − floor, the same
+    // quantity the node's getTier reads. (earned + granted alone left out the vouch.)
+    const totalCredit = Math.max(0, CREDIT_BASE_FLOOR - floor);
     const ec = totalCredit;                            // "trust" shown to the user
+    const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
@@ -257,18 +262,17 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const uniquePartners = ts?.uniquePartners ?? 0;
 
     // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
-    const TIER_NAMES = ['Newcomer', 'Resident', 'Steward', 'Elder'];
-    const serverIdx = TIER_NAMES.indexOf(balanceInfo?.tier?.name ?? '');
-    const tierIdx = serverIdx >= 0 ? serverIdx : (ec >= 1380 ? 3 : ec >= 580 ? 2 : ec >= 180 ? 1 : 0);
+    const serverIdx = tierIndexForName(balanceInfo?.tier?.name);
+    const tierIdx = serverIdx >= 0 ? serverIdx : tierIndexForCredit(totalCredit);
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
-    const ELDER_MIN = 1380;
+    const ELDER_MIN = TIERS[TIERS.length - 1].min;
     const journeyPct = Math.min(1, totalCredit / ELDER_MIN);
     const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
     // Value needed for the next tier: invert the curve for the earned credit it requires
-    // (granted credit is fixed), minus value already traded → rough "new partners" count.
-    const targetEarned = nextTier ? Math.max(0, nextTier.min - granted) : 0;
+    // (vouch + grants are fixed), minus value already traded → rough "new partners" count.
+    const targetEarned = nextTier ? Math.max(0, nextTier.min - notEarned) : 0;
     const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
     const partnersToNext = nextTier && Number.isFinite(valueToNext)
         ? Math.max(1, Math.ceil(valueToNext / PER_COUNTERPARTY_CAP)) : 0;
@@ -279,7 +283,6 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const selCurrent = tierIdx === selLevel;
     const selNeeded = Math.max(0, sel.min - ec);
 
-    const canInvite = balanceInfo?.tier?.canInvite ?? true;
     const hoursEquivalent = Math.abs(balance) / 40;
 
     // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
@@ -521,7 +524,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">WHAT BUILDS YOUR TRUST</span>
                         <div className="grid grid-cols-3 gap-1.5 sm:gap-3" data-testid="trust-builders">
                             {[
-                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(1380)), color: '#10b981' },
+                                { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: '#10b981' },
                                 { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
                                 { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (

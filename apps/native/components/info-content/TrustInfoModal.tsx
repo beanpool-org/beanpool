@@ -4,6 +4,11 @@ import { InfoModal, InfoModalTab } from '../InfoModal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { palette } from '../../constants/colors';
 import { useStyles, useTheme } from '../../app/ThemeContext';
+import { PROTOCOL_CONSTANTS, TIER_LEVELS } from '@beanpool/core';
+
+// Where each tier starts, as a floor (the node's own table — never a copy).
+const [, RESIDENT, STEWARD, ELDER] = TIER_LEVELS;
+const floorOf = (credit: number) => `${PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit}B`;
 
 interface Props {
     isOpen: boolean;
@@ -162,18 +167,18 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.resident.fg }]}>
                         <Text style={styles.tierTitle}>🏠 Resident</Text>
-                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-200B</Text> (up to -599B)</ListItem>
+                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(RESIDENT.minCredit)}</Text> (up to {floorOf(STEWARD.minCredit - 1)})</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.steward.fg }]}>
                         <Text style={styles.tierTitle}>🏛️ Steward</Text>
-                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-600B</Text> (up to -1399B)</ListItem>
+                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(STEWARD.minCredit)}</Text> (up to {floorOf(ELDER.minCredit - 1)})</ListItem>
                         <ListItem>Trusted-trader recognition across the community</ListItem>
                     </View>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
                         <Text style={styles.tierTitle}>⛰️ Elder</Text>
-                        <ListItem>Reached when your credit floor passes <Text style={styles.boldWhiteText}>-1400B</Text> (max <Text style={styles.boldWhiteText}>-2000B</Text>)</ListItem>
+                        <ListItem>Reached when your credit floor reaches <Text style={styles.boldWhiteText}>{floorOf(ELDER.minCredit)}</Text> (max <Text style={styles.boldWhiteText}>{floorOf(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP)}</Text>)</ListItem>
                         <ListItem>Recognised as a long-standing, high-trust member</ListItem>
                     </View>
 

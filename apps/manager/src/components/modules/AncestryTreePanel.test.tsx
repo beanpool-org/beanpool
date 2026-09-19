@@ -424,4 +424,22 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(aliceBtn).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByRole('button', { name: /Collapse Alice branch/i })).toBeInTheDocument();
     });
+
+    it('shows the tier the node reports, not one recomputed from the granted column', () => {
+        // earnedCredit on the admin feed is the granted lane only; an Elder by trade has 0 there.
+        const payload = {
+            members: [
+                { publicKey: 'pk_dana_000000000000000000', callsign: 'Dana', invitedBy: 'genesis', earnedCredit: 0, tier: 'Elder', standing: 'Elder' },
+                { publicKey: 'pk_eli_0000000000000000000', callsign: 'Eli', invitedBy: 'genesis', earnedCredit: 1320, tier: 'Steward', standing: 'Steward' },
+            ],
+            profiles: [
+                { publicKey: 'pk_dana_000000000000000000', callsign: 'Dana', status: 'active' },
+                { publicKey: 'pk_eli_0000000000000000000', callsign: 'Eli', status: 'active' },
+            ],
+        };
+        render(<AncestryTreePanel nodeData={payload} activeNode={mockNode} onRefresh={vi.fn()} onPruneBranch={vi.fn()} onSelectMember={vi.fn()} />);
+        expect(screen.getByText('⛰️ Elder')).toBeInTheDocument();
+        expect(screen.getByText('🏛️ Steward')).toBeInTheDocument();
+        expect(screen.queryByText(/Newcomer/)).not.toBeInTheDocument();
+    });
 });

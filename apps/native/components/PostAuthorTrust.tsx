@@ -4,31 +4,10 @@ import { getMemberRatings } from '../utils/db';
 import { router } from 'expo-router';
 import { MemberAvatar } from './MemberAvatar';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
+import { getTrustTier } from '../utils/trust-tier';
 
-/**
- * Trust Tier Thresholds (based on Energy Cycled)
- * Energy = total outbound transaction volume
- */
-// `token` names the shared trust colours (constants/colors.ts), resolved from
-// the active theme at render so the tier ramp follows light/dark and stays
-// identical across cards, the Ledger, and the Trust modal.
-const TRUST_TIERS = [
-    { min: 1320, emoji: '⛰️', label: 'Elder',    token: 'elder' },
-    { min: 520,  emoji: '🏛️', label: 'Steward',  token: 'steward' },
-    { min: 120,  emoji: '🏠', label: 'Resident', token: 'resident' },
-    { min: 0,    emoji: '🌱', label: 'Newcomer', token: 'newcomer' },
-] as const;
-
-export function getTrustTier(energyCycled: number = 0) {
-    for (const tier of TRUST_TIERS) {
-        if (energyCycled >= tier.min) return tier;
-    }
-    return TRUST_TIERS[TRUST_TIERS.length - 1];
-}
-
-export function isElder(energyCycled: number = 0): boolean {
-    return energyCycled >= 1320;
-}
+// Re-exported for the screens that import them from here (Market feed Elder cards).
+export { getTrustTier, isElder } from '../utils/trust-tier';
 
 interface PostAuthorTrustProps {
     pubkey: string;
@@ -149,7 +128,7 @@ const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     },
     compactCallsign: {
         fontSize: 12,
-        color: colors.text.secondary,
+        color: colors.market.author,
         fontWeight: '500',
         flex: 1,
     },

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { tierForCredit } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
@@ -196,9 +197,8 @@ export function getMemberTier(m: MemberItem | null | undefined): string {
     if (m.role && m.role !== 'Citizen') return m.role;
 
     const earned = typeof m.earnedCredit === 'number' ? m.earnedCredit : (typeof m.earned_credit === 'number' ? m.earned_credit : 0);
-    if (earned >= 1400) return 'Elder';
-    if (earned >= 600) return 'Steward';
-    if (earned >= 200) return 'Resident';
+    const byCredit = tierForCredit(earned).name;   // the node's own thresholds (@beanpool/core)
+    if (byCredit !== 'Newcomer') return byCredit;
 
     if (m.canVouch || m.isVoucher) return 'Elder';
 
@@ -1056,7 +1056,7 @@ export function MembersModule({
                                 <label className="block text-nature-300 font-semibold mb-2">Select Standing / Tier Badge:</label>
                                 <div className="space-y-2">
                                     {[
-                                        { id: 'Newcomer', name: '🥚 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
+                                        { id: 'Newcomer', name: '🌱 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
                                         { id: 'Resident', name: '🏠 RESIDENT', desc: '-200 granted credit floor (verified community member)' },
                                         { id: 'Steward', name: '🏛️ STEWARD', desc: '-600 granted credit floor (active steward & voucher)' },
                                         { id: 'Elder', name: '⛰️ ELDER', desc: '-1400 granted credit floor (founding governance tier)' },

@@ -56,6 +56,7 @@ import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import type { RouteDeps } from './types.js';
+import { clientIp } from '../client-ip.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -823,7 +824,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
 // shared tunnel/proxy IP it must never drain the admin-auth limiter's pool.
 const inviteCheckAttempts = new Map<string, { count: number; resetAt: number }>();
 router.get('/api/invite/check', async (ctx) => {
-    const ip = ctx.ip || 'unknown';
+    const ip = clientIp(ctx);
     const now = Date.now();
     if (inviteCheckAttempts.size > 200) {
         for (const [k, v] of inviteCheckAttempts) {

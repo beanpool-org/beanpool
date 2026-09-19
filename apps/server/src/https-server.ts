@@ -112,6 +112,7 @@ import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
+import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
@@ -124,6 +125,8 @@ import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
+import { clientIp, resolveClientIp } from './client-ip.js';
+import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
 
 
 // X-1: replay protection for signed requests.
@@ -291,37 +294,10 @@ interface ActiveConnectionInfo {
 
 const activeConnections = new Map<string, ActiveConnectionInfo>();
 
-/** Loopback or a private-network peer: where cloudflared or a local proxy reaches the node from
- *  (the docker network is RFC 1918). A client on the public internet never has one of these. */
-function isProxyPeer(addr: string | undefined): boolean {
-    if (!addr) return false;
-    const a = addr.startsWith('::ffff:') ? addr.slice(7) : addr;
-    if (a === '::1' || /^(fc|fd)[0-9a-f]{2}:/i.test(a)) return true;
-    const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(a);
-    if (!m) return false;
-    const [o1, o2] = [Number(m[1]), Number(m[2])];
-    return o1 === 127 || o1 === 10 || (o1 === 172 && o2 >= 16 && o2 <= 31) || (o1 === 192 && o2 === 168);
-}
-
-/** The connection label on the admin dashboard. X-Forwarded-For is honoured only from a proxy peer,
- *  so a direct-mode client cannot write its own label. A label, not an auth decision. */
+/** The connection label on the admin dashboard: the real client (client-ip.ts), so a direct-mode client
+ *  cannot write its own label. A label, not an auth decision. */
 function getIpAddress(req: import('node:http').IncomingMessage): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded && isProxyPeer(req.socket.remoteAddress)) {
-        return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
-    }
-    return req.socket.remoteAddress || 'unknown';
-}
-
-/** Real client IP for replication logging: prefer Cloudflare's CF-Connecting-IP
- *  (nodes sit behind CF tunnels), then X-Forwarded-For, then the socket. */
-function replicationClientIp(ctx: any): string {
-    const h = ctx?.request?.header || {};
-    const cf = h['cf-connecting-ip'];
-    if (cf) return String(cf);
-    const fwd = h['x-forwarded-for'];
-    if (fwd) return String(fwd).split(',')[0].trim();
-    return ctx?.ip || 'unknown';
+    return resolveClientIp(req.socket.remoteAddress, req.headers);
 }
 
 function calculateAnalytics() {
@@ -626,6 +602,19 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
     };
 }
 
+/** Paths the signature middleware never verifies (they carry their own auth, or none). */
+function isSignatureBypassed(p: string): boolean {
+    return p.startsWith('/api/local/') ||
+        p.startsWith('/api/admin/') ||
+        p.startsWith('/api/manager/') ||
+        p.startsWith('/api/pair/') ||
+        p.startsWith('/api/pricing-guide/admin/') ||
+        p.startsWith('/api/pricing-guide/reports') ||
+        p === '/api/invite/redeem' ||
+        p === '/api/invite/redeem-offline' ||
+        p === '/api/recovery/sso/github-exchange';
+}
+
 // Module-level reference so the HTTP server can reuse the same Koa app for
 // plain-HTTP tunnel ingress (avoids TLS handshake overhead from cloudflared).
 let _koaApp: Koa | null = null;
@@ -639,6 +628,14 @@ export async function startHttpsServer(port: number): Promise<void> {
     app.proxy = true;
     _koaApp = app;
     const router = new Router();
+
+    // With app.proxy on, Koa's ctx.ip is the leftmost X-Forwarded-For from ANY peer — the client's own claim.
+    // Replace it with the real client (forwarding headers believed only from our own tunnel/proxy, see
+    // client-ip.ts) before anything reads it.
+    app.use(async (ctx, next) => {
+        ctx.request.ip = clientIp(ctx);
+        await next();
+    });
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)
     app.use(federationCors());
@@ -679,13 +676,13 @@ export async function startHttpsServer(port: number): Promise<void> {
     });
 
     // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
-    const gatewayRateLimits = new Map<string, number[]>();
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        // Derive real remote socket IP for security access control (strip IPv6-mapped IPv4 prefix)
-        const rawSocketIp = ctx.socket?.remoteAddress || ctx.ip || 'unknown';
-        const clientIp = rawSocketIp.replace(/^::ffff:/, '');
+        // The real client (client-ip.ts): the socket peer, unless that peer is our own tunnel/proxy, in which case
+        // the address it forwards. In tunnel mode the socket peer is the cloudflared container for everyone, so
+        // an allowlist or limiter keyed on it cannot tell one person from another.
+        const realIp = clientIp(ctx);
 
         // 1. Dynamic CORS Allowed Origins Handling (#131)
         const requestOrigin = ctx.get('Origin');
@@ -745,9 +742,9 @@ export async function startHttpsServer(port: number): Promise<void> {
             ) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
                     const norm = allowedIp.trim();
-                    if (clientIp === norm || norm === '*') return true;
-                    if ((norm === '127.0.0.1' || norm === 'localhost') && (clientIp === '127.0.0.1' || clientIp === '::1')) return true;
-                    if (norm.endsWith('*') && clientIp.startsWith(norm.slice(0, -1))) return true;
+                    if (realIp === norm || norm === '*') return true;
+                    if ((norm === '127.0.0.1' || norm === 'localhost') && (realIp === '127.0.0.1' || realIp === '::1')) return true;
+                    if (norm.endsWith('*') && realIp.startsWith(norm.slice(0, -1))) return true;
                     return false;
                 });
                 if (!isAllowed) {
@@ -795,30 +792,20 @@ export async function startHttpsServer(port: number): Promise<void> {
             }
         }
 
-        // 4. Rate Limiting Middleware (Exempts admin control plane and federation/community paths
-        //    to avoid NAT IP aggregation issues and inter-node synchronisation bursts)
+        // 4. Rate Limiting (gateway-rate-limit.ts): per real client address for unsigned requests, per member
+        //    for signed ones (charged after verification, below requireSignature). Exempts the admin control
+        //    plane and federation/community paths (inter-node synchronisation bursts).
         const isFederationPath = ctx.path.startsWith('/api/federation/') || ctx.path.startsWith('/api/community/');
-        if (gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isFederationPath) {
-            const now = Date.now();
-            const windowMs = 60 * 1000;
-            // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to 600
+        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isFederationPath;
+        if (limited) {
+            // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to the default
             const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
-
-            let timestamps = gatewayRateLimits.get(clientIp) || [];
-            timestamps = timestamps.filter(t => now - t < windowMs);
-
-            if (timestamps.length >= maxReqs) {
-                ctx.status = 429;
-                ctx.set('Retry-After', '60'); // RFC 6585 — tell clients how long to wait
-                ctx.body = { error: 'Gateway rate limit exceeded. Please try again in 1 minute.' };
-                return;
-            }
-
-            timestamps.push(now);
-            gatewayRateLimits.set(clientIp, timestamps);
+            const claimsSignature = !!ctx.get('X-Public-Key') && !!ctx.get('X-Signature') && !isSignatureBypassed(ctx.path);
+            if (!gatewayAdmit(ctx, maxReqs, claimsSignature)) return;
         }
 
         await next();
+        if (limited) gatewaySettle(ctx);
     });
 
     // Administrative In-Memory Rate Limiter Middleware
@@ -829,7 +816,7 @@ export async function startHttpsServer(port: number): Promise<void> {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
-                const ip = ctx.ip || 'unknown';
+                const ip = clientIp(ctx);
                 const now = Date.now();
                 const windowMs = 60 * 1000; // 1 minute
                 const limit = 300; // max 300 administrative requests per minute
@@ -854,11 +841,7 @@ export async function startHttpsServer(port: number): Promise<void> {
     const rateLimitCleaner = setInterval(() => {
         const now = Date.now();
         const windowMs = 60 * 1000;
-        for (const [ip, timestamps] of gatewayRateLimits) {
-            const valid = timestamps.filter(t => now - t < windowMs);
-            if (valid.length === 0) gatewayRateLimits.delete(ip);
-            else gatewayRateLimits.set(ip, valid);
-        }
+        pruneGatewayBuckets(now);
         for (const [ip, timestamps] of adminRateLimits) {
             const valid = timestamps.filter(t => now - t < windowMs);
             if (valid.length === 0) adminRateLimits.delete(ip);
@@ -947,18 +930,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
         // unless it is on the public allowlist.
         const isGatedRead = ENFORCE_READ_AUTH && ctx.method === 'GET' && isApiPath && !isPublicRead(ctx.path);
-        const isBypassed =
-            ctx.path.startsWith('/api/local/') ||
-            ctx.path.startsWith('/api/admin/') ||
-            ctx.path.startsWith('/api/manager/') ||
-            ctx.path.startsWith('/api/pair/') ||
-            ctx.path.startsWith('/api/pricing-guide/admin/') ||
-            ctx.path.startsWith('/api/pricing-guide/reports') ||
-            ctx.path === '/api/invite/redeem' ||
-            ctx.path === '/api/invite/redeem-offline' ||
-            ctx.path === '/api/recovery/sso/github-exchange';
-
-        if (isBypassed) {
+        if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
         // Writes that may be anonymous: an unsigned request passes through with no actor, but signature
@@ -1100,6 +1072,13 @@ export async function startHttpsServer(port: number): Promise<void> {
     }
     app.use(requireSignature);
 
+    // The gateway limiter's member bucket: charged only once the signature above has been verified.
+    app.use(async (ctx, next) => {
+        const gwConfig = getGatewayConfig();
+        if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
+        await next();
+    });
+
     // Trust endpoint — only for self-signed mode
     if (!isUsingLetsEncrypt()) {
         router.get('/trust', async (ctx) => {
@@ -1143,6 +1122,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createChannelRoutes(deps),
+        createNodeAdminRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),

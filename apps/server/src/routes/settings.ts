@@ -472,10 +472,14 @@ router.post('/api/admin/check-update', async (ctx) => {
  */
 router.get('/api/local/admin/2fa/status', async (ctx) => {
     const config = getLocalConfig();
+    // A key session (the app's one-time sign-in link) already passed the node's 2FA when it was issued,
+    // so there is no chicken-and-egg for it: a live one may read the status too.
+    const keySessionId = ctx.cookies?.get('admin_session');
+    const keySessionOk = !!keySessionId && validateAdminSession(keySessionId).valid;
     const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
         || ctx.request?.headers?.['x-admin-password']
         || (ctx as any).headers?.['x-admin-password'];
-    if (!headerPass || !config.adminHash || !config.salt || !(await verifyPasswordAsync(headerPass, config.adminHash, config.salt))) {
+    if (!keySessionOk && (!headerPass || !config.adminHash || !config.salt || !(await verifyPasswordAsync(headerPass, config.adminHash, config.salt)))) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;

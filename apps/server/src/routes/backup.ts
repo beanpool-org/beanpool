@@ -24,6 +24,7 @@ import {
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion } from '../db/db.js';
 import type { RouteDeps } from './types.js';
+import { clientIp } from '../client-ip.js';
 
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -37,14 +38,9 @@ export function createBackupRoutes(deps: RouteDeps): Router {
         return proto + '://' + host;
     }
 
-    /** Real client IP for replication logging */
+    /** Real client IP for replication logging (client-ip.ts: forwarding headers only from our own tunnel/proxy) */
     function replicationClientIp(ctx: any): string {
-        const h = ctx?.request?.header || {};
-        const cf = h['cf-connecting-ip'];
-        if (cf) return String(cf);
-        const fwd = h['x-forwarded-for'];
-        if (fwd) return String(fwd).split(',')[0].trim();
-        return ctx?.ip || 'unknown';
+        return clientIp(ctx);
     }
 
     // Conditional pull state for sync-snapshot

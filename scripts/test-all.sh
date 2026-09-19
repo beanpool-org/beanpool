@@ -210,6 +210,7 @@ run_federation_suites() {
       test-admin-password-query
       test-cors-policy
       test-gateway-config
+      test-gateway-real-client
       test-csrf-protection
       test-totp-admin-2fa
       test-totp-helpers
@@ -232,6 +233,7 @@ run_federation_suites() {
       test-federation-settlement
       test-admin-auth
       test-admin-key-auth
+      test-app-admin-handoff
       test-backend-monitors
       test-backup-hardening
       test-backup-identity-bundle

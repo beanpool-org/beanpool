@@ -80,6 +80,25 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 | Browser session | 2 hours idle, 12 hours hard maximum |
 | Revocation | *"Revoke all web sessions"* in the app bumps the admin's `session_epoch`, invalidating every outstanding cookie instantly |
 
+**Phone button — built 2026-09-19 (Marty approved the flow 2026-09-19).**
+
+- *Who sees it:* Settings → "🛡️ Manage ‹community›" appears only when `GET /api/node-admin/me` (signed with
+  the member key, answers only for the signer) says `owner` or `admin`. Nothing is cached on the phone. The
+  node checks the live role again when it issues the token and again when the browser exchanges it, and a
+  key session's role follows `node_roles` on every request.
+- *Second factor:* the phone's own unlock (fingerprint, face or PIN) comes before the token is requested.
+  A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock. The
+  node's own TOTP, when turned on, is still asked for on top.
+- *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /
+  SFSafariViewController. The token goes in the **fragment**, so it never reaches a server, proxy log or
+  Referer. `/settings` wipes it from the address bar, then POSTs it once to `/api/local/admin/auth/exchange`.
+- *Android app links* claim only `/` on node hosts (where `/?invite=` lives) and `/auth/*` on beanpool.org.
+  That means `/settings`, `/app` and the website stay in the browser.
+- *Web app (PWA):* shows the same owner/admin-only entry, as a plain link to `/settings`, which then asks
+  for the password. The browser does not mint key links, because it has no equivalent of the phone unlock.
+- *Admin queue:* `GET /api/node-admin/queue` (owner/admin, signed) returns counts only, each with its
+  `/settings#section=` target, for the header's "needs you" badge.
+
 ### 2.4 Migration — do not flip this in one release
 
 A flip-day locks the operator out of their own machine.

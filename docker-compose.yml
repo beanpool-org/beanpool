@@ -51,6 +51,11 @@ services:
       # that one back off still finishes trades already in flight (federation-settlement.ts).
       - ENABLE_PEER_CONNECTORS=${ENABLE_PEER_CONNECTORS:-}
       - FEDERATION_SETTLEMENT=${FEDERATION_SETTLEMENT:-}
+      # Extra proxies whose forwarding headers (CF-Connecting-IP / X-Forwarded-For) name the real client, as
+      # comma-separated IPs or CIDRs. EMPTY is right for almost every node: loopback, the docker networks this
+      # container is on (where cloudflared connects from) and Cloudflare's edge are trusted already. Only for a
+      # reverse proxy on ANOTHER host. See apps/server/src/client-ip.ts.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       # The Pulse OAuth Credentials
       - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY:-}
       - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET:-}

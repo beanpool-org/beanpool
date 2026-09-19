@@ -1,13 +1,17 @@
 import type Koa from 'koa';
+import { clientIp } from './client-ip.js';
 
 /**
  * Rate limiter for auth endpoints (15 attempts per minute per IP): verify-password, recovery lookup, pairing,
  * callsign checks. Chat lines do NOT come through here — they have their own per-member bucket
  * (chat-rate-limit.ts), so members chatting behind one NAT cannot lock each other out of recovery.
+ *
+ * Keyed on the real client (client-ip.ts), never Koa's ctx.ip: with app.proxy on that is the leftmost
+ * X-Forwarded-For, which any client can set to a fresh value per attempt.
  */
 const authAttempts = new Map<string, { count: number; resetAt: number }>();
 export function authRateLimit(ctx: Koa.Context): boolean {
-    const ip = ctx.ip || 'unknown';
+    const ip = clientIp(ctx);
     const now = Date.now();
     if (authAttempts.size > 200) {
         for (const [k, v] of authAttempts) {

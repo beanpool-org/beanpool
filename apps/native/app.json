@@ -27,7 +27,8 @@
         "applinks:castlemaine.beanpool.org",
         "applinks:gippsland.beanpool.org",
         "applinks:eastgippy.beanpool.org",
-        "applinks:bindarrabi.beanpool.org"
+        "applinks:bindarrabi.beanpool.org",
+        "applinks:yarravalley.beanpool.org"
       ],
       "infoPlist": {
         "UISupportedInterfaceOrientations": [
@@ -38,6 +39,7 @@
         ],
         "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
         "NSCameraUsageDescription": "BeanPool uses your camera to scan device pairing QR codes and community invites.",
+        "NSFaceIDUsageDescription": "BeanPool asks for Face ID before sensitive steps, such as opening your community's admin settings or showing your recovery phrase.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "485XM2R33S"
@@ -68,43 +70,68 @@
           "data": [
             {
               "scheme": "https",
-              "host": "beanpool.org"
+              "host": "mullum.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "mullum.beanpool.org"
+              "host": "bris.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "bris.beanpool.org"
+              "host": "test.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "test.beanpool.org"
+              "host": "review.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "review.beanpool.org"
+              "host": "melb.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "melb.beanpool.org"
+              "host": "castlemaine.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "castlemaine.beanpool.org"
+              "host": "gippsland.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "gippsland.beanpool.org"
+              "host": "eastgippy.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "eastgippy.beanpool.org"
+              "host": "bindarrabi.beanpool.org",
+              "path": "/"
             },
             {
               "scheme": "https",
-              "host": "bindarrabi.beanpool.org"
+              "host": "yarravalley.beanpool.org",
+              "path": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "beanpool.org",
+              "pathPrefix": "/auth/"
             }
           ],
           "category": [
@@ -117,7 +144,8 @@
           "data": [
             {
               "scheme": "https",
-              "host": "*.beanpool.org"
+              "host": "*.beanpool.org",
+              "path": "/"
             }
           ],
           "category": [

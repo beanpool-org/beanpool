@@ -15,6 +15,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { ProfilePage } from './ProfilePage';
 import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
+import { NodeAdminLink } from '../components/NodeAdminLink';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
@@ -486,6 +487,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 {mode === 'menu' && (
                     <div className="space-y-6">
                         <RecoveryAlertBanner identity={identity} />
+                        {/* Owners and admins only — the node answers the role. */}
+                        <NodeAdminLink />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">

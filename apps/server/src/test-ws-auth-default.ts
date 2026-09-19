@@ -16,7 +16,7 @@
  *   3. a member socket gets what it got before (the community-wide events in full, plus the transfers it is
  *      a party to)
  *   4. a socket signed by a key that becomes a member while connected (mid-join) is promoted on its
- *      member_joined
+ *      member_joined; a member pruned while connected is demoted to a stranger's feed on user_pruned
  *   5. /ws/logs still refuses an upgrade without admin auth
  *
  * With ENFORCE_WS_AUTH=false (the operator's escape hatch) the same script asserts the old open feed
@@ -144,6 +144,15 @@ async function main() {
         const forged = await upgrade(`${base}/ws?${signedWsQuery(alice, { signer: keypair().privateKey })}`);
         assert(forged.kind === 'status' && forged.status === 401, `alice's pubkey signed by another key → 401 (got ${describe(forged)})`);
 
+        // The signature is checked before the nonce is spent, so a forger who sees (or guesses) a nonce
+        // cannot burn it and lock the real member out of their own connect.
+        const sharedNonce = crypto.randomBytes(16).toString('hex');
+        const forgedFirst = await upgrade(`${base}/ws?${signedWsQuery(bob, { nonce: sharedNonce, signer: keypair().privateKey })}`);
+        assert(forgedFirst.kind === 'status' && forgedFirst.status === 401, `a forged token for bob → 401 (got ${describe(forgedFirst)})`);
+        const realAfter = await upgrade(`${base}/ws?${signedWsQuery(bob, { nonce: sharedNonce })}`);
+        assert(realAfter.kind === 'open', `bob's real token with the nonce the forgery used → 101, the forgery did not spend it (got ${describe(realAfter)})`);
+        if (realAfter.kind === 'open') realAfter.ws.close();
+
         const q = signedWsQuery(bob);
         const first = await upgrade(`${base}/ws?${q}`);
         assert(first.kind === 'open', `bob's fresh token → 101 (got ${describe(first)})`);
@@ -232,6 +241,20 @@ async function main() {
         await sleep(200);
         assert(joiner.events.some(e => e.type === 'system_announcement' && e.title === LATER), 'after its member_joined, the same socket gets member events');
         assert(!guest.raw.some(r => r.includes(LATER)), 'the guest socket still does not');
+    }
+
+    // ── 4b. A pruned member's open socket is demoted ──
+    if (!OPEN_FEED) {
+        console.log('\n— pruned while connected —');
+        se.adminPruneUser(carol.pubKeyHex, 'owner:password');
+        await sleep(150);
+        carolWs.events.length = 0; carolWs.raw.length = 0; aliceWs.events.length = 0;
+        const AFTER_PRUNE = 'after-prune-' + crypto.randomBytes(4).toString('hex');
+        se.adminBroadcastAnnouncement(AFTER_PRUNE, 'members only', 'info');
+        await sleep(200);
+        assert(aliceWs.events.some(e => e.type === 'system_announcement' && e.title === AFTER_PRUNE), 'alice still gets member events');
+        assert(!carolWs.raw.some(r => r.includes(AFTER_PRUNE)), 'carol, pruned while connected, no longer gets member events on her open socket');
+        assert(carolWs.events.every(e => Object.keys(e).length === 1), 'carol\'s socket now gets bare doorbells only, like a stranger');
     }
 
     // ── 5. /ws/logs unchanged ──

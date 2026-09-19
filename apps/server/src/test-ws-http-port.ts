@@ -10,6 +10,7 @@
  *   /ws signed by a member → 101, and a broadcast reaches the socket
  *   /ws unsigned (default) → 101, and gets a public change as a bare doorbell but not a member event
  *   /ws (ENFORCE_WS_AUTH=true) unsigned → 401, validly signed → 101
+ *   /ws (ENFORCE_WS_AUTH=false) unsigned → 101, and gets a community-wide event in full (the open feed)
  *   /ws/logs      without admin auth → 401; with a valid ticket → 101
  *   anything else → socket destroyed, no response
  *
@@ -17,6 +18,7 @@
  * ENFORCE_WS_AUTH is a module const read at import, so run it once per value:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ws-http-port.ts
  *   ENFORCE_WS_AUTH=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ws-http-port.ts
+ *   ENFORCE_WS_AUTH=false BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-ws-http-port.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -145,6 +147,22 @@ async function main() {
                 assert(!anon.events.some(e => e.type === 'test_ping'), `${p.name}: unsigned /ws does not get a member event`);
                 assert(anon.events.some(e => e.type === 'new_post' && Object.keys(e).length === 1),
                     `${p.name}: unsigned /ws gets a public change as a bare doorbell`);
+                anon.ws.close();
+            }
+        }
+
+        if (OPEN_FEED) {
+            // The operator's escape hatch: the old open feed, on the tunnel port exactly as on 8443.
+            const anon = await upgrade(`${p.base}/ws`, tunnelHeaders);
+            assert(anon.kind === 'open', `${p.name}: unsigned /ws with ENFORCE_WS_AUTH=false → 101 (got ${describe(anon)})`);
+            if (anon.kind === 'open') {
+                await sleep(100);
+                anon.events.length = 0;
+                const marker = crypto.randomBytes(6).toString('hex');
+                broadcast({ type: 'test_ping', marker });
+                await sleep(200);
+                assert(anon.events.some(e => e.type === 'test_ping' && e.marker === marker),
+                    `${p.name}: unsigned /ws with ENFORCE_WS_AUTH=false gets a community-wide event in full`);
                 anon.ws.close();
             }
         }

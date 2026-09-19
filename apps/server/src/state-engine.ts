@@ -1014,6 +1014,13 @@ export function broadcast(event: any, recipients?: string[]): void {
         }
         try { ws.send(out); } catch { wsClients.delete(ws); }
     }
+    // A pruned member's open socket stops being a member socket: from now on it gets what a stranger gets.
+    if (event?.type === 'user_pruned' && typeof event.publicKey === 'string') {
+        const pruned = event.publicKey.toLowerCase();
+        for (const ws of wsClients) {
+            if (typeof ws._memberPubkey === 'string' && ws._memberPubkey.toLowerCase() === pruned) ws._memberPubkey = null;
+        }
+    }
 }
 
 // ===================== DB HELPERS =====================

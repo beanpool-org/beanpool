@@ -423,6 +423,16 @@ run_federation_suites() {
     if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(wsauth,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(wsauth)"; fi
     rm -rf "$TMP_DIR"
 
+    # The same upgrade paths with the operator escape hatch ENFORCE_WS_AUTH=false: an unsigned /ws on the
+    # tunnel port gets the old open feed, exactly as on 8443. Same const-at-import reason.
+    echo "━━━ test-ws-http-port (ws auth OFF, open feed) ━━━"
+    TMP_DIR=$(mktemp -d)
+    ENFORCE_WS_AUTH=false ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR="$TMP_DIR" \
+      $SUITE_TIMEOUT pnpm exec tsx src/test-ws-http-port.ts
+    RC=$?
+    if [ $RC -eq 124 ]; then FAILED="$FAILED test-ws-http-port(open,TIMEOUT)"; elif [ $RC -ne 0 ]; then FAILED="$FAILED test-ws-http-port(open)"; fi
+    rm -rf "$TMP_DIR"
+
     # The /ws feed with the operator escape hatch ENFORCE_WS_AUTH=false: the old open feed, where an
     # unsigned socket gets every community-wide event but still never a scoped one. The loop above
     # covers the default (strangers get public doorbells only); same const-at-import reason.

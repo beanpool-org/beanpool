@@ -203,8 +203,6 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
         const tsNum = Number(ts);
         const now = Date.now();
         if (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > SIGNATURE_FRESHNESS_MS) return { kind: 'invalid' };
-        // Atomic check-and-consume — a replayed connect nonce is rejected.
-        if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
         const signedMessage = `WS\n${pathname}\n${ts}\n${nonce}\n`;
         const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
@@ -214,6 +212,9 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
             undefined, Buffer.from(signedMessage), publicKeyObject, Buffer.from(sigB64, 'base64'),
         );
         if (!isValid) return { kind: 'invalid' };
+        // Atomic check-and-consume — a replayed connect nonce is rejected. Only after the signature
+        // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
+        if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
         // A valid signature only proves key possession — only a known member gets the
         // member feed, so an anonymous keypair can't subscribe to it.

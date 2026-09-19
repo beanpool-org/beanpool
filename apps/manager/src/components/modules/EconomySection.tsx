@@ -763,8 +763,8 @@ export function EconomySection({
 
             {/* Create Enterprise Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0">🌾 Create Community Enterprise</h3>
                             <p className="text-xs text-nature-400 m-0 mt-0.5">
@@ -908,8 +908,8 @@ export function EconomySection({
 
             {/* Manage Keepers Modal */}
             {manageKeepersTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-lg bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in max-h-[90vh] overflow-y-auto">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                             <div>
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
@@ -1091,8 +1091,8 @@ export function EconomySection({
 
             {/* Seed Offer Modal */}
             {seedOfferTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">
                             Post Initial Offer for {seedOfferTreasury.name}
                         </h3>

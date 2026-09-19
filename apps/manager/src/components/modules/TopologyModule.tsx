@@ -1270,8 +1270,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
             {/* HISTORY MODAL */}
             {selectedHistoryNode && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
+                <div className="fixed inset-0 overflow-y-auto z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl animate-scale-in">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <h4 className="text-sm font-bold text-white m-0">
                                 📅 30-Day Historical Archives ({selectedHistoryNode.name})

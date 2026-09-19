@@ -313,12 +313,12 @@ export function PostModerationPanel({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="delete-post-dialog-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                     onClick={(e) => {
                         if (e.target === e.currentTarget && !isDeleting) setDeletingPost(null);
                     }}
                 >
-                    <div className="bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-red-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                             <h3 id="delete-post-dialog-title" className="text-base font-bold text-red-300 flex items-center gap-2 m-0">
                                 <span>⚠️</span>

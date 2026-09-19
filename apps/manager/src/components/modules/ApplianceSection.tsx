@@ -629,8 +629,9 @@ export function ApplianceSection({
                 </SubTabStrip>
             </div>
 
-            {/* Read-only Version / Update-Available / Last-Backup Card (per admin-surface §4.3) */}
-            <div className="p-5 rounded-2xl bg-nature-900/90 border border-nature-800 shadow-xl">
+            {/* Read-only Version / Update-Available / Last-Backup Card (per admin-surface §4.3). On a phone, only on
+                Diagnostics & Logs: there it is a screen tall and would push every other sub-tab's content off it. */}
+            <div className={`p-5 rounded-2xl bg-nature-900/90 border border-nature-800 shadow-xl ${subTab === 'diagnostics' ? '' : 'hidden lg:block'}`}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
                         {/* Node Version */}
@@ -1461,9 +1462,9 @@ export function ApplianceSection({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="clean-storage-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2">
                                 <span>🧹</span>

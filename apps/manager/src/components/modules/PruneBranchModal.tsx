@@ -165,7 +165,7 @@ export function PruneBranchModal({
                 if (e.target === e.currentTarget && !isPruning) onClose();
             }}
         >
-            <div className="bg-nature-900 border border-red-700/80 rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 text-nature-100 font-sans my-auto">
+            <div className="m-auto bg-nature-900 border border-red-700/80 rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-5 text-nature-100 font-sans my-auto">
                 <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                     <div>
                         <h3 id="prune-branch-title" className="text-base sm:text-lg font-black text-white flex items-center gap-2 m-0 text-red-300">

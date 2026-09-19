@@ -1034,8 +1034,8 @@ export function MembersModule({
 
             {/* Member Standing & Tier Upgrade Modal */}
             {tierEditMember && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <div>
                                 <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
@@ -1109,8 +1109,8 @@ export function MembersModule({
 
             {/* Create Treasury Modal */}
             {showCreateTreasuryModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0">🏛️ Create Community Treasury</h3>
                             <button onClick={() => setShowCreateTreasuryModal(false)} className="text-nature-500 hover:text-white text-lg">✕</button>
@@ -1165,8 +1165,8 @@ export function MembersModule({
 
             {/* Seed Offer Modal */}
             {offerTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <h3 className="text-base font-bold text-white m-0">🥚 Seed Offer for {offerTreasury.name}</h3>
                             <button onClick={() => setOfferTreasury(null)} className="text-nature-500 hover:text-white text-lg">✕</button>

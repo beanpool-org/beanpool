@@ -229,7 +229,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
 
                         <div>
                             <label className="block text-xs font-bold text-nature-300 mb-1">Severity Level</label>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setSeverity('info')}
@@ -364,8 +364,8 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
 
             {/* Add Channel Modal */}
             {showAddChannelModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-4 animate-fade-in">
                         <h3 className="text-base font-bold text-white m-0">📚 Add Curated Pulse Feed</h3>
                         <form onSubmit={handleAddChannel} className="space-y-3">
                             <div>

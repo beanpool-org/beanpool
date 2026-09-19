@@ -170,8 +170,8 @@ export function ThreatReviewModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-950 border border-red-900/80 rounded-3xl p-6 max-w-xl w-full space-y-6 shadow-2xl overflow-hidden relative">
+        <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-950 border border-red-900/80 rounded-3xl p-6 max-w-xl w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header Section */}
                 <div className="flex items-start justify-between border-b border-nature-800/80 pb-4">

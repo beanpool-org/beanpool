@@ -493,12 +493,12 @@ export function ReplicationAccessPanel({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="gen-token-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                     onClick={(e) => {
                         if (e.target === e.currentTarget && !generating) setShowGenConfirm(false);
                     }}
                 >
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                             <div className="flex items-center gap-3 text-amber-400">
                                 <span className="text-2xl">⚠️</span>
@@ -555,12 +555,12 @@ export function ReplicationAccessPanel({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="clear-token-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                     onClick={(e) => {
                         if (e.target === e.currentTarget && !clearing) setShowClearConfirm(false);
                     }}
                 >
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
                             <div className="flex items-center gap-3 text-red-400">
                                 <span className="text-2xl">🗑️</span>

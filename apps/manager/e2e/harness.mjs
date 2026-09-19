@@ -87,6 +87,8 @@ export async function openSettings(browser, origin, { width, height = 800, textS
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
+    // Nothing leaves this machine: map tiles, avatars and anything else off the local server are refused.
+    await context.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort());
     await page.route(/\/(api|proxy)\//, async (route) => {
         const req = route.request();
         const url = new URL(req.url());

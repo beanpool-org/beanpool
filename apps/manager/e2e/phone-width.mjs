@@ -14,6 +14,16 @@
 import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, SCREENS, screenName, UNKNOWN } from './harness.mjs';
 
 const WIDTH = 320;
+/** One of each kind of modal an owner meets on a phone: `open` is the button (in the page) that opens it. */
+const MODALS = [
+    { name: 'member-detail', screen: { tab: 'people', sub: 'directory' }, open: /^Inspect$/ },
+    { name: 'report-review', screen: { tab: 'people', sub: 'moderation' }, open: /Inspect & Action/ },
+    { name: 'create-enterprise', screen: { tab: 'economy', sub: 'enterprises' }, open: /Create Enterprise/ },
+    { name: 'keepers', screen: { tab: 'economy', sub: 'enterprises' }, open: /^Keepers$/ },
+    { name: 'seed-offer', screen: { tab: 'economy', sub: 'enterprises' }, open: /^Seed Offer$/ },
+    { name: 'halt-decision', screen: { tab: 'economy', sub: 'decisions' }, open: /Halt this Decision/ },
+    { name: 'add-pulse-channel', screen: { tab: 'bulletin', sub: 'pulse' }, open: /Add Feed Channel/ },
+];
 const TEXT_SCALES = [1, 1.3];
 const failures = [];
 let checks = 0;
@@ -67,6 +77,35 @@ try {
         {
             const { context, page } = await openSettings(browser, origin, { width: WIDTH, textScale, signedIn: false });
             record(`sign-in ${at}`, await horizontalOverflow(page));
+            await context.close();
+        }
+
+        // Modals: they fit the width, and with the keyboard up (the viewport shortened, as `interactive-widget=
+        // resizes-content` makes the phone do) their last field can still be reached and seen.
+        for (const modal of MODALS) {
+            const { context, page } = await openSettings(browser, origin, { width: WIDTH, textScale, screen: modal.screen });
+            await page.locator('main').getByRole('button', { name: modal.open }).first().click();
+            await settle(page);
+            record(`modal ${modal.name} ${at}`, await horizontalOverflow(page));
+            checks++;
+            await page.setViewportSize({ width: WIDTH, height: 360 });
+            const field = page.locator('.fixed.inset-0 input:not([type=checkbox]):not([type=radio]):not([type=range]), .fixed.inset-0 textarea, .fixed.inset-0 select').last();
+            if (await field.count()) {
+                await field.focus();
+                await page.waitForTimeout(150);
+                const seen = await field.evaluate((el) => {
+                    const r = el.getBoundingClientRect();
+                    return r.top >= 0 && r.bottom <= window.innerHeight;
+                });
+                if (!seen) {
+                    failures.push(`modal ${modal.name} ${at}: with the keyboard up, its last field is off screen`);
+                    console.log(`  ✗ modal ${modal.name} keyboard ${at}`);
+                } else {
+                    console.log(`  ✓ modal ${modal.name} keyboard ${at}`);
+                }
+            } else {
+                console.log(`  - modal ${modal.name}: no text field`);
+            }
             await context.close();
         }
     }

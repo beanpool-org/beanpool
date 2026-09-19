@@ -529,12 +529,12 @@ export function EscrowDisputesPanel({
 
             {/* Resolve Confirmation Modal */}
             {selectedDispute && selectedAction && (
-                <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 overflow-y-auto z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
                     <div
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="resolve-dialog-title"
-                        className="bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
+                        className="m-auto bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
                     >
                         {/* Modal Header */}
                         <div className="flex items-start justify-between">

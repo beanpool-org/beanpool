@@ -57,9 +57,9 @@ function longToken(seed, len = 120) {
 // Shared fixture data
 // ---------------------------------------------------------------------------
 
-const COMMUNITY_NAME = 'Castlemaine & District Community Exchange Cooperative';
-const CALLSIGN = 'castlemaine';
-const NODE_HOSTNAME = 'castlemaine-community-exchange.beanpool.org';
+const COMMUNITY_NAME = 'Riverbend & District Community Exchange Cooperative';
+const CALLSIGN = 'riverbend';
+const NODE_HOSTNAME = 'riverbend-community-exchange.example.org';
 const LONG_FEDERATION_URL = `https://${NODE_HOSTNAME}/api/federation/peer/very/long/path`;
 
 const MEMBER_NAMES = [
@@ -230,7 +230,7 @@ const REPORTS = [
         pulseItem: {
             title: 'URGENT free firewood pickup today only, gate code 4482, ask for Dave out back',
             platform: 'facebook',
-            url: 'https://www.facebook.com/groups/castlemainecommunityswap/permalink/9284710002983471/',
+            url: 'https://www.facebook.com/groups/riverbendcommunityswap/permalink/9284710002983471/',
             removed: false,
         },
     },
@@ -248,7 +248,7 @@ const POSTS = [
 const ENTERPRISES = [
     {
         publicKey: pubkey('treasury-tool-library'),
-        name: 'Castlemaine Tool Library & Repair Cooperative',
+        name: 'Riverbend Tool Library & Repair Cooperative',
         avatar: '\u{1F6E0}️',
         balance: 615.5,
         creditLine: 800,
@@ -341,7 +341,7 @@ const DIAGNOSTICS = {
 const GATEWAY_CONFIG = {
     corsAllowedOrigins: [
         `https://${NODE_HOSTNAME}`,
-        'https://app.beanpool.org',
+        'https://app.example.org',
         LONG_FEDERATION_URL,
     ],
     adminIpAllowlist: [
@@ -368,16 +368,16 @@ const LOG_MESSAGES = [
     'P2P mesh: connected to 2 peers, 6 active websocket sessions',
     'Directory push succeeded (12h interval)',
     `Disk usage at 84% — approaching the 80% warning threshold, schedule a cleanup soon`,
-    'Snapshot created: snap-2026-09-19T00-00-00Z-castlemaine-community-exchange-full.db.gz',
+    'Snapshot created: snap-2026-09-19T00-00-00Z-riverbend-community-exchange-full.db.gz',
     `Replication pull from primary rejected: token mismatch, auth=token session=${longToken('log-auth-1', 96)}`,
     'Ledger audit completed: drift 0.00, sumBalances=8492.75, baseline=8492.75',
-    'Pulse channel fetch slow (4210ms) for feed https://community-radio-castlemaine.example.net/rss/local-notices.xml',
+    'Pulse channel fetch slow (4210ms) for feed https://community-radio-riverbend.example.net/rss/local-notices.xml',
     'Admin login succeeded for owner via password',
     'Post moderation: post-2003 flagged by automatic keyword filter, left for manual review',
     `Uncaught exception in federation worker: ECONNRESET reading peer stream token=${longToken('log-err-1', 100)}`,
     'Backup verification passed for live-db (sha256 checksum matched)',
     'CPU load spike to 61% during snapshot compression',
-    'Registrar attestation renewed for castlemaine-community-exchange.beanpool.org',
+    'Registrar attestation renewed for riverbend-community-exchange.example.org',
     'Onboarding funnel: 3 members completed step 2 (first photo) today',
 ];
 const LOGS = LOG_LEVELS.map((level, i) => ({
@@ -491,10 +491,10 @@ const ANNOUNCEMENTS_LIST = [
 ];
 
 const PULSE_CHANNELS = [
-    { id: 'chan-1', title: 'Castlemaine Community Radio Local Notices', feedUrl: 'https://community-radio-castlemaine.example.net/rss/local-notices.xml', url: 'https://community-radio-castlemaine.example.net/rss/local-notices.xml', platform: 'rss', category: 'learn', description: 'Daily local notices and weather', itemCount: 214, enabled: true },
+    { id: 'chan-1', title: 'Riverbend Community Radio Local Notices', feedUrl: 'https://community-radio-riverbend.example.net/rss/local-notices.xml', url: 'https://community-radio-riverbend.example.net/rss/local-notices.xml', platform: 'rss', category: 'learn', description: 'Daily local notices and weather', itemCount: 214, enabled: true },
     { id: 'chan-2', title: 'District Council Public Works Updates', feedUrl: 'https://council.example.gov.au/feeds/public-works.rss', url: 'https://council.example.gov.au/feeds/public-works.rss', platform: 'rss', category: 'civic', description: 'Roadworks and public works notices', itemCount: 88, enabled: true },
     { id: 'chan-3', title: 'Regional Farmers Market Bulletin', feedUrl: 'https://farmersmarket.example.org/bulletin/feed', url: 'https://farmersmarket.example.org/bulletin/feed', platform: 'rss', category: 'market', description: 'Weekly market stallholder list', itemCount: 52, enabled: true },
-    { id: 'chan-4', title: 'Volunteer Fire Brigade Alerts', feedUrl: 'https://cfa-castlemaine.example.org/alerts.xml', url: 'https://cfa-castlemaine.example.org/alerts.xml', platform: 'rss', category: 'safety', description: 'Fire danger ratings and burn-off notices', itemCount: 133, enabled: true },
+    { id: 'chan-4', title: 'Volunteer Fire Brigade Alerts', feedUrl: 'https://cfa-riverbend.example.org/alerts.xml', url: 'https://cfa-riverbend.example.org/alerts.xml', platform: 'rss', category: 'safety', description: 'Fire danger ratings and burn-off notices', itemCount: 133, enabled: true },
     { id: 'chan-5', title: 'Community Garden Working Bee Schedule', feedUrl: 'https://districtmarketgarden.example.org/feed/working-bees', url: 'https://districtmarketgarden.example.org/feed/working-bees', platform: 'rss', category: 'learn', description: 'Fortnightly working bee announcements', itemCount: 29, enabled: false },
 ];
 
@@ -535,7 +535,7 @@ const CONNECTORS = [
         publicUrl: LONG_FEDERATION_URL,
         name: 'Maldon Timebank Node',
         peerId: pubkey('peer-maldon'),
-        url: 'https://maldon-timebank.beanpool.org',
+        url: 'https://maldon-timebank.example.org',
     },
     {
         id: 'conn-2',
@@ -549,10 +549,10 @@ const CONNECTORS = [
         latencyMs: null,
         lastVerified: Date.parse('2026-09-11T08:30:00.000Z'),
         remoteTrustLevel: 'blocked',
-        publicUrl: 'https://newstead-community-exchange.beanpool.org/api/federation/peer',
+        publicUrl: 'https://newstead-community-exchange.example.org/api/federation/peer',
         name: 'Newstead Community Exchange',
         peerId: pubkey('peer-newstead'),
-        url: 'https://newstead-community-exchange.beanpool.org',
+        url: 'https://newstead-community-exchange.example.org',
     },
 ];
 
@@ -560,7 +560,7 @@ const REGISTRAR_ALLOCATIONS = [
     {
         name: 'harcourt-orchard-exchange',
         node_pubkey: pubkey('registrar-harcourt'),
-        hostname: 'harcourt-orchard-exchange.beanpool.org',
+        hostname: 'harcourt-orchard-exchange.example.org',
         mode: 'tunnel',
         status: 'pending',
         community_name: 'Harcourt Orchard Exchange Cooperative',
@@ -568,7 +568,7 @@ const REGISTRAR_ALLOCATIONS = [
         dns_record_id: 'dns-4471',
         origin: null,
         public_ip: null,
-        contact: 'admin@harcourt-orchard-exchange.beanpool.org',
+        contact: 'admin@harcourt-orchard-exchange.example.org',
         attest_fails: 0,
         last_attest_at: Date.parse('2026-09-18T00:00:00.000Z'),
         requested_at: Date.parse('2026-09-17T00:00:00.000Z'),
@@ -598,15 +598,15 @@ const REGISTRAR_ALLOCATIONS = [
     {
         name: 'maldon-timebank',
         node_pubkey: pubkey('peer-maldon'),
-        hostname: 'maldon-timebank.beanpool.org',
+        hostname: 'maldon-timebank.example.org',
         mode: 'direct',
         status: 'revoked',
         community_name: 'Maldon Timebank',
         tunnel_id: null,
         dns_record_id: 'dns-0771',
-        origin: 'https://maldon-timebank.beanpool.org',
+        origin: 'https://maldon-timebank.example.org',
         public_ip: '203.0.113.19',
-        contact: 'admin@maldon-timebank.beanpool.org',
+        contact: 'admin@maldon-timebank.example.org',
         attest_fails: 6,
         last_attest_at: Date.parse('2026-06-01T00:00:00.000Z'),
         requested_at: Date.parse('2026-05-01T00:00:00.000Z'),
@@ -635,10 +635,10 @@ const COMMONS_PROJECTS = [
 ];
 
 const SNAPSHOTS = [
-    { name: 'snap-2026-09-19T00-00-00Z-castlemaine-community-exchange-full.db.gz', sizeBytes: 812541952, createdAt: '2026-09-19T00:00:00.000Z' },
-    { name: 'snap-2026-09-18T00-00-00Z-castlemaine-community-exchange-full.db.gz', sizeBytes: 809238528, createdAt: '2026-09-18T00:00:00.000Z' },
-    { name: 'snap-2026-09-17T00-00-00Z-castlemaine-community-exchange-full.db.gz', sizeBytes: 805830656, createdAt: '2026-09-17T00:00:00.000Z' },
-    { name: 'snap-2026-09-16T00-00-00Z-castlemaine-community-exchange-pre-restore.db.gz', sizeBytes: 799512576, createdAt: '2026-09-16T00:00:00.000Z' },
+    { name: 'snap-2026-09-19T00-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 812541952, createdAt: '2026-09-19T00:00:00.000Z' },
+    { name: 'snap-2026-09-18T00-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 809238528, createdAt: '2026-09-18T00:00:00.000Z' },
+    { name: 'snap-2026-09-17T00-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 805830656, createdAt: '2026-09-17T00:00:00.000Z' },
+    { name: 'snap-2026-09-16T00-00-00Z-riverbend-community-exchange-pre-restore.db.gz', sizeBytes: 799512576, createdAt: '2026-09-16T00:00:00.000Z' },
 ];
 
 const SNAPSHOT_SCHEDULE = { enabled: true, intervalHours: 24, keep: 7 };
@@ -664,14 +664,14 @@ const REPLICATION_TOKEN_STATUS = { hasToken: true, tokenOnly: false, createdAt: 
 
 const BACKUP_STATUS = {
     role: 'backup',
-    primaryUrl: 'https://primary-castlemaine.beanpool.org',
+    primaryUrl: 'https://primary-riverbend.example.org',
     intervalMs: 30000,
     lastSuccess: '2026-09-19T00:00:00.000Z',
     failStreak: 0,
     isSynced: true,
 };
 
-const REPLICATION_CONFIG = { primaryUrl: 'https://primary-castlemaine.beanpool.org', hasPassword: true, hasToken: true };
+const REPLICATION_CONFIG = { primaryUrl: 'https://primary-riverbend.example.org', hasPassword: true, hasToken: true };
 
 // ---------------------------------------------------------------------------
 // UNKNOWN — pathnames the harness asked about that this module has no explicit case for.
@@ -801,7 +801,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
 
     // ---- snapshots ----
     if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS });
-    if (pathname === '/api/local/admin/snapshots/create') return ok({ snapshot: { name: 'snap-2026-09-19T12-00-00Z-castlemaine-community-exchange-full.db.gz', sizeBytes: 813000000, createdAt: '2026-09-19T12:00:00.000Z' } });
+    if (pathname === '/api/local/admin/snapshots/create') return ok({ snapshot: { name: 'snap-2026-09-19T12-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 813000000, createdAt: '2026-09-19T12:00:00.000Z' } });
     if (pathname === '/api/local/admin/snapshots/delete') return ok({ success: true });
     if (pathname === '/api/local/admin/snapshots/config') return ok({ config: SNAPSHOT_SCHEDULE });
     if (pathname === '/api/local/admin/snapshots/download') return ok({});

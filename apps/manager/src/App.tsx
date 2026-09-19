@@ -978,7 +978,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     if (!isFleetMode && !adminToken && !keySession) {
         return (
-            <>
+            <div className="bp-settings">
             {keySessionNotice && (
                 <div role="alert" className="bg-terra-600 text-white text-sm px-4 py-3 text-center">
                     {keySessionNotice}
@@ -997,12 +997,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     setRefreshToken((n) => n + 1);
                 }}
             />
-            </>
+            </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased">
+        <div className={`min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased ${isFleetMode ? '' : 'bp-settings'}`}>
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
             <FleetSidebar
                 profiles={profiles}

@@ -7,3 +7,43 @@
     @apply bg-nature-950 text-white antialiased selection:bg-terra-500 selection:text-white;
   }
 }
+
+/*
+ * Node Settings on a phone or small tablet (below Tailwind's `lg`, where the desktop sidebar gives way to the top bar).
+ * Owners open Settings from the app's Manage button, in the phone's in-app browser, at 320px wide and often with large
+ * text. Two rules keep every screen usable there without touching the desktop layout:
+ *   - every control is at least 48px, the size a thumb can hit (the same target the app holds itself to);
+ *   - below `sm`, card padding shrinks, because cards nest three deep and 24px on each side left 150px for content.
+ * Scoped to `.bp-settings` (single-node /settings), not the fleet manager.
+ */
+@media (max-width: 1023.98px) {
+  .bp-settings button,
+  .bp-settings select,
+  .bp-settings input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']),
+  .bp-settings a[role='button'] {
+    min-height: 48px;
+  }
+  .bp-settings button {
+    min-width: 48px;
+  }
+  .bp-settings input[type='checkbox'],
+  .bp-settings input[type='radio'] {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+  /* The map draws its own controls. */
+  .bp-settings .leaflet-container a,
+  .bp-settings .leaflet-container button {
+    min-height: 0;
+    min-width: 0;
+  }
+}
+@media (max-width: 639.98px) {
+  .bp-settings main .p-6,
+  .bp-settings main .p-8 {
+    padding: 1rem;
+  }
+  .bp-settings main .p-5 {
+    padding: 0.875rem;
+  }
+}

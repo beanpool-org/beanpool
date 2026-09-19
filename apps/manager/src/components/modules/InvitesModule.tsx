@@ -449,7 +449,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     aria-labelledby="printable-sheet-title"
                     className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto"
                 >
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl my-8">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl max-w-3xl w-full p-6 space-y-5 shadow-2xl my-8">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-4">
                             <div>
                                 <h3 id="printable-sheet-title" className="text-base font-bold text-white m-0 flex items-center gap-2">
@@ -539,8 +539,8 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
             {/* QR Code Preview Modal */}
             {previewQrItem && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
+                <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-4 text-center shadow-2xl">
                         <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                             <span className="text-xs font-bold text-terra-400 uppercase tracking-wider">
                                 SINGLE-USE ONBOARDING PASS

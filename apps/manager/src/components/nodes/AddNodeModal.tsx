@@ -19,8 +19,8 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl">
+        <div className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl">
                 <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                     <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-xl bg-terra-500/20 text-terra-400 flex items-center justify-center text-lg font-bold">

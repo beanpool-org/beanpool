@@ -302,6 +302,7 @@ run_federation_suites() {
       test-ws-http-port
       test-ws-auth-default
       test-ws-feed-parties
+      test-moderation-notifications
       test-polls
       test-events
       test-event-chat

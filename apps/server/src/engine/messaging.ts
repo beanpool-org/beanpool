@@ -231,7 +231,8 @@ export function sendMessage(
     // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
     if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
         const senderMember = getMember(db, authorPubkey) as any;
-        const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
+        // A push names people in words, never a slice of their key.
+        const senderName = senderMember?.callsign || 'A member';
         cb.dispatchPushNotification(
             unmutedRecipients(effectiveConvId, participants.map(p => p.public_key)),
             authorPubkey,
@@ -410,7 +411,7 @@ export function injectSystemMessage(
         [SystemMessageType.COMMONS_GRANT]: `Commons grant awarded.`,
         [SystemMessageType.VOUCH_GRANTED]: `Vouch granted.`,
         [SystemMessageType.VOUCH_REVOKED]: `Vouch revoked.`,
-        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: `Dispute arbitrated by admin (${meta.authSigner || 'admin'}): ${
+        [SystemMessageType.ESCROW_DISPUTE_RESOLVED]: `Dispute arbitrated by ${meta.resolvedByName || 'a community admin'}: ${
             meta.resolution === 'release_to_seller' ? 'Released to seller' : meta.resolution === 'refund_to_buyer' ? 'Refunded to buyer' : 'Split 50/50'
         }${meta.reason ? ` — ${meta.reason}` : ''}.`
     };

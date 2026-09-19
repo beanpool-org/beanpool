@@ -6,6 +6,7 @@ import { isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
+import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import crypto from 'node:crypto';
 import {
@@ -997,6 +998,9 @@ export function resolveEscrowDispute(
     const authSigner = adminSigner.trim();
     const completedAt = new Date().toISOString();
     const reasonText = opts?.reason ? ` (Reason: ${opts.reason})` : '';
+    // Members read who ruled in words; the signer itself stays on the audit columns (dispute_resolved_by,
+    // the ledger rows' auth_signer) and never reaches a memo, a chat line or a push.
+    const resolverName = adminActorName(authSigner);
 
     const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
     const sellerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.seller_pubkey) as any;
@@ -1031,7 +1035,7 @@ export function resolveEscrowDispute(
                 `escrow_${row.id}`,
                 row.seller_pubkey,
                 sellerShare,
-                `Dispute arbitrated by admin (${authSigner}): released to seller for ${row.post_id}${reasonText}`,
+                `Dispute arbitrated by ${resolverName}: released to seller for ${row.post_id}${reasonText}`,
                 'escrow',
                 false,
                 { signer: authSigner }
@@ -1059,7 +1063,7 @@ export function resolveEscrowDispute(
                 `escrow_${row.id}`,
                 row.buyer_pubkey,
                 buyerShare,
-                `Dispute arbitrated by admin (${authSigner}): refunded to buyer for ${row.post_id}${reasonText}`,
+                `Dispute arbitrated by ${resolverName}: refunded to buyer for ${row.post_id}${reasonText}`,
                 'escrow',
                 true,
                 { signer: authSigner }
@@ -1089,7 +1093,7 @@ export function resolveEscrowDispute(
                     `escrow_${row.id}`,
                     row.buyer_pubkey,
                     buyerShare,
-                    `Dispute arbitrated by admin (${authSigner}): 50% split refund to buyer for ${row.post_id}${reasonText}`,
+                    `Dispute arbitrated by ${resolverName}: 50% split refund to buyer for ${row.post_id}${reasonText}`,
                     'escrow',
                     true,
                     { signer: authSigner }
@@ -1103,7 +1107,7 @@ export function resolveEscrowDispute(
                     `escrow_${row.id}`,
                     row.seller_pubkey,
                     sellerShare,
-                    `Dispute arbitrated by admin (${authSigner}): 50% split payout to seller for ${row.post_id}${reasonText}`,
+                    `Dispute arbitrated by ${resolverName}: 50% split payout to seller for ${row.post_id}${reasonText}`,
                     'escrow',
                     false,
                     { signer: authSigner }
@@ -1154,7 +1158,8 @@ export function resolveEscrowDispute(
     // else, who get a bare doorbell (other admins' dispute lists re-fetch on it too).
     const disputeRecipients = tradeRecipients(cb, tx);
     if (authSigner && !disputeRecipients.includes(authSigner)) disputeRecipients.push(authSigner);
-    cb.broadcast({ type: 'dispute_resolved', transactionId, action, authSigner, transaction: tx }, disputeRecipients, { othersGetDoorbell: true });
+    // The ruling names who ruled in words: the parties' sockets never carry the admin's key or 'owner:password'.
+    cb.broadcast({ type: 'dispute_resolved', transactionId, action, resolvedBy: resolverName, transaction: tx }, disputeRecipients, { othersGetDoorbell: true });
 
     // Public record on both parties' activity views
     try {
@@ -1193,8 +1198,7 @@ export function resolveEscrowDispute(
             transactionId: row.id,
             resolution: action,
             amount: row.credits,
-            actorPubkey: authSigner,
-            authSigner,
+            resolvedByName: resolverName,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,
             reason: opts?.reason
@@ -1214,7 +1218,7 @@ export function resolveEscrowDispute(
         [row.buyer_pubkey, row.seller_pubkey],
         authSigner,
         '⚖️ Escrow Dispute Resolved',
-        `Dispute arbitrated by admin (${authSigner}): ${actionLabel} for "${post?.title || 'deal'}"`,
+        `Dispute arbitrated by ${resolverName}: ${actionLabel} for "${post?.title || 'deal'}"`,
         { screen: 'post', postId: row.post_id },
         'escrow'
     );

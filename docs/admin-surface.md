@@ -123,6 +123,65 @@ Until key-based admin auth ships, password-authenticated admin routes follow an 
 - When a signed actor IS present (via cryptographic session or signature), use it and enforce owner-only for owner grants.
 - The same rule applies to voting-round creation (`POST /api/local/admin/commons/round`): bind round creation to the cryptographically verified actor (`ctx.state.actor`), or fall back to the active node admin/owner if unpopulated under password auth; never accept an unauthenticated `adminPubkey` in the request body.
 
+### 2.6 The password brake, and why a stranger cannot use it to lock you out
+
+The admin password is the one secret an outsider can try online, so guesses are slowed down
+(`apps/server/src/password-brake.ts`). On a node with no key owner yet (every node straight after its launch
+update) the password is also the only way in. So nobody else's guessing may keep the owner out.
+
+#937's first brake counted wrong passwords for the whole node. After eleven wrong passwords from anyone, it refused
+every password, including the right one, for up to ten minutes. Anyone could keep that going for as long as they
+liked. We found this on the test node on 2026-09-19. It was replaced by this brake:
+
+- **Per source.** A source is an IPv4 address or an IPv6 /64 (`client-ip.ts`, `limiterKeyForIp`). Each source gets
+  5 wrong passwords free. After that it waits 2 s, then 4 s, 8 s, and so on, doubling up to **1 hour**. Only that
+  source waits. A right password from the source clears its record, and so does a day with no failure from it.
+- **A clean source is always checked.** A source is clean when it has no wrong password on record. Its attempt is
+  never capped or queued. So from a network you haven't been guessing from today, the right password always works,
+  whatever else is happening to the node.
+- **A node-wide cap for everyone else.** Sources with a failure on record share **12 checks a minute** across the
+  node. Sources already in backoff may use only the first **6** of those, so an owner who mistyped once isn't
+  queued behind an attacker's backed-off addresses. An attempt over the cap gets 429 with `Retry-After` (a minute
+  at most) and is not counted as a failure.
+- **Clean sources can't be minted.** One IPv6 customer can hold a /48, which is 65,536 /64s. So failures are also
+  counted per IPv6 /48 and per IPv4 /24. After 20 failures in a day, that block's fresh sources are no longer
+  clean. They get the top tier of the shared cap instead.
+- Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
+  one fails. A dashboard sending several right passwords at once is served in turn, not refused.
+- Every password check goes through it: `checkAdminAuth`, every route that calls `checkAdminPassword`, and
+  `/ws/logs?auth=`. Key sign-in never does.
+- The existing per-address limiters still apply on top: 15 auth attempts a minute on `verify-password`, and 300
+  admin requests a minute.
+
+**The maths.** These numbers come from simulating an attacker who guesses as soon as the brake allows
+(`test-password-brake-no-lockout.ts` part 2):
+
+| Attacker | #937 (node-wide) | This brake |
+|---|---|---|
+| 1 address | 24 in hour 1, then 6/h; 32/h if it pauses 30 min to reset the count | 16 in hour 1, then 1/h |
+| N addresses in N different /24s or /48s | the same ~24–32/h, whatever N is | at most N + 720 in hour 1, then at most 720/h, falling to 360/h once every source is in backoff, plus one clean guess per new source per day |
+| any number of /64s in one /48 | the same | at most 20 + 720 in hour 1, then at most 720/h |
+
+For example, 300 addresses simulated gave 1020, 720 and 720 checks in hours 1–3.
+
+This is looser against a large botnet than #937: hundreds of guesses an hour instead of about 30. That is the price
+of promising that the owner is never locked out. A generated admin password is far outside what that rate can reach
+in any useful time. A weak human-chosen one isn't, so the pre-launch password rotation still matters.
+
+**Locked out with no key enrolled.** In order of what to try:
+
+1. **Use another network**, such as mobile data instead of home Wi-Fi. A source with no failures is always checked.
+2. **Wait.** A source's wait is never more than an hour, and the node-wide cap frees within a minute. The 429 says
+   how long.
+3. **Restart the node.** The brake is kept in memory, so a restart clears it completely. This needs shell access
+   to the server, not the password.
+4. **Reset the password from the server.** Set `ADMIN_PASSWORD` in the node's `.env` and recreate the container.
+   `scripts/rotate-node-env.sh` clears the `isLocked` flag for you. Also needs shell access, not the old password.
+   See `docs/secrets-rotation-runbook.md`.
+
+Once a key owner exists, key sign-in skips the brake entirely. A break-glass code (§2.2) is still checked even from a
+braked source, because it is 64 random bits and can't be guessed online.
+
 ---
 
 ## 3. Where admin work happens

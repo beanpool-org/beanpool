@@ -46,6 +46,8 @@ export interface TakeoverProgressData {
     missing: string[];
     afterwards: string[];
     codeUsed: { codeId: number; at: string; message: string } | null;
+    /** Split-brain guard (slice 8): another server took over this one's identity; it is read-only. Absent on older servers. */
+    replaced?: { epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string; message: string } | null;
 }
 
 export interface TakeoverPreview {
@@ -297,7 +299,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
     const state = progress?.state ?? 'none';
     const followingOne = !!progressToken || (state !== 'none');
     // Nothing to show on a main server that never took over and has no used code.
-    if (!isStandby && !followingOne && !progress?.codeUsed) return null;
+    if (!isStandby && !followingOne && !progress?.codeUsed && !progress?.replaced) return null;
 
     const missing = preview?.missing ?? (progress?.missing?.length ? progress.missing : MISSING_FALLBACK);
 
@@ -310,6 +312,18 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                     community as it is: the same identity, owners, links with other communities and web address.
                 </p>
             </div>
+
+            {progress?.replaced && (
+                <div role="alert" id="takeover-replaced" className="p-3 rounded-xl border bg-red-950/70 border-red-800 text-red-200 text-sm space-y-1" style={WRAP}>
+                    <p className="m-0 font-bold">🛑 {progress.replaced.message}</p>
+                    <p className="m-0">
+                        Another server took over this community (identity epoch {progress.replaced.epoch}; this server is at {progress.replaced.ownEpoch}),
+                        and this server&apos;s web address now leads there. Members&apos; changes are refused here. Don&apos;t run this server as the
+                        main server again: to use this machine, set it up from scratch as a standby of the new main server.
+                    </p>
+                    <p className="m-0 text-xs text-red-300">Seen {when(progress.replaced.detectedAt)} at {progress.replaced.url}</p>
+                </div>
+            )}
 
             {progress?.codeUsed && (
                 <div role="alert" id="takeover-code-used" className="p-3 rounded-xl border bg-amber-950/70 border-amber-800 text-amber-200 text-sm" style={WRAP}>

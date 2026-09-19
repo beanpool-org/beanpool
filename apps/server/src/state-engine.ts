@@ -6630,8 +6630,8 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * a corrupt replica. Reuses the existing conservation audit — no new math.
  *
  * Logs a prominent PASS/FAIL banner and returns the audit result so a caller
- * (boot path / operator script) can decide whether to proceed. Wired at boot
- * when PROMOTED_FROM_BACKUP=true (see index.ts).
+ * (boot path) can decide whether to proceed. Run once after a take-over, at the
+ * next boot (services/takeover.ts, promotionAuditPending).
  */
 export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
     return promotionSanityCheckEngine();

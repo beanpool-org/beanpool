@@ -77,6 +77,29 @@ describe('TakeoverPanel', () => {
         await waitFor(() => expect(container.querySelector('#takeover-panel')).toBeNull());
     });
 
+    it('a main server another took over from says so: replaced, read-only, and where it saw it', async () => {
+        stubFetch({
+            '/api/local/admin/takeover/progress': () => ({
+                status: 200,
+                body: {
+                    ...progress('none'), role: 'primary',
+                    replaced: {
+                        epoch: 1, ownEpoch: 0, since: '2026-09-20T01:00:00.000Z', detectedAt: '2026-09-21T08:00:00.000Z',
+                        url: 'https://riverbend.beanpool.org/api/node/identity-epoch',
+                        message: 'This server was replaced on 2026-09-20. It is now read-only.',
+                    },
+                },
+            }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby={false} pollMs={60_000} />);
+        const alert = await screen.findByText(/This server was replaced on 2026-09-20\. It is now read-only\./);
+        const box = alert.closest('#takeover-replaced') as HTMLElement;
+        expect(box).not.toBeNull();
+        expect(box.textContent).toContain('riverbend.beanpool.org');
+        expect(box.textContent).toContain("Don't run this server as the main server again");
+        expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
+    });
+
     it('two confirms: the explanation with what will be missing, then the code, then the preview and "Take over now"', async () => {
         const calls = stubFetch({
             // After the confirm the screen follows with the progress token.

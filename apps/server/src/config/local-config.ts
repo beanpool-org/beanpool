@@ -97,6 +97,18 @@ export interface LocalConfig {
     // The recovery code a take-over was opened with. While recoveryCode is still that code, Settings says "Your
     // recovery code was used. Make a new one" (a used code is a spent code, §5.3). Making a new code ends it.
     recoveryCodeUsed?: { codeId: number; at: string } | null;
+    // --- Split-brain guard (sealed-keys.md §5.4; services/identity-epoch.ts) ---
+    // How many take-overs this identity has been through. Carried in the take-over bundle; a take-over writes the
+    // bundle's number + 1. The main server serves it, signed with its node key, at GET /api/node/identity-epoch.
+    identityEpoch?: number | null;
+    // When this server took that number (the take-over's start). Null for a server that never took over.
+    identityEpochSince?: string | null;
+    // Set when this server saw, at its own public address, a HIGHER epoch signed by its own node key: another server
+    // took over from it. It then refuses members' writes. Kept across restarts; applies only while this server still
+    // has that PeerId and is a main server.
+    identityReplaced?: {
+        peerId: string; epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string;
+    } | null;
 }
 
 export interface Thresholds {

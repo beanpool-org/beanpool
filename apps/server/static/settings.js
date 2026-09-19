@@ -2851,7 +2851,6 @@
                 if (streakEl) streakEl.textContent = String(d.consecutiveFailures || 0);
 
                 const enrollWizard = document.getElementById('backup-enroll-wizard');
-                const restoreWizard = document.getElementById('backup-restore-wizard');
                 const healthTile = document.getElementById('backup-health-tile');
 
                 // A standby still holding the main server's admin password says so, with the fix.
@@ -2880,14 +2879,12 @@
                     // Replication Access panel (who's pulling our snapshots) does.
                     if (healthTile) healthTile.style.display = 'none';
                     if (enrollWizard) enrollWizard.style.display = 'block';
-                    if (restoreWizard) restoreWizard.style.display = 'none';
                     if (accessPanel) { accessPanel.style.display = 'block'; loadReplicationAccess(); }
                     return;
                 }
 
                 if (healthTile) healthTile.style.display = 'block';
                 if (enrollWizard) enrollWizard.style.display = 'none';
-                if (restoreWizard) restoreWizard.style.display = 'block';
                 if (accessPanel) accessPanel.style.display = 'none';
 
                 if (lastEl) lastEl.textContent = relativeTime(d.lastSuccessAt);
@@ -3008,26 +3005,6 @@
         }
         window.copyBackupCommand = copyBackupCommand;
 
-        // ---- Restore a primary server wizard ----
-        function generateRestoreCommand() {
-            const backupUrl = window.location.origin;
-            const cmd = `node scripts/restore-primary.mjs --backup ${backupUrl} --admin-pw '<BACKUP_ADMIN_PASSWORD>'`;
-            document.getElementById('backup-restore-command').textContent = cmd;
-            document.getElementById('backup-restore-result').style.display = 'block';
-        }
-        window.generateRestoreCommand = generateRestoreCommand;
-
-        function copyRestoreCommand() {
-            const cmd = document.getElementById('backup-restore-command').textContent;
-            navigator.clipboard.writeText(cmd).then(() => {
-                const statusEl = document.getElementById('backup-restore-status');
-                statusEl.textContent = '✅ Copied to clipboard';
-                statusEl.style.color = '#10b981';
-                statusEl.classList.add('show');
-                setTimeout(() => { statusEl.classList.remove('show'); }, 2000);
-            }).catch(() => {});
-        }
-        window.copyRestoreCommand = copyRestoreCommand;
 
         // ---- Dynamic replication config editing form ----
         async function toggleReplicationConfigForm() {

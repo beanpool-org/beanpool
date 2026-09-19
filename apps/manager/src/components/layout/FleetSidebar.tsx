@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { IS_FLEET_MODE } from '../../lib/mode';
 import { useManual } from '../manual/Manual';
+import { SECTION_SUB_TABS, isSettingsSection } from '../../lib/sections';
 
 export type TabId =
     | 'home'
@@ -27,6 +28,15 @@ export type TabId =
  */
 export type NodeHealthStatus = 'online' | 'warning' | 'critical' | 'alert' | 'offline' | 'auth_required' | 'loading';
 
+/** The single-node Settings sections, in menu order. lib/manual.test.ts reads the ids from this list. */
+export const singleNodeNavItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
+    { id: 'home', label: 'Home', icon: '⚡' },
+    { id: 'people', label: 'People & Safety', icon: '👥' },
+    { id: 'economy', label: 'Shared Projects & Economy', icon: '🏛️' },
+    { id: 'bulletin', label: 'Bulletin & News', icon: '📢' },
+    { id: 'appliance', label: 'Appliance & Data', icon: '⚙️' },
+];
+
 export interface AlertCounts {
     critical: number;
     warning: number;
@@ -47,6 +57,16 @@ interface FleetSidebarProps {
     isFleetMode?: boolean;
     communityName?: string;
     onLogout?: () => void;
+    /**
+     * `rail` is the desktop sidebar (single-node Settings hides it below `lg`). `drawer` is the same menu in the phone
+     * sheet: bigger targets, a Close button, and the current section's sub-tabs listed under it.
+     */
+    variant?: 'rail' | 'drawer';
+    activeSubTab?: string;
+    onSelectSubTab?: (tab: TabId, sub: string) => void;
+    onClose?: () => void;
+    /** The drawer steps aside for the manual (without a history step: the manual adds its own). */
+    onBeforeManual?: () => void;
 }
 
 export function FleetSidebar({
@@ -64,18 +84,16 @@ export function FleetSidebar({
     isFleetMode = IS_FLEET_MODE,
     communityName,
     onLogout,
+    variant = 'rail',
+    activeSubTab,
+    onSelectSubTab,
+    onClose,
+    onBeforeManual,
 }: FleetSidebarProps) {
+    const inDrawer = variant === 'drawer';
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const activeNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
-
-    const singleNodeNavItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
-        { id: 'home', label: 'Home', icon: '⚡' },
-        { id: 'people', label: 'People & Safety', icon: '👥' },
-        { id: 'economy', label: 'Shared Projects & Economy', icon: '🏛️' },
-        { id: 'bulletin', label: 'Bulletin & News', icon: '📢' },
-        { id: 'appliance', label: 'Appliance & Data', icon: '⚙️' },
-    ];
 
     const multiServerItems: { id: TabId; label: string; icon: string; badge?: string }[] = [
         { id: 'overview', label: 'Fleet Telemetry', icon: '📊' },
@@ -109,11 +127,13 @@ export function FleetSidebar({
         }
         const hasCounts = counts.critical > 0 || counts.warning > 0;
 
-        return (
+        const subTabs = inDrawer && isActive && isSettingsSection(item.id) ? SECTION_SUB_TABS[item.id] : [];
+        const button = (
             <button
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                aria-current={isActive && (!inDrawer || subTabs.length === 0) ? 'page' : undefined}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl ${inDrawer ? 'min-h-[48px] text-sm' : 'text-xs'} font-semibold transition-all ${
                     isActive
                         ? 'bg-terra-500/15 text-white border border-terra-500/40 shadow-sm font-bold'
                         : 'text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent'
@@ -151,20 +171,48 @@ export function FleetSidebar({
                 </div>
             </button>
         );
+        if (subTabs.length === 0) return button;
+        const current = activeSubTab || subTabs[0].id;
+        return (
+            <div key={item.id}>
+                {button}
+                <ul className="mt-1 mb-2 ml-5 pl-3 border-l border-nature-800 space-y-0.5" aria-label={`${item.label} screens`}>
+                    {subTabs.map((sub) => (
+                        <li key={sub.id}>
+                            <button
+                                type="button"
+                                onClick={() => onSelectSubTab?.(item.id, sub.id)}
+                                aria-current={current === sub.id ? 'page' : undefined}
+                                className={`w-full text-left min-h-[48px] px-3 rounded-lg text-sm transition-all ${
+                                    current === sub.id ? 'text-terra-300 font-bold bg-terra-500/10' : 'text-nature-300 hover:text-white hover:bg-nature-800/50'
+                                }`}
+                            >
+                                {sub.label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
     };
 
     return (
-        <aside className="w-72 bg-nature-900 border-r border-nature-800 flex flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none">
+        <aside
+            id={inDrawer ? 'settings-menu' : undefined}
+            className={inDrawer
+                ? 'w-full min-h-full bg-nature-900 flex flex-col font-sans select-none'
+                : `w-72 bg-nature-900 border-r border-nature-800 ${isFleetMode ? 'flex' : 'hidden lg:flex'} flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none`}
+        >
             {/* Header Brand */}
-            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <div className="p-5 border-b border-nature-800/80 flex items-center justify-between gap-2 lg:gap-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                        className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                        className="w-10 h-10 shrink-0 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
                         aria-hidden="true"
                     >
                         🌱
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <h1 className="text-base font-extrabold tracking-tight text-white m-0 leading-tight truncate max-w-[170px]" title={isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}>
                             {isFleetMode ? 'BeanPool' : (communityName || 'BeanPool')}
                         </h1>
@@ -173,6 +221,17 @@ export function FleetSidebar({
                         </p>
                     </div>
                 </div>
+                {inDrawer && onClose && (
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        data-autofocus
+                        aria-label="Close menu"
+                        className="shrink-0 min-w-[48px] min-h-[48px] -mr-2 rounded-xl text-xl text-nature-300 hover:text-white hover:bg-nature-800/60 flex items-center justify-center"
+                    >
+                        ✕
+                    </button>
+                )}
             </div>
 
             {/* Navigation Tabs */}
@@ -205,8 +264,11 @@ export function FleetSidebar({
                     {manual && (
                         <button
                             type="button"
-                            onClick={() => manual.openManual()}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl text-xs font-semibold text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent transition-all"
+                            onClick={() => {
+                                onBeforeManual?.();
+                                manual.openManual();
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[48px] rounded-xl ${inDrawer ? 'text-sm' : 'text-xs'} font-semibold text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent transition-all`}
                         >
                             <span className="text-sm shrink-0">📖</span>
                             <span className="truncate">Manual: running your community</span>
@@ -425,14 +487,14 @@ export function FleetSidebar({
                     <div className="flex items-center justify-between text-xs px-1">
                         <a
                             href="/settings-legacy"
-                            className="text-[11px] text-nature-400 hover:text-terra-400 transition-colors underline"
+                            className={`${inDrawer ? 'min-h-[48px] inline-flex items-center text-sm' : 'text-[11px]'} text-nature-400 hover:text-terra-400 transition-colors underline`}
                         >
                             Legacy Settings
                         </a>
                         {onLogout && (
                             <button
                                 onClick={onLogout}
-                                className="text-[11px] text-nature-400 hover:text-red-400 transition-colors font-medium"
+                                className={`${inDrawer ? 'min-h-[48px] px-2 text-sm' : 'text-[11px]'} text-nature-400 hover:text-red-400 transition-colors font-medium`}
                             >
                                 Log Out
                             </button>

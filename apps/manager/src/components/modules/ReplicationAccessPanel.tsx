@@ -10,6 +10,7 @@ import {
     type ReplicationAccessEvent,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface ReplicationAccessPanelProps {
     activeNode: NodeProfile;
@@ -512,18 +513,17 @@ export function ReplicationAccessPanel({
 
             {/* Confirmation Modal: Generate Token */}
             {showGenConfirm && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowGenConfirm(false)}
+                    dismissable={!generating}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="gen-token-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget && !generating) setShowGenConfirm(false);
-                    }}
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                 >
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div className="flex items-center gap-3 text-amber-400">
+                            <div className="flex items-center gap-3 text-amber-400 min-w-0 flex-1">
                                 <span className="text-2xl">⚠️</span>
                                 <h3 id="gen-token-title" className="text-base font-bold m-0 text-white">
                                     Generate / Rotate Replication Token?
@@ -533,7 +533,7 @@ export function ReplicationAccessPanel({
                                 type="button"
                                 onClick={() => { if (!generating) setShowGenConfirm(false); }}
                                 disabled={generating}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                className="shrink-0 text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close generate confirmation"
                             >
                                 ✕
@@ -569,23 +569,22 @@ export function ReplicationAccessPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Confirmation Modal: Clear Token */}
             {showClearConfirm && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowClearConfirm(false)}
+                    dismissable={!clearing}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="clear-token-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget && !clearing) setShowClearConfirm(false);
-                    }}
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                 >
-                    <div className="bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-nature-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <div className="flex items-center gap-3 text-red-400">
+                            <div className="flex items-center gap-3 text-red-400 min-w-0 flex-1">
                                 <span className="text-2xl">🗑️</span>
                                 <h3 id="clear-token-title" className="text-base font-bold m-0 text-white">
                                     Remove Replication Token?
@@ -595,7 +594,7 @@ export function ReplicationAccessPanel({
                                 type="button"
                                 onClick={() => { if (!clearing) setShowClearConfirm(false); }}
                                 disabled={clearing}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                className="shrink-0 text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close clear confirmation"
                             >
                                 ✕
@@ -631,7 +630,7 @@ export function ReplicationAccessPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

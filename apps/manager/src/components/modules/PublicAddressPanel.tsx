@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -429,7 +430,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             type="button"
                             onClick={() => setActionMessage(null)}
                             aria-label="Dismiss message"
-                            className="text-nature-400 hover:text-white font-bold px-1"
+                            className="shrink-0 text-nature-400 hover:text-white font-bold px-1"
                         >
                             ✕
                         </button>
@@ -464,7 +465,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                     href={hostname ? `https://${hostname}` : '#'}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="text-terra-400 hover:text-terra-300 font-bold font-mono underline break-all"
+                                    className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-400 hover:text-terra-300 font-bold font-mono underline break-all"
                                 >
                                     {hostname || 'your-node.beanpool.org'}
                                 </a>
@@ -574,8 +575,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
             {/* Real-time Propagation Monitor Terminal */}
             <div className="p-5 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3">
-                <div className="flex items-center justify-between gap-2 border-b border-nature-800 pb-2.5">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 border-b border-nature-800 pb-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
                         <span className="text-sm">📡</span>
                         <h4 className="text-xs font-bold text-white uppercase tracking-wider m-0">
                             Real-time DNS &amp; Edge Propagation Monitor
@@ -753,18 +754,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
 
             {/* Confirmation Modal for Destructive Actions */}
             {confirmModal.isOpen && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="confirm-modal-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-                        }
-                    }}
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shrink-0">
                                 ⚠️
@@ -799,7 +796,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

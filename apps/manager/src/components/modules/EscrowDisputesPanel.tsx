@@ -6,6 +6,7 @@ import {
     type EscrowDisputeItem,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
@@ -183,8 +184,8 @@ export function EscrowDisputesPanel({
             {/* Header & Governance Transparency Notice */}
             <div className="bg-nature-900/80 border border-nature-800 rounded-3xl p-6 shadow-xl backdrop-blur-md">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>⚖️</span> Escrow Dispute Resolution
                             </h2>
@@ -228,7 +229,7 @@ export function EscrowDisputesPanel({
                 </div>
 
                 {/* Subtabs for Pending vs Resolved */}
-                <div className="flex items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 mt-5 pt-4 border-t border-nature-800/80">
                     <button
                         onClick={() => setFilterStatus('pending')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
@@ -264,8 +265,8 @@ export function EscrowDisputesPanel({
 
             {/* Error banner */}
             {error && (
-                <div className="bg-rose-950/80 border border-rose-800 rounded-2xl p-4 text-rose-300 text-xs flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                <div className="bg-rose-950/80 border border-rose-800 rounded-2xl p-4 text-rose-300 text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 break-words">
                         <span>⚠️</span>
                         <span>{error}</span>
                     </div>
@@ -529,16 +530,16 @@ export function EscrowDisputesPanel({
 
             {/* Resolve Confirmation Modal */}
             {selectedDispute && selectedAction && (
-                <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                <ModalBackdrop onClose={handleCloseResolveModal} dismissable={!resolving} className="fixed inset-0 overflow-y-auto z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
                     <div
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="resolve-dialog-title"
-                        className="bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
+                        className="m-auto bg-nature-900 border border-nature-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up font-sans"
                     >
                         {/* Modal Header */}
-                        <div className="flex items-start justify-between">
-                            <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-3 lg:gap-0">
+                            <div className="space-y-1 min-w-0 flex-1">
                                 <h3 id="resolve-dialog-title" className="text-lg font-black text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span> Confirm Escrow Resolution
                                 </h3>
@@ -547,9 +548,10 @@ export function EscrowDisputesPanel({
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={handleCloseResolveModal}
                                 disabled={resolving}
-                                className="text-nature-400 hover:text-white text-lg font-bold p-1 rounded-lg"
+                                className="shrink-0 text-nature-400 hover:text-white text-lg font-bold p-1 rounded-lg"
                             >
                                 ✕
                             </button>
@@ -642,7 +644,7 @@ export function EscrowDisputesPanel({
                             <button
                                 onClick={handleCloseResolveModal}
                                 disabled={resolving}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-300 text-xs font-bold transition"
+                                className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-300 text-xs font-bold transition"
                             >
                                 Cancel
                             </button>
@@ -656,7 +658,7 @@ export function EscrowDisputesPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

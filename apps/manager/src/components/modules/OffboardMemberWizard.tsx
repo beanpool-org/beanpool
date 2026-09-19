@@ -4,6 +4,7 @@ import {
     executeOffboardApi,
     type OffboardPreviewResponse,
 } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface OffboardMemberWizardProps {
     member: {
@@ -129,28 +130,29 @@ export function OffboardMemberWizard({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header */}
-                <div className="flex items-start justify-between border-b border-nature-800 pb-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-red-950/60 border border-red-800/80 flex items-center justify-center text-xl">
+                <div className="flex items-start justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 shrink-0 rounded-2xl bg-red-950/60 border border-red-800/80 flex items-center justify-center text-xl">
                             🚪
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-white leading-tight">
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-bold text-white leading-tight break-words">
                                 Offboard Member
                             </h3>
-                            <p className="text-xs text-nature-400 font-mono mt-0.5">
+                            <p className="text-xs text-nature-400 font-mono mt-0.5 break-all">
                                 @{member.callsign} · {member.publicKey.slice(0, 10)}...
                             </p>
                         </div>
                     </div>
                     <button
+                        aria-label="Close"
                         type="button"
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
+                        className="shrink-0 text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
                     >
                         ✕
                     </button>
@@ -339,7 +341,7 @@ export function OffboardMemberWizard({
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold text-xs"
+                                className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold text-xs"
                             >
                                 Cancel
                             </button>
@@ -361,6 +363,6 @@ export function OffboardMemberWizard({
                 ) : null}
 
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

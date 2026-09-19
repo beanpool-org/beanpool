@@ -29,8 +29,8 @@ export function LogsModule({ logs, onRefresh }: LogsModuleProps) {
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
-            <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0">
+                <div className="min-w-0">
                     <h3 className="text-lg font-bold text-white m-0">📜 Real-Time Node Logs Streamer</h3>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         Filterable system diagnostic and event log stream from the target node database.

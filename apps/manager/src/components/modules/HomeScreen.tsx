@@ -130,13 +130,13 @@ export function HomeScreen({
             {/* 1. Header — community name, public domain, appliance status */}
             <div className="bg-nature-900/80 border border-nature-800 rounded-3xl p-6 shadow-xl backdrop-blur-md">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <h1 className="text-2xl font-black text-white m-0 tracking-tight">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap lg:flex-nowrap items-center gap-x-2 gap-y-1 mb-1">
+                            <h1 className="text-2xl font-black text-white m-0 tracking-tight break-words min-w-0">
                                 {communityName || 'Sovereign Community'}
                             </h1>
                             <HelpLink screen="home" />
-                            <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold">
+                            <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold max-w-full truncate lg:overflow-visible lg:shrink-0">
                                 {publicDomain || 'local'}
                             </span>
                         </div>

@@ -209,7 +209,7 @@ describe('InvitesModule', () => {
 
         expect(screen.getByText('SINGLE-USE ONBOARDING PASS')).toBeInTheDocument();
 
-        const closeBtn = screen.getByRole('button', { name: '✕' });
+        const closeBtn = screen.getAllByRole('button', { name: 'Close' })[0]; // the ✕ (the footer has a Close button too)
         await userEvent.click(closeBtn);
 
         expect(screen.queryByText('SINGLE-USE ONBOARDING PASS')).not.toBeInTheDocument();

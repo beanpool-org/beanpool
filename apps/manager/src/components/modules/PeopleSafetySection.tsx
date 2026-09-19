@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
@@ -25,6 +27,8 @@ interface PeopleSafetySectionProps {
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole) => Promise<void>;
     initialSubTab?: 'directory' | 'invites' | 'moderation' | 'roles';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'directory' | 'invites' | 'moderation' | 'roles') => void;
     /** Who is signed in to /settings — decides whether Owners & admins offers its add/remove controls. */
     rolesViewer?: RolesViewer;
 }
@@ -43,9 +47,10 @@ export function PeopleSafetySection({
     onGrantNodeRole,
     onRevokeNodeRole,
     initialSubTab = 'directory',
+    onSubTabChange,
     rolesViewer = { kind: 'password' },
 }: PeopleSafetySectionProps) {
-    const [subTab, setSubTab] = useState<'directory' | 'invites' | 'moderation' | 'roles'>(initialSubTab);
+    const [subTab, setSubTab] = useSectionSubTab<'directory' | 'invites' | 'moderation' | 'roles'>(initialSubTab, onSubTabChange);
     const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
     const [selectedThreat, setSelectedThreat] = useState<ThreatItem | null>(null);
     const [bulkDeleteDays, setBulkDeleteDays] = useState(30);
@@ -117,7 +122,7 @@ export function PeopleSafetySection({
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Sub-Navigation */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>👥</span>
@@ -129,10 +134,12 @@ export function PeopleSafetySection({
                     </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={true}>
                     <button
                         onClick={() => setSubTab('directory')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="directory"
+                        aria-current={subTab === 'directory' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'directory'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -142,7 +149,9 @@ export function PeopleSafetySection({
                     </button>
                     <button
                         onClick={() => setSubTab('invites')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="invites"
+                        aria-current={subTab === 'invites' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'invites'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -152,7 +161,9 @@ export function PeopleSafetySection({
                     </button>
                     <button
                         onClick={() => setSubTab('moderation')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        data-subtab="moderation"
+                        aria-current={subTab === 'moderation' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'moderation'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -167,7 +178,9 @@ export function PeopleSafetySection({
                     </button>
                     <button
                         onClick={() => setSubTab('roles')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="roles"
+                        aria-current={subTab === 'roles' ? 'page' : undefined}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'roles'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -175,7 +188,7 @@ export function PeopleSafetySection({
                     >
                         Owners &amp; admins
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
             {/* Sub-tab content */}
@@ -257,8 +270,8 @@ export function PeopleSafetySection({
                 <div className="space-y-6">
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⚠️</span>
                                     <span>Community Report Triage</span>
@@ -292,8 +305,8 @@ export function PeopleSafetySection({
                                         key={report.id || idx}
                                         className="p-4 rounded-xl bg-nature-950 border border-nature-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:border-nature-700 transition-colors"
                                     >
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
+                                        <div className="space-y-1 min-w-0 break-words">
+                                            <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                                                     {report.severity || 'Report'}
                                                 </span>
@@ -325,7 +338,7 @@ export function PeopleSafetySection({
                                                             href={report.pulseItem.url}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="text-terra-300 underline break-all"
+                                                            className="inline-flex items-center min-h-[48px] lg:min-h-0 min-w-0 text-terra-300 underline break-all"
                                                         >
                                                             {report.pulseItem.title || report.pulseItem.url}
                                                         </a>

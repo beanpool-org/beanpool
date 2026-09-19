@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface PeerConnector {
     address: string;
@@ -387,7 +388,7 @@ export function PeerConnectorsPanel({
                         type="button"
                         onClick={() => setStatusMsg(null)}
                         aria-label="Dismiss message"
-                        className="text-nature-400 hover:text-white font-bold px-1"
+                        className="shrink-0 text-nature-400 hover:text-white font-bold px-1"
                     >
                         ✕
                     </button>
@@ -729,18 +730,14 @@ export function PeerConnectorsPanel({
 
             {/* Confirmation Modal for Removing Peer */}
             {confirmModal.isOpen && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setConfirmModal({ isOpen: false, address: '', callsign: '' })}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="remove-peer-modal-title"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            setConfirmModal({ isOpen: false, address: '', callsign: '' });
-                        }
-                    }}
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-lg shrink-0">
                                 🛑
@@ -772,7 +769,7 @@ export function PeerConnectorsPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

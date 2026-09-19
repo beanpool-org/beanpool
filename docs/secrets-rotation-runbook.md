@@ -35,7 +35,7 @@ This inventory enumerates every secret the BeanPool system uses across all layer
 | **`CF_API_TOKEN` (Registrar)** | Cloudflare Worker secret (`wrangler secret put`) | Scoped Cloudflare API token with `Account·Cloudflare Tunnel·Edit` and `Zone·DNS·Edit` permissions. | Cloudflare Worker runtime |
 | **`CF_TUNNEL_TOKEN`** | Repo root `.env`<br>`deploy.sh`<br>Node `<node>/data/tunnel-token` | Cloudflare Zero Trust tunnel connector token for `cloudflared` sidecar container. | Echoed in 2026-09-15 transcript |
 | **`ADMIN_SECRET` (Registrar)** | Cloudflare Worker secret<br>`apps/registrar/src/admin-html.js` | Shared secret for registrar Worker administrative endpoints (`/api/local/admin/registrar/*`). | Cloudflare Worker runtime |
-| **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | Used in `.github/workflows/deploy-website.yml` to deploy `apps/website` to Cloudflare Pages. | GitHub Repo Secrets |
+| **`CLOUDFLARE_API_TOKEN`** | GitHub Actions Secret | **No longer used by CI.** `.github/workflows/deploy-website.yml` was removed on 2026-09-19 (#962); beanpool.org deploys through Cloudflare Pages' own Git connection. The secret was already empty. Delete it rather than rotate it. | GitHub Repo Secrets |
 | **`CLOUDFLARE_API_KEY`** | GitHub Actions Secret<br>Repo root `.env` | Global Cloudflare API Key (fallback credentials for legacy wrangler operations). | GitHub Repo Secrets |
 | **`CLOUDFLARE_EMAIL`** | GitHub Actions Secret<br>Repo root `.env` | Cloudflare account email associated with `CLOUDFLARE_API_KEY`. | GitHub Repo Secrets |
 | **`CLOUDFLARE_ACCOUNT_ID`** | GitHub Actions Secret<br>`apps/registrar/wrangler.toml` | Cloudflare Account ID (`151a28c4fd1e6ee09768f4226be76b4d`). | Public / semi-private identifier |
@@ -174,16 +174,14 @@ flowchart TD
 *   **Where to update:**
     1. In GitHub repository: **Settings** $\to$ **Secrets and variables** $\to$ **Actions**.
     2. Update Repository Secrets:
-       - `CLOUDFLARE_API_TOKEN`: Paste Token C from Step 2.1.
+       - `CLOUDFLARE_API_TOKEN`: delete it (unused since #962).
        - `CLOUDFLARE_API_KEY`: Update Global API Key if rotated.
        - `CLOUDFLARE_EMAIL`: Maintainer account email.
        - `CLOUDFLARE_ACCOUNT_ID`: `151a28c4fd1e6ee09768f4226be76b4d`.
 *   **How to verify:**
-    Trigger workflow dispatch on `.github/workflows/deploy-website.yml`:
-    ```bash
-    gh workflow run deploy-website.yml
-    gh run watch
-    ```
+    No GitHub workflow uses these Cloudflare secrets since `deploy-website.yml` was removed (2026-09-19, #962).
+    The website deploys through Cloudflare Pages' Git connection: merge any website change and check the
+    "Cloudflare Pages" check on the PR, then load beanpool.org.
 
 ---
 

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>First-time setup — BeanPool operator manual</title>
+    <meta name="description" content="The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#setup">Setting up</a></p>
+        <h1>First-time setup</h1>
+        <p class="lede">The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.</p>
+        <h2>Before the first start</h2>
+        <p>Your server keeps everything in one folder, <strong>data</strong>, next to docker-compose.yml. The server sees it as /data. Back up that folder and you have backed up the whole community.</p>
+        <p>Put an admin password in the .env file as <strong>ADMIN_PASSWORD</strong> before you start the server for the first time. It needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. If the password is weaker than that, the server will not start. It restarts over and over until you fix it.</p>
+        <p>If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It prints it once, in a box in the log. Read it with: docker compose logs beanpool-node</p>
+        <p>The server reads ADMIN_PASSWORD only on its first start. After that it keeps a scrambled copy in data/local-config.json and ignores the variable. To change the password later, use Settings.</p>
+        <h2>What the first start creates</h2>
+        <ul>
+            <li><strong>data/genesis.json</strong> and <strong>data/community.key</strong>: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.</li>
+            <li><strong>data/state.db</strong>: the database, with every member, post, deal and vote.</li>
+            <li><strong>data/local-config.json</strong>: the admin password, two-factor settings and gateway settings.</li>
+        </ul>
+        <h2>Open Settings</h2>
+        <p>Go to your server's address followed by <strong>/settings</strong>, for example https://example.org/settings, and sign in with the admin password.</p>
+        <h2>The setup wizard</h2>
+        <p>While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only.</p>
+        <p>What it really does:</p>
+        <ul>
+            <li><strong>Step 1</strong> saves your community's name. It does not save the region or the address you type.</li>
+            <li><strong>Step 3</strong> can create your first enterprise and post its first offer.</li>
+            <li><strong>Step 5</strong> makes three founding invites, with QR codes you can print.</li>
+        </ul>
+        <p>What it does not do yet:</p>
+        <ul>
+            <li><strong>Step 2</strong> shows an owner-pairing QR, an authenticator secret and an &quot;emergency seed&quot;. None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access and Security.</li>
+            <li><strong>Step 4</strong> says it seeds the commons, but it does not move any beans.</li>
+            <li>If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People and Safety.</li>
+        </ul>
+        <h2>The first owner</h2>
+        <p>The first time you make an invite on an empty server, it creates a member called <strong>Admin</strong> as the first owner. Nobody holds that member's key, so nobody can sign in as it. It exists so the first invites have someone to come from.</p>
+        <p>When the first real people have joined, give owner to at least one of them. As the password holder, open People and Safety, open the person and choose <strong>Grant owner</strong>. Settings now has an owner who can sign in from their phone. Keep at least two owners.</p>
+        <h2>Then</h2>
+        <ul>
+            <li>Switch on two-factor sign-in (Access and Security).</li>
+            <li>Set up backups (Backups and restore).</li>
+            <li>Invite your first members.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="signing-in.html"><strong>Signing in to Settings</strong><span>The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.</span></a></li>
+            <li><a href="access-and-security.html"><strong>Access and security</strong><span>Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance and Data, then Access and Security.</span></a></li>
+            <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
+            <li><a href="members-and-invites.html"><strong>Members and invites</strong><span>How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.</span></a></li>
+            <li><a href="backups-and-replicas.html"><strong>Backups and replicas</strong><span>What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

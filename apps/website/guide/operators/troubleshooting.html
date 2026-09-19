@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>When things go wrong — BeanPool operator manual</title>
+    <meta name="description" content="The server has stopped answering, members see &quot;too many requests&quot;, the disk is full, or you cannot sign in.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#help">When things go wrong</a></p>
+        <h1>When things go wrong</h1>
+        <p class="lede">The server has stopped answering, members see &quot;too many requests&quot;, the disk is full, or you cannot sign in.</p>
+        <p>Stay calm and take a copy before you fix anything. Most problems are fixed by a restart; a lost database is not.</p>
+        <h2>The server has stopped answering</h2>
+        <ul>
+            <li>Check from outside: open your address followed by /api/version. If it does not answer, check the machine is on and online.</li>
+            <li>Look at what the server last said: docker compose logs --tail 200 beanpool-node</li>
+            <li>If it is frozen (running, but not answering), capture why before you restart: docker compose kill -s SIGUSR2 beanpool-node writes a report file, named report followed by the date and ending .json, into the data folder. Then run docker compose restart beanpool-node.</li>
+            <li>After a crash or power cut the server checks its database as it starts, and Home shows a card about it.</li>
+        </ul>
+        <h3>A watchdog</h3>
+        <p>The BeanPool source code has a small watchdog for Linux machines (ops/watchdog). It checks the server every 20 seconds, and after 3 failures saves a report and restarts it, at most 4 times an hour. Set BEANPOOL_WATCH_CONTAINERS to your container's name: its built-in names are the BeanPool project's own servers.</p>
+        <h2>Members see &quot;too many requests&quot;</h2>
+        <ul>
+            <li>Read the message: it names the limit. See Rate limits.</li>
+            <li>Many people joining at once from one wifi can hit the sign-in limit. It clears within a minute.</li>
+            <li>If everyone hits the gateway limit at once, your server may think every member has the same internet address. That happens behind a proxy on another machine: set TRUSTED_PROXIES.</li>
+            <li>A restart clears every count, if you need it right now.</li>
+        </ul>
+        <h2>The disk is full</h2>
+        <ul>
+            <li>Appliance and Data, then Diagnostics and Logs, shows how full it is and what is using it.</li>
+            <li>Run <strong>Clean Orphaned Media and Compress Logs</strong>, and delete old snapshots after copying them off.</li>
+            <li>On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.</li>
+            <li>When there is room again, check the database: Backups and Restore, then Database Integrity Verification.</li>
+        </ul>
+        <h2>You cannot sign in</h2>
+        <ul>
+            <li>&quot;Too many wrong admin passwords&quot;: wait, or sign in from the app. See Rate limits.</li>
+            <li>Lost the password: see Signing in.</li>
+            <li>Lost the two-factor code: see Access and security.</li>
+            <li>Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts.</li>
+        </ul>
+        <h2>Members cannot join</h2>
+        <ul>
+            <li>Check the invite has not been used or passed its 30 days.</li>
+            <li>Invites made in Settings while signed in from the app are not real codes. See Members and invites.</li>
+            <li>Check Invites is not switched off under Gateway and Peers.</li>
+        </ul>
+        <h2>Getting help</h2>
+        <p>Ask on the BeanPool project's GitHub. Say what you did, what you expected, what happened, and your version (your address followed by /api/version). Never post the admin password, a break-glass code, a backup or anyone's 12 words.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="updates-and-health.html"><strong>Updates, health checks and disk space</strong><span>Updating the server, checking it is well from outside and inside, and keeping the disk from filling up.</span></a></li>
+            <li><a href="rate-limits.html"><strong>Rate limits</strong><span>The limits that protect your server, what members see when they hit one, and what you can change.</span></a></li>
+            <li><a href="backups-and-replicas.html"><strong>Backups and replicas</strong><span>What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.</span></a></li>
+            <li><a href="signing-in.html"><strong>Signing in to Settings</strong><span>The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, expectedOutputs } from '../scripts/build.mjs';
-import { parseGuideMarkdown, renderWebsite, contentHash, GUIDE_SCHEMA } from '../src/guide.mjs';
+import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, expectedOutputs } from '../scripts/build.mjs';
+import { parseGuideMarkdown, renderWebsite, contentHash, loadGuide, GUIDE_SCHEMA } from '../src/guide.mjs';
 
 test('every generated file (app bundle and website) is exactly what the source produces', () => {
     assert.deepEqual(check(), []);
@@ -123,4 +123,80 @@ test('a text change changes the hash (which forces a version bump)', () => {
     const a = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'x' }] }];
     const b = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'y' }] }];
     assert.notEqual(contentHash(a), contentHash(b));
+});
+
+// ─── The operator manual (operators/) ─────────────────────────────────────────
+
+test("the operator manual: Settings' bundled operators.json and the website's are the same bytes", () => {
+    const bundled = fs.readFileSync(OPERATORS_JSON, 'utf8');
+    const website = fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'operators.json'), 'utf8');
+    assert.equal(bundled, website);
+    const manual = JSON.parse(bundled);
+    assert.equal(manual.schema, GUIDE_SCHEMA);
+    assert.equal(manual.hash, contentHash({ sections: manual.sections, guides: manual.guides }));
+});
+
+test("the operator manual is a separate collection: the members' guide carries none of its pages", () => {
+    const { guide, manual } = expectedOutputs();
+    const memberSlugs = new Set(guide.guides.map(g => g.slug));
+    // Distinct slugs, so a page name never means two different pages in search results or links.
+    for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
+});
+
+test('the operator manual covers what an operator needs, and the website lists and renders every page', () => {
+    const { manual } = expectedOutputs();
+    const slugs = new Set(manual.guides.map(g => g.slug));
+    for (const want of ['first-time-setup', 'signing-in', 'roles', 'members-and-invites', 'reports-and-takedowns', 'disputes',
+        'decisions-and-emergencies', 'enterprises-and-keepers', 'pulse-and-announcements', 'backups-and-replicas',
+        'updates-and-health', 'rate-limits', 'what-the-server-sees', 'feedback', 'troubleshooting']) {
+        assert.ok(slugs.has(want), `operator page ${want}`);
+    }
+    const index = fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'index.html'), 'utf8');
+    for (const s of manual.sections) assert.ok(index.includes(`href="#${s.id}"`), `contents links ${s.id}`);
+    for (const g of manual.guides) {
+        assert.ok(index.includes(`href="${g.slug}.html"`), `index links ${g.slug}`);
+        const html = fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, `${g.slug}.html`), 'utf8').replace(/<\/?strong>/g, '');
+        for (const b of g.blocks) {
+            for (const t of b.type === 'ul' ? b.items : [b.text]) {
+                const firstWords = t.replace(/\*\*/g, '').split(' ').slice(0, 4).join(' ')
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                assert.ok(html.includes(firstWords), `${g.slug}.html is missing "${firstWords}"`);
+            }
+        }
+        for (const r of g.related) assert.ok(html.includes(`href="${r}.html"`), `${g.slug}.html links related ${r}`);
+        // The site's stylesheet and home page sit two folders up.
+        assert.ok(html.includes('href="../../style.css'), `${g.slug}.html finds the stylesheet`);
+    }
+    const members = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
+    assert.ok(members.includes('href="operators/index.html"'), "the members' guide links the operator manual");
+});
+
+test('operator words: beans not Ʀ, badges gate nothing', () => {
+    const text = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))
+        .map(f => fs.readFileSync(path.join(OPERATORS_DIR, String(f)), 'utf8')).join('\n')
+        + fs.readFileSync(path.join(OPERATORS_DIR, 'manifest.json'), 'utf8');
+    for (const [re, why] of [
+        [/Ʀ/, 'the currency is beans'],
+        [/\btiers?\b/i, 'call them trust badges'],
+        [/\b(unlock|unlocks|requires?) (the )?(Resident|Steward|Elder)\b/i, 'badges gate nothing'],
+    ]) {
+        const m = re.exec(text);
+        assert.equal(m, null, `found "${m?.[0]}" — ${why}`);
+    }
+});
+
+test('the operator manual has no concept-guide section; the members\' guide still must', () => {
+    const { manual } = expectedOutputs();
+    assert.ok(!manual.sections.some(s => s.id === 'about'));
+    assert.throws(() => loadGuide(OPERATORS_DIR), /needs the "about" section/);
+});
+
+test('check() reports a stray file in the website folder, including under operators/', () => {
+    const stray = path.join(OPERATORS_WEBSITE_DIR, 'stray-test-file.html');
+    fs.writeFileSync(stray, 'x');
+    try {
+        assert.ok(check().some(p => p.includes('operators/stray-test-file.html')));
+    } finally {
+        fs.rmSync(stray);
+    }
 });

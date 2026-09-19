@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backups and replicas — BeanPool operator manual</title>
+    <meta name="description" content="What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#server">Running the server</a></p>
+        <h1>Backups and replicas</h1>
+        <p class="lede">What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.</p>
+        <h2>What matters</h2>
+        <p>Everything lives in the <strong>data</strong> folder next to docker-compose.yml:</p>
+        <ul>
+            <li><strong>state.db</strong> (with state.db-wal and state.db-shm beside it while the server runs): members, posts, deals, beans, votes, messages;</li>
+            <li><strong>genesis.json</strong> and <strong>community.key</strong>: the community's own key. Lose these and the community cannot be rebuilt as itself;</li>
+            <li><strong>local-config.json</strong>: the admin password, two-factor sign-in and other settings;</li>
+            <li><strong>libp2p_key</strong> and <strong>connectors.json</strong>: the server's network identity and peer links;</li>
+            <li><strong>snapshots</strong>, <strong>logs</strong> and <strong>cache</strong>: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again.</li>
+        </ul>
+        <p>The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update.</p>
+        <h2>Backups from Settings</h2>
+        <p><strong>Appliance and Data</strong>, then <strong>Backups and Restore</strong>:</p>
+        <ul>
+            <li><strong>Download Sovereign Database</strong>: a .tar.gz with a clean copy of the database, taken while the server runs. It usually carries a copy of your settings too, including the scrambled admin password and the two-factor secret. It does not include the community key.</li>
+            <li><strong>Point-in-time snapshots</strong>: on by default, one every <strong>24 hours</strong>, keeping the last <strong>7</strong>, in data/snapshots. You can take one now, download one or delete one. Snapshots sit on the same disk as the server, so they do not survive a lost disk. Copy one off the server now and then.</li>
+            <li><strong>Database Integrity Verification</strong>: checks the live database or a snapshot for damage.</li>
+        </ul>
+        <p>Treat every backup as private: it holds everything, including how each member voted (see Privacy and what your server can see). Keep it encrypted, somewhere only owners can reach.</p>
+        <h2>Restoring</h2>
+        <p><strong>Restore Database Wizard</strong> takes a backup file (up to 500 MB) and the admin password. It replaces the database and restarts the server.</p>
+        <ul>
+            <li>It restores the database only. It does not bring back genesis.json, community.key or local-config.json; copy those back by hand if they were lost.</li>
+            <li>Stop and think before restoring over a live community: everything since the backup is lost.</li>
+        </ul>
+        <h2>A standby server</h2>
+        <p>A second server can follow yours as a read-only standby, copying changes about every minute.</p>
+        <ul>
+            <li>On your server, <strong>Replication Access</strong> (under Backups and Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.</li>
+            <li>On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under <strong>Live Backup Server</strong>. If you give it the admin password instead, it is stored in plain text on the standby.</li>
+            <li>Copying goes one way only. Your main server never takes data from the standby.</li>
+            <li><strong>A standby is not a complete copy.</strong> It does not copy Decisions and their votes, or who holds which role. Keep file backups as well.</li>
+            <li>Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="updates-and-health.html"><strong>Updates, health checks and disk space</strong><span>Updating the server, checking it is well from outside and inside, and keeping the disk from filling up.</span></a></li>
+            <li><a href="troubleshooting.html"><strong>When things go wrong</strong><span>The server has stopped answering, members see &quot;too many requests&quot;, the disk is full, or you cannot sign in.</span></a></li>
+            <li><a href="what-the-server-sees.html"><strong>Privacy and what your server can see</strong><span>What is private even from you, what you and your admins can see, secret ballots, and what your server sends elsewhere.</span></a></li>
+            <li><a href="first-time-setup.html"><strong>First-time setup</strong><span>The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports and takedowns — BeanPool operator manual</title>
+    <meta name="description" content="How members report posts, people and Pulse items, where the reports land, and what each action really does.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#safety">Safety and moderation</a></p>
+        <h1>Reports and takedowns</h1>
+        <p class="lede">How members report posts, people and Pulse items, where the reports land, and what each action really does.</p>
+        <h2>How members report</h2>
+        <p>In the app, members report a post, a person or a Pulse item and choose a reason: spam or scam, offensive content, misleading post, or other. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.</p>
+        <ul>
+            <li>A member can file at most <strong>10 reports an hour</strong>.</li>
+            <li>Reporting the same thing again, while the first report is still open, does nothing new.</li>
+            <li>Nobody can report themselves.</li>
+        </ul>
+        <p>The report form tells members their note goes to moderators. In practice it goes to the owners and admins, because moderators cannot sign in to Settings.</p>
+        <h2>Where reports land</h2>
+        <p><strong>People and Safety</strong>, then <strong>Triage and Moderation</strong>. Any owner or admin can act on them.</p>
+        <ul>
+            <li>The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.</li>
+            <li>It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter.</li>
+        </ul>
+        <h2>What each action does</h2>
+        <ul>
+            <li><strong>Dismiss Flag</strong>: marks the report reviewed. Nothing happens to the person.</li>
+            <li><strong>Freeze Accounts</strong>: freezes the person's credit line and their voting. It does not mark the report handled.</li>
+            <li><strong>Remove from the Pulse</strong> (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.</li>
+            <li>To stop a person using the community, <strong>Suspend</strong> them from their page (see Members and invites). Members then vote on keeping it.</li>
+        </ul>
+        <h2>Taking a post down</h2>
+        <p>In <strong>Triage and Moderation</strong>, find the post in the posts list and delete it.</p>
+        <ul>
+            <li>If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.</li>
+            <li>Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.</li>
+            <li><strong>The author is not told</strong>, and nor is the person who reported it. Send them a message yourself.</li>
+        </ul>
+        <p><strong>Prune Stale Posts</strong> removes every post older than the age you pick, including ones that are still live and wanted. Use it with care.</p>
+        <h2>Be fair</h2>
+        <ul>
+            <li>Read the post and talk to the person before you act, unless there is danger.</li>
+            <li>Write reasons you would be happy for the whole community to read. Suspension reasons are public.</li>
+            <li>Whoever is reported may be a stranger to you, from a culture you do not know. Ask before you judge.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pulse-and-announcements.html"><strong>Pulse and announcements</strong><span>Telling every member something at once, the channels in the Pulse, the daily learning item, and taking a Pulse item down.</span></a></li>
+            <li><a href="members-and-invites.html"><strong>Members and invites</strong><span>How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.</span></a></li>
+            <li><a href="decisions-and-emergencies.html"><strong>Decisions, emergencies and removal</strong><span>How the community's votes run by themselves, the emergency suspension, removing someone, and halting a Decision.</span></a></li>
+            <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

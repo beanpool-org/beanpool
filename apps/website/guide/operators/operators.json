@@ -1,0 +1,1570 @@
+{
+  "schema": 2,
+  "version": 1,
+  "hash": "34077b4de4575b2d0d3195acb79f8a6689861177c5be1fe21eab72628b535265",
+  "sections": [
+    {
+      "id": "setup",
+      "title": "Setting up",
+      "summary": "The first start, signing in, finding your way around Settings, and keeping the admin door locked.",
+      "slugs": [
+        "first-time-setup",
+        "signing-in",
+        "the-settings-screens",
+        "access-and-security"
+      ]
+    },
+    {
+      "id": "people",
+      "title": "People and roles",
+      "summary": "Owners, admins and moderators, and looking after members and invites.",
+      "slugs": [
+        "roles",
+        "members-and-invites"
+      ]
+    },
+    {
+      "id": "safety",
+      "title": "Safety and moderation",
+      "summary": "Reports, taking posts down, announcements and the Pulse.",
+      "slugs": [
+        "reports-and-takedowns",
+        "pulse-and-announcements"
+      ]
+    },
+    {
+      "id": "commons",
+      "title": "Money and decisions",
+      "summary": "Stuck deals, the community's Decisions and emergencies, enterprises and the commons.",
+      "slugs": [
+        "disputes",
+        "decisions-and-emergencies",
+        "enterprises-and-keepers"
+      ]
+    },
+    {
+      "id": "server",
+      "title": "Running the server",
+      "summary": "Backups, updates and health, your address and peers, and rate limits.",
+      "slugs": [
+        "backups-and-replicas",
+        "updates-and-health",
+        "address-and-peers",
+        "rate-limits"
+      ]
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy and feedback",
+      "summary": "What your server can and cannot see, and where suggestions to the project go.",
+      "slugs": [
+        "what-the-server-sees",
+        "feedback"
+      ]
+    },
+    {
+      "id": "help",
+      "title": "When things go wrong",
+      "summary": "A frozen server, too many requests, a full disk, and getting help.",
+      "slugs": [
+        "troubleshooting"
+      ]
+    }
+  ],
+  "guides": [
+    {
+      "slug": "first-time-setup",
+      "title": "First-time setup",
+      "summary": "The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.",
+      "section": "setup",
+      "related": [
+        "signing-in",
+        "access-and-security",
+        "roles",
+        "members-and-invites",
+        "backups-and-replicas"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Before the first start"
+        },
+        {
+          "type": "p",
+          "text": "Your server keeps everything in one folder, **data**, next to docker-compose.yml. The server sees it as /data. Back up that folder and you have backed up the whole community."
+        },
+        {
+          "type": "p",
+          "text": "Put an admin password in the .env file as **ADMIN_PASSWORD** before you start the server for the first time. It needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. If the password is weaker than that, the server will not start. It restarts over and over until you fix it."
+        },
+        {
+          "type": "p",
+          "text": "If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It prints it once, in a box in the log. Read it with: docker compose logs beanpool-node"
+        },
+        {
+          "type": "p",
+          "text": "The server reads ADMIN_PASSWORD only on its first start. After that it keeps a scrambled copy in data/local-config.json and ignores the variable. To change the password later, use Settings."
+        },
+        {
+          "type": "h2",
+          "text": "What the first start creates"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Keep both files in your backups.",
+            "**data/state.db**: the database, with every member, post, deal and vote.",
+            "**data/local-config.json**: the admin password, two-factor settings and gateway settings."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Open Settings"
+        },
+        {
+          "type": "p",
+          "text": "Go to your server's address followed by **/settings**, for example https://example.org/settings, and sign in with the admin password."
+        },
+        {
+          "type": "h2",
+          "text": "The setup wizard"
+        },
+        {
+          "type": "p",
+          "text": "While your community has no members, Settings opens with a setup wizard. You can skip it, and open it again later from Home. It records that you finished it in this browser only."
+        },
+        {
+          "type": "p",
+          "text": "What it really does:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Step 1** saves your community's name. It does not save the region or the address you type.",
+            "**Step 3** can create your first enterprise and post its first offer.",
+            "**Step 5** makes three founding invites, with QR codes you can print."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "What it does not do yet:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Step 2** shows an owner-pairing QR, an authenticator secret and an \"emergency seed\". None of these is connected to the server. The emergency seed is not a working recovery code, and scanning the QR does nothing. Two-factor sign-in is not switched on until you finish it in Access and Security.",
+            "**Step 4** says it seeds the commons, but it does not move any beans.",
+            "If the server cannot be reached, step 5 shows codes starting with FOUNDING-. The server does not accept those codes. Make new invites under People and Safety."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The first owner"
+        },
+        {
+          "type": "p",
+          "text": "The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner. Nobody holds that member's key, so nobody can sign in as it. It exists so the first invites have someone to come from."
+        },
+        {
+          "type": "p",
+          "text": "When the first real people have joined, give owner to at least one of them. As the password holder, open People and Safety, open the person and choose **Grant owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners."
+        },
+        {
+          "type": "h2",
+          "text": "Then"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Switch on two-factor sign-in (Access and Security).",
+            "Set up backups (Backups and restore).",
+            "Invite your first members."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "signing-in",
+      "title": "Signing in to Settings",
+      "summary": "The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.",
+      "section": "setup",
+      "related": [
+        "access-and-security",
+        "roles",
+        "first-time-setup",
+        "rate-limits"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "There are two ways into Settings. The password is one shared secret for the whole server. The app's Manage button signs in a named person with their own key."
+        },
+        {
+          "type": "h2",
+          "text": "With the admin password"
+        },
+        {
+          "type": "p",
+          "text": "Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The password counts as an **owner**. Whoever has it can do everything an owner can.",
+            "Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.",
+            "Your browser keeps the password for this tab only. Close the tab and you sign in again.",
+            "Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "From the app's Manage button"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins see **Manage** followed by the community's name in the phone app's Settings. Pressing it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "asks for the phone's own unlock (fingerprint, face or PIN). If the phone has no screen lock, the button refuses to open Settings;",
+            "asks for the 6-digit code if your server has two-factor sign-in on;",
+            "opens Settings in the browser, signed in as you."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "This sign-in belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button, and cannot sign in to Settings at all."
+        },
+        {
+          "type": "p",
+          "text": "A sign-in from the app ends after **2 hours** without use, and after **12 hours** at most. It also ends when an owner changes or removes your role, and when the server restarts."
+        },
+        {
+          "type": "p",
+          "text": "The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password."
+        },
+        {
+          "type": "h2",
+          "text": "If you are locked out"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Too many wrong passwords close password sign-in for a while, for everyone. Signing in from the app's Manage button still works meanwhile. See Rate limits.",
+            "Forgot the password: owners and admins can still sign in from the app, but nobody can change the password without knowing the old one. The fix is on the server itself: stop it, delete data/local-config.json and start it again with a new ADMIN_PASSWORD. That file also holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds and the backup settings, so you set those again. Members, posts and beans are not touched: they are in data/state.db."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "the-settings-screens",
+      "title": "Finding your way around Settings",
+      "summary": "The five screens in Settings, what each is for, and how to get help on any of them.",
+      "section": "setup",
+      "related": [
+        "first-time-setup",
+        "signing-in",
+        "roles",
+        "troubleshooting"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar opens the whole manual."
+        },
+        {
+          "type": "h2",
+          "text": "The screens"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Home**: the community at a glance, with shortcuts to invite someone, make an enterprise, download a backup and check the books.",
+            "**People and Safety**: Members (each person's page and role), Invites and QR, and Triage and Moderation (reports and taking posts down).",
+            "**Shared Projects and Economy**: Enterprises, Proposals (the community's Decisions), the Commons Pool, and Escrow Disputes (deals that are stuck).",
+            "**Bulletin and News**: Announcements to every member, and the channels in the Pulse.",
+            "**Appliance and Data**: Diagnostics and Logs, Backups and Restore, Gateway and Peers, Public Address, Node Identity, and Access and Security."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Who sees what"
+        },
+        {
+          "type": "p",
+          "text": "Owners and admins see the same screens. Some buttons only work for owners, and Settings says so when it refuses. See Owners, admins and moderators."
+        },
+        {
+          "type": "h2",
+          "text": "Some figures are placeholders"
+        },
+        {
+          "type": "p",
+          "text": "A few numbers in Settings are not calculated yet: the trust score on a member's page, the \"Live Request Traffic\" meter under Gateway, and the \"Backed up recently\" line on Home. Check the real thing (the member's history, the logs, the backups list) before you act on them."
+        }
+      ]
+    },
+    {
+      "slug": "access-and-security",
+      "title": "Access and security",
+      "summary": "Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance and Data, then Access and Security.",
+      "section": "setup",
+      "related": [
+        "signing-in",
+        "roles",
+        "first-time-setup",
+        "rate-limits"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Change the admin password"
+        },
+        {
+          "type": "p",
+          "text": "Type the current password and a new one. The new one needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. Only someone who knows the current password can change it, even an owner signed in from the app."
+        },
+        {
+          "type": "p",
+          "text": "Change it whenever someone who knew it steps down. Everyone who has it is an owner."
+        },
+        {
+          "type": "h2",
+          "text": "Two-factor sign-in"
+        },
+        {
+          "type": "p",
+          "text": "Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.",
+            "Type the 6-digit code the app shows, and press **Verify and Enable**. Until you do, nothing changes.",
+            "There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.",
+            "Once you have typed a code, the browser does not ask again for **4 hours** of use."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Know its limits:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Some actions check only the password, never the code: changing the password, the factory reset, the community's name and address, invites made by the setup wizard, peer links and the money thresholds. Someone with the password alone can still do those. Guard the password as if two-factor sign-in were off.",
+            "Any admin can switch two-factor sign-in off, not only owners.",
+            "The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.",
+            "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server (see Signing in)."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Break-glass codes"
+        },
+        {
+          "type": "p",
+          "text": "A break-glass code belongs to one owner. It starts with **bg-** and works in place of the admin password, recorded against that owner's name. Settings cannot make one yet: the break-glass card under Access and Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners."
+        },
+        {
+          "type": "p",
+          "text": "If you do hold one, keep it offline, like a spare key. Anyone who has it can do what the password can, apart from the password-only actions listed above."
+        },
+        {
+          "type": "h2",
+          "text": "Factory reset"
+        },
+        {
+          "type": "p",
+          "text": "**Wipe and Reset Node** needs the admin password. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds and the backup settings. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and prints it in the log."
+        },
+        {
+          "type": "p",
+          "text": "To start a community again from nothing, stop the server and move the whole data folder away. Keep that copy until you are sure."
+        }
+      ]
+    },
+    {
+      "slug": "roles",
+      "title": "Owners, admins and moderators",
+      "summary": "What each role can do, what only owners can do, and why a community can never lose its last owner.",
+      "section": "people",
+      "related": [
+        "members-and-invites",
+        "signing-in",
+        "decisions-and-emergencies",
+        "access-and-security"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "A role is about running the server. It has nothing to do with trust badges, which are merit badges and gate nothing. Each member holds at most one role. Give roles to people the community knows, and keep at least two owners so one lost phone cannot lock everyone out."
+        },
+        {
+          "type": "h2",
+          "text": "Owner"
+        },
+        {
+          "type": "p",
+          "text": "Owners can do everything in Settings. Only owners can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "give or take away any role, including admin and moderator;",
+            "remove or offboard an owner or an admin;",
+            "suspend an owner;",
+            "lift a suspension, or give back a role that a suspension took away;",
+            "end the waiting time early when an owner or admin is being removed;",
+            "sign other people out of Settings;",
+            "switch break-glass mode on or off, and be issued a break-glass code."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The **admin password** counts as an owner. Anyone who knows it can do all of the above."
+        },
+        {
+          "type": "h2",
+          "text": "Admin"
+        },
+        {
+          "type": "p",
+          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They cannot give or take away roles, and they cannot act against an owner."
+        },
+        {
+          "type": "h2",
+          "text": "Moderator"
+        },
+        {
+          "type": "p",
+          "text": "You can give someone the moderator role, and it shows on their profile in Settings. Today it does nothing else: moderators cannot sign in to Settings, and no action checks for it. Give admin to people who need to moderate."
+        },
+        {
+          "type": "h2",
+          "text": "Giving and removing roles"
+        },
+        {
+          "type": "p",
+          "text": "Open **People and Safety**, then **Members**, and open the person. Choose **Grant Owner**, **Grant Admin** or **Grant Moderator**, or **Revoke** to take the role away. Giving a new role replaces the old one."
+        },
+        {
+          "type": "p",
+          "text": "A change takes effect at once. If the person is signed in to Settings, their sign-in stops working."
+        },
+        {
+          "type": "h2",
+          "text": "The last owner"
+        },
+        {
+          "type": "p",
+          "text": "A community always keeps at least one active owner. Settings refuses to:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "revoke or demote the last owner;",
+            "remove, suspend or offboard the last owner, whether by hand or by a Decision."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "To hand over, first give owner to the new person, then step down yourself."
+        },
+        {
+          "type": "h2",
+          "text": "The first owner, Admin"
+        },
+        {
+          "type": "p",
+          "text": "On a new server the first owner is a member called **Admin**, made by the server with a key nobody holds (see First-time setup). It cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up."
+        }
+      ]
+    },
+    {
+      "slug": "members-and-invites",
+      "title": "Members and invites",
+      "summary": "How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.",
+      "section": "people",
+      "related": [
+        "roles",
+        "reports-and-takedowns",
+        "decisions-and-emergencies",
+        "disputes",
+        "first-time-setup"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "How people join"
+        },
+        {
+          "type": "p",
+          "text": "Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. The name an invite is made out to is only a label: the person picks their own name when they join."
+        },
+        {
+          "type": "p",
+          "text": "Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows."
+        },
+        {
+          "type": "h2",
+          "text": "Invites from Settings"
+        },
+        {
+          "type": "p",
+          "text": "Open **People and Safety**, then **Invites and QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "These invites need the **admin password**. If you signed in from the app's Manage button, Settings cannot make them, and shows made-up codes that the server will not accept. Sign in with the password, or make invites from your own app.",
+            "Every invite made in Settings is recorded as coming from the first member, Admin, not from you."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "A member's page"
+        },
+        {
+          "type": "p",
+          "text": "Open **People and Safety**, then **Members**, and open a person. Owners and admins can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.",
+            "**Lift suspension**: ends a suspension early and closes its vote.",
+            "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.",
+            "**Promote** and **Demote**: whether they can vouch for others.",
+            "**Grant Operator**: lets them act for enterprises they are a keeper of.",
+            "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.",
+            "**Offboard**: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.",
+            "**Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts, role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database.",
+            "**Prune Branch**: removes them and everyone they invited, and everyone those people invited. You type their name to confirm."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Only an owner can suspend an owner, or remove an owner or an admin. Nobody can remove the last owner."
+        },
+        {
+          "type": "h2",
+          "text": "Things to know"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.",
+            "The trust score shown on a member's page is not calculated yet. Do not act on it.",
+            "Suspended members can still make invites from their app."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "reports-and-takedowns",
+      "title": "Reports and takedowns",
+      "summary": "How members report posts, people and Pulse items, where the reports land, and what each action really does.",
+      "section": "safety",
+      "related": [
+        "pulse-and-announcements",
+        "members-and-invites",
+        "decisions-and-emergencies",
+        "roles"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "How members report"
+        },
+        {
+          "type": "p",
+          "text": "In the app, members report a post, a person or a Pulse item and choose a reason: spam or scam, offensive content, misleading post, or other. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A member can file at most **10 reports an hour**.",
+            "Reporting the same thing again, while the first report is still open, does nothing new.",
+            "Nobody can report themselves."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The report form tells members their note goes to moderators. In practice it goes to the owners and admins, because moderators cannot sign in to Settings."
+        },
+        {
+          "type": "h2",
+          "text": "Where reports land"
+        },
+        {
+          "type": "p",
+          "text": "**People and Safety**, then **Triage and Moderation**. Any owner or admin can act on them."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The list shows every report ever made, handled or not, and the count beside the tab counts them all. Work from the newest.",
+            "It does not show which post a report is about. Open the reported person to see their posts, or ask the reporter."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What each action does"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Dismiss Flag**: marks the report reviewed. Nothing happens to the person.",
+            "**Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.",
+            "**Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.",
+            "To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on keeping it."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Taking a post down"
+        },
+        {
+          "type": "p",
+          "text": "In **Triage and Moderation**, find the post in the posts list and delete it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.",
+            "Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.",
+            "**The author is not told**, and nor is the person who reported it. Send them a message yourself."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care."
+        },
+        {
+          "type": "h2",
+          "text": "Be fair"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Read the post and talk to the person before you act, unless there is danger.",
+            "Write reasons you would be happy for the whole community to read. Suspension reasons are public.",
+            "Whoever is reported may be a stranger to you, from a culture you do not know. Ask before you judge."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "pulse-and-announcements",
+      "title": "Pulse and announcements",
+      "summary": "Telling every member something at once, the channels in the Pulse, the daily learning item, and taking a Pulse item down.",
+      "section": "safety",
+      "related": [
+        "reports-and-takedowns",
+        "what-the-server-sees",
+        "updates-and-health",
+        "the-settings-screens"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "These are under **Bulletin and News**."
+        },
+        {
+          "type": "h2",
+          "text": "Announcements"
+        },
+        {
+          "type": "p",
+          "text": "An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. It is not kept anywhere, so someone who has notifications off will not see it later. Keep it short and use it rarely."
+        },
+        {
+          "type": "h2",
+          "text": "The Pulse"
+        },
+        {
+          "type": "p",
+          "text": "The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Anyone can see the Pulse feed, even without joining, so it is part of your community's public face."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Members add their own channels, and can hide or delete their own items.",
+            "The server checks each channel every **5 minutes** and keeps the newest **20** items from each.",
+            "Pictures are fetched by your server, so members' phones do not contact other sites to show them.",
+            "An item stops showing when its owner is suspended or removed."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Under **Pulse Channels** you can add or remove channels that belong to the community rather than to a member. The built-in BeanPool Learn channel cannot be removed."
+        },
+        {
+          "type": "h2",
+          "text": "Taking a Pulse item down"
+        },
+        {
+          "type": "p",
+          "text": "There is no button to hide an item directly. A member reports it; then, under People and Safety, then Triage and Moderation, press **Remove from the Pulse**. See Reports and takedowns."
+        },
+        {
+          "type": "h2",
+          "text": "The daily learning item"
+        },
+        {
+          "type": "p",
+          "text": "Every day at 05:00, server time, the server adds a short learning item to the Pulse. While your market has fewer than two real listings it also posts a free example offer, and takes it down once there are two. Server time is UTC unless you give the server a TZ setting. To switch it off, use DAILY_PULSE=false (below)."
+        },
+        {
+          "type": "h2",
+          "text": "Switches"
+        },
+        {
+          "type": "p",
+          "text": "docker-compose.yml passes only the settings it lists to the server. The TikTok and Instagram keys are listed, so they go in .env. The others are not listed: add each one as a line under **environment:** in docker-compose.yml, then run docker compose up -d."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**DAILY_PULSE=false** stops the daily learning item and the example offer.",
+            "**PULSE_SCHEDULER=0** stops the server checking members' channels.",
+            "**TZ**, for example TZ=Africa/Nairobi, sets the server's clock for the 05:00 item.",
+            "TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET are the app keys that let members sign in to TikTok and Instagram to add those channels. You get them from those companies' developer sites."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "disputes",
+      "title": "Stuck deals and disputes",
+      "summary": "What counts as a dispute, who may rule on one, the three rulings, and why you can never rule on your own.",
+      "section": "commons",
+      "related": [
+        "decisions-and-emergencies",
+        "enterprises-and-keepers",
+        "roles",
+        "reports-and-takedowns"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "When a member buys something, their beans are held until they confirm they got it. Most deals finish on their own. A dispute is a deal whose beans have been held too long."
+        },
+        {
+          "type": "h2",
+          "text": "Finding them"
+        },
+        {
+          "type": "p",
+          "text": "**Shared Projects and Economy**, then **Escrow Disputes**. Choose how old a deal must be to show: 3, 7, 14 or 30 days (7 is usual)."
+        },
+        {
+          "type": "p",
+          "text": "The list also shows ordinary finished deals older than that, marked Resolved, and shows at most 50, oldest first. Look for the ones still held."
+        },
+        {
+          "type": "p",
+          "text": "Nothing is decided by the server on its own. Held beans are never released automatically. The buyer is reminded every 7 days while beans are held."
+        },
+        {
+          "type": "h2",
+          "text": "Before you rule"
+        },
+        {
+          "type": "p",
+          "text": "Message both people. Most stuck deals are someone who forgot to press Received. A ruling is the last step, not the first."
+        },
+        {
+          "type": "h2",
+          "text": "The three rulings"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Release to seller**: the seller gets the beans, less the usual 1.5% fee.",
+            "**Refund to buyer**: the buyer gets all the beans back, with no fee.",
+            "**Split**: the buyer gets half back; the seller gets the other half, less 1.5% on their half."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You can add a reason. Both people get a notification, a message in their chat and a line in their activity."
+        },
+        {
+          "type": "h2",
+          "text": "Who may rule"
+        },
+        {
+          "type": "p",
+          "text": "Any owner or admin, with two exceptions:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**You cannot rule on a deal you are part of**: as the buyer, as the seller, or as a keeper of an enterprise that is either one. Settings refuses. Ask another admin.",
+            "**The admin password cannot rule when an owner is part of the deal**, because it cannot show which owner is acting. Another admin must rule from their own sign-in from the app."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "This is why a community needs more than one admin."
+        },
+        {
+          "type": "h2",
+          "text": "Know this"
+        },
+        {
+          "type": "p",
+          "text": "The notification the two people receive shows who ruled as a long key, or as \"owner:password\" if you used the password. They can see it was an admin, not which one by name."
+        }
+      ]
+    },
+    {
+      "slug": "decisions-and-emergencies",
+      "title": "Decisions, emergencies and removal",
+      "summary": "How the community's votes run by themselves, the emergency suspension, removing someone, and halting a Decision.",
+      "section": "commons",
+      "related": [
+        "roles",
+        "members-and-invites",
+        "enterprises-and-keepers",
+        "disputes"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "The community governs itself through Decisions. Members propose and vote in the app. Settings is where owners and admins watch them, and step in when something goes wrong."
+        },
+        {
+          "type": "h2",
+          "text": "How a Decision runs"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Voting is open for **7 days**. When it closes, the server counts the votes within a minute and, if it passed, carries it out by itself. No admin has to press anything.",
+            "Enough people must vote: at least 3, and at least 30% of members active in the last 30 days (25% for removing someone).",
+            "It passes with 60% yes. Removing someone needs 66%; restoring someone needs just over half. A tie fails.",
+            "Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.",
+            "Each member can have one open Decision at a time. Frozen and suspended members cannot vote or propose."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days."
+        },
+        {
+          "type": "h2",
+          "text": "Watching them"
+        },
+        {
+          "type": "p",
+          "text": "**Shared Projects and Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far."
+        },
+        {
+          "type": "h2",
+          "text": "Emergency suspension"
+        },
+        {
+          "type": "p",
+          "text": "For when someone is doing harm now. Open the person (People and Safety, then Members) and choose **Suspend**. Write a reason of at least 10 characters: every member will see it."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "They are suspended at once and their role, if any, is set aside.",
+            "A 7-day vote opens: \"Keep the suspension?\". One member, one vote, 60% to keep it.",
+            "If it does not pass, the suspension lifts by itself and their role comes back.",
+            "You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.",
+            "The suspended person gets no notification. Tell them yourself."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Removing someone"
+        },
+        {
+          "type": "p",
+          "text": "Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons."
+        },
+        {
+          "type": "h2",
+          "text": "Halting a Decision"
+        },
+        {
+          "type": "p",
+          "text": "**Halt** stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Halting a removal in its grace period restores the person.",
+            "Halting a \"keep the suspension\" vote lifts the suspension.",
+            "**Owner only**: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Halting overrides the community. Use it for a mistake or an abuse of the process, not because you dislike the result, and say why."
+        },
+        {
+          "type": "h2",
+          "text": "Know this"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A suspension by Decision takes away the person's role for good. An emergency suspension only sets it aside.",
+            "Lifting a suspension by hand is refused while a removal is waiting out its grace period. Halt the removal instead."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "enterprises-and-keepers",
+      "title": "Enterprises, keepers and the commons",
+      "summary": "Setting up a shared enterprise, choosing who runs it, and the commons pool that pays grants.",
+      "section": "commons",
+      "related": [
+        "decisions-and-emergencies",
+        "disputes",
+        "members-and-invites",
+        "roles"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "An enterprise is a shared project with its own account: a community garden, a tool library, a bakery run by several people. The people who run it are its **keepers**."
+        },
+        {
+          "type": "h2",
+          "text": "Setting one up"
+        },
+        {
+          "type": "p",
+          "text": "**Shared Projects and Economy**, then **Enterprises**. Owners and admins can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "make an enterprise. One made here starts with a credit line of 0;",
+            "set its **working capital ceiling**, the most it can owe;",
+            "add or remove keepers;",
+            "post an offer or a need in the enterprise's name;",
+            "put it on the map, or take its pin off."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "An enterprise must always keep at least one live offer. It cannot vote or propose, and it pays no circulation fee."
+        },
+        {
+          "type": "h2",
+          "text": "Keepers"
+        },
+        {
+          "type": "p",
+          "text": "A keeper acts for the enterprise from their own app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Adding someone as a keeper also gives them the Operator switch (see Members and invites).",
+            "Keepers added from Settings are always ordinary keepers, never the lead, and an enterprise made in Settings starts with no lead.",
+            "If the lead leaves, the longest-serving keeper becomes lead. If no keeper is left, the enterprise pauses.",
+            "Other keepers have 3 days to object to a change of keepers. The community can remove a lead by a Decision."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The commons pool"
+        },
+        {
+          "type": "p",
+          "text": "**Commons Pool** shows the health of the community's shared beans. They come from the 1.5% market fee on every completed trade, the circulation fee on large balances, and members who leave with beans to spare. They pay out through Decisions: grants to enterprises, hardship grants, and writing off debts. Removing a member also settles their balance through the commons."
+        },
+        {
+          "type": "p",
+          "text": "Settings has no button to pay beans out of the commons by hand, and the setup wizard's \"seed the commons\" step moves no beans."
+        }
+      ]
+    },
+    {
+      "slug": "backups-and-replicas",
+      "title": "Backups and replicas",
+      "summary": "What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.",
+      "section": "server",
+      "related": [
+        "updates-and-health",
+        "troubleshooting",
+        "what-the-server-sees",
+        "first-time-setup"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What matters"
+        },
+        {
+          "type": "p",
+          "text": "Everything lives in the **data** folder next to docker-compose.yml:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**state.db** (with state.db-wal and state.db-shm beside it while the server runs): members, posts, deals, beans, votes, messages;",
+            "**genesis.json** and **community.key**: the community's own key. Lose these and the community cannot be rebuilt as itself;",
+            "**local-config.json**: the admin password, two-factor sign-in and other settings;",
+            "**libp2p_key** and **connectors.json**: the server's network identity and peer links;",
+            "**snapshots**, **logs** and **cache**: the automatic snapshots, old logs, and pictures fetched for the Pulse, which can be fetched again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update."
+        },
+        {
+          "type": "h2",
+          "text": "Backups from Settings"
+        },
+        {
+          "type": "p",
+          "text": "**Appliance and Data**, then **Backups and Restore**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Download Sovereign Database**: a .tar.gz with a clean copy of the database, taken while the server runs. It usually carries a copy of your settings too, including the scrambled admin password and the two-factor secret. It does not include the community key.",
+            "**Point-in-time snapshots**: on by default, one every **24 hours**, keeping the last **7**, in data/snapshots. You can take one now, download one or delete one. Snapshots sit on the same disk as the server, so they do not survive a lost disk. Copy one off the server now and then.",
+            "**Database Integrity Verification**: checks the live database or a snapshot for damage."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Treat every backup as private: it holds everything, including how each member voted (see Privacy and what your server can see). Keep it encrypted, somewhere only owners can reach."
+        },
+        {
+          "type": "h2",
+          "text": "Restoring"
+        },
+        {
+          "type": "p",
+          "text": "**Restore Database Wizard** takes a backup file (up to 500 MB) and the admin password. It replaces the database and restarts the server."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "It restores the database only. It does not bring back genesis.json, community.key or local-config.json; copy those back by hand if they were lost.",
+            "Stop and think before restoring over a live community: everything since the backup is lost."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "A standby server"
+        },
+        {
+          "type": "p",
+          "text": "A second server can follow yours as a read-only standby, copying changes about every minute."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On your server, **Replication Access** (under Backups and Restore) makes a replication token. It is shown once. Token-only mode then refuses the admin password for copying, which is safer.",
+            "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server**. If you give it the admin password instead, it is stored in plain text on the standby.",
+            "Copying goes one way only. Your main server never takes data from the standby.",
+            "**A standby is not a complete copy.** It does not copy Decisions and their votes, or who holds which role. Keep file backups as well.",
+            "Making a standby the main server uses scripts in the BeanPool source code, not in the server image, and the first start after needs PROMOTED_FROM_BACKUP=true."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "updates-and-health",
+      "title": "Updates, health checks and disk space",
+      "summary": "Updating the server, checking it is well from outside and inside, and keeping the disk from filling up.",
+      "section": "server",
+      "related": [
+        "backups-and-replicas",
+        "troubleshooting",
+        "rate-limits",
+        "address-and-peers"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Updating"
+        },
+        {
+          "type": "p",
+          "text": "Your server runs a ready-made image, beanpool-node, from ghcr.io/beanpool-org. It never updates itself. To update:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "back up the data folder (see Backups and replicas);",
+            "on the server, in the folder with docker-compose.yml, run: docker compose pull",
+            "then run: docker compose up -d"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Members stay signed in to their apps. Anyone signed in to Settings from the app, or with a two-factor code, signs in again: those sign-ins are kept in memory."
+        },
+        {
+          "type": "p",
+          "text": "The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one."
+        },
+        {
+          "type": "p",
+          "text": "The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared"
+        },
+        {
+          "type": "h2",
+          "text": "Is there a new version?"
+        },
+        {
+          "type": "p",
+          "text": "The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance and Data**, then **Diagnostics and Logs**, shows the version and whether an update is out, with a button to check now."
+        },
+        {
+          "type": "h2",
+          "text": "Checking from outside"
+        },
+        {
+          "type": "p",
+          "text": "These addresses answer without signing in, so a monitoring service or a phone browser can check them:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "your address followed by **/api/version**: the version, and whether an update is available;",
+            "your address followed by **/api/community/health**: the community's name, version and activity, and the watchdog's last report if you run one."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If neither answers, the server is down or unreachable. See Troubleshooting."
+        },
+        {
+          "type": "h2",
+          "text": "Checking from inside"
+        },
+        {
+          "type": "p",
+          "text": "**Diagnostics and Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it."
+        },
+        {
+          "type": "p",
+          "text": "The server keeps its most recent log lines, which Settings shows under Logs. Some messages only appear in Docker's own log: docker compose logs --tail 200 beanpool-node"
+        },
+        {
+          "type": "h2",
+          "text": "Disk space"
+        },
+        {
+          "type": "p",
+          "text": "The disk card warns at **80%** full. Nothing stops the server writing when the disk is full, and a full disk can damage the database, so act on the warning."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Clean Orphaned Media and Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.",
+            "Keep fewer snapshots, or copy old ones off the server.",
+            "Things that grow with no limit: data/logs/archived, the freeze reports (files named report-something.json in data), and Docker's own logs."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "address-and-peers",
+      "title": "Address, identity and peers",
+      "summary": "Your community's web address, what it tells the BeanPool directory, the gateway switches, and links to other communities.",
+      "section": "server",
+      "related": [
+        "what-the-server-sees",
+        "rate-limits",
+        "updates-and-health",
+        "backups-and-replicas"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Public address"
+        },
+        {
+          "type": "p",
+          "text": "**Appliance and Data**, then **Public Address**. Members' apps need an address to reach your server."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
+            "The usual way in is a tunnel: a small helper container dials out to Cloudflare, so your server needs no open ports and its own address stays hidden. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "You can also use your own domain name and certificate. BeanPool does not need to be involved."
+        },
+        {
+          "type": "h2",
+          "text": "Node identity and the directory"
+        },
+        {
+          "type": "p",
+          "text": "**Node Identity** holds the community's name, contact email and phone, and the area it serves."
+        },
+        {
+          "type": "p",
+          "text": "By default your server tells the BeanPool directory about itself every 12 hours: the community's name, the area it serves, how many members it has, and the contact email and phone if you filled them in. That is how new people find you. Each part can be switched off here, and so can the whole thing. Your members' names and posts are never sent."
+        },
+        {
+          "type": "h2",
+          "text": "Gateway"
+        },
+        {
+          "type": "p",
+          "text": "**Gateway and Peers** has the gateway switches:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "turn the market, messages, links with other communities, invites or the web app off for everyone;",
+            "the rate limit (see Rate limits);",
+            "which other websites may call your server."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Turning a feature off affects every member at once. Tell them first."
+        },
+        {
+          "type": "h2",
+          "text": "Peers: other communities"
+        },
+        {
+          "type": "p",
+          "text": "Links between communities are off unless you switch them on in the server's .env: ENABLE_PEER_CONNECTORS=true lets your server talk to peers, and FEDERATION_SETTLEMENT=true lets members trade across the link. Then add a peer's address under **Gateway and Peers**. Trading between communities is new and little used; agree the terms with the other community's owners first."
+        }
+      ]
+    },
+    {
+      "slug": "rate-limits",
+      "title": "Rate limits",
+      "summary": "The limits that protect your server, what members see when they hit one, and what you can change.",
+      "section": "server",
+      "related": [
+        "troubleshooting",
+        "address-and-peers",
+        "signing-in",
+        "updates-and-health"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "When someone goes over a limit the server answers \"too many requests\" (HTTP 429) and says how long to wait. The counts are kept in memory, so a restart clears them all."
+        },
+        {
+          "type": "h2",
+          "text": "The limits"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance and Data, then Gateway and Peers. Community and federation traffic, and Settings itself, are not counted.",
+            "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device and checking names.",
+            "**Settings**: 300 requests a minute per internet address.",
+            "**Group and event chats**: 30 lines a minute per member.",
+            "**Checking an invite code** before joining: 30 a minute per internet address.",
+            "**Reports**: 10 an hour per member."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The admin password brake"
+        },
+        {
+          "type": "p",
+          "text": "This one is for the whole server, not per address. The first 10 wrong admin passwords cost nothing. After that, password sign-in closes for 2 seconds, then 4, 8 and so on, up to 10 minutes. While it is closed, even the right password is refused. It opens again after a right password, or after 30 minutes with no wrong ones. Signing in from the app's Manage button is not affected."
+        },
+        {
+          "type": "p",
+          "text": "If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else."
+        },
+        {
+          "type": "h2",
+          "text": "Many people on one connection"
+        },
+        {
+          "type": "p",
+          "text": "A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again."
+        },
+        {
+          "type": "p",
+          "text": "If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance."
+        },
+        {
+          "type": "h2",
+          "text": "Finding out which limit"
+        },
+        {
+          "type": "p",
+          "text": "The message says which: \"Gateway rate limit exceeded\", \"Too many attempts\", \"You're sending messages too fast\", or \"Too many wrong admin passwords\". The gateway and the password brake also write a line in the logs."
+        }
+      ]
+    },
+    {
+      "slug": "what-the-server-sees",
+      "title": "Privacy and what your server can see",
+      "summary": "What is private even from you, what you and your admins can see, secret ballots, and what your server sends elsewhere.",
+      "section": "privacy",
+      "related": [
+        "backups-and-replicas",
+        "address-and-peers",
+        "roles",
+        "feedback"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "Running the server means holding your neighbours' information. Know what you can see, so you can tell members honestly, and so you never look without a reason."
+        },
+        {
+          "type": "h2",
+          "text": "Private even from you"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Direct messages** between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What the server holds in the clear"
+        },
+        {
+          "type": "p",
+          "text": "Anyone with the server's files can read these, and so can anyone with a backup:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "members' names, profiles, posts, photos, deals, balances and every trade;",
+            "**group chats, event chats and enterprise chats**: these are not encrypted;",
+            "who messaged whom, and when, even for direct messages;",
+            "**how each member voted**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Secret ballots"
+        },
+        {
+          "type": "p",
+          "text": "Votes on Decisions are secret in the apps and in Settings: everyone sees only the totals, and each member sees their own vote. But the database records each member's vote, to count it and to stop anyone voting twice."
+        },
+        {
+          "type": "p",
+          "text": "So every owner and admin can read how each member voted: all of them can download a backup from Settings, and whoever runs the machine can copy the files. Tell your members this plainly. Keep backups encrypted, and let only people the community trusts hold them."
+        },
+        {
+          "type": "h2",
+          "text": "Who can read what over the internet"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.",
+            "Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.",
+            "The live-updates channel, which carries changes as they happen, is open to anyone who can reach your server unless ENFORCE_WS_AUTH=true. Before you switch it on, check with the BeanPool project that the apps your members use sign their connection, or they stop getting live updates."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What admins see in Settings"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The logs, with passwords, keys and 12-word phrases removed before they are written.",
+            "The list of devices connected right now, with their internet address, device type and member name.",
+            "Reports, and the people they are about."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What your server sends elsewhere"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.",
+            "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
+            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.",
+            "Members' Pulse channels are fetched from the sites they link to.",
+            "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "feedback",
+      "title": "Suggestions to the BeanPool project",
+      "summary": "Where \"Suggest a change\" sends ideas and problems, what is kept, and who reads them.",
+      "section": "privacy",
+      "related": [
+        "what-the-server-sees",
+        "the-settings-screens",
+        "troubleshooting"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "BeanPool is made by a small project, not by you. \"Suggest a change\" is how members, and you, tell the project about an idea or a problem."
+        },
+        {
+          "type": "h2",
+          "text": "Where it goes"
+        },
+        {
+          "type": "p",
+          "text": "A suggestion goes straight from the member's app or browser to the BeanPool project at beanpool.org. It does not pass through your server, and you and your members do not see it."
+        },
+        {
+          "type": "h2",
+          "text": "Is it on yet?"
+        },
+        {
+          "type": "p",
+          "text": "Not in this version. Every \"Suggest a change\" button, in the apps and in Settings, stays hidden until the project switches the service on. Until then, raise problems on the BeanPool project's GitHub page."
+        },
+        {
+          "type": "h2",
+          "text": "What is kept"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The text (10 to 2000 characters), whether it is an idea, a problem or other, where it came from (app, web app or Settings), the app version, the device type and the language.",
+            "The community's name, only if the person types it.",
+            "Not kept: the person's name, key or internet address."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "There are limits on how many suggestions one connection can send in an hour and in a day."
+        },
+        {
+          "type": "h2",
+          "text": "Who reads it"
+        },
+        {
+          "type": "p",
+          "text": "The BeanPool project team reads the suggestions and sorts them each week. They choose which ones to share publicly on the project's GitHub. Nobody replies through the app, so if you want an answer, say how to reach you in the text."
+        }
+      ]
+    },
+    {
+      "slug": "troubleshooting",
+      "title": "When things go wrong",
+      "summary": "The server has stopped answering, members see \"too many requests\", the disk is full, or you cannot sign in.",
+      "section": "help",
+      "related": [
+        "updates-and-health",
+        "rate-limits",
+        "backups-and-replicas",
+        "signing-in"
+      ],
+      "blocks": [
+        {
+          "type": "p",
+          "text": "Stay calm and take a copy before you fix anything. Most problems are fixed by a restart; a lost database is not."
+        },
+        {
+          "type": "h2",
+          "text": "The server has stopped answering"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Check from outside: open your address followed by /api/version. If it does not answer, check the machine is on and online.",
+            "Look at what the server last said: docker compose logs --tail 200 beanpool-node",
+            "If it is frozen (running, but not answering), capture why before you restart: docker compose kill -s SIGUSR2 beanpool-node writes a report file, named report followed by the date and ending .json, into the data folder. Then run docker compose restart beanpool-node.",
+            "After a crash or power cut the server checks its database as it starts, and Home shows a card about it."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "A watchdog"
+        },
+        {
+          "type": "p",
+          "text": "The BeanPool source code has a small watchdog for Linux machines (ops/watchdog). It checks the server every 20 seconds, and after 3 failures saves a report and restarts it, at most 4 times an hour. Set BEANPOOL_WATCH_CONTAINERS to your container's name: its built-in names are the BeanPool project's own servers."
+        },
+        {
+          "type": "h2",
+          "text": "Members see \"too many requests\""
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Read the message: it names the limit. See Rate limits.",
+            "Many people joining at once from one wifi can hit the sign-in limit. It clears within a minute.",
+            "If everyone hits the gateway limit at once, your server may think every member has the same internet address. That happens behind a proxy on another machine: set TRUSTED_PROXIES.",
+            "A restart clears every count, if you need it right now."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The disk is full"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Appliance and Data, then Diagnostics and Logs, shows how full it is and what is using it.",
+            "Run **Clean Orphaned Media and Compress Logs**, and delete old snapshots after copying them off.",
+            "On the machine, check Docker's own logs and old images: docker system df shows them; docker image prune removes old images.",
+            "When there is room again, check the database: Backups and Restore, then Database Integrity Verification."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "You cannot sign in"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "\"Too many wrong admin passwords\": wait, or sign in from the app. See Rate limits.",
+            "Lost the password: see Signing in.",
+            "Lost the two-factor code: see Access and security.",
+            "Settings keeps signing you out: sign-ins from the app last 2 hours unused, 12 hours at most, and end when the server restarts."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Members cannot join"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Check the invite has not been used or passed its 30 days.",
+            "Invites made in Settings while signed in from the app are not real codes. See Members and invites.",
+            "Check Invites is not switched off under Gateway and Peers."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Getting help"
+        },
+        {
+          "type": "p",
+          "text": "Ask on the BeanPool project's GitHub. Say what you did, what you expected, what happened, and your version (your address followed by /api/version). Never post the admin password, a break-glass code, a backup or anyone's 12 words."
+        }
+      ]
+    }
+  ]
+}

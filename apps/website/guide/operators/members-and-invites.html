@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Members and invites — BeanPool operator manual</title>
+    <meta name="description" content="How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#people">People and roles</a></p>
+        <h1>Members and invites</h1>
+        <p class="lede">How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.</p>
+        <h2>How people join</h2>
+        <p>Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires <strong>30 days</strong> after it is made. The name an invite is made out to is only a label: the person picks their own name when they join.</p>
+        <p>Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.</p>
+        <h2>Invites from Settings</h2>
+        <p>Open <strong>People and Safety</strong>, then <strong>Invites and QR</strong>. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.</p>
+        <ul>
+            <li>These invites need the <strong>admin password</strong>. If you signed in from the app's Manage button, Settings cannot make them, and shows made-up codes that the server will not accept. Sign in with the password, or make invites from your own app.</li>
+            <li>Every invite made in Settings is recorded as coming from the first member, Admin, not from you.</li>
+        </ul>
+        <h2>A member's page</h2>
+        <p>Open <strong>People and Safety</strong>, then <strong>Members</strong>, and open a person. Owners and admins can:</p>
+        <ul>
+            <li><strong>Suspend</strong>: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.</li>
+            <li><strong>Lift suspension</strong>: ends a suspension early and closes its vote.</li>
+            <li><strong>Freeze</strong> and <strong>Unfreeze</strong>: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.</li>
+            <li><strong>Promote</strong> and <strong>Demote</strong>: whether they can vouch for others.</li>
+            <li><strong>Grant Operator</strong>: lets them act for enterprises they are a keeper of.</li>
+            <li><strong>Re-Key</strong>: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for <strong>24 hours</strong>. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.</li>
+            <li><strong>Offboard</strong>: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.</li>
+            <li><strong>Prune Account</strong>: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts, role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database.</li>
+            <li><strong>Prune Branch</strong>: removes them and everyone they invited, and everyone those people invited. You type their name to confirm.</li>
+        </ul>
+        <p>Only an owner can suspend an owner, or remove an owner or an admin. Nobody can remove the last owner.</p>
+        <h2>Things to know</h2>
+        <ul>
+            <li>A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.</li>
+            <li>The trust score shown on a member's page is not calculated yet. Do not act on it.</li>
+            <li>Suspended members can still make invites from their app.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
+            <li><a href="reports-and-takedowns.html"><strong>Reports and takedowns</strong><span>How members report posts, people and Pulse items, where the reports land, and what each action really does.</span></a></li>
+            <li><a href="decisions-and-emergencies.html"><strong>Decisions, emergencies and removal</strong><span>How the community's votes run by themselves, the emergency suspension, removing someone, and halting a Decision.</span></a></li>
+            <li><a href="disputes.html"><strong>Stuck deals and disputes</strong><span>What counts as a dispute, who may rule on one, the three rulings, and why you can never rule on your own.</span></a></li>
+            <li><a href="first-time-setup.html"><strong>First-time setup</strong><span>The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy and what your server can see — BeanPool operator manual</title>
+    <meta name="description" content="What is private even from you, what you and your admins can see, secret ballots, and what your server sends elsewhere.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#privacy">Privacy and feedback</a></p>
+        <h1>Privacy and what your server can see</h1>
+        <p class="lede">What is private even from you, what you and your admins can see, secret ballots, and what your server sends elsewhere.</p>
+        <p>Running the server means holding your neighbours' information. Know what you can see, so you can tell members honestly, and so you never look without a reason.</p>
+        <h2>Private even from you</h2>
+        <ul>
+            <li><strong>Direct messages</strong> between two members, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. One exception: if the sender's app cannot find the other person's key, it sends the message without the lock rather than not at all, and that message can be read.</li>
+        </ul>
+        <h2>What the server holds in the clear</h2>
+        <p>Anyone with the server's files can read these, and so can anyone with a backup:</p>
+        <ul>
+            <li>members' names, profiles, posts, photos, deals, balances and every trade;</li>
+            <li><strong>group chats, event chats and enterprise chats</strong>: these are not encrypted;</li>
+            <li>who messaged whom, and when, even for direct messages;</li>
+            <li><strong>how each member voted</strong>.</li>
+        </ul>
+        <h2>Secret ballots</h2>
+        <p>Votes on Decisions are secret in the apps and in Settings: everyone sees only the totals, and each member sees their own vote. But the database records each member's vote, to count it and to stop anyone voting twice.</p>
+        <p>So every owner and admin can read how each member voted: all of them can download a backup from Settings, and whoever runs the machine can copy the files. Tell your members this plainly. Keep backups encrypted, and let only people the community trusts hold them.</p>
+        <h2>Who can read what over the internet</h2>
+        <ul>
+            <li>Reading anything private needs a member's signature. This is on by default. The setting is ENFORCE_READ_AUTH, and only the exact value false turns it off. Leave it on.</li>
+            <li>Some things are public on purpose: the market's list of posts, the Pulse, the community's health summary, profile pictures and post photos.</li>
+            <li>The live-updates channel, which carries changes as they happen, is open to anyone who can reach your server unless ENFORCE_WS_AUTH=true. Before you switch it on, check with the BeanPool project that the apps your members use sign their connection, or they stop getting live updates.</li>
+        </ul>
+        <h2>What admins see in Settings</h2>
+        <ul>
+            <li>The logs, with passwords, keys and 12-word phrases removed before they are written.</li>
+            <li>The list of devices connected right now, with their internet address, device type and member name.</li>
+            <li>Reports, and the people they are about.</li>
+        </ul>
+        <h2>What your server sends elsewhere</h2>
+        <ul>
+            <li>The BeanPool directory, every 12 hours: your community's name, area, member count and contact details (see Address, identity and peers). Switch it off under Node Identity.</li>
+            <li>GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.</li>
+            <li>Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.</li>
+            <li>Members' Pulse channels are fetched from the sites they link to.</li>
+            <li>With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="backups-and-replicas.html"><strong>Backups and replicas</strong><span>What to back up, the backups Settings makes for you, restoring, and running a second server as a standby.</span></a></li>
+            <li><a href="address-and-peers.html"><strong>Address, identity and peers</strong><span>Your community's web address, what it tells the BeanPool directory, the gateway switches, and links to other communities.</span></a></li>
+            <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
+            <li><a href="feedback.html"><strong>Suggestions to the BeanPool project</strong><span>Where &quot;Suggest a change&quot; sends ideas and problems, what is kept, and who reads them.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/operators by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decisions, emergencies and removal — BeanPool operator manual</title>
+    <meta name="description" content="How the community's votes run by themselves, the emergency suspension, removing someone, and halting a Decision.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../style.css?v=2.4">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these two stay. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-block !important; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Operator manual</a>
+                <a href="../index.html">Members' guide</a>
+                <a href="../../index.html">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#commons">Money and decisions</a></p>
+        <h1>Decisions, emergencies and removal</h1>
+        <p class="lede">How the community's votes run by themselves, the emergency suspension, removing someone, and halting a Decision.</p>
+        <p>The community governs itself through Decisions. Members propose and vote in the app. Settings is where owners and admins watch them, and step in when something goes wrong.</p>
+        <h2>How a Decision runs</h2>
+        <ul>
+            <li>Voting is open for <strong>7 days</strong>. When it closes, the server counts the votes within a minute and, if it passed, carries it out by itself. No admin has to press anything.</li>
+            <li>Enough people must vote: at least 3, and at least 30% of members active in the last 30 days (25% for removing someone).</li>
+            <li>It passes with 60% yes. Removing someone needs 66%; restoring someone needs just over half. A tie fails.</li>
+            <li>Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.</li>
+            <li>Each member can have one open Decision at a time. Frozen and suspended members cannot vote or propose.</li>
+        </ul>
+        <p>What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days.</p>
+        <h2>Watching them</h2>
+        <p><strong>Shared Projects and Economy</strong>, then <strong>Proposals</strong>, shows open votes and removals that are waiting out their grace period, with the totals so far.</p>
+        <h2>Emergency suspension</h2>
+        <p>For when someone is doing harm now. Open the person (People and Safety, then Members) and choose <strong>Suspend</strong>. Write a reason of at least 10 characters: every member will see it.</p>
+        <ul>
+            <li>They are suspended at once and their role, if any, is set aside.</li>
+            <li>A 7-day vote opens: &quot;Keep the suspension?&quot;. One member, one vote, 60% to keep it.</li>
+            <li>If it does not pass, the suspension lifts by itself and their role comes back.</li>
+            <li>You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.</li>
+            <li>The suspended person gets no notification. Tell them yourself.</li>
+        </ul>
+        <h2>Removing someone</h2>
+        <p>Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has <strong>7 days' grace</strong>. After that they are removed automatically, and their balance or debt goes to the commons.</p>
+        <h2>Halting a Decision</h2>
+        <p><strong>Halt</strong> stops a Decision that is open or in its grace period. You must give a reason of at least 10 characters, and it is public.</p>
+        <ul>
+            <li>Halting a removal in its grace period restores the person.</li>
+            <li>Halting a &quot;keep the suspension&quot; vote lifts the suspension.</li>
+            <li><strong>Owner only</strong>: if halting would give someone back an owner or admin role, only an owner can do it. The same goes for lifting such a suspension by hand, and for cutting a grace period short.</li>
+        </ul>
+        <p>Halting overrides the community. Use it for a mistake or an abuse of the process, not because you dislike the result, and say why.</p>
+        <h2>Know this</h2>
+        <ul>
+            <li>A suspension by Decision takes away the person's role for good. An emergency suspension only sets it aside.</li>
+            <li>Lifting a suspension by hand is refused while a removal is waiting out its grace period. Halt the removal instead.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="roles.html"><strong>Owners, admins and moderators</strong><span>What each role can do, what only owners can do, and why a community can never lose its last owner.</span></a></li>
+            <li><a href="members-and-invites.html"><strong>Members and invites</strong><span>How people join, the invites you can make, and what each button on a member does, from Freeze to Offboard.</span></a></li>
+            <li><a href="enterprises-and-keepers.html"><strong>Enterprises, keepers and the commons</strong><span>Setting up a shared enterprise, choosing who runs it, and the commons pool that pays grants.</span></a></li>
+            <li><a href="disputes.html"><strong>Stuck deals and disputes</strong><span>What counts as a dispute, who may rule on one, the three rulings, and why you can never rule on your own.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version 1.</p>
+    </main>
+</body>
+</html>

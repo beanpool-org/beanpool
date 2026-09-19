@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "setup",
+      "title": "Setting up",
+      "summary": "The first start, signing in, finding your way around Settings, and keeping the admin door locked.",
+      "pages": ["first-time-setup", "signing-in", "the-settings-screens", "access-and-security"]
+    },
+    {
+      "id": "people",
+      "title": "People and roles",
+      "summary": "Owners, admins and moderators, and looking after members and invites.",
+      "pages": ["roles", "members-and-invites"]
+    },
+    {
+      "id": "safety",
+      "title": "Safety and moderation",
+      "summary": "Reports, taking posts down, announcements and the Pulse.",
+      "pages": ["reports-and-takedowns", "pulse-and-announcements"]
+    },
+    {
+      "id": "commons",
+      "title": "Money and decisions",
+      "summary": "Stuck deals, the community's Decisions and emergencies, enterprises and the commons.",
+      "pages": ["disputes", "decisions-and-emergencies", "enterprises-and-keepers"]
+    },
+    {
+      "id": "server",
+      "title": "Running the server",
+      "summary": "Backups, updates and health, your address and peers, and rate limits.",
+      "pages": ["backups-and-replicas", "updates-and-health", "address-and-peers", "rate-limits"]
+    },
+    {
+      "id": "privacy",
+      "title": "Privacy and feedback",
+      "summary": "What your server can and cannot see, and where suggestions to the project go.",
+      "pages": ["what-the-server-sees", "feedback"]
+    },
+    {
+      "id": "help",
+      "title": "When things go wrong",
+      "summary": "A frozen server, too many requests, a full disk, and getting help.",
+      "pages": ["troubleshooting"]
+    }
+  ]
+}

@@ -10,10 +10,11 @@ import {
     Alert,
     ActivityIndicator,
 } from 'react-native';
-// RN's own KeyboardAvoidingView does nothing under Android edge-to-edge. No nested KeyboardProvider
-// inside this <Modal>: on the emulator it left the root provider suspended after the sheet closed,
-// so the chat composer stayed under the keyboard; the root provider lifts this sheet on its own.
-import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+// No nested KeyboardProvider inside this <Modal>: on the emulator it left the root provider suspended after the
+// sheet closed, so the chat composer stayed under the keyboard. The sheet is lifted from the root provider's
+// keyboard state by useModalKeyboardLift.
+import { KeyboardController } from 'react-native-keyboard-controller';
+import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -53,7 +54,10 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>('open');
     const [submitting, setSubmitting] = useState(false);
     const insets = useSafeAreaInsets();
-    const keyboardVisible = useKeyboardState(s => s.isVisible);
+    // Measured lift, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
+    const lift = useModalKeyboardLift(insets.top + 8);
+    const keyboardVisible = lift.keyboardVisible;
+
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         backdrop: {
@@ -65,8 +69,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             backgroundColor: colors.surface.card,
             borderTopLeftRadius: 24,
             borderTopRightRadius: 24,
-            maxHeight: '90%',
-            // Shrink into the space above the keyboard rather than overflow off the top.
+            // maxHeight comes from useModalKeyboardLift: 90% of the screen, or what is left above the keyboard.
             flexShrink: 1,
         },
         header: {
@@ -244,11 +247,11 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
             transparent
             onRequestClose={onClose}
         >
-            <KeyboardAvoidingView
-                behavior="padding"
-                style={styles.backdrop}
+            <View
+                style={[styles.backdrop, { paddingTop: insets.top + 8 }]}
+                onLayout={lift.onLayout}
             >
-                <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 0 : insets.bottom }]}>
+                <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 0 : insets.bottom, maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
                         <Text style={styles.title}>Create a Group</Text>
                         <Pressable
@@ -262,7 +265,9 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         </Pressable>
                     </View>
 
-                    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                    {/* flexShrink: at 320dp x 569dp with the keyboard up the sheet has ~250dp; without it the ScrollView
+                        kept its content height, the sheet overflowed, and only the title showed, under the status bar. */}
+                    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
                             <Text style={styles.infoNoticeText}>
@@ -390,7 +395,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
                         </Pressable>
                     </ScrollView>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 }

@@ -4,14 +4,15 @@
  * sends each an invitation (POST /api/groups/:id/members, action 'invite'); the server writes the joins into the
  * chat as system lines when they accept.
  *
- * Keyboard: KeyboardAvoidingView from react-native-keyboard-controller and NO nested KeyboardProvider inside this
+ * Keyboard: lifted by useModalKeyboardLift from the root provider's state, NO nested KeyboardProvider inside this
  * Modal (memory keyboard-avoidance-pattern); the keyboard is dismissed before any Alert.
  * At 320dp and 1.3× text every row is a 56dp target, names truncate, the Invite button never leaves the screen.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
-import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
+import { KeyboardController } from 'react-native-keyboard-controller';
+import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -33,7 +34,8 @@ interface Props {
 export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubkey, onClose, onInvited }: Props) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const keyboardVisible = useKeyboardState(s => s.isVisible);
+    const lift = useModalKeyboardLift(insets.top + 8, 0.92);
+    const keyboardVisible = lift.keyboardVisible;
     const [members, setMembers] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -57,7 +59,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
         sheet: {
             backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            maxHeight: '92%', minHeight: '60%', flexShrink: 1,
+            flexShrink: 1,
         },
         header: {
             flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingRight: 4, paddingVertical: 6,
@@ -118,8 +120,13 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
 
     return (
         <Modal visible={isOpen} animationType="slide" transparent onRequestClose={onClose}>
-            <KeyboardAvoidingView behavior="padding" style={styles.backdrop}>
-                <View style={[styles.sheet, { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12) }]}>
+            <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]} onLayout={lift.onLayout}>
+                <View style={[styles.sheet, {
+                    paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 12),
+                    maxHeight: lift.maxHeight, marginBottom: lift.lift,
+                    // Tall enough to pick from when there is room; never taller than what is left above the keyboard.
+                    minHeight: Math.min(lift.maxHeight, 360),
+                }]}>
                     <View style={styles.header}>
                         <View style={styles.titleWrap}>
                             <Text style={styles.title} numberOfLines={1}>Invite people</Text>
@@ -142,6 +149,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                     </View>
                     <FlatList
                         data={shown}
+                        style={{ flexShrink: 1 }}
                         keyExtractor={m => m.publicKey}
                         keyboardShouldPersistTaps="handled"
                         ListEmptyComponent={<Text style={styles.empty}>{query ? 'Nobody by that name.' : 'Nobody else is in this community yet.'}</Text>}
@@ -183,7 +191,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
                         </Pressable>
                     </View>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 }

@@ -47,6 +47,7 @@
 import { importRemoteState, getNodeRole, getReplicaConsistency, clearReplicatedTables, getStateHash, getSyncCursor, setSyncCursor, type ImportResult, type SyncPayload, type ReplicaConsistency } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { pullTakeoverEnvelope } from './standby-envelopes.js';
 
 const SNAPSHOT_PATH = '/api/local/admin/sync-snapshot';
 const DELTA_PATH = '/api/local/admin/sync-delta';
@@ -567,6 +568,16 @@ export async function migrateStandbyPassword(): Promise<StandbyCredentialState> 
 }
 
 /**
+ * Fetch the main server's take-over envelope with the replication token, if it has a new one (services/
+ * standby-envelopes.ts checks it against the mirror pin and keeps the last five). Never throws.
+ */
+export async function pullTakeoverEnvelopeNow(): ReturnType<typeof pullTakeoverEnvelope> {
+    const { token, primaryUrl } = readCredentials();
+    if (!primaryUrl || !isAllowedPrimaryUrl(primaryUrl)) return 'failed';
+    return pullTakeoverEnvelope({ primaryUrl, replicationToken: token });
+}
+
+/**
  * Start the backup pull loop if this node is configured as a backup. No-op
  * (with a clear log) on a primary or when required config is missing, so the
  * same image runs in either role purely from env.
@@ -599,6 +610,8 @@ export function initBackupPuller(): void {
             await migrateStandbyPassword().catch(() => {});
         }
         await pullOnce(nextMode()).catch(() => {});
+        // The main server's locked take-over keys (sealed-keys.md §4): a 304 on most ticks.
+        await pullTakeoverEnvelopeNow().catch(() => {});
         if (stopped) return;
         pullTimer = setTimeout(loop, getPullMs());
     };

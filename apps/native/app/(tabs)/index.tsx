@@ -1526,6 +1526,9 @@ export default function MarketScreen() {
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
             {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
+            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" />} below={categoryPanelOverlay}>
+                {controls}
+            </QuickReturnBlock>
             <Animated.FlatList
                 ref={listRef}
                 key={viewMode}
@@ -1620,9 +1623,6 @@ export default function MarketScreen() {
                     onPress={closeCategoryPanel}
                 />
             )}
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" />} below={categoryPanelOverlay}>
-                {controls}
-            </QuickReturnBlock>
             {qr.hidden && filterSummary && (
                 <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}

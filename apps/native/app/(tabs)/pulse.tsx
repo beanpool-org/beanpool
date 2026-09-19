@@ -296,44 +296,6 @@ export default function PulseScreen() {
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            {/* Feed List */}
-            {loading && !refreshing ? (
-                <View style={[styles.centerLoader, { paddingTop: qr.blockHeight }]}>
-                    <ActivityIndicator size="large" color={colors.brand.primary} />
-                    <Text style={styles.loaderText}>Loading community feed…</Text>
-                </View>
-            ) : (
-                <Animated.FlatList
-                    ref={listRef}
-                    {...qr.listProps}
-                    data={visibleItems}
-                    keyExtractor={(item: any) => item.id}
-                    renderItem={({ item }: { item: PulseFeedItem }) => (
-                        <PulseFeedCard
-                            item={item}
-                            currentPubkey={identity?.publicKey}
-                            onMute={handleMute}
-                            onReport={handleReport}
-                            nodeUrl={nodeUrl}
-                        />
-                    )}
-                    contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.blockHeight }]}
-                    ListHeaderComponent={errorBox}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={handleRefresh}
-                            tintColor={colors.brand.primary}
-                            colors={[colors.brand.primary]}
-                            progressViewOffset={qr.blockHeight}
-                        />
-                    }
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.3}
-                    ListEmptyComponent={renderEmptyState}
-                    ListFooterComponent={renderFooter}
-                />
-            )}
             {/* + Channels rides on the title's line rather than costing a row of its own. */}
             <QuickReturnBlock qr={qr} title={<>
                 <PageTitle title="Pulse" right={
@@ -476,6 +438,44 @@ export default function PulseScreen() {
                 )}
             </View>
             </QuickReturnBlock>
+            {/* Feed List */}
+            {loading && !refreshing ? (
+                <View style={[styles.centerLoader, { paddingTop: qr.blockHeight }]}>
+                    <ActivityIndicator size="large" color={colors.brand.primary} />
+                    <Text style={styles.loaderText}>Loading community feed…</Text>
+                </View>
+            ) : (
+                <Animated.FlatList
+                    ref={listRef}
+                    {...qr.listProps}
+                    data={visibleItems}
+                    keyExtractor={(item: any) => item.id}
+                    renderItem={({ item }: { item: PulseFeedItem }) => (
+                        <PulseFeedCard
+                            item={item}
+                            currentPubkey={identity?.publicKey}
+                            onMute={handleMute}
+                            onReport={handleReport}
+                            nodeUrl={nodeUrl}
+                        />
+                    )}
+                    contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.blockHeight }]}
+                    ListHeaderComponent={errorBox}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={colors.brand.primary}
+                            colors={[colors.brand.primary]}
+                            progressViewOffset={qr.blockHeight}
+                        />
+                    }
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.3}
+                    ListEmptyComponent={renderEmptyState}
+                    ListFooterComponent={renderFooter}
+                />
+            )}
             </View>
         </SafeAreaView>
     );

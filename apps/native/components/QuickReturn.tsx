@@ -21,6 +21,8 @@ function useA11ySetting(read: () => Promise<boolean>, event: 'screenReaderChange
 }
 
 const REVEAL_MS = 180;
+const readScreenReader = () => AccessibilityInfo.isScreenReaderEnabled();
+const readReduceMotion = () => AccessibilityInfo.isReduceMotionEnabled();
 
 export interface QuickReturn {
     /** Spread onto the list (an Animated.FlatList / Animated.ScrollView). */
@@ -59,8 +61,8 @@ export interface QuickReturn {
  *   fresh list at the top does not inherit the old one's scrolled-away block.
  */
 export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean; resetKey?: unknown } = {}): QuickReturn {
-    const screenReader = useA11ySetting(AccessibilityInfo.isScreenReaderEnabled, 'screenReaderChanged');
-    const reduceMotion = useA11ySetting(AccessibilityInfo.isReduceMotionEnabled, 'reduceMotionChanged');
+    const screenReader = useA11ySetting(readScreenReader, 'screenReaderChanged');
+    const reduceMotion = useA11ySetting(readReduceMotion, 'reduceMotionChanged');
     const fixed = screenReader || pinned;
 
     const scrollY = useRef(new Animated.Value(0)).current;
@@ -147,8 +149,9 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
 
 /**
  * The block that rides over the top of the list. Place it inside a `{ flex: 1, overflow: 'hidden' }`
- * container together with the list (which spreads `qr.listProps` and adds `qr.blockHeight` to its paddingTop), so what slides up
- * goes under the tab bar rather than over it.
+ * container together with the list (which spreads `qr.listProps` and adds `qr.blockHeight` to its
+ * paddingTop), so what slides up goes under the tab bar rather than over it. Put it BEFORE the list in
+ * that container: its zIndex draws it on top, and a screen reader then reads the controls first.
  *
  * `below` is drawn under the controls but not counted in the block's height: a panel that opens over
  * the list (Market's category tiles) instead of pushing it down.

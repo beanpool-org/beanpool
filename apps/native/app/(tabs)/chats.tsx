@@ -684,22 +684,9 @@ export default function ChatsScreen() {
     return (
         <View style={styles.safeArea}>
             {/* The large "Talk" title replaces the old "Inbox" heading (one title per page). It, the switch
-                and the search row sit over the list and ride away with it (QuickReturnBlock below); the
+                and the search row sit over the list and ride away with it (QuickReturnBlock); the
                 compose button lives in the search row, so it comes back with the first scroll up. */}
             <View style={{ flex: 1, overflow: 'hidden' }}>
-            <Animated.FlatList
-                ref={listRef}
-                {...qr.listProps}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                data={regularConversations}
-                keyExtractor={(item: any) => item.id}
-                renderItem={renderItem}
-                ListHeaderComponent={listHeader}
-                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.blockHeight }]}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={listEmpty}
-            />
             <QuickReturnBlock qr={qr} title={<PageTitle title="Talk" />} below={optionsDrawer}>
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
@@ -749,6 +736,19 @@ export default function ChatsScreen() {
             </View>
 
             </QuickReturnBlock>
+            <Animated.FlatList
+                ref={listRef}
+                {...qr.listProps}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                data={regularConversations}
+                keyExtractor={(item: any) => item.id}
+                renderItem={renderItem}
+                ListHeaderComponent={listHeader}
+                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.blockHeight }]}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={listEmpty}
+            />
             </View>
 
 

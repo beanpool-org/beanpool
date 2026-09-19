@@ -13,6 +13,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 process.env.ADMIN_PASSWORD = 'TestManagerAdmin123!';
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -104,6 +106,31 @@ async function main(): Promise<void> {
         headers: { 'X-Admin-Password': ADMIN_PW },
     });
     assert(downloadIdentityTraversal.status === 400, `download-identity rejects path-traversal nodeId (got ${downloadIdentityTraversal.status})`);
+
+    // 6. Sealed backups (sealed-keys slice 3): the harvester holds only .bpsealed files, and these routes serve them
+    //    as they are. The plain identity bundle is gone (410), and nothing here is gzip.
+    const sealedDir = path.join(process.env.BEANPOOL_DATA_DIR!, 'backups', 'mullum', 'sealed');
+    fs.mkdirSync(sealedDir, { recursive: true });
+    const fakeSealed = Buffer.concat([Buffer.from([0, 0, 0, 2]), Buffer.from('{}'), Buffer.from('ciphertext')]);
+    fs.writeFileSync(path.join(sealedDir, 'beanpool-2026-09-19T01-02-03.bpsealed'), fakeSealed);
+    const isGz = (b: Buffer) => b[0] === 0x1f && b[1] === 0x8b;
+    const dbRes = await fetch(`${BASE}/api/manager/backups/download-db?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const dbBody = Buffer.from(await dbRes.arrayBuffer());
+    assert(dbRes.status === 200 && dbBody.equals(fakeSealed) && /\.bpsealed"/.test(dbRes.headers.get('content-disposition') || ''),
+        `download-db serves the newest sealed file as it is (got ${dbRes.status})`);
+    const histRes = await fetch(`${BASE}/api/manager/backups/history?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const hist = await histRes.json() as any;
+    assert(hist.history?.length === 1 && hist.history[0].filename === 'beanpool-2026-09-19T01-02-03.bpsealed' && hist.history[0].sealed === true,
+        'history lists the sealed files');
+    const oneRes = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-19T01-02-03.bpsealed`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const oneBody = Buffer.from(await oneRes.arrayBuffer());
+    assert(oneRes.status === 200 && oneBody.equals(fakeSealed), `download-history serves a sealed file (got ${oneRes.status})`);
+    const oldName = await fetch(`${BASE}/api/manager/backups/download-history?nodeId=mullum&filename=beanpool-2026-09-10.db`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    assert(oldName.status === 400, `download-history refuses an old plaintext .db name (got ${oldName.status})`);
+    const idRes = await fetch(`${BASE}/api/manager/backups/download-identity?nodeId=mullum`, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    const idBody = Buffer.from(await idRes.arrayBuffer());
+    assert(idRes.status === 410 && !isGz(idBody) && /inside the sealed backup/.test(idBody.toString()), `download-identity is gone: 410 with the reason (got ${idRes.status})`);
+    assert(![dbBody, oneBody, idBody].some(isGz), 'no manager download starts with gzip magic');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

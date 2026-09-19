@@ -242,6 +242,7 @@ run_federation_suites() {
       test-backend-monitors
       test-backup-hardening
       test-backup-identity-bundle
+      test-sealed-backups
       test-takeover-envelope
       test-backup-topology
       test-standby-token-only

@@ -153,29 +153,34 @@ function header(headers: Record<string, string | string[] | undefined>, name: st
 const FORWARDING_HEADERS = ['x-forwarded-for', 'x-real-ip', 'forwarded', 'cf-connecting-ip'];
 const FORWARDER_MEMORY_MS = 24 * 60 * 60_000;
 const MAX_FORWARDERS = 1024;
-const untrustedForwarders = new Map<string, number>();
+/** Limiter key → when it last forwarded, and whether the warning has been printed for it. */
+const untrustedForwarders = new Map<string, { seen: number; warned: boolean }>();
 let lastForwarderWarning = 0;
 
 function noteUntrustedForwarder(ip: string): void {
     const key = limiterKeyForIp(ip);
     const now = Date.now();
-    const known = untrustedForwarders.has(key);
+    const entry = untrustedForwarders.get(key) ?? { seen: now, warned: false };
+    entry.seen = now;
     untrustedForwarders.delete(key);
-    untrustedForwarders.set(key, now);
+    untrustedForwarders.set(key, entry);
     if (untrustedForwarders.size > MAX_FORWARDERS) untrustedForwarders.delete(untrustedForwarders.keys().next().value!);
-    if (!known && now - lastForwarderWarning > 10 * 60_000) {
+    // Marked warned only when the warning is printed: a peer first seen while the warnings are rate-limited (a
+    // scanner sending X-Forwarded-For just used the last one) is warned about on its next request after that.
+    if (!entry.warned && now - lastForwarderWarning > 10 * 60_000) {
         lastForwarderWarning = now;
+        entry.warned = true;
         console.warn(`[client-ip] ${ip} sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from ${ip}. If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart; until then the members behind it share one set of rate limits and one admin-password brake.`);
     }
 }
 
 /**
  * Whether limiter key `key` is a peer that has recently forwarded for others without being trusted: one source
- * standing for many people.
+ * standing for many people. `now` is the caller's clock (the password brake passes its own).
  */
-export function isSharedSourceKey(key: string): boolean {
-    const seen = untrustedForwarders.get(key);
-    return seen !== undefined && Date.now() - seen <= FORWARDER_MEMORY_MS;
+export function isSharedSourceKey(key: string, now = Date.now()): boolean {
+    const seen = untrustedForwarders.get(key)?.seen;
+    return seen !== undefined && now - seen <= FORWARDER_MEMORY_MS;
 }
 
 /** Tests only. */

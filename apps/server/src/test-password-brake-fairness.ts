@@ -3,8 +3,9 @@
  *
  *   1. An attacker with one IPv6 /48 who rotates fresh /64s (six guesses each) took every freed check in the
  *      "few failures" tier, so an owner who had mistyped once was never checked again from that network: 0 of 1078
- *      retries over 6 h. A source with at most TYPO_FAILURES failures outside a dirty prefix now has the next free
- *      check held for it, so it is checked on its first retry after one frees (a minute at most).
+ *      retries over 6 h. A source with at most TYPO_FAILURES failures, in a prefix with at most TYPO_PREFIX_FAILURES, now has the next free
+ *      check held for it, so it is checked on its first retry after one frees: a minute at most against a single
+ *      /48, about (1 + 2N) minutes against N clean /48s or /24s more (part 1b, #948's review round 1).
  *   2. Behind a reverse proxy the node does not trust, every member is one source, and #944's hour-long wait fell on
  *      everyone. client-ip.ts now notices such a proxy (forwarding headers from an untrusted peer), and its wait is
  *      capped at SHARED_SOURCE_MAX_DELAY_MS (ten minutes, as before #944), with a log line naming TRUSTED_PROXIES.
@@ -18,7 +19,7 @@
 import { resolveClientIp, limiterKeyForIp, isSharedSourceKey, resetUntrustedForwardersForTests, setTrustConfigForTests } from './client-ip.js';
 import {
     SOURCE_FREE_FAILURES, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, TYPO_FAILURES, PENDING_HOLD_MS,
-    SHARED_SOURCE_MAX_DELAY_MS, MAX_SOURCES, MAX_PREFIXES,
+    SHARED_SOURCE_MAX_DELAY_MS, MAX_SOURCES, MAX_PREFIXES, TYPO_PREFIX_FAILURES,
     tryAdmit, settlePasswordAttempt, notePasswordFailure, resetPasswordBrake, passwordBrakeSizes,
 } from './password-brake.js';
 
@@ -76,7 +77,7 @@ function part1Fairness() {
         const waited = admittedAt < 0 ? Infinity : (admittedAt - firstRightTry) / 1000;
         console.log(`  ${typos} mistype(s): the right password got in after ${waited} s and ${retries} refusal(s)`);
         assert(admittedAt > 0 && waited <= 61,
-            `an owner who mistyped ${typos}× during the /48 attack gets in within a minute of trying the right password, honouring Retry-After (${waited} s; before this fix: never, over 6 h)`);
+            `an owner who mistyped ${typos}× during a single-/48 attack gets in within a minute of trying the right password, honouring Retry-After (${waited} s; before this fix: never, over 6 h)`);
     }
 
     resetPasswordBrake();
@@ -162,6 +163,90 @@ function part1Fairness() {
     }
 }
 
+/**
+ * Fable's review of #948: typo-rank sources are not held back by each other's claims, so an attacker with one
+ * dirty filler /48 fills 11 checks a minute with it and spends one typo-rank check on the 12th, and each such check
+ * costs a waiting owner about a minute. With typo rank allowed up to a dirty prefix (20 failures), one clean /48 fed
+ * 13 of them: 14 min for 1 clean /48, 66 min for 5, 365 min for 28. Typo rank now needs a nearly clean prefix
+ * (at most TYPO_PREFIX_FAILURES), which caps a /48's yield at 2.
+ */
+function adaptiveAttack(cleanPrefixes: number, perPrefix: number): { waited: number; typoChecks: number } {
+    resetPasswordBrake();
+    let t = T0, fillerN = 0, typoChecks = 0, typoIdx = 0;
+    for (let i = 0; i < 20; i++) notePasswordFailure(`2001:db8:66:f${i.toString(16)}::/64`, t);
+    const pool: string[] = [];
+    for (let p = 0; p < cleanPrefixes; p++) for (let s = 0; s < perPrefix; s++) pool.push(`2001:db8:${(0x100 + p).toString(16)}:${s}::/64`);
+    for (const k of pool) { const a = tryAdmit(k, t); if (a !== 'wait' && a.admitted) settlePasswordAttempt(k, false, true, t); }
+    const owner = '192.0.2.44';
+    let mistyped = false, next = T0 + 10 * 60_000, firstRight = 0;
+    for (; t < T0 + 24 * 3_600_000; t += 1000) {
+        let got = 0;
+        for (let g = 0; g < 30; g++) {
+            const k = `2001:db8:66:${fillerN.toString(16)}::/64`;
+            const a = tryAdmit(k, t);
+            if (a === 'wait') break;
+            if (a.admitted) { settlePasswordAttempt(k, false, true, t); got++; continue; }
+            if (a.reason === 'source') { fillerN++; continue; }
+            break;
+        }
+        if (got === NODE_CHECKS_PER_MIN - 1) {
+            for (; typoIdx < pool.length; typoIdx++) {
+                const a = tryAdmit(pool[typoIdx], t);
+                if (a !== 'wait' && a.admitted) { settlePasswordAttempt(pool[typoIdx], false, true, t); typoChecks++; break; }
+            }
+        }
+        if (t < next) continue;
+        const a = tryAdmit(owner, t);
+        if (a === 'wait') continue;
+        if (!mistyped) {
+            if (a.admitted) { settlePasswordAttempt(owner, false, true, t); mistyped = true; firstRight = next = t + 1000; }
+            continue;
+        }
+        if (a.admitted) { settlePasswordAttempt(owner, true, true, t); return { waited: (t - firstRight) / 1000, typoChecks }; }
+        next = t + a.retryAfter * 1000;
+    }
+    return { waited: Infinity, typoChecks };
+}
+
+function part1bTypoNeedsCleanPrefix() {
+    console.log('\n— typo rank needs a nearly clean prefix, so clean /48s buy an attacker little —');
+    for (const n of [1, 5]) {
+        let worst = { waited: 0, typoChecks: 0, perPrefix: 0 };
+        for (const perPrefix of [1, 2, 3, 7]) {
+            const r = adaptiveAttack(n, perPrefix);
+            if (r.waited > worst.waited) worst = { ...r, perPrefix };
+        }
+        console.log(`  ${n} clean /48(s): worst case ${worst.waited} s, ${worst.typoChecks} typo-rank checks (${worst.perPrefix} source(s) per /48)`);
+        assert(worst.typoChecks <= 2 * n && worst.waited <= (2 * n + 1) * 60,
+            `with ${n} clean /48(s) feeding typo-rank checks, a once-mistyped owner still gets in within ${2 * n + 1} min (${worst.waited} s, ${worst.typoChecks} checks; before: ${n === 1 ? '14' : '66'} min, ${13 * n} checks)`);
+    }
+
+    // A genuine owner on a clean home network: their own mistype, plus two from someone else on the same /24.
+    for (const [others, held] of [[TYPO_PREFIX_FAILURES - 1, true], [TYPO_PREFIX_FAILURES, false]] as const) {
+        resetPasswordBrake();
+        const t = T0;
+        for (let i = 0; i < others; i++) notePasswordFailure(`192.0.2.${100 + i}`, t);
+        const owner = '192.0.2.44';
+        notePasswordFailure(owner, t);
+        for (let i = 0; i < NODE_CHECKS_PER_MIN; i++) {
+            const k = `2001:db8:55:${i}::/64`;
+            notePasswordFailure(k, T0 - 1);
+            const a = tryAdmit(k, t + i);
+            if (a !== 'wait' && a.admitted) settlePasswordAttempt(k, false, true, t + i);
+        }
+        const refused = tryAdmit(owner, t + NODE_CHECKS_PER_MIN);
+        assert(refused !== 'wait' && !refused.admitted && passwordBrakeSizes().pending === (held ? 1 : 0),
+            held ? `an owner who mistyped once, on a /24 with ${others + 1} failures in all, has a check held for them`
+                : `a source on a /24 with ${others + 1} failures in all is not (it ranks as 'few')`);
+        if (!held) continue;
+        const freed = t + 60_000;
+        const rival = tryAdmit('2001:db8:55:99::/64', freed);
+        const o = tryAdmit(owner, freed);
+        assert(rival !== 'wait' && !rival.admitted && o !== 'wait' && o.admitted, 'and gets the next freed check, ahead of the few rank');
+        if (o !== 'wait' && o.admitted) settlePasswordAttempt(owner, true, true, freed);
+    }
+}
+
 function part2SharedSource() {
     console.log('\n— one source for everyone (a proxy the node does not trust) waits at most ten minutes —');
     resetPasswordBrake();
@@ -170,6 +255,9 @@ function part2SharedSource() {
     const warnings: string[] = [];
     const warn = console.warn;
     console.warn = (...a: unknown[]) => { warnings.push(a.join(' ')); };
+    const realNow = Date.now;
+    let clock = T0;
+    Date.now = () => clock; // client-ip.ts notes forwarders on the real clock; give it the brake's
     try {
         const proxy = '198.51.100.9';
         const ip = resolveClientIp(proxy, { 'x-forwarded-for': '203.0.113.5', 'x-real-ip': '203.0.113.5' });
@@ -208,7 +296,29 @@ function part2SharedSource() {
             t += Math.max(a.retryAfter * 1000, 60_000);
         }
         assert(loneLongest === MAX_DELAY_MS / 1000, `an ordinary single address still backs off to ${MAX_DELAY_MS / 60_000} min (${loneLongest} s)`);
+
+        assert(isSharedSourceKey(key, T0 + 60_000) && !isSharedSourceKey(key, T0 + 25 * 3_600_000),
+            'isSharedSourceKey reads the clock it is given (the brake passes its own): a day on, the proxy is forgotten');
+
+        // Fable's optional finding 2: a peer first seen while warnings were rate-limited was marked known and never
+        // warned about. A scanner sending X-Forwarded-For could use up the warning ahead of the real proxy.
+        resetUntrustedForwardersForTests();
+        warnings.length = 0;
+        const scanner = '203.0.113.66', realProxy = '198.51.100.20';
+        clock = T0;
+        resolveClientIp(scanner, { 'x-forwarded-for': '1.2.3.4' });
+        clock = T0 + 60_000;
+        resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
+        assert(warnings.length === 1 && warnings[0].includes(scanner), 'a scanner sending X-Forwarded-For takes the one warning of the next ten minutes');
+        clock = T0 + 11 * 60_000;
+        resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
+        assert(warnings.length === 2 && warnings[1].includes(realProxy), 'the real proxy, seen inside that window, is still warned about on its next request after it (before: never)');
+        resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
+        clock = T0 + 30 * 60_000;
+        resolveClientIp(realProxy, { 'x-forwarded-for': '203.0.113.5' });
+        assert(warnings.length === 2, 'and once only');
     } finally {
+        Date.now = realNow;
         console.warn = warn;
         setTrustConfigForTests(undefined);
         resetUntrustedForwardersForTests();
@@ -263,6 +373,7 @@ function part3Scale() {
 
 function main() {
     part1Fairness();
+    part1bTypoNeedsCleanPrefix();
     part2SharedSource();
     part3Scale();
     console.log(`\n${passed}/${run} passed`);

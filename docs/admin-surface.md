@@ -142,10 +142,33 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
 - **A node-wide cap for everyone else.** Sources with a failure on record share **12 checks a minute** across the
   node. An attempt over the cap gets 429 with `Retry-After` (a minute at most) and is not counted as a failure.
   The cap is shared in three ranks, so an owner who mistyped isn't queued behind an attacker:
-  - **Typo**: 1 or 2 failures, in a /48 or /24 that isn't dirty (next point). When one of these is refused, a
-    free check is **held for it** for 5 minutes, and the ranks below can't take it. So the owner is checked on
-    the first retry after a check frees, within a minute.
-  - **Few**: up to 5 failures, or a fresh source in a dirty block. Gets the cap, minus the held checks.
+  - **Typo**: 1 or 2 failures, in a /48 or /24 with at most 3 failures today (so nearly clean). When one of
+    these is refused, a free check is **held for it** for 5 minutes, and the ranks below can't take it. So the
+    owner is checked on the first retry after a check frees. That is **not** always within a minute. Typo-rank
+    sources don't wait for each other, so an attacker can fill 11 checks a minute from a dirty block and spend
+    one typo-rank check on the 12th, which keeps the owner out for that minute. Each clean /48 or /24 gives it at
+    most 2 of those a day. Measured (`test-password-brake-fairness.ts` part 1b; the owner mistyped once and
+    honours `Retry-After`):
+
+    | Attacker: one dirty /48, plus | Owner let in after | Before #948's review round 1 (typo rank up to 20 failures) |
+    |---|---|---|
+    | nothing more (a single /48) | 59 s | 59 s |
+    | 1 clean /48 | 3 min | 14 min |
+    | 2 clean /48s | 5 min | 27 min |
+    | 5 clean /48s | 11 min | 66 min |
+    | 28 clean /48s | 57 min | 365 min |
+
+    So against N clean /48s or /24s the owner waits about 1 + 2N minutes, once per day of the attacker's
+    supply. On main before #948 the same owner never got in. A network with no failures today is never held up
+    at all, so the quick way in is still another network or key sign-in.
+  - **After 3 or more mistypes** a source ranks as "few", and nothing is held for it. An attacker with a dirty
+    block can keep it out for as long as it keeps guessing (as on main). Holding a claim costs the attacker
+    nothing: twelve once-failed addresses keep their claims by retrying when they lapse, which shuts out the few
+    and backoff ranks for about 144 filler checks an hour (Fable's measure at 9d0b061f: 0 of 2,159 tries over
+    6 h for a 3-mistype owner). That owner was already shut out on main; it is cheaper for the attacker now. Either way,
+    after 3 mistypes sign in from another network or with your key from the app.
+  - **Few**: up to 5 failures and not typo (so also a fresh source in a dirty block). Gets the cap, minus the
+    held checks.
   - **Backoff**: sources already backing off get only the first **6** checks, minus the held checks.
 - **Clean sources can't be minted.** One IPv6 customer can hold a /48, which is 65,536 /64s. So failures are also
   counted per IPv6 /48 and per IPv4 /24. After 20 failures in a day, the block is dirty: its fresh sources are
@@ -189,7 +212,9 @@ in any useful time. A weak human-chosen one isn't, so the pre-launch password ro
 
 1. **Use another network**, such as mobile data instead of home Wi-Fi. A source with no failures is always checked.
 2. **Wait.** A source's wait is never more than an hour (10 minutes behind an untrusted proxy). The node-wide cap
-   frees within a minute, and after one or two mistypes a check is held for you. The 429 says how long.
+   frees within a minute, and after one or two mistypes a check is held for you. Under a determined attack that
+   can still take several minutes (§2.6 above), and after three or more mistypes it may not come at all; then use
+   another network or your key. The 429 says how long each wait is.
 3. **Restart the node.** The brake is kept in memory, so a restart clears it completely. This needs shell access
    to the server, not the password.
 4. **Reset the password from the server.** Set `ADMIN_PASSWORD` in the node's `.env` and recreate the container.
@@ -207,8 +232,10 @@ from the app", and regenerate.
 > free. After that it waits 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits. A right
 > password, or a day with no wrong ones, clears it. From a network you haven't mistyped from today, the right
 > password is always checked straight away, whatever anyone else is doing. If you mistyped once or twice and the
-> server is busy with someone else's guesses, you are let in on your next try within a minute. Signing in from
-> the app's Manage button is never affected.
+> server is busy with someone else's guesses, a check is kept for you: you usually get in on your next try, within
+> a minute, but someone attacking from many networks can stretch that to several minutes or more. After three or
+> more mistypes, or if you are still waiting, sign in from another network (mobile data instead of Wi-Fi) or from
+> the app's Manage button, which is never affected.
 >
 > If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the
 > password is long and not used anywhere else.

@@ -21,14 +21,21 @@
  *   3. Everyone else (sources with a failure on record) shares a node-wide allowance of NODE_CHECKS_PER_MIN checks
  *      per minute, so a botnet cannot get round (1) by spreading its guesses thin. The allowance is shared in
  *      three ranks, so an owner who mistyped is not queued behind an attacker:
- *        - 'typo': at most TYPO_FAILURES failures, and its wider prefix (4) is not dirty. May use the whole
- *          allowance, and when one is refused, a free check is held for it for PENDING_HOLD_MS: the ranks below
- *          may not take it. Only these sources are ever held for, so an attacker rotating fresh /64s in a dirty
- *          /48 cannot take every freed check ahead of an owner who mistyped once (Fable's review of #944: 0 of
- *          1078 of the owner's retries over 6 h got through). The owner is checked on the first retry after the
- *          next check frees, which the 429's Retry-After (at most a minute) names.
- *        - 'few': up to SOURCE_FREE_FAILURES failures, or a fresh source in a dirty prefix. The whole allowance,
- *          less the checks held for waiting 'typo' sources.
+ *        - 'typo': at most TYPO_FAILURES failures, and its wider prefix (4) has at most TYPO_PREFIX_FAILURES. May
+ *          use the whole allowance, and when one is refused, a free check is held for it for PENDING_HOLD_MS: the
+ *          ranks below may not take it. Only these sources are ever held for, so an attacker rotating fresh /64s in
+ *          a dirty /48 cannot take every freed check ahead of an owner who mistyped once (Fable's review of #944:
+ *          0 of 1078 of the owner's retries over 6 h got through). What the owner waits is NOT bounded by a
+ *          minute, though. 'typo' sources are not held back by each other, so an attacker who fills 11 checks a
+ *          minute from a dirty prefix and spends one 'typo' check on the 12th keeps the owner out for that minute.
+ *          Each clean /48 or /24 yields at most 2 such checks a day (TYPO_PREFIX_FAILURES), so measured
+ *          (test-password-brake-fairness.ts, part 1b) the owner waits about (1 + 2N) minutes against N clean
+ *          prefixes plus any number of dirty ones: 59 s against a single /48, 3 min with one clean /48 more,
+ *          11 min with five. A clean source is never held up at all (2), so another network always works.
+ *          After 3 or more mistypes the source is 'few', and an attacker's filler can keep it out indefinitely:
+ *          use another network or key sign-in.
+ *        - 'few': up to SOURCE_FREE_FAILURES failures and not 'typo' (so also a fresh source in a dirty prefix).
+ *          The whole allowance, less the checks held for waiting 'typo' sources.
  *        - 'backoff': a source already in backoff. Only the first NODE_BACKOFF_CHECKS_PER_MIN, less those held.
  *      An attempt over the allowance is refused with Retry-After (at most a minute), not counted.
  *
@@ -70,8 +77,16 @@ export const FORGET_MS = 24 * 60 * 60_000;
 export const NODE_CHECKS_PER_MIN = 12;
 export const NODE_BACKOFF_CHECKS_PER_MIN = 6;
 export const PREFIX_CLEAN_FAILURES = 20;
-/** A source with at most this many failures, outside a dirty prefix, has checks held for it (the 'typo' rank). */
+/** A source with at most this many failures, in a nearly clean prefix, has checks held for it (the 'typo' rank). */
 export const TYPO_FAILURES = 2;
+/**
+ * The most failures a source's prefix may have for it to rank as 'typo'. Typo sources are not held back by each
+ * other's claims, so each typo-rank check an attacker spends can take the check held for a waiting owner. With
+ * the bar at PREFIX_CLEAN_FAILURES (20) one /48 or /24 fed 13 such checks, about 13 minutes of the owner's wait;
+ * at 3 it feeds 2 (a clean check, then two more from that source). An owner who mistyped once or twice from home
+ * has put at most 2 on their own prefix.
+ */
+export const TYPO_PREFIX_FAILURES = 3;
 /** How long a refused 'typo' source's claim on a free check lasts; each refusal renews it. */
 export const PENDING_HOLD_MS = 5 * 60_000;
 /** The longest wait for a source that is really a proxy for everyone (client-ip.ts, isSharedSourceKey). */
@@ -212,9 +227,9 @@ function prefixFailures(key: string, now: number): number {
 
 type Tier = 'clean' | 'typo' | 'few' | 'backoff';
 function tierOf(key: string, s: SourceState, now: number): Tier {
-    const dirty = prefixFailures(key, now) >= PREFIX_CLEAN_FAILURES;
-    if (s.failures === 0 && !dirty) return 'clean';
-    if (s.failures <= TYPO_FAILURES && !dirty) return 'typo';
+    const pf = prefixFailures(key, now);
+    if (s.failures === 0 && pf < PREFIX_CLEAN_FAILURES) return 'clean';
+    if (s.failures <= TYPO_FAILURES && pf <= TYPO_PREFIX_FAILURES) return 'typo';
     return s.failures <= SOURCE_FREE_FAILURES ? 'few' : 'backoff';
 }
 
@@ -283,7 +298,7 @@ export function notePasswordFailure(key: string, now = Date.now()): void {
     s.failures++;
     s.lastFailureAt = now;
     touch(sources, key, s); // keeps the map in order of last failure, stalest first
-    const shared = isSharedSourceKey(key);
+    const shared = isSharedSourceKey(key, now);
     const delay = delayFor(s.failures, shared);
     if (delay > 0) {
         s.closedUntil = Math.max(s.closedUntil, now + delay);

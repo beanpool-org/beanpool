@@ -137,7 +137,7 @@ function main() {
     const rich = makeMember('Leaving With Credit', 200);
     const beforePrune = nodeTotal();
     const commonsBeforePrune = getCommonsBalanceExact();
-    adminPruneUser(rich);
+    adminPruneUser(rich, 'owner:password');
 
     assert(bal(rich) === 0, 'the pruned member ends at zero');
     assert(r4(getCommonsBalanceExact()) === r4(commonsBeforePrune + 200),
@@ -151,7 +151,7 @@ function main() {
     const debtor = makeMember('Leaving In Debt', -120);
     const beforeDebt = nodeTotal();
     const commonsBeforeDebt = getCommonsBalanceExact();
-    adminPruneUser(debtor);
+    adminPruneUser(debtor, 'owner:password');
 
     assert(bal(debtor) === 0, 'the debt is settled and the member ends at zero');
     assert(r4(getCommonsBalanceExact()) === r4(commonsBeforeDebt - 120),
@@ -169,7 +169,7 @@ function main() {
     reconcileLedgerFromDb();
     const bigDebtor = makeMember('Deep Debt', -500);
     const beforeBig = nodeTotal();
-    adminPruneUser(bigDebtor);
+    adminPruneUser(bigDebtor, 'owner:password');
 
     assert(bal(bigDebtor) === 0, 'a debt far larger than the pot is still settled');
     assert(getCommonsBalanceExact() < 0, 'the Commons goes into DEFICIT — the honest record of the write-off');
@@ -232,7 +232,7 @@ function main() {
     const beforeFailedPrune = nodeTotal();
     const commonsBeforeFailedPrune = getCommonsBalanceExact();
 
-    throws(() => adminPruneUser(stubborn), /simulated failure/, 'a prune that fails late reports it');
+    throws(() => adminPruneUser(stubborn, 'owner:password'), /simulated failure/, 'a prune that fails late reports it');
     db.exec('DROP TRIGGER t_fail_posts');
 
     assert(bal(stubborn) === -75, 'the member keeps their debt — the write-off was rolled back');

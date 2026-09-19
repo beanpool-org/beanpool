@@ -654,7 +654,7 @@ async function main() {
     assert(floorBeforePrune.floor === -40, 'Floor before prune is -40');
 
     // Prune keeper via adminPruneUser
-    adminPruneUser(KPrune);
+    adminPruneUser(KPrune, 'owner:password');
 
     // Because setUserStatusRow clears enterpriseFloorCache, immediate read must not return stale 40
     const floorAfterPrune = getEnterpriseFloor(pruneEnt);

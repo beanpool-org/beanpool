@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     const inactiveChannel = addChannel({ ownerPubkey: inactive, platform: 'youtube', raw: 'https://www.youtube.com/@inactive', category: 'craft' });
     insertItem('item_inactive', inactiveChannel.id, inactive, new Date().toISOString());
     await cacheImage('item_inactive');
-    adminPruneUser(inactive);
+    adminPruneUser(inactive, 'owner:password');
     await settle();
     await expectEvicted('item_inactive', "Pruned member's item");
 

@@ -47,6 +47,8 @@ import {
     getMember,
     setUserStatusRow,
     adminPruneUser,
+    COMMUNITY_DECISION_ACTOR,
+    isOwnerLevelActor,
     broadcast,
     isNodeAdmin,
     isSoleOwner,
@@ -861,6 +863,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         try {
             conservingTransaction(() => {
+                // Hold the member's node role aside before the suspension deletes it, so halting the removal
+                // in its grace window gives it back exactly (as an emergency suspension does).
+                db.prepare(`
+                    INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                    SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
+                    FROM node_roles WHERE member_pubkey = ?
+                `).run(decisionId, decision.subject!);
                 // Immediately suspend and freeze member
                 setUserStatusRow(decision.subject!, 'disabled');
                 db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(decision.subject!);
@@ -925,6 +934,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
                     for (const cd of cancelledDecisions) {
                         cancelledDecisionIds.push(cd.id);
+                        // The community reinstated them: the role the removal held aside comes back too.
+                        restoreSuspendedNodeRole(cd.id);
                     }
                     break;
                 }
@@ -1097,9 +1108,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
  * Admin brake: halt a decision in grace period or execution.
  * Requires an authenticated admin pubkey and a signed, public reason (§3.7).
  */
-export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string } {
+export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string; status?: number } {
     if (!isAdminActor(adminPubkey)) {
-        return { success: false, error: 'Unauthorized: admin required to halt decision' };
+        return { success: false, status: 403, error: 'Unauthorized: admin required to halt decision' };
     }
     if (!reason || reason.trim().length < 10) {
         return { success: false, error: 'A signed public reason (min 10 characters) is required to halt a decision' };
@@ -1109,6 +1120,14 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     if (!decision) return { success: false, error: 'Decision not found' };
     if (decision.status !== 'execution_pending_grace' && decision.status !== 'open') {
         return { success: false, error: `Cannot halt decision with status ${decision.status}` };
+    }
+    // Halting a removal in its grace window, or the vote on an emergency suspension, gives the member back
+    // the node role held aside for it — and only an owner may grant an owner or admin role.
+    const restoresRole = (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
+        || decision.effect === 'keep_suspension';
+    if (restoresRole && !isOwnerLevelActor(adminPubkey)) {
+        const held = heldRoleFor([decisionId]);
+        if (held) return { success: false, status: 403, error: roleRestoreRefusal(held) };
     }
 
     const now = new Date().toISOString();
@@ -1127,6 +1146,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject) {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
+            restoreSuspendedNodeRole(decision.id);
         }
         // Halting the ratifying vote takes away the only thing that could keep an emergency suspension,
         // so it lifts — an admin can't park a suspension forever by stopping its vote.
@@ -1161,7 +1181,7 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
 
     const now = new Date().toISOString();
     try {
-        adminPruneUser(decision.subject);
+        adminPruneUser(decision.subject, COMMUNITY_DECISION_ACTOR);
         db.prepare(`
             UPDATE decisions SET
                 status = 'executed',
@@ -1192,7 +1212,23 @@ export function isAdminActor(actor: string | null | undefined): boolean {
 export const EMERGENCY_SUSPENSION_DAYS = 7;
 
 /**
- * Give back the node role an emergency suspension held aside — the same role, grant record and break-glass
+ * The owner or admin role held aside for any of these Decisions, if one is — what lifting them would restore.
+ */
+function heldRoleFor(decisionIds: string[]): 'owner' | 'admin' | null {
+    if (decisionIds.length === 0) return null;
+    const rows = db.prepare(
+        `SELECT role FROM suspended_node_roles WHERE decision_id IN (${decisionIds.map(() => '?').join(',')}) AND role IN ('owner', 'admin')`
+    ).all(...decisionIds) as { role: 'owner' | 'admin' }[];
+    if (rows.some(r => r.role === 'owner')) return 'owner';
+    return rows.length ? 'admin' : null;
+}
+
+function roleRestoreRefusal(role: 'owner' | 'admin'): string {
+    return `This member held the ${role} role, which comes back with them, and only an owner can give back an owner or admin role. Ask an owner to do this`;
+}
+
+/**
+ * Give back the node role a suspension (emergency, or a removal's grace window) held aside — the same role, grant record and break-glass
  * hash. The session epoch moves on by one, so admin sessions opened before the suspension stay dead and the
  * member signs in again. Call inside a transaction, after the member is active again.
  */
@@ -1282,8 +1318,7 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
     // who thinks an owner must go proposes a member-removal Decision instead.
-    const actorIsOwner = adminActor === 'owner:password' || isNodeOwner(adminActor);
-    if (isNodeOwner(subjectPubkey) && !actorIsOwner) {
+    if (isNodeOwner(subjectPubkey) && !isOwnerLevelActor(adminActor)) {
         return { success: false, status: 403, error: 'Only an owner can suspend an owner. Propose a Decision to remove them instead' };
     }
 
@@ -1347,6 +1382,11 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     const openKeeps = db.prepare(
         "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
     ).all(subjectPubkey) as { id: string }[];
+    // Lifting gives back the role the suspension held aside; only an owner may give back an owner or admin role.
+    if (!isOwnerLevelActor(adminActor)) {
+        const held = heldRoleFor(openKeeps.map(k => k.id));
+        if (held) return { success: false, status: 403, error: roleRestoreRefusal(held) };
+    }
     db.transaction(() => {
         setUserStatusRow(subjectPubkey, 'active');
         for (const k of openKeeps) {
@@ -1480,7 +1520,7 @@ export function tickDecisions(asOfTime?: number): {
             }
 
             try {
-                adminPruneUser(r.subject);
+                adminPruneUser(r.subject, COMMUNITY_DECISION_ACTOR);
                 db.prepare(`
                     UPDATE decisions SET
                         status = 'executed',

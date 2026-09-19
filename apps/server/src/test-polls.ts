@@ -335,7 +335,7 @@ async function main() {
     votePoll(pollBob!.id, 'pub-frank', '1');
 
     // Prune Bob
-    adminPruneUser('pub-bob');
+    adminPruneUser('pub-bob', 'owner:password');
 
     const bobPollAfter = getPosts({ id: pollBob!.id, includeInactive: true })[0];
     assert(bobPollAfter?.status === 'completed', 'Bob poll closed immediately upon author prune');

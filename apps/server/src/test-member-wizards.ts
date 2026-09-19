@@ -425,6 +425,24 @@ async function main() {
     assert(reqRow.status === 'completed', 'rekey_requests status is completed');
     assert(Boolean(reqRow.completed_at), 'rekey_requests completed_at timestamp recorded');
 
+    // Re-keying a suspended role-holder: the role held aside for the suspension moves with the key, and a
+    // new key does not end the suspension.
+    const oldCarolKey = generateValidPubkey();
+    makeMember('carol_suspended_admin', oldCarolKey);
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(oldCarolKey);
+    db.prepare(`INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+                VALUES ('carol-keep', ?, 'admin', '2026-01-01T00:00:00.000Z', ?, 2, NULL)`).run(oldCarolKey, operatorPubkey);
+    const carolCode = issueRekeyCode(oldCarolKey, operatorPubkey).code;
+    assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(oldCarolKey) as any)?.status === 'disabled',
+        'issuing a re-key code leaves a suspended member suspended');
+    const newCarolKey = generateValidPubkey();
+    completeRekey(oldCarolKey, newCarolKey, carolCode, operatorPubkey);
+    const carolHeld = db.prepare('SELECT member_pubkey, role, session_epoch FROM suspended_node_roles WHERE decision_id = ?').get('carol-keep') as any;
+    assert(carolHeld?.member_pubkey === newCarolKey && carolHeld.role === 'admin' && carolHeld.session_epoch === 2,
+        `the held admin role moves to the new key (got ${JSON.stringify(carolHeld)})`);
+    assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(newCarolKey) as any)?.status === 'disabled',
+        'and the member is still suspended under the new key');
+
     // =========================================================================
     // PART 2: OFFBOARDING WIZARD & TWO-PERSON RULE ENFORCEMENT
     // =========================================================================

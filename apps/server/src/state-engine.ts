@@ -176,7 +176,6 @@ import {
     hasListedOffer as hasListedOfferEngine,
     hasLiveOffer as hasLiveOfferEngine,
     liveOfferCount as liveOfferCountEngine,
-    usableFloor as usableFloorEngine,
     generateSearchKeywords as generateSearchKeywordsEngine,
     CONTRIBUTION_REQUIRED_ERROR,
     COVENANT_REQUIRED_ERROR,

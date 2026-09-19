@@ -250,6 +250,7 @@ run_federation_suites() {
       test-activity-feed-members-only
       test-sync-signature
       test-trust-value-curve
+      test-trust-tiers-one-source
       test-vouch-covenant
       test-wash-sybil-defense
       test-apple-probe

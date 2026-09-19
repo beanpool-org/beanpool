@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,8 +11,8 @@ import {
     type GuidePage,
 } from '../utils/guide';
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
-import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { getSavedNodes, isGuestNode } from '../utils/nodes';
+import { useCommunities, type CommunityStatus } from '../utils/use-communities';
+import appConfig from '../app.json';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 
 export { ErrorBoundary };
@@ -31,51 +31,35 @@ const SECTION_ICONS: Record<string, IconName> = {
     settings: 'cog-outline',
 };
 
-type CommunityStatus = 'checking' | 'online' | 'offline' | 'guest' | 'none';
-
-const STATUS_TEXT: Record<CommunityStatus, string> = {
+// The heading's status line for the community in use. Guest and "no community" each carry the next step.
+const STATUS_TEXT: Record<CommunityStatus | 'none', string> = {
     checking: 'Checking the connection…',
-    online: 'Connected',
+    online: 'Connected. You are a member here.',
     offline: "Can't reach it right now",
     guest: 'Visiting as a guest',
-    none: 'Not connected. Tap to join a community.',
+    none: 'Not connected to a community yet',
 };
 
-function hostOf(url: string): string {
-    try { return new URL(url).host || url; } catch { return url.replace(/^https?:\/\//, '').replace(/\/.*$/, ''); }
+function syncedAgo(at: number | null): string | null {
+    if (!at) return null;
+    const s = Math.max(0, Math.floor((Date.now() - at) / 1000));
+    if (s < 60) return `synced ${s}s ago`;
+    if (s < 3600) return `synced ${Math.floor(s / 60)}m ago`;
+    return `synced ${Math.floor(s / 3600)}h ago`;
 }
 
-/** The community this phone is using: its name, and whether its server answers. Never blocks the sheet. */
-function useCommunity(): { name: string | null; status: CommunityStatus } {
-    const [name, setName] = useState<string | null>(null);
-    const [status, setStatus] = useState<CommunityStatus>('checking');
-    useEffect(() => {
-        let alive = true;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
-        (async () => {
-            const url = await getAnchorUrl().catch(() => null);
-            if (!url) { if (alive) setStatus('none'); return; }
-            const nodes = await getSavedNodes().catch(() => []);
-            if (alive) setName(nodes.find(n => n.url === url)?.alias || hostOf(url));
-            if (await isGuestNode(url).catch(() => false)) { if (alive) setStatus('guest'); return; }
-            const ok = await fetch(`${url}/api/community/health`, { signal: controller.signal })
-                .then(r => r.ok).catch(() => false);
-            if (alive) setStatus(ok ? 'online' : 'offline');
-        })();
-        return () => { alive = false; clearTimeout(timer); controller.abort(); };
-    }, []);
-    return { name, status };
-}
-
-// "BeanPool: help and how it works" — the members' sheet. Opened from Settings → BeanPool today; the header redesign
-// will also open it from the electric bean. Everything renders from useGuide (bundled, cached or newer from
-// beanpool.org) and never waits on the network. The search runs on the phone, over the text it already has.
+// The BeanPool sheet — the one sheet for the community and for help. The header's bean opens it, and so does
+// Settings → "Help & how it works". Top to bottom: the community in use (name and status), your communities to
+// switch between, then the guides and the BeanPool project. Guides render from useGuide (bundled, cached or
+// newer from beanpool.org) and never wait on the network; the community part fills in as nodes answer. The guide
+// search runs on the phone, over the text it already has.
 export default function BeanPoolSheet() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { guide, source } = useGuide();
-    const community = useCommunity();
+    const communities = useCommunities();
+    const status: CommunityStatus | 'none' = communities.active === null ? 'none'
+        : communities.current?.status ?? 'checking';
     const [query, setQuery] = useState('');
     const results = useMemo(() => searchGuide(guide, query), [guide, query]);
     const searching = query.trim().length >= 2;
@@ -101,16 +85,34 @@ export default function BeanPoolSheet() {
         dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
         shareBtn: { minWidth: 48, minHeight: 48, paddingHorizontal: 12, borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
         shareText: { fontSize: 14, fontWeight: '600', color: colors.text.body },
+        community: { paddingHorizontal: 4, paddingTop: 4 },
+        communityName: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
+        rowCurrent: { backgroundColor: colors.accent.tint },
+        rowPressed: { backgroundColor: colors.surface.subtle },
+        guestTag: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, flexShrink: 0 },
+        cta: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, marginTop: 12 },
+        ctaGuest: { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border },
+        ctaNone: { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border },
+        ctaText: { fontSize: 15, fontWeight: '700' },
         empty: { fontSize: 15, color: colors.text.body, lineHeight: 22, padding: 16 },
         foot: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 24, lineHeight: 18 },
     }));
 
-    const dotColor = community.status === 'online' ? colors.feedback.success.solid
-        : community.status === 'guest' ? colors.feedback.warning.solid
-        : community.status === 'checking' ? colors.text.muted
+    const dotFor = (st: CommunityStatus | 'none') => st === 'online' ? colors.feedback.success.solid
+        : st === 'guest' ? colors.feedback.warning.solid
+        : st === 'checking' ? colors.text.muted
         : colors.feedback.danger.solid;
+    const { current } = communities;
+    const synced = status === 'online' ? syncedAgo(communities.lastSync) : null;
+    // Where a guest joins and a phone with no community connects: the same places the header's pill goes.
+    const join = () => {
+        DeviceEventEmitter.emit('set_people_view', { view: 'invites' });
+        router.navigate({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+    };
+    const connect = () => router.navigate({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
+
     const page = (slug: string) => findGuidePage(guide, slug);
 
     const Row = ({ icon, title, sub, onPress, first, label, hint }: {
@@ -153,7 +155,77 @@ export default function BeanPoolSheet() {
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
             >
-                <View style={styles.searchBox}>
+                {/* The community in use: its name heads the sheet (the header row no longer shows it). */}
+                <View style={styles.community}>
+                    <Text style={styles.communityName} numberOfLines={2} accessibilityRole="header">
+                        {current?.name ?? (status === 'none' ? 'No community yet' : ' ')}
+                    </Text>
+                    <View style={styles.statusRow} accessible accessibilityLabel={`${STATUS_TEXT[status]}${synced ? `, ${synced}` : ''}`}>
+                        <View style={[styles.dot, { backgroundColor: dotFor(status) }]} />
+                        <Text style={[styles.rowSub, { marginTop: 0, flex: 1 }]} numberOfLines={2}>
+                            {STATUS_TEXT[status]}{synced ? ` · ${synced}` : ''}
+                        </Text>
+                    </View>
+                    {(status === 'guest' || status === 'none') && (
+                        <Pressable
+                            style={[styles.cta, status === 'guest' ? styles.ctaGuest : styles.ctaNone]}
+                            onPress={status === 'guest' ? join : connect}
+                            accessibilityRole="button"
+                            accessibilityLabel={status === 'guest' ? 'Join this community' : 'Connect to a community'}
+                        >
+                            <MaterialCommunityIcons name={status === 'guest' ? 'account-alert-outline' : 'link-variant'} size={20}
+                                color={status === 'guest' ? colors.feedback.warning.fg : colors.feedback.danger.fg} />
+                            <Text style={[styles.ctaText, { color: status === 'guest' ? colors.feedback.warning.fg : colors.feedback.danger.fg }]}>
+                                {status === 'guest' ? 'Join this community' : 'Connect to a community'}
+                            </Text>
+                        </Pressable>
+                    )}
+                </View>
+
+                <Text style={styles.sectionLabel}>YOUR COMMUNITIES</Text>
+                <View style={styles.group}>
+                    {communities.rows.map((r, i) => {
+                        const isCurrent = r.url === communities.active;
+                        return (
+                            <Pressable
+                                key={r.url}
+                                style={({ pressed }) => [styles.row, i > 0 && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
+                                onPress={() => communities.switchTo(r.url)}
+                                onLongPress={() => communities.remove(r)}
+                                delayLongPress={500}
+                                disabled={communities.switching}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: isCurrent }}
+                                accessibilityLabel={`${r.name}, ${STATUS_TEXT[r.status]}${isCurrent ? ', in use' : ''}`}
+                                accessibilityHint={isCurrent ? undefined : 'Switches to this community. Long press to remove it.'}
+                            >
+                                <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
+                                <View style={styles.rowText}>
+                                    <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{r.name}</Text>
+                                    <Text style={styles.rowSub} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
+                                </View>
+                                {isCurrent
+                                    ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
+                                    : r.status === 'guest' && <Text style={styles.guestTag}>Guest</Text>}
+                            </Pressable>
+                        );
+                    })}
+                    <Pressable
+                        style={({ pressed }) => [styles.row, communities.rows.length > 0 && styles.rowDivider, pressed && styles.rowPressed]}
+                        onPress={connect}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add a community"
+                        accessibilityHint="Opens Settings, where you can connect to another community"
+                    >
+                        <MaterialCommunityIcons name="plus-circle-outline" size={24} color={colors.brand.primary} />
+                        <View style={styles.rowText}>
+                            <Text style={styles.rowTitle}>Add a community</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
+                    </Pressable>
+                </View>
+
+                <View style={[styles.searchBox, { marginTop: 20 }]}>
                     <MaterialCommunityIcons name="magnify" size={22} color={colors.text.muted} />
                     <TextInput
                         value={query}
@@ -187,27 +259,6 @@ export default function BeanPoolSheet() {
                     </>
                 ) : (
                     <>
-                        <Text style={styles.sectionLabel}>YOUR COMMUNITY</Text>
-                        <View style={styles.group}>
-                            <Pressable
-                                style={styles.row}
-                                onPress={() => router.navigate({ pathname: '/(tabs)/settings', params: { section: 'advanced' } })}
-                                accessibilityRole="button"
-                                accessibilityLabel={`Your community: ${community.name ?? 'none'}. ${STATUS_TEXT[community.status]}`}
-                                accessibilityHint="Opens your communities, where you can switch or add one"
-                            >
-                                <MaterialCommunityIcons name="home-group" size={24} color={colors.brand.primary} />
-                                <View style={styles.rowText}>
-                                    <Text style={styles.rowTitle} numberOfLines={1}>{community.name ?? 'No community yet'}</Text>
-                                    <View style={styles.statusRow}>
-                                        <View style={[styles.dot, { backgroundColor: dotColor }]} />
-                                        <Text style={[styles.rowSub, { marginTop: 0, flex: 1 }]} numberOfLines={2}>{STATUS_TEXT[community.status]}</Text>
-                                    </View>
-                                </View>
-                                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
-                            </Pressable>
-                        </View>
-
                         <Text style={styles.sectionLabel}>GUIDES</Text>
                         <View style={styles.group}>
                             <GuideRow p={page(GUIDE_SLUGS.howItWorks)} icon="book-open-variant" first />
@@ -268,6 +319,7 @@ export default function BeanPoolSheet() {
                         </View>
 
                         <Text style={styles.foot}>
+                            BeanPool v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode}){'\n'}
                             Guide version {guide.version}{source === 'bundled' ? ' · built into the app' : ' · updated from beanpool.org'}{'\n'}Works without a connection.
                         </Text>
                     </>

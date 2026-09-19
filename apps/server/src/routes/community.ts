@@ -35,7 +35,7 @@ import {
 import { completeRekey } from '../engine/member-wizards.js';
 import { verifyEd25519Signature } from '../admin-key-auth.js';
 import {
-    getLocalConfig, saveLocalConfig, hashPassword, verifyPassword,
+    getLocalConfig, saveLocalConfig, hashPassword,
     validatePasswordStrength,
 } from '../config/local-config.js';
 import {
@@ -56,7 +56,8 @@ import { db } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import type { RouteDeps } from './types.js';
-import { clientIp } from '../client-ip.js';
+import { clientLimiterKey } from '../client-ip.js';
+import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -93,8 +94,11 @@ router.post('/api/local/verify-password', async (ctx) => {
     }
 
     const pw = password || headerPass;
-    if (!config.adminHash || !config.salt ||
-        !verifyPassword(pw, config.adminHash, config.salt)) {
+    // Under 2FA the brake lets go only once the code is right too (password-brake.ts).
+    const totpOn = !!(config.totpEnabled && config.totpSecret);
+    const pwCheck = await checkAdminPassword(ctx, pw, { reset: !totpOn });
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         logger.security('AUTH', 'Failed administrative login attempt.');
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
@@ -127,10 +131,12 @@ router.post('/api/local/verify-password', async (ctx) => {
         }
 
         if (!totpValid) {
+            notePasswordFailure();
             ctx.status = 401;
             ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
             return;
         }
+        notePasswordSuccess();
     }
 
     // Issue 2FA session token so subsequent API calls can skip TOTP re-entry
@@ -147,8 +153,9 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     const config = getLocalConfig();
     const { password, type: inviteType } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         logger.security('AUTH', 'Unauthorized attempt to generate invite code.');
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
@@ -214,8 +221,9 @@ router.post('/api/local/update-identity', async (ctx) => {
     const config = getLocalConfig();
     const { password, callsign, lat, lng, communityName, contactEmail, contactPhone } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -294,8 +302,9 @@ router.post('/api/local/change-password', async (ctx) => {
     const config = getLocalConfig();
     const { currentPassword, newPassword } = (ctx as any).requestBody || {};
 
-    if (!currentPassword || !config.adminHash || !config.salt ||
-        !verifyPassword(currentPassword, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, currentPassword);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid current password' };
         return;
@@ -343,8 +352,9 @@ router.post('/api/local/connectors', async (ctx) => {
     const config = getLocalConfig();
     const { password, address, trustLevel, callsign, enabled, publicUrl } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -403,8 +413,9 @@ router.post('/api/local/connectors/connect', async (ctx) => {
     const config = getLocalConfig();
     const { password, address } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -441,8 +452,9 @@ router.post('/api/local/connectors/credit-cap', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const { password, address } = body;
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -570,8 +582,9 @@ router.post('/api/local/federation/links/ceiling', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const { password, peerId } = body;
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -609,8 +622,9 @@ router.post('/api/local/connectors/disconnect', async (ctx) => {
     const config = getLocalConfig();
     const { password, address } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -631,8 +645,9 @@ router.post('/api/local/connectors/remove', async (ctx) => {
     const config = getLocalConfig();
     const { password, address } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -656,8 +671,9 @@ router.post('/api/local/reset', async (ctx) => {
     const config = getLocalConfig();
     const { password } = (ctx as any).requestBody || {};
 
-    if (!password || !config.adminHash || !config.salt ||
-        !verifyPassword(password, config.adminHash, config.salt)) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -824,7 +840,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
 // shared tunnel/proxy IP it must never drain the admin-auth limiter's pool.
 const inviteCheckAttempts = new Map<string, { count: number; resetAt: number }>();
 router.get('/api/invite/check', async (ctx) => {
-    const ip = clientIp(ctx);
+    const ip = clientLimiterKey(ctx);
     const now = Date.now();
     if (inviteCheckAttempts.size > 200) {
         for (const [k, v] of inviteCheckAttempts) {

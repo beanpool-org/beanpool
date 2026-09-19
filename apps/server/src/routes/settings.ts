@@ -13,13 +13,14 @@ import {
     getNodeRole, getMemberStats,
 } from '../state-engine.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, verifyPasswordAsync,
+    getLocalConfig, saveLocalConfig, updateLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
 import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken } from '../admin-auth.js';
+import { checkAdminPassword } from '../password-brake.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow } from '../services/directory-publisher.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
@@ -362,8 +363,9 @@ router.get('/api/version', (ctx) => {
 router.post('/api/admin/thresholds', async (ctx) => {
     const config = getLocalConfig();
     const { password, ...updates } = (ctx as any).requestBody || {};
-    if (!password || !config.adminHash || !config.salt ||
-        !(await verifyPasswordAsync(password, config.adminHash, config.salt))) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -398,8 +400,9 @@ function semverGreater(a: string, b: string): boolean {
 router.post('/api/admin/check-update', async (ctx) => {
     const config = getLocalConfig();
     const { password } = (ctx as any).requestBody || {};
-    if (!password || !config.adminHash || !config.salt ||
-        !(await verifyPasswordAsync(password, config.adminHash, config.salt))) {
+    const pwCheck = await checkAdminPassword(ctx, password);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;
@@ -479,7 +482,9 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
     const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
         || ctx.request?.headers?.['x-admin-password']
         || (ctx as any).headers?.['x-admin-password'];
-    if (!keySessionOk && (!headerPass || !config.adminHash || !config.salt || !(await verifyPasswordAsync(headerPass, config.adminHash, config.salt)))) {
+    const pwCheck = keySessionOk ? 'ok' : await checkAdminPassword(ctx, headerPass);
+    if (pwCheck === 'braked') return;
+    if (pwCheck !== 'ok') {
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
         return;

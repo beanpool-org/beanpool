@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import { clientIp } from './client-ip.js';
+import { clientLimiterKey } from './client-ip.js';
 
 /**
  * Throttle for chat lines in rooms that push to many people: group chats (both send routes) and event chats.
@@ -15,7 +15,7 @@ const WINDOW_MS = 60_000;
 const chatLines = new Map<string, { count: number; resetAt: number }>();
 
 export function chatRateLimit(ctx: Koa.Context, memberPubkey: string | null | undefined): boolean {
-    const key = memberPubkey ? `m:${memberPubkey}` : `ip:${clientIp(ctx)}`;
+    const key = memberPubkey ? `m:${memberPubkey}` : `ip:${clientLimiterKey(ctx)}`;
     const now = Date.now();
     if (chatLines.size > 2000) pruneChatLines(now);
     const entry = chatLines.get(key);

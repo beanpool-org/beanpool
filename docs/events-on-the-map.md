@@ -10,7 +10,8 @@ is in this branch's history.
 
 Status (2026-09-19): **slices 1–6 are built and merged**: server #866, PWA #870, native #869, chat #871,
 notifications and copy #878, moderation and 30-day scrub #883; then edit/reopen and QA fixes #900 and address
-search #901. **Slice 7 (native map layer) is approved by Marty (2026-09-19) and queued as its own PR.** The two
+search #901. **Slice 7 (native map layer) is built too**: #888 added event pins to the native map, drawn in
+`map.tsx` itself rather than through `UnifiedMapPin`, and #900 refined them (calendar glyph, never clustered). The two
 "later" slices are not scheduled. The text below is the design as decided; where a built PR differs, the PR wins.
 
 ---

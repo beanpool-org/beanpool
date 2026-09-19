@@ -1308,8 +1308,8 @@ export function ApplianceSection({
 
                     {/* 2FA / TOTP Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🛡️</span>
                                     <span>Two-Factor Authentication (2FA)</span>
@@ -1369,16 +1369,24 @@ export function ApplianceSection({
                         )}
 
                         {tfaStatus?.enabled && (
+                            // Wraps: the input takes at least 10rem, so on a narrow screen the button drops to its own
+                            // line instead of squeezing the code. The label is visible text above (it wraps; a
+                            // placeholder that long clipped at 320px and 1.3× text). No numeric keypad: backup codes
+                            // have letters (a–f).
                             <div className="flex flex-wrap gap-2">
+                                <label htmlFor="tfa-disable-code" className="w-full text-xs text-nature-400">
+                                    Current 2FA or backup code
+                                </label>
                                 <input
+                                    id="tfa-disable-code"
                                     type="text"
-                                    inputMode="numeric"
                                     autoComplete="one-time-code"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
                                     value={totpDisableCode}
                                     onChange={(e) => setTotpDisableCode(e.target.value)}
-                                    placeholder="Current 2FA or backup code"
-                                    aria-label="Current 2FA or backup code"
-                                    className="flex-1 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                    placeholder="123456"
+                                    className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
                                 />
                                 <button
                                     type="button"

@@ -218,6 +218,54 @@ export function verifyAndSolveChallenge(params: {
         return { ok: false, error: 'Challenge already resolved' };
     }
 
+    const signer = authorizeKeySigner({
+        memberPubkey,
+        totpCode,
+        // Signature over challenge.challenge, falling back to the bare challengeId.
+        signatureValid: () =>
+            verifyEd25519Signature(challenge.challenge, signature, memberPubkey) ||
+            verifyEd25519Signature(challenge.challengeId, signature, memberPubkey),
+    });
+    if (!signer.ok) {
+        return { ok: false, error: signer.error, ...(signer.totpRequired ? { totpRequired: true } : {}) };
+    }
+    const role = signer.role;
+    const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, role);
+
+    // Resolve challenge
+    challenge.status = 'resolved';
+    challenge.handshakeToken = handshakeToken;
+    challenge.memberPubkey = memberPubkey;
+    challenge.role = role;
+
+    return {
+        ok: true,
+        handshakeToken,
+        expiresAt,
+        memberPubkey,
+        role,
+    };
+}
+
+// ===================== SHARED SIGNER CHECKS =====================
+
+export type KeySignerCheck =
+    | { ok: true; role: MemberNodeRole }
+    | { ok: false; error: string; totpRequired?: boolean; notAdmin?: boolean; badSignature?: boolean; wrongTotp?: boolean };
+
+/**
+ * Everything a key sign-in checks about the signer, shared by the app's one-time link (verifyAndSolveChallenge)
+ * and the browser's sign-in by QR (settings-signin-pairing.ts) so the two cannot drift apart: an active member,
+ * holding owner or admin in node_roles (moderators are not let in), whose signature over the flow's own message
+ * verifies, and — when the owner turned it on — the node's 2FA code (a used backup code is spent).
+ */
+export function authorizeKeySigner(params: {
+    memberPubkey: string;
+    signatureValid: () => boolean;
+    totpCode?: string;
+}): KeySignerCheck {
+    const { memberPubkey, signatureValid, totpCode } = params;
+
     // Member existence and active status check
     const member = getMember(db, memberPubkey);
     if (!member || member.status !== 'active') {
@@ -227,16 +275,11 @@ export function verifyAndSolveChallenge(params: {
     // Role check: must hold 'owner' or 'admin' in node_roles
     const role = nodeRoleOf(memberPubkey);
     if (!role || !isNodeAdmin(memberPubkey)) {
-        return { ok: false, error: 'Signer does not hold a node role' };
+        return { ok: false, error: 'Signer does not hold a node role', notAdmin: true };
     }
 
-    // Signature verification (check challenge.challenge payload, and fallback to challengeId)
-    const sigValid =
-        verifyEd25519Signature(challenge.challenge, signature, memberPubkey) ||
-        verifyEd25519Signature(challenge.challengeId, signature, memberPubkey);
-
-    if (!sigValid) {
-        return { ok: false, error: 'Invalid cryptographic signature' };
+    if (!signatureValid()) {
+        return { ok: false, error: 'Invalid cryptographic signature', badSignature: true };
     }
 
     // TOTP verification if enabled
@@ -259,40 +302,28 @@ export function verifyAndSolveChallenge(params: {
             }
         }
         if (!totpOk) {
-            return { ok: false, error: 'Invalid 2FA code', totpRequired: true };
+            return { ok: false, error: 'Invalid 2FA code', totpRequired: true, wrongTotp: true };
         }
     }
 
-    // Mint 60-second single-use handshake token
-    const handshakeToken = crypto.randomBytes(32).toString('hex');
-    const now = Date.now();
-    const expiresAt = now + HANDSHAKE_TOKEN_TTL_MS;
-    const sessionEpoch = getNodeRoleSessionEpoch(memberPubkey);
+    return { ok: true, role };
+}
 
+/** Mint a 60-second, single-use handshake token for this member; consumeHandshakeToken redeems it. */
+export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, now = Date.now()): { handshakeToken: string; expiresAt: number } {
+    const handshakeToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = now + HANDSHAKE_TOKEN_TTL_MS;
     const entry: HandshakeTokenEntry = {
         token: handshakeToken,
         memberPubkey,
         role,
-        sessionEpoch,
+        sessionEpoch: getNodeRoleSessionEpoch(memberPubkey),
         createdAt: now,
         expiresAt,
         used: false,
     };
     handshakeTokens.set(handshakeToken, entry);
-
-    // Resolve challenge
-    challenge.status = 'resolved';
-    challenge.handshakeToken = handshakeToken;
-    challenge.memberPubkey = memberPubkey;
-    challenge.role = role;
-
-    return {
-        ok: true,
-        handshakeToken,
-        expiresAt,
-        memberPubkey,
-        role,
-    };
+    return { handshakeToken, expiresAt };
 }
 
 // ===================== HANDSHAKE TOKEN EXCHANGE =====================

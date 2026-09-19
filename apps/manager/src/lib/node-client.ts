@@ -132,6 +132,14 @@ export interface NodeReport {
     reason?: string;
     severity?: string;
     status?: string;
+    outcome?: 'open' | 'dismissed' | 'actioned' | string;
+    reporterCallsign?: string;
+    targetCallsign?: string;
+    postId?: string | null;
+    postTitle?: string | null;
+    title?: string | null;
+    postAuthorCallsign?: string | null;
+    postRemoved?: boolean | null;
     targetPulseItemId?: string;
     /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
@@ -661,10 +669,18 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                 reason: typeof r.reason === 'string' ? r.reason : (typeof r.description === 'string' ? r.description : ''),
                 severity: typeof r.severity === 'string' ? r.severity : 'Report',
                 status: typeof r.status === 'string' ? r.status : 'pending',
+                outcome: typeof r.outcome === 'string' ? r.outcome : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open'),
+                title: r.title ?? r.postTitle ?? null,
+                postTitle: r.postTitle ?? r.title ?? null,
+                postId: typeof r.postId === 'string' ? r.postId : null,
+                postAuthorCallsign: r.postAuthorCallsign ?? null,
+                postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
             };
         });
         if (typeof data.reportCount !== 'number') {
-            result.reportCount = result.reports.length;
+            result.reportCount = result.reports.filter((r) => r.outcome === 'open').length;
+        } else {
+            result.reportCount = data.reportCount;
         }
     }
 
@@ -878,37 +894,84 @@ export const REMOVAL_REASONS: { id: string; label: string }[] = [
 
 export type ReportStatusFilter = 'open' | 'actioned' | 'dismissed' | 'all';
 
-/** One report as GET /api/local/admin/reports lists it. */
-export interface ListedReport {
+/** One report as fetchReports returns it: a NodeReport with the fields a triage list needs made definite. */
+export interface ListedReport extends NodeReport {
     id: string;
     reason: string;
-    createdAt: string;
     outcome: 'open' | 'dismissed' | 'actioned';
-    reporterCallsign?: string;
-    targetCallsign?: string;
-    postId?: string | null;
-    postTitle?: string | null;
+    createdAt?: string;
     postDescription?: string | null;
-    postAuthorCallsign?: string | null;
-    postRemoved?: boolean | null;
-    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
 }
 
-/** The reports list, filtered, with the number still open whatever the filter. */
-export async function fetchNodeReports(
+export interface ReportsResponse {
+    success?: boolean;
+    reports: ListedReport[];
+    total: number;
+    /** Reports still open, whatever the filter (the server counts them; the owners' and moderators' tabs both show it). */
+    pendingCount: number;
+    limit: number;
+    offset: number;
+}
+
+const REPORT_OUTCOMES = new Set(['open', 'dismissed', 'actioned']);
+
+/**
+ * The reports list, filtered and paged, for both the owners' People & Safety tab and a moderator's Reports screen.
+ * A moderator's session is a cookie, so the request carries it (credentials: same-origin).
+ */
+export async function fetchReports(
     nodeUrl: string,
-    status: ReportStatusFilter,
+    status: ReportStatusFilter = 'open',
+    limit = 50,
+    offset = 0,
     adminPassword?: string,
-    tfaToken?: string,
-): Promise<{ reports: ListedReport[]; total: number; pendingCount: number }> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports?status=${encodeURIComponent(status)}&limit=200`);
-    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken), credentials: 'same-origin' });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    tfaToken?: string
+): Promise<ReportsResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/reports', {
+        status,
+        limit: String(limit),
+        offset: String(offset),
+    });
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    const reports: ListedReport[] = Array.isArray(json.reports) ? json.reports.map((r: any): ListedReport => {
+        if (!r || typeof r !== 'object') return { id: '', reason: '', outcome: 'open' };
+        const targetPubkey = normalizeKeeperPubkey(r.targetPubkey) || normalizeKeeperPubkey(r.target_pubkey);
+        const reporterPubkey = normalizeKeeperPubkey(r.reporterPubkey) || normalizeKeeperPubkey(r.reporter_pubkey);
+        const outcome = REPORT_OUTCOMES.has(r.outcome)
+            ? r.outcome
+            : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open');
+        return {
+            ...r,
+            id: r.id !== undefined && r.id !== null ? String(r.id) : '',
+            targetPubkey,
+            target_pubkey: targetPubkey,
+            reporterPubkey,
+            reporter_pubkey: reporterPubkey,
+            reason: typeof r.reason === 'string' ? r.reason : (typeof r.description === 'string' ? r.description : ''),
+            severity: typeof r.severity === 'string' ? r.severity : 'Report',
+            status: typeof r.status === 'string' ? r.status : 'pending',
+            outcome,
+            title: r.title ?? r.postTitle ?? null,
+            postTitle: r.postTitle ?? r.title ?? null,
+            postId: typeof r.postId === 'string' ? r.postId : null,
+            postAuthorCallsign: r.postAuthorCallsign ?? null,
+            postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
+        };
+    }) : [];
     return {
-        reports: Array.isArray(data.reports) ? data.reports : [],
-        total: Number(data.total) || 0,
-        pendingCount: Number(data.pendingCount) || 0,
+        success: json.success ?? true,
+        reports,
+        total: typeof json.total === 'number' ? json.total : reports.length,
+        pendingCount: typeof json.pendingCount === 'number' ? json.pendingCount : reports.filter((r) => r.outcome === 'open').length,
+        limit: typeof json.limit === 'number' ? json.limit : limit,
+        offset: typeof json.offset === 'number' ? json.offset : offset,
     };
 }
 
@@ -1763,19 +1826,46 @@ export interface EscrowDisputeItem {
     resolvedBy?: string | null;
 }
 
+export const COMMUNITY_ADMIN = 'a community admin';
+
+export function formatResolverName(signer?: string | null): string {
+    if (!signer || typeof signer !== 'string') return COMMUNITY_ADMIN;
+    const s = signer.trim();
+    if (s === 'owner:password' || s === 'admin' || /^[0-9a-f]{64}$/i.test(s)) {
+        return COMMUNITY_ADMIN;
+    }
+    return s;
+}
+
 export interface EscrowDisputesResponse {
     disputes: EscrowDisputeItem[];
     total: number;
+    /** Every tab's count, whichever status was asked for. Absent on servers older than PR #977. */
+    counts?: { pending: number; resolved: number; all: number };
+    count?: number;
     minDays: number;
+    limit?: number;
+    offset?: number;
+}
+
+export interface EscrowDisputesOptions {
+    limit?: number;
+    offset?: number;
+    status?: 'all' | 'pending' | 'resolved';
 }
 
 export async function fetchEscrowDisputes(
     nodeUrl: string,
     minDays = 7,
     adminPassword?: string,
-    tfaToken?: string
+    tfaToken?: string,
+    options?: EscrowDisputesOptions
 ): Promise<EscrowDisputesResponse> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', { minDays: String(minDays) });
+    const params: Record<string, string> = { minDays: String(minDays) };
+    if (options?.limit !== undefined) params.limit = String(options.limit);
+    if (options?.offset !== undefined) params.offset = String(options.offset);
+    if (options?.status !== undefined) params.status = options.status;
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/disputes', params);
     const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
     });

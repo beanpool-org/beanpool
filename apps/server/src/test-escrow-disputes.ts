@@ -29,6 +29,7 @@ import {
     getBalance,
     getCommonsBalanceExact,
     getEscrowDisputes,
+    completePostTransaction,
     getEscrowDispute,
     resolveEscrowDispute,
     type EscrowDisputeAction,
@@ -534,6 +535,40 @@ async function main() {
         assert(pwResolveData.authSigner === 'owner:password', 'Resolution attributed to owner:password under password auth');
         const dbRow5 = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(tx5.id) as any;
         assert(dbRow5.dispute_resolved_by === 'owner:password', 'DB dispute_resolved_by recorded owner:password');
+
+        // G. Tab counts come from the server and agree whichever tab is asked for.
+        //    One held deal and one ordinary finished deal (never disputed) are added first.
+        const ladderPost = createPost('offer', 'tools', 'Ladder', 'Ladder loan', 5, 'fixed', bob);
+        acceptPost(ladderPost!.id, charlie);
+        const kayakPost = createPost('offer', 'tools', 'Kayak', 'Kayak loan', 5, 'fixed', bob);
+        const txDone = acceptPost(kayakPost!.id, charlie);
+        const done = completePostTransaction(txDone!.id, txDone!.buyerPublicKey);
+        assert(done?.status === 'completed', 'Ordinary deal completed without any admin ruling');
+
+        const truth = db.prepare(`
+            SELECT SUM(status = 'pending') AS pending,
+                   SUM(dispute_resolution IS NOT NULL) AS resolved,
+                   SUM(status = 'pending' OR dispute_resolution IS NOT NULL) AS all_count,
+                   SUM(status != 'pending' AND dispute_resolution IS NULL) AS ordinary
+            FROM marketplace_transactions
+        `).get() as any;
+        assert(truth.pending >= 1 && truth.resolved >= 1 && truth.ordinary >= 1,
+            'Fixture has held, resolved and ordinary finished deals');
+
+        for (const status of ['pending', 'resolved', 'all'] as const) {
+            const res = await fetch(`${baseUrl}/api/local/admin/disputes?minDays=0&limit=200&status=${status}`, {
+                headers: { 'x-admin-password': 'test-admin-secret-password' },
+            });
+            const body = await res.json();
+            assert(body.counts?.pending === truth.pending && body.counts?.resolved === truth.resolved && body.counts?.all === truth.all_count,
+                `status=${status}: counts for every tab match the database (${truth.pending}/${truth.resolved}/${truth.all_count})`);
+            assert(body.total === body.counts[status] && body.disputes.length === body.total,
+                `status=${status}: total is that tab's count and the list holds exactly that many`);
+            if (status === 'all') {
+                assert(!body.disputes.some((d: any) => d.id === txDone!.id),
+                    'status=all leaves out ordinary finished deals that never needed a ruling');
+            }
+        }
 
         // Final conservation check
         assert(nodeTotal() === 0, 'Final ledger total sums to zero');

@@ -86,15 +86,13 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         beanBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
         statusBadge: { position: 'absolute', right: 5, bottom: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#ffffff' },
         headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
-        iconBtn: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
+        iconBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
         modalVersion: { fontSize: 14, fontWeight: '900', color: colors.text.muted, letterSpacing: 1, textAlign: 'right', marginBottom: 4 },
         sheetCommunity: { paddingHorizontal: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
         sheetCommunityName: { fontSize: 22, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         sheetCommunitySub: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
-        sheetSettingsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: 12, marginTop: 4, borderTopWidth: 1, borderTopColor: colors.border.default },
-        sheetSettingsText: { flex: 1, fontSize: 16, fontWeight: '700', color: colors.text.heading },
         modalHeader: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
         nodeBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4 },
         activeNodeBtn: { backgroundColor: colors.accent.tint },
@@ -516,7 +514,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
 
             {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
                 old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
-                it visible against the electric bean's dark rim. v4: beside it, an icon per kind of thing that needs you (NeedsYouIcons); invite and avatar are plain icons on the right. */}
+                it visible against the electric bean's dark rim. v4: beside it, an icon per kind of thing that needs you (NeedsYouIcons); invite, settings and avatar are plain 48dp icons on the right. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
@@ -555,6 +553,24 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                             size={24}
                             color={!hasAnchorUrl ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : '#ffffff'}
                         />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Settings"
+                        style={styles.iconBtn}
+                        onPress={() => {
+                            if (pathname === '/settings') {
+                                if (router.canGoBack()) {
+                                    router.back();
+                                } else {
+                                    router.replace('/(tabs)/');
+                                }
+                            } else {
+                                router.push('/(tabs)/settings');
+                            }
+                        }}
+                    >
+                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.accent.primary : '#ffffff'} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         accessibilityRole="button"
@@ -719,16 +735,6 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                                 </TouchableOpacity>
                             );
                         })}
-                        {/* MOCK v4: Settings (the sliders icon) left the header row; it lives here now. */}
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            style={styles.sheetSettingsRow}
-                            onPress={() => { setDropdownVisible(false); router.push('/(tabs)/settings'); }}
-                        >
-                            <MaterialCommunityIcons name="cog-outline" size={22} color={colors.text.secondary} />
-                            <Text style={styles.sheetSettingsText}>Settings</Text>
-                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} />
-                        </TouchableOpacity>
                     </View>
                 </Pressable>
             </Modal>

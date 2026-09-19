@@ -11,6 +11,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme, useStyles } from '../app/ThemeContext';
+import { NeedsYouIcons } from './NeedsYouIcons';
 import Constants from 'expo-constants';
 import appConfig from '../app.json';
 import { evaluateUpdate, normaliseVersion, pickStoreVersion } from '../utils/app-version';
@@ -40,49 +41,12 @@ export const HEADER_ROW_HEIGHT = 48;
 const BEAN_SIZE = 38;
 const AVATAR_SIZE = 32;
 
-// MOCK v3: the header names the COMMUNITY, not the page (each page carries its own large
-// title now). Saved alias first, then the node's host, so something readable shows before the
+// The community's name, shown at the top of the bean's sheet (MOCK v4). Saved alias first, then the node's host, so something readable shows before the
 // first health ping lands.
 function communityLabel(url: string | null, alias?: string | null): string {
     if (alias && alias.trim()) return alias.trim();
     if (!url) return 'BeanPool';
     try { return new URL(url).hostname.split('.')[0] || 'BeanPool'; } catch { return 'BeanPool'; }
-}
-
-const NAME_SIZE = 20;
-const NAME_MIN_SIZE = 16;
-
-/**
- * Measured at 320dp + 1.3x, ~124dp is left beside the icons: a scaled 26sp cut "Mullumbimby"
- * to "Mullumbi…", and even a fixed 20sp to "Mullumbim…". So the name is pinned at 20sp, shrinks
- * as far as 16sp to fit, and past that ellipsizes. Done by measuring rather than with
- * adjustsFontSizeToFit, because Android ignores minimumFontScale and shrank a long name to an
- * unreadable size.
- */
-function CommunityName({ name, style }: { name: string; style: any }) {
-    const [avail, setAvail] = useState(0);
-    const [natural, setNatural] = useState(0);
-    const size = avail && natural > avail
-        ? Math.max(NAME_MIN_SIZE, Math.floor(NAME_SIZE * avail / natural))
-        : NAME_SIZE;
-    return (
-        <View style={{ flex: 1, marginLeft: 4, justifyContent: 'center' }} onLayout={e => setAvail(e.nativeEvent.layout.width)} pointerEvents="none">
-            <Text style={[style, { flex: 0, marginLeft: 0, fontSize: size }]} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={1}>
-                {name}
-            </Text>
-            {/* Off-screen copy at full size, unconstrained, to learn the name's natural width. */}
-            <View style={{ position: 'absolute', left: 0, top: 0, width: 2000, opacity: 0 }} importantForAccessibility="no-hide-descendants">
-                <Text
-                    style={[style, { flex: 0, marginLeft: 0, alignSelf: 'flex-start', fontSize: NAME_SIZE }]}
-                    maxFontSizeMultiplier={1}
-                    numberOfLines={1}
-                    onLayout={e => setNatural(e.nativeEvent.layout.width)}
-                >
-                    {name}
-                </Text>
-            </View>
-        </View>
-    );
 }
 
 /**
@@ -121,21 +85,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         },
         beanBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
         statusBadge: { position: 'absolute', right: 5, bottom: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#ffffff' },
-        headerTitle: {
-            flex: 1,
-            marginLeft: 4,
-            color: '#ffffff',
-            fontSize: 20,
-            fontWeight: '800',
-            textShadowColor: 'rgba(0,0,0,0.75)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 4,
-        },
         headerRightIcons: { flexDirection: 'row', alignItems: 'center' },
         iconBtn: { width: 44, height: 48, alignItems: 'center', justifyContent: 'center' },
         modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center' },
         modalContent: { backgroundColor: colors.surface.card, width: '85%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
         modalVersion: { fontSize: 14, fontWeight: '900', color: colors.text.muted, letterSpacing: 1, textAlign: 'right', marginBottom: 4 },
+        sheetCommunity: { paddingHorizontal: 12, paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border.default },
+        sheetCommunityName: { fontSize: 22, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
+        sheetCommunitySub: { fontSize: 13, color: colors.text.secondary, marginTop: 2 },
+        sheetSettingsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: 12, marginTop: 4, borderTopWidth: 1, borderTopColor: colors.border.default },
+        sheetSettingsText: { flex: 1, fontSize: 16, fontWeight: '700', color: colors.text.heading },
         modalHeader: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
         nodeBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4 },
         activeNodeBtn: { backgroundColor: colors.accent.tint },
@@ -557,8 +516,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
 
             {/* MOCK (mock/header-slim): one 48dp row. The bean opens the community sheet the
                 old centre chevron opened, and wears the connection dot as a badge, whose white ring keeps
-                it visible against the electric bean's dark rim. The COMMUNITY's name sits beside it (v3), ellipsized when long; invite, settings and avatar are plain icons on the
-                right. */}
+                it visible against the electric bean's dark rim. v4: beside it, an icon per kind of thing that needs you (NeedsYouIcons); invite and avatar are plain icons on the right. */}
             <View style={[styles.headerContainer, { paddingTop: insets.top, height: headerHeight }]} pointerEvents="box-none">
                 <TouchableOpacity
                     accessibilityRole="button"
@@ -575,7 +533,8 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                     <View style={[styles.statusBadge, { backgroundColor: isOffline ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : colors.feedback.success.solid }]} />
                 </TouchableOpacity>
 
-                <CommunityName name={communityName} style={styles.headerTitle} />
+                {/* MOCK v4: small icons for what needs you, only while something does; the community's name moved into the bean's sheet. */}
+                <NeedsYouIcons />
 
                 <View style={styles.headerRightIcons}>
                     <TouchableOpacity
@@ -596,24 +555,6 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                             size={24}
                             color={!hasAnchorUrl ? colors.feedback.danger.solid : isGuestOnActive ? colors.feedback.warning.solid : '#ffffff'}
                         />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="Settings"
-                        style={styles.iconBtn}
-                        onPress={() => {
-                            if (pathname === '/settings') {
-                                if (router.canGoBack()) {
-                                    router.back();
-                                } else {
-                                    router.replace('/(tabs)/');
-                                }
-                            } else {
-                                router.push('/(tabs)/settings');
-                            }
-                        }}
-                    >
-                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.accent.primary : '#ffffff'} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         accessibilityRole="button"
@@ -689,7 +630,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                 <Pressable accessibilityRole="button" accessibilityLabel="Close" style={styles.modalBg} onPress={() => setDropdownVisible(false)}>
                     <View style={[styles.modalContent, { marginTop: insets.top + 80 }]}>
                         <Text style={styles.modalVersion}>v{appConfig.expo.version} ({Platform.OS === 'ios' ? appConfig.expo.ios.buildNumber : appConfig.expo.android.versionCode})</Text>
-                        <Text style={styles.modalHeader}>Select Community</Text>
+                        {/* MOCK v4: the community's name left the header line, so it heads this sheet instead. */}
+                        {hasAnchorUrl && (
+                            <View style={styles.sheetCommunity}>
+                                <Text style={styles.sheetCommunityName} numberOfLines={2} accessibilityRole="header">{communityName}</Text>
+                                <Text style={styles.sheetCommunitySub}>
+                                    {isOffline ? 'Offline' : isGuestOnActive ? 'Visiting as a guest' : 'You are a member here'}
+                                </Text>
+                            </View>
+                        )}
+                        <Text style={styles.modalHeader}>Your communities</Text>
                         {savedNodes.length === 0 && (
                             <View style={{ padding: 14 }}>
                                 <Text style={{ fontSize: 14, color: colors.text.body, lineHeight: 20 }}>
@@ -769,6 +719,16 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                                 </TouchableOpacity>
                             );
                         })}
+                        {/* MOCK v4: Settings (the sliders icon) left the header row; it lives here now. */}
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            style={styles.sheetSettingsRow}
+                            onPress={() => { setDropdownVisible(false); router.push('/(tabs)/settings'); }}
+                        >
+                            <MaterialCommunityIcons name="cog-outline" size={22} color={colors.text.secondary} />
+                            <Text style={styles.sheetSettingsText}>Settings</Text>
+                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} />
+                        </TouchableOpacity>
                     </View>
                 </Pressable>
             </Modal>

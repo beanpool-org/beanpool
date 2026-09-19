@@ -48,7 +48,7 @@ export default function ChatsScreen() {
         talkBar: {
             flexDirection: 'row',
             marginHorizontal: 16,
-            marginTop: 10,
+            // MOCK v4: the gap above comes from PageTitle (or a spacer while it is folded away).
             backgroundColor: colors.surface.subtle,
             borderRadius: 12,
             padding: 3,
@@ -557,6 +557,7 @@ export default function ChatsScreen() {
                 and folds away once the list scrolls. The compose button moved into the search row
                 so it never folds away with the title. */}
             <PageTitle title="Talk" collapsed={pageTitle.collapsed} />
+            {pageTitle.collapsed ? <View style={{ height: 10 }} /> : null}
             {talkSwitch}
             {/* Search, Sort, and Filter row */}
             <View style={styles.searchBarRow}>

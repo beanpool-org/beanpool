@@ -290,7 +290,7 @@ export default function PulseScreen() {
                 </Pressable>
             } />
             {/* Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, !pageTitle.collapsed && { paddingTop: 0 }]}>
                 {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
                     fallback while the app-review instructions reference that path), so
                     Back only makes sense when we actually arrived on a stack. */}
@@ -309,7 +309,7 @@ export default function PulseScreen() {
                 )}
 
                 {/* The page's one title is the large "Pulse" above (MOCK v3); this is only its subtitle. */}
-                <View style={styles.titleRow}>
+                <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
                     <Text style={styles.subtitle}>
                         {activeLane === 'learn'
                             ? 'How BeanPool works and daily reflections'
@@ -525,7 +525,6 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         subtitle: {
             fontSize: 13,
             color: colors.text.secondary,
-            marginTop: 2,
             lineHeight: 18,
         },
         categoryContainer: {

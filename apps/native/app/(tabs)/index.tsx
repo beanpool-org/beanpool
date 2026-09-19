@@ -537,7 +537,9 @@ export default function MarketScreen() {
     const [screenH, setScreenH] = useState(0);
     const [filterBlockY, setFilterBlockY] = useState(0);
     const [filterRowsBottom, setFilterRowsBottom] = useState(0);
-    const rowsBottom = HEADER_PAD_TOP + filterBlockY + filterRowsBottom;
+    // MOCK v4: the large title brings its own top gap, so the block's padding applies only while it is folded away.
+    const headerPadTop = pageTitle.collapsed ? HEADER_PAD_TOP : 0;
+    const rowsBottom = headerPadTop + filterBlockY + filterRowsBottom;
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
@@ -1462,7 +1464,7 @@ export default function MarketScreen() {
 
     return (
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
-            <View style={{ paddingTop: HEADER_PAD_TOP, paddingBottom: 0 }}>
+            <View style={{ paddingTop: headerPadTop, paddingBottom: 0 }}>
                 {HeaderComponent}
             </View>
             {showFirstOfferQuest && !categoryPanel.open && (

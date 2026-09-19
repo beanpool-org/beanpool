@@ -7,23 +7,31 @@ import { useTheme } from '../app/ThemeContext';
 // map) opens with its own large title, as iOS large titles do. Capped at 1.3x so "Commons" still
 // fits one line at 320dp with the largest text setting.
 export const PAGE_TITLE_SIZE = 30;
+// MOCK v4: ONE spacing for every large title (Market, Talk, Pulse, Commons, Ledger). The title owns
+// the gap above it and the gap to the first content row; pages add nothing of their own above that
+// row while the title shows. v3 measured 10.7-18.7dp above and 6-22dp below, page by page.
+export const PAGE_TITLE_TOP = 4;
+export const PAGE_TITLE_BOTTOM = 8;
+const PAGE_TITLE_LINE = 36;
 
-export function PageTitle({ title, right, collapsed = false }: {
+export function PageTitle({ title, right, collapsed = false, inset = 16 }: {
     title: string;
     /** Page action drawn on the title's line (e.g. Talk's compose button). */
     right?: React.ReactNode;
     /** Pages whose controls stay pinned above their list fold the title away once scrolled. */
     collapsed?: boolean;
+    /** Horizontal padding; 0 when the page's own container already pads 16 (Commons' list). */
+    inset?: number;
 }) {
     const { colors } = useTheme();
     if (collapsed) return null;
     return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: inset, paddingTop: PAGE_TITLE_TOP, paddingBottom: PAGE_TITLE_BOTTOM }}>
             <Text
                 accessibilityRole="header"
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.3}
-                style={{ flex: 1, fontSize: PAGE_TITLE_SIZE, fontWeight: '800', letterSpacing: -0.5, color: colors.text.heading }}
+                style={{ flex: 1, fontSize: PAGE_TITLE_SIZE, lineHeight: PAGE_TITLE_LINE, includeFontPadding: false, fontWeight: '800', letterSpacing: -0.5, color: colors.text.heading }}
             >
                 {title}
             </Text>

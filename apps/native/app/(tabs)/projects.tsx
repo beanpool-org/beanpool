@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { enterpriseCardStatus } from '../../utils/enterprise-card';
-import { PAGE_TITLE_SIZE, useTabRetapScrollTop } from '../../components/PageTitle';
+import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 
 export default function ProjectsScreen() {
     const { theme, colors } = useTheme();
@@ -49,8 +49,6 @@ export default function ProjectsScreen() {
         safeArea: { flex: 1, backgroundColor: colors.surface.app },
         headerContainer: { marginBottom: 16 },
         headerInfo: { marginBottom: 16 },
-        titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-        headerTitle: { flex: 1, fontSize: PAGE_TITLE_SIZE, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.5 },
         headerDesc: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         infoBtn: { padding: 4 },
         treasuryPanelLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
@@ -88,7 +86,7 @@ export default function ProjectsScreen() {
         filterBtnText: { fontSize: 12, color: colors.text.secondary, fontWeight: '600' },
         filterBtnTextActive: { color: colors.text.inverse },
 
-        listContainer: { padding: 16, paddingBottom: 100 },
+        listContainer: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 100 },
         card: { backgroundColor: colors.surface.card, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border.default, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3 },
         cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, paddingBottom: 8, gap: 12 },
         avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface.subtle },
@@ -497,9 +495,9 @@ export default function ProjectsScreen() {
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>
-                            <View style={styles.titleRow}>
-                                {/* MOCK v3: the page's one large title, first thing in the list, so it scrolls away with it. */}
-                                <Text style={styles.headerTitle} accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.3}>Commons</Text>
+                            {/* MOCK v3: the page's one large title, first thing in the list, so it scrolls away with it.
+                                v4: the shared PageTitle, so its spacing matches every other page (the list pads the sides). */}
+                            <PageTitle title="Commons" inset={0} right={
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel="About the Commons Pool"
@@ -509,7 +507,7 @@ export default function ProjectsScreen() {
                                 >
                                     <MaterialCommunityIcons name="information-outline" size={22} color={colors.text.secondary} />
                                 </Pressable>
-                            </View>
+                            } />
                             <Text style={styles.headerDesc}>
                                 Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.
                             </Text>

@@ -145,6 +145,8 @@ export const OWNER_WORDS_COPY = {
     promptTitleRenew: 'Time to check your 12 words',
     promptBodyRenew: "It's a year since you last checked them. If you lose this phone, they're how you'd take over the server or open a backup.",
     checked: (ms: number) => `12 words checked ${formatCheckedDate(ms)}`,
+    unlockTitle: 'Take over or restore with this phone',
+    unlockSub: "If your main server is gone: scan the code on the standby's Settings, or on a server restoring a backup.",
     stays: 'Your words stay on this phone. They are never sent or saved.',
     match: 'These are the right words.',
     matchSaved: 'These are the right words. Your community can see you checked them today.',

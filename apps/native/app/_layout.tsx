@@ -27,6 +27,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
 // Complete any pending browser-based auth sessions (e.g. OAuth redirects)
@@ -201,6 +202,9 @@ function RootLayoutNav() {
         if (currentUrl.includes('/auth/instagram') || currentUrl.includes('/auth/tiktok') || currentUrl.startsWith('beanpool://auth/')) {
             return;
         }
+        // "Take over with this phone" (app/unlock-keys.tsx) is routed by expo-router. Not an invite: its server address
+        // would otherwise make extractInviteToken read the path's last part ("unlock-keys") as an invite code.
+        if (isUnlockLink(currentUrl)) return;
 
         const inviteToken = extractInviteToken(currentUrl);
         // Valid invite tokens must be present, and not be full HTTP URLs or paths

@@ -27,7 +27,7 @@ import { buildSignedHeaders } from '../crypto';
 import { extractInviteToken } from '../invite-parser';
 import {
     readUnlockScan, unlockTextFromParams, isUnlockLink, scanProblemMessage, lookupUnlock, buildUnlockRequest, approveUnlock,
-    runLockOpenCheck, readLockPin, lockPinKey, resetLockOpenCheckForTests, unlockRefusalMessage, type CommunityLockPin,
+    runLockOpenCheck, readLockPin, lockPinKey, resetLockOpenCheckForTests, unlockRefusalMessage, openedFromLinkWarning, type CommunityLockPin,
 } from '../takeover-unlock';
 
 // A real Ed25519 PeerId for a real node key, so the header's signature checks out as it does on a device.
@@ -121,6 +121,19 @@ describe('reading the scan payload', () => {
         // Why app/_layout.tsx skips these links before its invite handling: the https server address inside makes
         // extractInviteToken fall back to the path's last part.
         expect(extractInviteToken(link)).toBe('unlock-keys');
+    });
+});
+
+describe('opened from a link', () => {
+    it('warns the owner, naming the server, and says what a restore would give away', () => {
+        const restore = openedFromLinkWarning('restore', 'evil.example');
+        expect(restore).toMatch(/opened this from a link/);
+        expect(restore).toMatch(/evil\.example/);
+        expect(restore).toMatch(/Not now/);
+        expect(restore).toMatch(/backup/);
+        const takeover = openedFromLinkWarning('takeover', 'standby.example');
+        expect(takeover).toMatch(/opened this from a link/);
+        expect(takeover).toMatch(/take-over on standby\.example/);
     });
 });
 

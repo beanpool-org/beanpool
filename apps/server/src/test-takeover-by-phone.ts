@@ -20,7 +20,9 @@
  *  5. Confirm → the journaled promotion → the restart. After: the SAME end state as by code — the same PeerId, the
  *     roles, @Anna's key sign-in, the link, the audit exactly once, the tunnel token — and it says "@Anna's phone",
  *     the notice names @Anna, and no "your recovery code was used" (nothing was spent).
- *  6. A standby holding only another community's keys refuses to start a phone session.
+ *  6. A standby holding only another community's keys refuses to start a phone session. Only the NEWEST held envelope
+ *     is offered to a phone: when it has no owner the answer is the printed recovery code, never an older envelope an
+ *     owner removed since could open; when it has, the session is on it and the removed owner is refused.
  *  7. Restore: a sealed backup from the promoted server, uploaded to a FRESH server with "open with an owner's
  *     phone" → the QR → @Anna's phone (native raw seed) → restored, restarted: the community's PeerId and roles.
  *
@@ -271,6 +273,39 @@ async function main(): Promise<void> {
             nodes.push(probe);
             const refused = await post(probe.base, '/api/local/admin/takeover/phone/start', { serverUrl: probe.base }, pw(PW_STANDBY));
             assert(refused.status === 409 && refused.body.wrongCommunity === true, `no session: the keys are another community's (${refused.status} ${refused.body.error})`);
+
+            // ── 6b. Only the NEWEST envelope is offered to a phone ──
+            console.log('\n— 6b. only the newest held envelope is offered to a phone —');
+            for (const n of fs.readdirSync(heldDir)) fs.rmSync(path.join(heldDir, n));
+            const zedSeed = crypto.randomBytes(32);
+            const zedPub = Buffer.from(ed25519.getPublicKey(zedSeed)).toString('hex');
+            const { record: codeRecord } = await core.createRecoveryCode(2);
+            let stamp = Date.now();
+            const hold = async (createdAt: string, recipients: { owners: { pubkey: string; callsign: string }[]; codes?: any[] }) => {
+                const env = await core.sealEnvelope(new TextEncoder().encode('{}'), {
+                    kind: 'takeover', communityId, nodePeerId: mainPeerId, signingKey: mainSeed, recipients, createdAt,
+                });
+                const id = core.readSealedHeader(env).envelopeId;
+                fs.writeFileSync(path.join(heldDir, `${String(stamp++).padStart(13, '0')}-${id}.bpseal`), env, { mode: 0o600 });
+                return id;
+            };
+            // An older envelope locked to @Zed, an owner since removed; the newest has no owner at all.
+            const olderId = await hold('2026-01-01T00:00:00.000Z', { owners: [{ pubkey: zedPub, callsign: 'Zed' }], codes: [codeRecord] });
+            await hold('2026-02-01T00:00:00.000Z', { owners: [], codes: [codeRecord] });
+            const codeOnly = await post(probe.base, '/api/local/admin/takeover/phone/start', { serverUrl: probe.base }, pw(PW_STANDBY));
+            assert(codeOnly.status === 409 && codeOnly.body.noOwnerStanza === true && /printed recovery code/.test(codeOnly.body.error),
+                `the newest has no owner → no session, "use the printed recovery code", not the older one @Zed could open (${codeOnly.status} ${codeOnly.body.error})`);
+            assert(!JSON.stringify(codeOnly.body).includes(olderId), 'the older envelope is not offered');
+
+            // A newer one locked to @Anna: the session is on it, and @Zed can't open it.
+            const newestId = await hold('2026-03-01T00:00:00.000Z', { owners: [{ pubkey: setup.anna, callsign: 'Anna' }], codes: [codeRecord] });
+            const onNewest = await post(probe.base, '/api/local/admin/takeover/phone/start', { serverUrl: probe.base }, pw(PW_STANDBY));
+            assert(onNewest.status === 200 && onNewest.body.envelope.envelopeId === newestId && JSON.stringify(onNewest.body.owners) === '["@Anna"]',
+                `the newest locked to an owner → a session on it, for @Anna (${onNewest.status})`);
+            const annaProbe = await phone(onNewest.body.qr, ownerSeedHex, { communityId, nodePeerId: mainPeerId });
+            const zedTry = await send(annaProbe.qr, resign(annaProbe.request, zedSeed, { signer: zedPub }));
+            assert(zedTry.status === 403 && zedTry.body.reason === 'not-a-recipient',
+                `the removed owner @Zed's phone is refused (${zedTry.status} ${zedTry.body.reason})`);
             await probe.kill();
         }
 

@@ -30,6 +30,21 @@ function minutesLeft(expiresAt: number, now: number): string {
 
 const WRAP: React.CSSProperties = { overflowWrap: 'anywhere' };
 
+/**
+ * The QR's server address when it is this computer's own (localhost, 127.x, ::1): a phone can't reach it. The QR
+ * carries the address this dashboard's profile uses for the server, which on a Mac is often https://localhost:8443.
+ */
+export function loopbackQrHost(qr: string): string | null {
+    try {
+        const u = new URLSearchParams(qr.slice(qr.indexOf('?') + 1)).get('u');
+        if (!u) return null;
+        const host = new URL(u).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        return host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host === '::1' || host === '0.0.0.0' ? host : null;
+    } catch {
+        return null;
+    }
+}
+
 export function OwnerPhoneUnlock({ session, purpose }: { session: OwnerPhoneSession; purpose: 'takeover' | 'restore' }) {
     const [now, setNow] = useState(() => Date.now());
     const [copied, setCopied] = useState(false);
@@ -38,6 +53,7 @@ export function OwnerPhoneUnlock({ session, purpose }: { session: OwnerPhoneSess
         return () => clearInterval(t);
     }, []);
     const img = generateOfflineQrUrl(session.qr);
+    const loopback = loopbackQrHost(session.qr);
     const copy = async () => {
         try {
             await navigator.clipboard.writeText(session.link);
@@ -52,6 +68,12 @@ export function OwnerPhoneUnlock({ session, purpose }: { session: OwnerPhoneSess
                     : 'An owner opens the BeanPool app → Settings → Take over or restore with this phone, and scans this code to open the backup.'}
                 {' '}Their phone asks for its own unlock, then hands this server the key, locked so only this server can read it.
             </p>
+            {loopback && (
+                <p className="m-0 p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 font-bold" role="alert">
+                    This code points at {loopback}, this computer's own address: a phone can't reach it. Open this server in the
+                    dashboard by its public web address and start again, or {purpose === 'takeover' ? 'take over' : 'open the backup'} with the recovery code.
+                </p>
+            )}
             {img && (
                 <div className="flex justify-center">
                     <img src={img} alt="Code for an owner's phone" className="w-56 h-56 max-w-full bg-white p-2 rounded-xl" />

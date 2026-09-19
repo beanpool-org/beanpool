@@ -181,6 +181,10 @@ async function main() {
         const info = await sessionInfo(ex.sessionId!);
         assert(info.authenticated === true && info.isKeySession === true, 'the session is a key session');
         assert(info.memberPubkey === admin.pub && info.role === 'admin', 'the session acts as the member who signed');
+        const tfaWithSession = await fetch(`${BASE}/api/local/admin/2fa/status`, { headers: { Cookie: `admin_session=${ex.sessionId}` } });
+        assert(tfaWithSession.status === 200, `/settings can read its 2FA status under the key session (got ${tfaWithSession.status})`);
+        const tfaBogus = await fetch(`${BASE}/api/local/admin/2fa/status`, { headers: { Cookie: 'admin_session=deadbeef' } });
+        assert(tfaBogus.status === 401, `…but not with a made-up session (got ${tfaBogus.status})`);
 
         // Single use.
         const replay = await exchange(link.body.handshakeToken);

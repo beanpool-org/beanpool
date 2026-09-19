@@ -14,6 +14,16 @@
       "types": "./dist/ed25519-key.d.ts",
       "import": "./dist/ed25519-key.js",
       "default": "./dist/ed25519-key.js"
+    },
+    "./sealed-envelope": {
+      "types": "./dist/sealed-envelope.d.ts",
+      "import": "./dist/sealed-envelope.js",
+      "default": "./dist/sealed-envelope.js"
+    },
+    "./sealed-envelope-vectors": {
+      "types": "./dist/sealed-envelope-vectors.d.ts",
+      "import": "./dist/sealed-envelope-vectors.js",
+      "default": "./dist/sealed-envelope-vectors.js"
     }
   },
   "scripts": {

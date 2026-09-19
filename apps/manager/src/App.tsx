@@ -71,6 +71,7 @@ import { startKeySession, endKeySession, sectionTarget, type KeySession } from '
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
 import { defaultSubTab } from './lib/sections';
+import { PhoneReturnLink } from './components/layout/ReturnLinks';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 
 /**
@@ -1104,7 +1105,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     />
                 )}
                 {!isFleetMode && sidebarMode === 'hidden' && (
-                    // lg and wider, sidebar hidden: one ☰ at the top-left brings it back in full.
+                    // lg and wider, sidebar hidden: one ☰ at the top-left brings it back in full; the way back stays on the right.
                     <div className="hidden lg:flex items-center gap-2 px-3 min-h-[56px] border-b border-nature-800 bg-nature-900/95 sticky top-0 z-30">
                         <button
                             type="button"
@@ -1116,7 +1117,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         >
                             <span aria-hidden="true">☰</span>
                         </button>
-                        <p className="text-sm font-semibold text-terra-400 m-0 truncate">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
+                        <p className="text-sm font-semibold text-terra-400 m-0 truncate flex-1 min-w-0">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
+                        {returnLinks && <PhoneReturnLink back={returnLinks.back} />}
                     </div>
                 )}
                 {/* Active Target Banner for Control Subsystems */}

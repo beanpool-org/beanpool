@@ -241,7 +241,7 @@ async function main() {
 
         const annP = pushesTo(Ann), r1P = pushesTo(R1), r2P = pushesTo(R2);
         assert(annP.length === 1 && annP[0].title === mod.POST_REMOVED_TITLE, `the author gets exactly one push (${annP.length})`);
-        assert(annP[0]?.body === `Your post "${P_TITLE}" was removed by the community's admins. Reason: spam or a scam.`,
+        assert(annP[0]?.body === `Your post "${P_TITLE}" was removed by the community's moderators. Reason: spam or a scam.`,
             `saying what was removed, by whom in words, and why (${annP[0]?.body})`);
         assert(annP[0]?.channelId === 'marketplace', 'on the marketplace channel, so the Marketplace preference applies');
         assert(r1P.length === 1 && r1P[0].body === mod.reportedPostRemovedBody(), 'the first reporter gets exactly "the post you reported was removed"');
@@ -307,7 +307,7 @@ async function main() {
         const del = await admin('POST', `/api/local/admin/posts/${Z.id}/delete`, { reasonCategory: 'not-a-category' });
         assert(del.status === 200, 'the post delete route answers 200');
         await flush();
-        assert(pushesTo(Ann).length === 1 && pushesTo(Ann)[0].body === 'Your post "Knock-off watches" was removed by the community\'s admins.',
+        assert(pushesTo(Ann).length === 1 && pushesTo(Ann)[0].body === 'Your post "Knock-off watches" was removed by the community\'s moderators.',
             `the author is told, and an unknown reason category is left out (${pushesTo(Ann)[0]?.body})`);
         assert(pushesTo(R2).length === 0, 'a reporter with Marketplace notifications off gets no push');
         assert(notices(socks.R2).length === 1 && notices(socks.R2)[0].outcome === 'removed', 'but still gets the live notice');
@@ -382,7 +382,7 @@ async function main() {
         assert(annPrune[0]?.title === mod.POSTS_CLEARED_TITLE && annPrune[0]?.body === mod.postsClearedBody(15, 100),
             `with the count, the age, and "not a report" (${annPrune[0]?.body})`);
         assert(/15 of your listings older than 100 days/.test(annPrune[0]?.body) && /routine tidying, not a report/.test(annPrune[0]?.body), 'worded as tidying');
-        assert(!sent.some(m => m.title === mod.POST_REMOVED_TITLE || /removed by the community's admins/.test(m.body)), 'nobody gets the takedown wording');
+        assert(!sent.some(m => m.title === mod.POST_REMOVED_TITLE || /removed by the community's moderators/.test(m.body)), 'nobody gets the takedown wording');
         assert(notices(socks.Ann).length === 1 && notices(socks.Ann)[0].kind === 'posts_cleared' && notices(socks.Ann)[0].count === 15,
             'and exactly one live notice, so no alerts stack');
         assert(pushesTo(Seller).length === 1 && pushesTo(Seller)[0].body === mod.postsClearedBody(2, 100), `the other author gets one notice for 2 (${pushesTo(Seller)[0]?.body})`);

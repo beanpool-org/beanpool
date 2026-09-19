@@ -120,7 +120,7 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
                 <h3 id="phone-signin-title" className="text-base font-bold text-white m-0">Sign in with your phone</h3>
                 <p className="text-sm text-nature-300 m-0 mt-1 leading-relaxed">
                     In the BeanPool app, open <strong className="text-nature-100">Settings → Sign in on a computer</strong> and scan this code.
-                    Owners and admins only.
+                    Owners, admins and moderators only.
                 </p>
             </div>
 

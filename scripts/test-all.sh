@@ -248,6 +248,7 @@ run_federation_suites() {
       test-app-admin-handoff
       test-settings-qr-signin
       test-challenge-token-leak
+      test-moderator-routes
       test-backend-monitors
       test-backup-hardening
       test-backup-identity-bundle

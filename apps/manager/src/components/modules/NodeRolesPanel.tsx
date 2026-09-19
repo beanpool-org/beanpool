@@ -24,7 +24,7 @@ import {
 /** Who is looking at /settings: the admin password counts as owner level (admin-surface.md §2.5). */
 export type RolesViewer =
     | { kind: 'password' }
-    | { kind: 'key'; memberPubkey: string; role: 'owner' | 'admin' };
+    | { kind: 'key'; memberPubkey: string; role: 'owner' | 'admin' | 'moderator' };
 
 interface NodeRolesPanelProps {
     activeNode: NodeProfile;
@@ -52,7 +52,7 @@ export function grantConsequence(name: string, role: MemberNodeRole, self = fals
         case 'admin':
             return `${name} will be able to open these Settings with ${their} own key and run the community day to day — members, moderation, invites and backups — but not add or remove owners, admins or moderators.`;
         case 'moderator':
-            return `${name} will be listed as a moderator. For now that is a label only: it does not open these Settings or give any extra powers.`;
+            return `${name} will be able to open these Settings with ${their} own key, but see only Reports: dismiss a report, or take down the post or Pulse item it is about. Nothing else — not members' details, money, invites, backups or roles.`;
     }
 }
 
@@ -343,7 +343,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                     <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 space-y-2" data-testid="remove-confirm">
                                         <p className="text-sm text-red-100 m-0">
                                             {name} will no longer be {ROLE_ARTICLE[r.role]} of this community.
-                                            {r.role !== 'moderator' && ' They lose access to these Settings straight away.'}
+                                            {' They lose access to these Settings straight away.'}
                                             {isMe && ' This is you — you will be signed out of these Settings.'}
                                         </p>
                                         <div className="flex flex-wrap gap-2">

@@ -1790,7 +1790,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setSubmittingReport(true);
                                         try {
                                             await reportAbuse(identity.publicKey, selectedPost.authorPublicKey, reportReason, selectedPost.id);
-                                            alert('Report submitted. The admin will review it.');
+                                            alert("Report submitted. Your community's moderators will review it.");
                                             setShowReportForm(false);
                                             setReportReason('');
                                         } catch (e: any) {

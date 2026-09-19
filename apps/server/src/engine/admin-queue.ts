@@ -44,7 +44,11 @@ function count(sql: string, ...params: unknown[]): number {
     return Number((db.prepare(sql).get(...params) as { c: number } | undefined)?.c ?? 0);
 }
 
-export function getAdminQueue(): AdminQueue {
+/** The only kind of queued work a moderator handles: reports (admin-auth.ts, MODERATOR_ROUTES). */
+const MODERATOR_QUEUE_KINDS: ReadonlySet<AdminQueueKind> = new Set(['reports']);
+
+/** `forModerator`: only what a moderator can act on, so their badge never counts work they cannot open. */
+export function getAdminQueue(opts: { forModerator?: boolean } = {}): AdminQueue {
     const shutdown = getShutdownStatus();
     const raw: Array<Omit<AdminQueueItem, 'settingsPath'>> = [
         {
@@ -83,7 +87,7 @@ export function getAdminQueue(): AdminQueue {
         },
     ];
     const items = raw
-        .filter(i => i.count > 0)
+        .filter(i => i.count > 0 && (!opts.forModerator || MODERATOR_QUEUE_KINDS.has(i.kind)))
         .map(i => ({ ...i, settingsPath: settingsPathFor(i.section) }));
     return { total: items.reduce((n, i) => n + i.count, 0), items };
 }

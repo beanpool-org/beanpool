@@ -867,6 +867,82 @@ export async function dismissNodeReport(
     return res.json();
 }
 
+/** The reasons a post can be removed for, as the author reads them (server: engine/moderation-notices.ts). */
+export const REMOVAL_REASONS: { id: string; label: string }[] = [
+    { id: 'spam', label: 'Spam or a scam' },
+    { id: 'offensive', label: 'Offensive content' },
+    { id: 'misleading', label: 'Misleading' },
+    { id: 'unsafe', label: 'Unsafe or illegal' },
+    { id: 'rules', label: "Against this community's rules" },
+];
+
+export type ReportStatusFilter = 'open' | 'actioned' | 'dismissed' | 'all';
+
+/** One report as GET /api/local/admin/reports lists it. */
+export interface ListedReport {
+    id: string;
+    reason: string;
+    createdAt: string;
+    outcome: 'open' | 'dismissed' | 'actioned';
+    reporterCallsign?: string;
+    targetCallsign?: string;
+    postId?: string | null;
+    postTitle?: string | null;
+    postDescription?: string | null;
+    postAuthorCallsign?: string | null;
+    postRemoved?: boolean | null;
+    pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
+}
+
+/** The reports list, filtered, with the number still open whatever the filter. */
+export async function fetchNodeReports(
+    nodeUrl: string,
+    status: ReportStatusFilter,
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<{ reports: ListedReport[]; total: number; pendingCount: number }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports?status=${encodeURIComponent(status)}&limit=200`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken), credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return {
+        reports: Array.isArray(data.reports) ? data.reports : [],
+        total: Number(data.total) || 0,
+        pendingCount: Number(data.pendingCount) || 0,
+    };
+}
+
+/**
+ * Acts on a report: takes the reported post down (the author is told, with the reason), takes a reported Pulse
+ * item off the feed, or neither (marks it handled). Never suspends anyone: that stays in People & Safety.
+ */
+export async function actionNodeReport(
+    nodeUrl: string,
+    reportId: string,
+    action: { deletePost?: boolean; removePulseItem?: boolean; reasonCategory?: string },
+    adminPassword?: string,
+    tfaToken?: string,
+): Promise<{ success: boolean; error?: string }> {
+    if (!reportId || typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('Valid report ID is required');
+    }
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/reports/${encodeURIComponent(reportId.trim())}/action`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            deletePost: !!action.deletePost,
+            removePulseItem: !!action.removePulseItem,
+            ...(action.reasonCategory ? { reasonCategory: action.reasonCategory } : {}),
+            ...(adminPassword ? { password: adminPassword } : {}),
+        }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    return data;
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,

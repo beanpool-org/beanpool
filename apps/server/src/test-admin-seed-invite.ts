@@ -8,8 +8,9 @@
  * 4. Existing node (>0 members): generates tiered seed invite codes ('standard', 'trusted', 'ambassador', 'elder')
  *    from the genesis/admin member, defaulting invalid tier names to 'standard'.
  * 5. Key-signed sessions (the app's 'Manage' button): an admin's session issues an invite that redeems, and the
- *    invite records who issued it; a member with no role, or a moderator, cannot get a session and a made-up session
- *    is refused; an admin removed from node_roles loses the power at once.
+ *    invite records who issued it; a member with no role cannot get a session; a moderator gets one (it reaches
+ *    reports only) but is refused invites; a made-up session is refused; an admin removed from node_roles loses the
+ *    power at once.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -143,8 +144,10 @@ async function main() {
 
     const charlieSolve = await solveChallenge(charlie);
     assert(charlieSolve.status === 403, 'Member without a role cannot get an admin session (403)');
-    const moSolve = await solveChallenge(mo);
-    assert(moSolve.status === 403, 'Moderator cannot get an admin session (403)');
+    const moSession = await keySession(mo);
+    assert(!!moSession, 'A moderator gets a key session (it reaches reports only)');
+    const moInvite = await postJson('/api/admin/seed-invite', { type: 'trusted' }, { 'x-admin-session': moSession });
+    assert(moInvite.status === 403 && !moInvite.body.code, `Moderator key session → seed-invite 403, no code (got ${moInvite.status})`);
     const fakeSession = await postJson('/api/admin/seed-invite', {}, { 'x-admin-session': 'not-a-real-session' });
     assert(fakeSession.status === 401, 'Made-up admin session → seed-invite 401');
     assert(!fakeSession.body.code, 'Made-up admin session gets no code');

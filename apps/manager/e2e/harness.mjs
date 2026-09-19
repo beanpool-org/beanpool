@@ -99,8 +99,9 @@ export async function launch() {
  * A fresh page on Settings, signed in with a (mocked) admin password, opened on `screen`.
  * `hash` lets a caller open the key sign-in hand-off link instead (e.g. '#handoff=…&section=disputes').
  * `overrides` maps an API path to a function that edits the fixture's reply.
+ * `handoffRole` is the role the hand-off link signs in as ('moderator' opens the moderator's Reports screen).
  */
-export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {} }) {
+export async function openSettings(browser, origin, { width, height = 800, textScale = 1, screen = { tab: 'home' }, hash = '', signedIn = true, systemFont = false, overrides = {}, handoffRole = 'owner' }) {
     const context = await browser.newContext({
         viewport: { width, height },
         deviceScaleFactor: 1,
@@ -120,9 +121,9 @@ export async function openSettings(browser, origin, { width, height = 800, textS
     await page.route(/\/(api|proxy)\//, async (route) => {
         const req = route.request();
         const url = new URL(req.url());
-        // The app's one-time sign-in link: any well-formed token is accepted here, as an owner.
+        // The app's one-time sign-in link: any well-formed token is accepted here, as an owner (or `handoffRole`).
         let { status, json } = url.pathname === '/api/local/admin/auth/exchange'
-            ? { status: 200, json: { role: 'owner', memberPubkey: 'f'.repeat(64), csrfToken: 'fixture-csrf' } }
+            ? { status: 200, json: { role: handoffRole, memberPubkey: 'f'.repeat(64), csrfToken: 'fixture-csrf' } }
             : mockResponse(req.method(), url.pathname, url.searchParams, req.postData() || '');
         // A screen that shows only on some nodes (e.g. a primary rather than a standby): `overrides[path]` edits the reply.
         if (overrides[url.pathname]) json = overrides[url.pathname](json);

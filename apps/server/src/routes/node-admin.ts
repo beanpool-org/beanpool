@@ -1,8 +1,10 @@
 /**
- * Member-facing node-admin routes: what the app needs to offer "Manage <community>" to owners and admins.
+ * Member-facing node-admin routes: what the app needs to offer "Manage <community>" to owners and admins
+ * (and "Moderate <community>" to moderators).
  *
- *   GET /api/node-admin/me     — the SIGNED-IN member's own node role (owner | admin | null). Nobody else's.
- *   GET /api/node-admin/queue  — for an owner/admin: counts of pending admin work, each with its /settings section.
+ *   GET /api/node-admin/me     — the SIGNED-IN member's own node role (owner | admin | moderator | null). Nobody else's.
+ *   GET /api/node-admin/queue  — for an owner/admin: counts of pending admin work, each with its /settings section;
+ *                                for a moderator: the reports waiting, and nothing else.
  *
  * Both answer only for the key that signed the request (ctx.state.actor, set by the signature middleware),
  * never for a pubkey named in the query or body. The role comes from node_roles at request time, so the
@@ -15,7 +17,7 @@
  */
 
 import Router from '@koa/router';
-import { getMember, nodeRoleOf, isNodeAdmin } from '../state-engine.js';
+import { getMember, nodeRoleOf } from '../state-engine.js';
 import { getAdminQueue } from '../engine/admin-queue.js';
 import { getLocalConfig } from '../config/local-config.js';
 import type { RouteDeps } from './types.js';
@@ -55,12 +57,14 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'no-store');
         const actor = signedMember(ctx);
         if (!actor) return;
-        if (!isNodeAdmin(actor)) {
+        const role = nodeRoleOf(actor);
+        if (!role) {
             ctx.status = 403;
-            ctx.body = { error: 'Only the node owner or an admin can see the admin queue' };
+            ctx.body = { error: 'Only the node owner, an admin or a moderator can see the admin queue' };
             return;
         }
-        ctx.body = getAdminQueue();
+        // A moderator sees only the reports waiting: the rest is work their session cannot open.
+        ctx.body = getAdminQueue({ forModerator: role === 'moderator' });
     });
 
     return router;

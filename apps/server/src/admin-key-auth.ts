@@ -31,7 +31,6 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { getMember } from '@beanpool/engine';
 import {
-    isNodeAdmin,
     isNodeOwner,
     nodeRoleOf,
     getNodeRoleSessionEpoch,
@@ -187,7 +186,7 @@ export function getAdminChallenge(challengeId: string): AdminChallenge | null {
  *
  * Enforces:
  * - Challenge exists, is pending, and has not expired
- * - Signer is an active member with a node role (owner or admin)
+ * - Signer is an active member with a node role (owner, admin or moderator)
  * - Cryptographic Ed25519 signature is valid
  * - TOTP code is verified if node has TOTP enabled
  */
@@ -254,7 +253,8 @@ export type KeySignerCheck =
 /**
  * Everything a key sign-in checks about the signer, shared by the app's one-time link (verifyAndSolveChallenge)
  * and the browser's sign-in by QR (settings-signin-pairing.ts) so the two cannot drift apart: an active member,
- * holding owner or admin in node_roles (moderators are not let in), whose signature over the flow's own message
+ * holding a role in node_roles (owner, admin or moderator; a moderator's session reaches only MODERATOR_ROUTES in
+ * admin-auth.ts), whose signature over the flow's own message
  * verifies, and — when the owner turned it on — the node's 2FA code (a used backup code is spent).
  */
 export function authorizeKeySigner(params: {
@@ -270,9 +270,10 @@ export function authorizeKeySigner(params: {
         return { ok: false, error: 'Member not found or inactive' };
     }
 
-    // Role check: must hold 'owner' or 'admin' in node_roles
+    // Role check: must hold a node role (owner, admin or moderator). What a moderator's session may then do is
+    // narrowed in checkAdminAuth (admin-auth.ts, MODERATOR_ROUTES).
     const role = nodeRoleOf(memberPubkey);
-    if (!role || !isNodeAdmin(memberPubkey)) {
+    if (!role) {
         return { ok: false, error: 'Signer does not hold a node role', notAdmin: true };
     }
 
@@ -333,7 +334,7 @@ export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, n
  * - Single-use token: token is burned on exchange, replays are rejected
  * - 60-second expiry: expired tokens are rejected
  * - session_epoch verification: if epoch bumped since minting, token is rejected
- * - Node role verification: member must still be an active owner/admin
+ * - Node role verification: member must still hold a node role
  */
 export function consumeHandshakeToken(token: string, now = Date.now()): {
     ok: boolean;
@@ -381,8 +382,8 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
     // Node role check, against the role held NOW rather than the one recorded when the token was minted:
     // an owner demoted to admin in the seconds between must not open an owner-level session.
     const liveRole = nodeRoleOf(entry.memberPubkey);
-    if (!liveRole || !isNodeAdmin(entry.memberPubkey)) {
-        return { ok: false, error: 'Member no longer holds an admin role' };
+    if (!liveRole) {
+        return { ok: false, error: 'Member no longer holds a node role' };
     }
 
     // Mint browser session (2h idle / 12h hard)
@@ -425,7 +426,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
  * - Hard limit: 12 hours hard maximum
  * - Idle limit: 2 hours idle timeout
  * - session_epoch: matching current member session_epoch in node_roles
- * - Node role: member still holds an active admin role
+ * - Node role: member still holds a node role (the session's role follows it)
  * - Sliding window: refreshes idle timeout on valid use
  */
 export function validateAdminSession(sessionId: string, now = Date.now()): {
@@ -469,10 +470,11 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
     // Role check. The session's role follows node_roles on every request: checkAdminAuth hands it to the
     // routes as ctx.state.adminRole, so an owner demoted to admin mid-session would otherwise keep
     // owner-only powers (enrol an owner, toggle break-glass) until the session ran out.
+    // A moderator whose role is taken away loses the session on the next request the same way.
     const liveRole = nodeRoleOf(session.memberPubkey);
-    if (!liveRole || !isNodeAdmin(session.memberPubkey)) {
+    if (!liveRole) {
         adminSessions.delete(sessionId);
-        return { valid: false, error: 'Member no longer holds an admin role' };
+        return { valid: false, error: 'Member no longer holds a node role' };
     }
     session.role = liveRole;
 

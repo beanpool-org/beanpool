@@ -248,10 +248,8 @@ router.post('/api/local/admin/node/config', async (ctx) => {
 });
 
 router.post('/api/local/admin/directory/push', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) {
-        ctx.status = 401;
-        return;
-    }
+    // checkAdminAuth has answered (401, or 403 for a moderator's session): keep its status.
+    if (!(await checkAdminAuth(ctx as any))) return;
     const result = await pushDirectoryNow();
     if (!result.success) {
         ctx.status = 500;

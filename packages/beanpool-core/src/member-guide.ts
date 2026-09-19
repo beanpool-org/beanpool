@@ -25,7 +25,8 @@ export const GUIDE_ABOUT_SECTION = 'about';
 
 export type GuideBlock =
     | { type: 'h2' | 'h3' | 'p'; text: string }
-    | { type: 'ul'; items: string[] };
+    | { type: 'ul'; items: string[] }
+    | { type: 'img'; src: string; alt: string; href?: string };
 
 export interface GuidePage {
     slug: string;
@@ -118,6 +119,13 @@ function validate(raw: unknown): Guide | null {
             } else if (block.type === 'h2' || block.type === 'h3' || block.type === 'p') {
                 if (!isText(block.text, MAX_TEXT)) return null;
                 blocks.push({ type: block.type, text: block.text });
+            } else if (block.type === 'img') {
+                if (typeof block.src !== 'string' || !block.src || block.src.length > MAX_TEXT) return null;
+                if (typeof block.alt !== 'string' || !block.alt || block.alt.length > MAX_TEXT) return null;
+                if (block.href !== undefined && (typeof block.href !== 'string' || !SLUG_RE.test(block.href))) return null;
+                const imgBlock: GuideBlock = { type: 'img', src: block.src, alt: block.alt };
+                if (block.href) (imgBlock as { href?: string }).href = block.href;
+                blocks.push(imgBlock);
             } else {
                 return null;
             }
@@ -278,6 +286,7 @@ function blockTexts(page: GuidePage): Array<{ text: string; heading: boolean }> 
     const out: Array<{ text: string; heading: boolean }> = [];
     for (const b of page.blocks) {
         if (b.type === 'ul') b.items.forEach(t => out.push({ text: t, heading: false }));
+        else if (b.type === 'img') out.push({ text: b.alt, heading: false });
         else out.push({ text: b.text, heading: b.type !== 'p' });
     }
     return out;

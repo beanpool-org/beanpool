@@ -364,6 +364,59 @@ describe('ApplianceSection Component', () => {
         );
     });
 
+    it('a locked backup (.bpsealed) turns the wizard to "open it": the recovery code or an owner\'s phone (slice 6)', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/api/local/admin/restore')) {
+                return Promise.resolve({
+                    ok: false, status: 400,
+                    json: () => Promise.resolve({
+                        error: "This backup is locked. To open it, type recovery code #1, or open it with an owner's phone.",
+                        needsRecoveryCode: true, ownerPhoneCanOpen: true,
+                        backup: { envelopeId: 'e'.repeat(32), createdAt: '2026-09-19T10:00:00.000Z', opensWith: '@anna, recovery code #1' },
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
+        }));
+
+        await act(async () => {
+            render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput.accept).toContain('.bpsealed');
+        await act(async () => {
+            fireEvent.change(fileInput, { target: { files: [new File(['sealed'], 'beanpool-backup.bpsealed')] } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /restore from backup/i }));
+        });
+
+        expect(await screen.findByTestId('restore-locked-backup')).toBeInTheDocument();
+        expect(screen.getByText(/It opens with: @anna, recovery code #1/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: "Open with an owner's phone" })).toBeInTheDocument();
+        expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
+    });
+
     it('correctly maps totpEnabled to enabled when rendering 2FA card in access subtab', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/admin/2fa/status')) {

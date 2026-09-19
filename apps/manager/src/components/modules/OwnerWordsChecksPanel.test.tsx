@@ -65,3 +65,35 @@ describe('OwnerWordsChecksPanel (Settings → Backups & Restore)', () => {
         expect(panel.innerHTML).not.toMatch(/whitespace-nowrap|\bw-\[\d/);
     });
 });
+
+describe('OwnerWordsChecksPanel — the silent open check (slice 6)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it("shows each owner's phone's last report on the lock, in words", async () => {
+        vi.mocked(nodeClient.getOwnerWordsChecks).mockResolvedValue({
+            owners: [
+                { pubkey: 'a', callsign: 'anna', wordsCheckedAt: NOW - DAY, lockOpen: { envelopeId: 'e1', opened: true, checkedAt: NOW - DAY, current: true } },
+                { pubkey: 'b', callsign: 'ben', wordsCheckedAt: null, lockOpen: { envelopeId: 'e0', opened: true, checkedAt: NOW - 9 * DAY, current: false } },
+                { pubkey: 'c', callsign: 'cleo', wordsCheckedAt: null, lockOpen: { envelopeId: 'e1', opened: false, checkedAt: NOW - DAY, current: true } },
+                { pubkey: 'd', callsign: 'dev', wordsCheckedAt: null, lockOpen: null },
+            ],
+            lock: { envelopeId: 'e1', sealedAt: '2026-09-19T00:00:00.000Z' },
+        });
+        render(<OwnerWordsChecksPanel activeNode={node} now={NOW} />);
+        const panel = await screen.findByTestId('owner-words-checks');
+        const lines = Array.from(panel.querySelectorAll('[data-testid="lock-open-line"]')).map((l) => [l.textContent, l.className]);
+        expect(lines[0][0]).toMatch(/^their phone opened the current lock /);
+        expect(lines[0][1]).toMatch(/emerald/);
+        expect(lines[1][0]).toMatch(/^their phone last opened an older lock .*, before the last change$/);
+        expect(lines[2][0]).toMatch(/^their phone could NOT open the current lock/);
+        expect(lines[2][1]).toMatch(/amber/);
+        expect(lines[3][0]).toBe('their phone has not reported on the lock yet');
+    });
+
+    it('a server before slice 6 sends no report field, and nothing is claimed either way', async () => {
+        vi.mocked(nodeClient.getOwnerWordsChecks).mockResolvedValue({ owners: [{ pubkey: 'a', callsign: 'anna', wordsCheckedAt: null }] });
+        render(<OwnerWordsChecksPanel activeNode={node} now={NOW} />);
+        const panel = await screen.findByTestId('owner-words-checks');
+        expect(panel.querySelectorAll('[data-testid="lock-open-line"]')).toHaveLength(0);
+    });
+});

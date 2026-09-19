@@ -28,6 +28,7 @@ import { TakeoverPanel } from './TakeoverPanel';
 import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
+import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -114,6 +115,8 @@ export function ApplianceSection({
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
     const [restoring, setRestoring] = useState(false);
     const [restoreStatus, setRestoreStatus] = useState<string | null>(null);
+    // A locked backup (.bpsealed): who can open it, from its public header; the wizard then asks for one of them.
+    const [lockedRestore, setLockedRestore] = useState<{ file: File; backup: LockedBackupInfo; canUseCode: boolean; canUsePhone: boolean } | null>(null);
 
     // Backup Schedule state
     const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig>({
@@ -376,6 +379,10 @@ export function ApplianceSection({
                 onRefreshDiag();
             } else {
                 const err = await res.json().catch(() => ({}));
+                if (res.status === 400 && err.backup && (err.needsRecoveryCode || err.ownerPhoneCanOpen)) {
+                    setLockedRestore({ file: restoreFile, backup: err.backup, canUseCode: !!err.needsRecoveryCode, canUsePhone: !!err.ownerPhoneCanOpen });
+                    return;
+                }
                 setRestoreStatus(`Restore failed: ${err.error || 'Server rejected backup file'}`);
             }
         } catch (e: unknown) {
@@ -985,7 +992,7 @@ export function ApplianceSection({
                                 <span>Restore Database Wizard</span>
                             </h3>
                             <p className="text-xs text-nature-400 m-0">
-                                Restore this node from a previously exported backup archive (.tar.gz). Overwrites existing database tables.
+                                Restore this node from a backup: a locked .bpsealed file (opened with the recovery code or an owner's phone), or an older .tar.gz. Overwrites existing database tables.
                             </p>
 
                             {restoreStatus && (
@@ -994,13 +1001,24 @@ export function ApplianceSection({
                                 </div>
                             )}
 
+                            {lockedRestore ? (
+                                <RestoreLockedBackup
+                                    activeNode={activeNode}
+                                    file={lockedRestore.file}
+                                    backup={lockedRestore.backup}
+                                    canUseCode={lockedRestore.canUseCode}
+                                    canUsePhone={lockedRestore.canUsePhone}
+                                    onDone={(message) => { setLockedRestore(null); setRestoreFile(null); setRestoreStatus(message); }}
+                                    onCancel={() => setLockedRestore(null)}
+                                />
+                            ) : (
                             <form
                                 onSubmit={handleRestoreSubmit}
                                 className="space-y-3"
                             >
                                 <input
                                     type="file"
-                                    accept=".sqlite,.db,.tar.gz"
+                                    accept=".bpsealed,.sqlite,.db,.tar.gz"
                                     onChange={(e) => setRestoreFile(e.target.files?.[0] || null)}
                                     className="block w-full text-xs text-nature-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-nature-800 file:text-white hover:file:bg-nature-700"
                                 />
@@ -1012,6 +1030,7 @@ export function ApplianceSection({
                                     {restoring ? 'Restoring Database...' : 'Restore from Backup'}
                                 </button>
                             </form>
+                            )}
                         </div>
                     </div>
 

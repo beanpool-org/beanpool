@@ -2,9 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 
 /**
- * "Take over as the main server" — on a standby, with the printed recovery code (sealed-keys.md §5.3–§5.5, slice 5).
+ * "Take over as the main server" — on a standby, with the printed recovery code (sealed-keys.md §5.3–§5.5, slice 5)
+ * or an owner's phone (§5.2, slice 6: a QR the owner scans; the phone opens the keys for this standby, which then shows
+ * the same preview as the code does).
  *
  * Two confirms: a plain explanation of what happens and what will be missing, then the code, then what the keys hold
  * (same PeerId, owners, links, web address, whether the main server still answers) and "Take over now". The server
@@ -48,7 +51,10 @@ export interface TakeoverProgressData {
 export interface TakeoverPreview {
     sessionId: string;
     expiresAt: number;
-    envelope: { envelopeId: string; sealedAt: string; codeId: number; newerCopiesSkipped: number };
+    /** null when an owner's phone opened the keys (servers before slice 6 always send a number). */
+    envelope: { envelopeId: string; sealedAt: string; codeId: number | null; newerCopiesSkipped: number };
+    /** "recovery code #1" / "@Anna's phone". Absent on servers before slice 6. */
+    openedBy?: string;
     communityId: string;
     peerId: string;
     owners: string[];
@@ -100,7 +106,7 @@ function when(iso: string | number | null | undefined): string {
 const BTN = 'min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50';
 const WRAP: React.CSSProperties = { overflowWrap: 'anywhere' };
 
-type Stage = 'closed' | 'explain' | 'code' | 'preview';
+type Stage = 'closed' | 'explain' | 'code' | 'phone' | 'preview';
 
 export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: TakeoverPanelProps) {
     const [progress, setProgress] = useState<TakeoverProgressData | null>(null);
@@ -112,6 +118,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
     const [error, setError] = useState<string | null>(null);
     const [preview, setPreview] = useState<TakeoverPreview | null>(null);
     const [mainGone, setMainGone] = useState(false);
+    const [phone, setPhone] = useState<OwnerPhoneSession | null>(null);
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const adminHeaders = useCallback(
@@ -165,12 +172,77 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                 method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword }),
             }).catch(() => {});
         }
+        if (phone) {
+            void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+            }).catch(() => {});
+        }
         setStage('closed');
         setCode('');
         setError(null);
         setPreview(null);
+        setPhone(null);
         setMainGone(false);
     };
+
+    // "Take over with an owner's phone": a session and its QR, on the newest keys this standby holds.
+    const startPhone = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/start'), {
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, serverUrl: activeNode.url }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && typeof data.qr === 'string') {
+                setPhone(data as OwnerPhoneSession);
+                setStage('phone');
+            } else {
+                setError(typeof data.error === 'string' ? data.error : `The standby answered HTTP ${res.status}.`);
+            }
+        } catch (err: unknown) {
+            setError(`The standby did not answer: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // While the QR is up, ask the standby whether a phone has opened the keys; then show the same preview as the code.
+    useEffect(() => {
+        if (stage !== 'phone' || !phone) return;
+        let cancelled = false;
+        let t: ReturnType<typeof setTimeout> | null = null;
+        const tick = async () => {
+            try {
+                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/wait'), {
+                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (data.state === 'unlocked' && data.preview) {
+                    setPreview(data.preview as TakeoverPreview);
+                    setPhone(null);
+                    setStage('preview');
+                    return;
+                }
+                if (data.state === 'failed') {
+                    setError(`${data.unlockedBy ? `${data.unlockedBy}'s phone opened the keys, but ` : ''}${data.error || 'the keys did not open.'}`);
+                    setPhone(null);
+                    return;
+                }
+                if (data.state === 'expired' || data.state === 'closed' || data.state === 'gone') {
+                    setError(data.state === 'closed'
+                        ? 'The code was closed after too many bad attempts. Make a new one.'
+                        : 'The code ran out before a phone used it. Make a new one.');
+                    setPhone(null);
+                    return;
+                }
+            } catch { /* try again */ }
+            if (!cancelled) t = setTimeout(tick, pollMs);
+        };
+        t = setTimeout(tick, pollMs);
+        return () => { cancelled = true; if (t) clearTimeout(t); };
+    }, [stage, phone, activeNode.url, activeNode.adminPassword, adminHeaders, pollMs]);
 
     const submitCode = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -326,6 +398,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                             <h3 id="takeover-dialog-title" className="text-base font-bold text-red-200 m-0 min-w-0 flex-1" style={WRAP}>
                                 {stage === 'explain' && 'Take over as the main server?'}
                                 {stage === 'code' && 'Type the recovery code'}
+                                {stage === 'phone' && "Open the keys with an owner's phone"}
                                 {stage === 'preview' && 'Take over now?'}
                             </h3>
                             <button type="button" onClick={close} disabled={busy} aria-label="Close take-over"
@@ -344,7 +417,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                             <div className="space-y-3 text-sm text-nature-200" style={WRAP}>
                                 <p className="m-0">Do this only if the main server is really gone. This server then becomes the main server:</p>
                                 <ul className="m-0 pl-5 space-y-1">
-                                    <li>it opens the main server&apos;s locked keys with your printed recovery code;</li>
+                                    <li>it opens the main server&apos;s locked keys with your printed recovery code, or with any one owner&apos;s phone;</li>
                                     <li>it takes the main server&apos;s identity, owners and admins, links with other communities, admin password and web address;</li>
                                     <li>it stops copying, restarts, checks the ledger adds up, and posts a notice for members;</li>
                                     <li>after it, sign in with the community&apos;s admin password or an owner&apos;s key: this standby&apos;s own password stops working.</li>
@@ -353,8 +426,12 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 <ul className="m-0 pl-5 space-y-1" id="takeover-missing">
                                     {missing.map((m) => <li key={m}>{m}</li>)}
                                 </ul>
-                                <div className="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+                                <div className="flex flex-col sm:flex-row flex-wrap gap-3 justify-end pt-2">
                                     <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close}>Cancel</button>
+                                    <button type="button" id="takeover-phone-btn" className={`${BTN} bg-red-900 hover:bg-red-800 text-white border border-red-700`}
+                                        onClick={startPhone} disabled={busy}>
+                                        {busy ? 'Starting…' : "I understand: use an owner's phone"}
+                                    </button>
                                     <button type="button" id="takeover-continue-btn" className={`${BTN} bg-red-800 hover:bg-red-700 text-white`}
                                         onClick={() => { setError(null); setStage('code'); }}>
                                         I understand, continue
@@ -388,6 +465,27 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                             </form>
                         )}
 
+                        {stage === 'phone' && phone && (
+                            <div className="space-y-3">
+                                <OwnerPhoneUnlock session={phone} purpose="takeover" />
+                                <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                                    <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close}>Cancel</button>
+                                    <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`}
+                                        onClick={() => { setPhone(null); setStage('code'); setError(null); }}>
+                                        Use the recovery code instead
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {stage === 'phone' && !phone && (
+                            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+                                <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close}>Cancel</button>
+                                <button type="button" id="takeover-phone-again-btn" className={`${BTN} bg-red-800 hover:bg-red-700 text-white`} onClick={startPhone} disabled={busy}>
+                                    Make a new code
+                                </button>
+                            </div>
+                        )}
+
                         {stage === 'preview' && preview && (
                             <div className="space-y-3 text-sm text-nature-200" style={WRAP} id="takeover-preview">
                                 {preview.mainServer.warning && (
@@ -396,7 +494,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                     </div>
                                 )}
                                 <ul className="m-0 pl-5 space-y-1">
-                                    <li>Keys locked {when(preview.envelope.sealedAt)}, opened with recovery code #{preview.envelope.codeId}.</li>
+                                    <li>Keys locked {when(preview.envelope.sealedAt)}, opened {preview.openedBy && preview.envelope.codeId === null ? `by ${preview.openedBy}` : `with recovery code #${preview.envelope.codeId}`}.</li>
                                     <li>Identity kept: <span className="font-mono text-xs">{preview.peerId}</span></li>
                                     <li>Owners: {preview.owners.length ? preview.owners.join(', ') : 'none'}; admins: {preview.admins}.</li>
                                     <li>Links with other communities: {preview.connectors}.</li>

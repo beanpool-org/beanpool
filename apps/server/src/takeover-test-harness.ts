@@ -1,5 +1,5 @@
 /**
- * Shared by test-takeover-by-code.ts and test-takeover-crash-resume.ts (not a suite itself).
+ * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
  * genesis, admin password, database, the take-over resume at boot (which may finish steps and run the audit),

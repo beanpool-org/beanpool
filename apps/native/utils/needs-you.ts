@@ -6,20 +6,20 @@
 
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { poolVoteBlocker } from './decision-card';
+import { canManageNode, type AdminQueueItem, type SettingsSection } from './node-role';
 
-export type NeedsYouKind = 'deal' | 'vote' | 'message' | 'group';
+export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
 
 /**
  * Highest first. The highest sits nearest the invite/Settings/avatar group and keeps its spot as others
- * come and go; the lowest are the first to fold into "•••".
- *
- * Seam for owners and admins: a 🛡️ kind for pending admin items (feat/app-node-admin-entry) slots in here
- * once the node serves its pending-admin-items endpoint. It is not on main yet, so nothing is faked.
+ * come and go; the lowest are the first to fold into "•••". Admin work (🛡️, owners and admins only) comes
+ * first: a report or an emergency suspension can be urgent.
  */
-export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['deal', 'vote', 'message', 'group'];
+export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'message', 'group'];
 
 /** Where a tap lands. Resolved to a route by the component, so this file stays free of navigation. */
 export type NeedsYouTarget =
+    | { to: 'admin'; section: SettingsSection }
     | { to: 'deal'; postId: string; txId: string }
     | { to: 'my-deals' }
     | { to: 'decide' }
@@ -30,7 +30,7 @@ export interface NeedsYouEntry {
     kind: NeedsYouKind;
     /** Things of this kind; the icon shows it in a dot only above 1. */
     count: number;
-    /** Only a deal waiting on the member, or a vote closing within 48h, gets the (amber) accent. Never red. */
+    /** Only admin work, a deal waiting on the member, or a vote closing within 48h gets the (amber) accent. Never red. */
     accent: boolean;
     /** In words, for screen readers and the "Needs you" sheet. */
     label: string;
@@ -76,9 +76,37 @@ export interface NeedsYouInputs {
     decisions: { decisions: Pick<DecisionWithTally, 'opensAt' | 'closesAt' | 'myVote' | 'franchise'>[]; myPoolVoting: MyPoolVoting | null; signed: boolean } | null;
     conversations: NeedsYouConversation[] | null;
     groupChats: NeedsYouGroupChat[] | null;
+    /**
+     * The member's node role (GET /api/node-admin/me) and, only when that is owner/admin, the node's admin
+     * queue (GET /api/node-admin/queue). null when either is unknown: no 🛡️ rather than a guess.
+     */
+    admin: { role: unknown; queue: { total: number; items: AdminQueueItem[] } | null } | null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** One admin-queue item in words: "2 reports to review". Kinds from apps/server/src/engine/admin-queue.ts. */
+export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>): string {
+    const n = i.count;
+    switch (i.kind) {
+        case 'reports': return `${plural(n, 'report', 'reports')} to review`;
+        case 'disputes': return `${plural(n, 'stalled trade', 'stalled trades')} awaiting a ruling`;
+        case 'suspensions': return `${plural(n, 'emergency suspension', 'emergency suspensions')} the community is voting on`;
+        case 'removals': return n === 1 ? '1 removal in its 7-day grace period' : `${n} removals in their 7-day grace period`;
+        case 'unclean_shutdown': return 'the node restarted after an unclean shutdown';
+        // A kind a newer node added: its own label, with the count.
+        default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
+    }
+}
+
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "2 reports to review", "2 reports to review and 1 stalled trade awaiting a ruling", "A, B and C". */
+export function adminLabel(items: Pick<AdminQueueItem, 'kind' | 'count' | 'label'>[]): string {
+    const parts = items.map(adminItemInWords);
+    const joined = parts.length <= 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+    return capitalise(joined);
+}
 
 /** "closes within the hour", "closes in 3 hours", "closes tonight", "closes tomorrow", "closes in 4 days". */
 export function closesInWords(closesAt: string, now: number): string {
@@ -103,6 +131,19 @@ function dealsWaiting(txns: NeedsYouTransaction[], me: string): NeedsYouTransact
 
 export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     const out: NeedsYouEntry[] = [];
+
+    // Owners and admins only, and only while the node's queue holds something. The node answers the queue
+    // only for an owner/admin anyway; checking the role here as well means a stale queue never outlives a demotion.
+    const queue = canManageNode(i.admin?.role) ? i.admin?.queue : null;
+    const adminItems = (queue?.items || []).filter(x => x.count > 0);
+    if (queue && queue.total > 0 && adminItems.length) {
+        out.push({
+            kind: 'admin', count: queue.total, accent: true,
+            label: adminLabel(adminItems),
+            // The node lists the most pressing kind first (reports); the tap opens /settings at its section.
+            target: { to: 'admin', section: adminItems[0].section },
+        });
+    }
 
     const deals = dealsWaiting(i.transactions || [], i.me);
     if (deals.length) {

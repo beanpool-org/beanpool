@@ -98,6 +98,11 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   for the password. The browser does not mint key links, because it has no equivalent of the phone unlock.
 - *Admin queue:* `GET /api/node-admin/queue` (owner/admin, signed) returns counts only, each with its
   `/settings#section=` target, for the header's "needs you" badge.
+- *Header 🛡️ icon (app):* owners/admins only, while the queue total is above 0. First in the needs-you
+  priority (rightmost, last to fold into "•••"), amber accent, label in words ("2 reports to review").
+  Tapping it is the Manage press (phone unlock → key sign-in link) landing at the first item's section.
+  The app remembers the role in memory for 10 minutes per node and key, and only then asks for the queue,
+  on the header's existing refresh gate; a refused queue makes it ask the role again.
 
 ### 2.4 Migration — do not flip this in one release
 

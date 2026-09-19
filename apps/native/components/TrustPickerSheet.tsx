@@ -1,16 +1,19 @@
 import React from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet, Dimensions } from 'react-native';
-import { colors, palette } from '../constants/colors';
+import { TIER_LEVELS } from '@beanpool/core';
+import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Tier emojis come from @beanpool/core so the filter matches the badges on the cards.
+const [NEWCOMER, RESIDENT, STEWARD, ELDER] = TIER_LEVELS;
 export const TRUST_FILTERS = [
     { id: 'all', emoji: '👥', label: 'All Users' },
     { id: 'founding', emoji: '🔑', label: 'Founding' },
-    { id: 'new', emoji: '🌱', label: 'Newcomers' },
-    { id: 'resident', emoji: '🏠', label: 'Residents' },
-    { id: 'steward', emoji: '🏛️', label: 'Stewards' },
-    { id: 'elder', emoji: '⛰️', label: 'Elders' },
+    { id: 'new', emoji: NEWCOMER.emoji, label: 'Newcomers' },
+    { id: 'resident', emoji: RESIDENT.emoji, label: 'Residents' },
+    { id: 'steward', emoji: STEWARD.emoji, label: 'Stewards' },
+    { id: 'elder', emoji: ELDER.emoji, label: 'Elders' },
 ] as const;
 
 // Grid: 3 columns for trust levels
@@ -24,6 +27,7 @@ interface TrustPickerSheetProps {
 }
 
 export function TrustPickerSheet({ visible, selected, onSelect, onClose }: TrustPickerSheetProps) {
+    const styles = useStyles(makeStyles);
     return (
         <Modal visible={visible} transparent animationType="slide">
             <Pressable style={styles.overlay} accessibilityRole="button" accessibilityLabel="Close" onPress={onClose}>
@@ -59,7 +63,8 @@ export function TrustPickerSheet({ visible, selected, onSelect, onClose }: Trust
     );
 }
 
-const styles = StyleSheet.create({
+// Themed, so the sheet follows dark mode (it used the static light colours).
+const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.4)',
@@ -110,8 +115,8 @@ const styles = StyleSheet.create({
         backgroundColor: colors.surface.app,
     },
     itemActive: {
-        backgroundColor: palette.green100,
-        borderColor: palette.green500,
+        backgroundColor: colors.accent.tint,
+        borderColor: colors.accent.primary,
     },
     itemEmoji: {
         fontSize: 24,
@@ -123,7 +128,7 @@ const styles = StyleSheet.create({
         color: colors.text.secondary,
     },
     itemLabelActive: {
-        color: palette.green800,
+        color: colors.accent.primary,
         fontWeight: '800',
     },
 });

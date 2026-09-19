@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 13,
-  "hash": "a6caeaccd22db77ccf1d6b058e935b74673698b1f039f88096e1dca655058b64",
+  "version": 14,
+  "hash": "4de767f3b41782eb28b19469e38a41d2cd12dde7ef66862c6e47ca5f8e6dc15c",
   "sections": [
     {
       "id": "setup",
@@ -234,7 +234,7 @@
           "items": [
             "asks for the phone's own unlock (fingerprint, face or PIN). If the phone has no screen lock, the button refuses to open Settings;",
             "asks for the 6-digit code if your server has two-factor sign-in on;",
-            "opens Settings in the browser, signed in as you."
+            "opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings."
           ]
         },
         {
@@ -265,7 +265,7 @@
     {
       "slug": "the-settings-screens",
       "title": "Finding your way around Settings",
-      "summary": "The five screens in Settings, what each is for, and how to get help on any of them.",
+      "summary": "The five screens in Settings, what each is for, how to get around on a phone, and how to get help on any of them.",
       "section": "setup",
       "related": [
         "first-time-setup",
@@ -276,7 +276,7 @@
       "blocks": [
         {
           "type": "p",
-          "text": "Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar opens the whole manual."
+          "text": "Settings is where owners and admins run the community's server. Members never see it. Every screen has a **?** beside its title that opens its page in this manual, and **Manual** in the side bar (on a phone, in the **☰** menu) opens the whole manual."
         },
         {
           "type": "h2",
@@ -290,6 +290,24 @@
             "**Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).",
             "**Bulletin & News**: Announcements to every member, and Pulse Channels.",
             "**Appliance & Data**: Diagnostics & Logs, Backups & Restore, Gateway & Peers, Public Address, Node Identity, and Access & Security."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "On a phone"
+        },
+        {
+          "type": "p",
+          "text": "Settings opened from the app's Manage button is laid out for the phone. So is any window narrower than a laptop screen."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The side bar folds away. The bar across the top always names the screen you are on, for example \"People & Safety › Owners & admins\".",
+            "Press **☰** at the top left for the menu: the five screens, the tabs of the one you are on, **Manual: running your community**, and **Log Out**.",
+            "A screen's tabs sit in one row under its title. Slide the row sideways to see them all.",
+            "Tables become one card per row. Long keys and addresses are shortened to fit. A member's page shows their whole key, with a button to copy it.",
+            "The phone's Back button goes back through the screens and tabs you opened. It closes the menu or the manual first, and only leaves Settings from the first screen."
           ]
         },
         {

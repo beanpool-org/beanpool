@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
+import { SubTabStrip } from '../layout/SubTabStrip';
+import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, GatewayConfig, SnapshotItem, SnapshotScheduleConfig, BackupVerificationResult, DiskHealth, StorageCleanPreview, StorageCleanResult } from '../../lib/node-client';
 import {
@@ -25,6 +27,7 @@ import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -42,6 +45,8 @@ interface ApplianceSectionProps {
     onRunLedgerAudit: () => Promise<void>;
     auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
     initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
+    /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
+    onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
     isStandby?: boolean;
 }
 
@@ -61,9 +66,10 @@ export function ApplianceSection({
     onRunLedgerAudit,
     auditState,
     initialSubTab = 'diagnostics',
+    onSubTabChange,
     isStandby: propIsStandby,
 }: ApplianceSectionProps) {
-    const [subTab, setSubTab] = useState<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab);
+    const [subTab, setSubTab] = useSectionSubTab<'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access'>(initialSubTab, onSubTabChange);
     const [backupRole, setBackupRole] = useState<'primary' | 'backup' | null>(null);
 
     useEffect(() => {
@@ -553,7 +559,7 @@ export function ApplianceSection({
     return (
         <div className="space-y-6 font-sans animate-fade-in">
             {/* Header & Subtabs */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-nature-800 pb-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-nature-800 pb-4">
                 <div>
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>⚙️</span>
@@ -565,10 +571,12 @@ export function ApplianceSection({
                     </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 bg-nature-950 p-1.5 rounded-xl border border-nature-800 self-start sm:self-auto">
+                <SubTabStrip wrap={true}>
                     <button
                         onClick={() => setSubTab('diagnostics')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="diagnostics"
+                        aria-current={subTab === 'diagnostics' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'diagnostics'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -578,7 +586,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('backups')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="backups"
+                        aria-current={subTab === 'backups' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'backups'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -588,7 +598,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('gateway')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="gateway"
+                        aria-current={subTab === 'gateway' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'gateway'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -598,7 +610,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('network')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="network"
+                        aria-current={subTab === 'network' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'network'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -608,7 +622,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('identity')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="identity"
+                        aria-current={subTab === 'identity' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'identity'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -618,7 +634,9 @@ export function ApplianceSection({
                     </button>
                     <button
                         onClick={() => setSubTab('access')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        data-subtab="access"
+                        aria-current={subTab === 'access' ? 'page' : undefined}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'access'
                                 ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
@@ -626,11 +644,12 @@ export function ApplianceSection({
                     >
                         Access &amp; Security
                     </button>
-                </div>
+                </SubTabStrip>
             </div>
 
-            {/* Read-only Version / Update-Available / Last-Backup Card (per admin-surface §4.3) */}
-            <div className="p-5 rounded-2xl bg-nature-900/90 border border-nature-800 shadow-xl">
+            {/* Read-only Version / Update-Available / Last-Backup Card (per admin-surface §4.3). On a phone, only on
+                Diagnostics & Logs: there it is a screen tall and would push every other sub-tab's content off it. */}
+            <div className={`p-5 rounded-2xl bg-nature-900/90 border border-nature-800 shadow-xl ${subTab === 'diagnostics' ? '' : 'hidden lg:block'}`}>
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
                         {/* Node Version */}
@@ -869,8 +888,8 @@ export function ApplianceSection({
 
                     {/* Ledger Conservation Audit Panel */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⚖️</span>
                                     <span>Ledger Conservation Audit</span>
@@ -983,8 +1002,8 @@ export function ApplianceSection({
 
                     {/* Automated Backup Schedule Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>⏱️</span>
                                     <span>Automated Backup Schedule</span>
@@ -1069,8 +1088,8 @@ export function ApplianceSection({
 
                     {/* Database Integrity Verification Card */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🔍</span>
                                     <span>Database Integrity Verification</span>
@@ -1117,8 +1136,8 @@ export function ApplianceSection({
 
                     {/* Snapshots Management */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>📸</span>
                                     <span>Point-in-Time Snapshots ({snapshots.length})</span>
@@ -1145,10 +1164,10 @@ export function ApplianceSection({
                                 {(Array.isArray(snapshots) ? snapshots : []).map((s) => (
                                     <div
                                         key={s.name}
-                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex items-center justify-between gap-3 text-xs"
+                                        className="p-3.5 rounded-xl bg-nature-950 border border-nature-800 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 text-xs"
                                     >
-                                        <div>
-                                            <div className="font-bold text-white font-mono">{s.name}</div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-white font-mono break-words">{s.name}</div>
                                             <div className="text-[10px] text-nature-400 mt-0.5">
                                                 {s.createdAt ? new Date(s.createdAt).toLocaleString() : 'Recent snapshot'} · {Math.round((s.sizeBytes || 0) / 1024)} KB
                                             </div>
@@ -1401,8 +1420,8 @@ export function ApplianceSection({
 
                     {/* Break-Glass Emergency Recovery Card (per admin-surface §2.2) */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
                                     <span>🚨</span>
                                     <span>Break-Glass Emergency Recovery</span>
@@ -1477,15 +1496,17 @@ export function ApplianceSection({
 
             {/* One-Click Clean Storage & Compress Logs Modal */}
             {showCleanModal && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowCleanModal(false)}
+                    dismissable={!cleaningStorage}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="clean-storage-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-white">
+                        <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <h3 id="clean-storage-title" className="text-base font-bold m-0 flex items-center gap-2 min-w-0 flex-1">
                                 <span>🧹</span>
                                 <span>Clean Orphaned Media &amp; Compress Logs</span>
                             </h3>
@@ -1494,7 +1515,7 @@ export function ApplianceSection({
                                 onClick={() => setShowCleanModal(false)}
                                 disabled={cleaningStorage}
                                 aria-label="Close storage cleanup modal"
-                                className="w-11 h-11 flex items-center justify-center rounded-lg text-nature-400 hover:text-white text-lg font-bold disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                                className="shrink-0 w-11 h-11 flex items-center justify-center rounded-lg text-nature-400 hover:text-white text-lg font-bold disabled:opacity-40 disabled:pointer-events-none transition-colors"
                             >
                                 ✕
                             </button>
@@ -1609,7 +1630,7 @@ export function ApplianceSection({
                             )}
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

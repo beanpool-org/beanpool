@@ -22,7 +22,7 @@ Owners and admins see **Manage** followed by the community's name in the phone a
 
 - asks for the phone's own unlock (fingerprint, face or PIN). If the phone has no screen lock, the button refuses to open Settings;
 - asks for the 6-digit code if your server has two-factor sign-in on;
-- opens Settings in the browser, signed in as you.
+- opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings.
 
 This sign-in belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button, and cannot sign in to Settings at all.
 

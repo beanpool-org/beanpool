@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface StandbyReplicationPanelProps {
     activeNode: NodeProfile;
@@ -392,18 +393,17 @@ export function StandbyReplicationPanel({
 
             {/* Resync Confirmation Modal */}
             {isStandby && showResyncConfirm && (
-                <div
+                <ModalBackdrop
+                    onClose={() => setShowResyncConfirm(false)}
+                    dismissable={!resyncing}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="resync-dialog-title"
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget && !resyncing) setShowResyncConfirm(false);
-                    }}
+                    className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
                 >
-                    <div className="bg-nature-900 border border-amber-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
+                    <div className="m-auto bg-nature-900 border border-amber-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 font-sans text-white">
                         <div className="flex items-start justify-between gap-3 border-b border-nature-800 pb-3">
-                            <h3 id="resync-dialog-title" className="text-base font-bold text-amber-300 flex items-center gap-2 m-0">
+                            <h3 id="resync-dialog-title" className="text-base font-bold text-amber-300 flex items-center gap-2 m-0 min-w-0 flex-1">
                                 <span>⚠️</span>
                                 <span>Confirm Full Replication Resync</span>
                             </h3>
@@ -411,7 +411,7 @@ export function StandbyReplicationPanel({
                                 type="button"
                                 onClick={() => { if (!resyncing) setShowResyncConfirm(false); }}
                                 disabled={resyncing}
-                                className="text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
+                                className="shrink-0 text-nature-400 hover:text-white p-1 text-sm min-h-[44px] min-w-[44px] flex items-center justify-center disabled:opacity-50"
                                 aria-label="Close resync confirmation"
                             >
                                 ✕
@@ -460,7 +460,7 @@ export function StandbyReplicationPanel({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

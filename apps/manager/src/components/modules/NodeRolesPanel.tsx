@@ -289,8 +289,8 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
 
             {/* The list */}
             <div className="p-4 sm:p-5 rounded-2xl bg-nature-900/80 border border-nature-800 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-sm font-bold text-nature-200 uppercase tracking-wider m-0">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-bold text-nature-200 uppercase tracking-wider m-0 min-w-0">
                         Current roles{roles ? ` (${roles.length})` : ''}
                     </h4>
                     <button type="button" onClick={() => void load()} disabled={loading} className={`${btn} bg-nature-800 text-nature-200 border-nature-700`}>

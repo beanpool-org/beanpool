@@ -68,6 +68,8 @@ import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
 import { startKeySession, endKeySession, sectionTarget, type KeySession } from './lib/key-session';
+import { defaultSubTab } from './lib/sections';
+import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -931,6 +933,43 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         ai: { critical: 0, warning: 0 },
     };
 
+    // Phone layout (single-node, below lg): the section menu is a sheet, and screens are history entries so Back works.
+    const [menuOpen, setMenuOpen] = useState(false);
+    const currentSubTab = navSubTab ?? defaultSubTab(activeTab);
+    useSettingsHistory({
+        enabled: !isFleetMode && Boolean(adminToken || keySession),
+        tab: activeTab,
+        sub: currentSubTab,
+        onRestore: (entry) => {
+            setNavSubTab(entry.sub);
+            setActiveTab(entry.tab);
+            setMenuOpen(Boolean(entry.menu));
+        },
+    });
+    const closeMenu = useCallback(() => closeMenuEntry(() => setMenuOpen(false)), []);
+    /**
+     * Leave the menu for a screen: the menu's history entry becomes that screen, so Back does not reopen the menu.
+     * Choosing the screen already showing just closes the menu.
+     */
+    const leaveMenu = (tab: TabId, sub?: string) => {
+        const target = sub ?? defaultSubTab(tab);
+        if (tab === activeTab && target === currentSubTab) {
+            closeMenu();
+            return;
+        }
+        if (readSettingsEntry(window.history.state)?.menu) {
+            window.history.replaceState({ bpSettings: { tab, sub: target } }, '');
+        }
+        setMenuOpen(false);
+    };
+    /** The manual takes over the menu's history entry (it would otherwise add its own on top). */
+    const leaveMenuForManual = () => {
+        if (readSettingsEntry(window.history.state)?.menu) {
+            window.history.replaceState({ bpSettings: { tab: activeTab, sub: currentSubTab }, bpManual: true }, '');
+        }
+        setMenuOpen(false);
+    };
+
     if (!isFleetMode && !adminToken && !keySession && !keySessionChecked) {
         return (
             <div className="min-h-screen bg-nature-950 text-nature-300 flex items-center justify-center font-sans" role="status">
@@ -941,7 +980,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     if (!isFleetMode && !adminToken && !keySession) {
         return (
-            <>
+            <div className="bp-settings">
             {keySessionNotice && (
                 <div role="alert" className="bg-terra-600 text-white text-sm px-4 py-3 text-center">
                     {keySessionNotice}
@@ -960,12 +999,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     setRefreshToken((n) => n + 1);
                 }}
             />
-            </>
+            </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased">
+        <div className={`min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased ${isFleetMode ? '' : 'bp-settings'}`}>
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
             <FleetSidebar
                 profiles={profiles}
@@ -987,8 +1026,53 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 onLogout={handleLogout}
             />
 
+            {!isFleetMode && menuOpen && (
+                <PhoneMenu onClose={closeMenu}>
+                    <FleetSidebar
+                        variant="drawer"
+                        profiles={profiles}
+                        activeProfileId={activeProfileId}
+                        onSelectNode={(id) => setActiveProfileId(id)}
+                        onOpenAddModal={() => setShowAddModal(true)}
+                        onEditNode={(node) => setEditingNode(node)}
+                        onRemoveNode={handleRemoveNode}
+                        activeTab={activeTab}
+                        activeSubTab={currentSubTab}
+                        onSelectTab={(tab) => {
+                            leaveMenu(tab);
+                            setNavSubTab(defaultSubTab(tab));
+                            setActiveTab(tab);
+                        }}
+                        onSelectSubTab={(tab, sub) => {
+                            leaveMenu(tab, sub);
+                            setNavSubTab(sub);
+                            setActiveTab(tab);
+                        }}
+                        onClose={closeMenu}
+                        onBeforeManual={leaveMenuForManual}
+                        nodeHealthMap={nodeHealthMap}
+                        tabAlertCounts={tabAlertCounts}
+                        isFleetMode={false}
+                        communityName={effectiveCommunityName}
+                        onLogout={handleLogout}
+                    />
+                </PhoneMenu>
+            )}
+
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+                {!isFleetMode && (
+                    <PhoneTopBar
+                        communityName={effectiveCommunityName}
+                        tab={activeTab}
+                        sub={currentSubTab}
+                        menuOpen={menuOpen}
+                        onOpenMenu={() => {
+                            pushMenuEntry(activeTab, currentSubTab);
+                            setMenuOpen(true);
+                        }}
+                    />
+                )}
                 {/* Active Target Banner for Control Subsystems */}
                 {isFleetMode && activeTab !== 'overview' && activeTab !== 'analytics' && (
                     <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">
@@ -1008,7 +1092,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 )}
 
                 {/* Workspace Body */}
-                <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
                     {!isFleetMode ? (
                         <>
                             {activeTab === 'home' && (() => {
@@ -1130,6 +1214,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             }
                                         }}
                                         initialSubTab={(navSubTab as any) || 'directory'}
+                                        onSubTabChange={setNavSubTab}
                                         rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                     />
                                 </SectionErrorBoundary>
@@ -1142,6 +1227,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         nodeData={nodeData}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                         initialSubTab={(navSubTab as any) || 'enterprises'}
+                                        onSubTabChange={setNavSubTab}
                                         onRefresh={() => {
                                             loadNodeData();
                                             loadDiagnostics();
@@ -1155,6 +1241,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                     <BulletinSection
                                         activeNode={activeNode}
                                         onRefresh={() => loadNodeData()}
+                                        initialSubTab={(navSubTab as any) || 'announcements'}
+                                        onSubTabChange={setNavSubTab}
                                     />
                                 </SectionErrorBoundary>
                             )}
@@ -1177,6 +1265,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         onRunLedgerAudit={handleRunLedgerAudit}
                                         auditState={auditState}
                                         initialSubTab={(navSubTab as any) || 'diagnostics'}
+                                        onSubTabChange={setNavSubTab}
                                     />
                                 </SectionErrorBoundary>
                             )}

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { getMemberDisplayName } from './MembersModule';
 import type { NodeProfile } from '../../lib/profiles';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface ThreatItem {
     id?: string;
@@ -170,19 +171,19 @@ export function ThreatReviewModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-950 border border-red-900/80 rounded-3xl p-6 max-w-xl w-full space-y-6 shadow-2xl overflow-hidden relative">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-950 border border-red-900/80 rounded-3xl p-6 max-w-xl w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header Section */}
-                <div className="flex items-start justify-between border-b border-nature-800/80 pb-4">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between gap-3 border-b border-nature-800/80 pb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl font-bold border ${
                             severity === 'critical' ? 'bg-red-950 text-red-400 border-red-800/80' : 'bg-amber-950 text-amber-400 border-amber-800/80'
                         }`}>
                             {isReport ? '📢' : '🚨'}
                         </div>
-                        <div>
-                            <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase font-mono tracking-wide ${
                                     severity === 'critical' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'
                                 }`}>
@@ -190,14 +191,15 @@ export function ThreatReviewModal({
                                 </span>
                                 <span className="text-xs font-mono text-nature-400">Threat ID: #{Math.floor(1000 + Math.random() * 9000)}</span>
                             </div>
-                            <h3 className="text-lg font-black text-white m-0 tracking-tight mt-0.5">
+                            <h3 className="text-lg font-black text-white m-0 tracking-tight mt-0.5 break-words">
                                 {title}
                             </h3>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-nature-900 text-lg"
+                        aria-label="Close"
+                        className="shrink-0 text-nature-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-nature-900 text-lg"
                     >
                         ✕
                     </button>
@@ -250,15 +252,15 @@ export function ThreatReviewModal({
                                         onClick={() => onInspectMember?.(matchedMember)}
                                         className="flex items-center justify-between bg-nature-950 hover:bg-nature-900/80 p-2 rounded-lg border border-nature-800 hover:border-terra-500/60 text-xs cursor-pointer transition-all group"
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 min-w-0">
                                             <div className="w-6 h-6 rounded-full bg-red-900/40 border border-red-700/60 flex items-center justify-center text-[10px] text-red-300 font-bold group-hover:scale-105 transition-transform">
                                                 👤
                                             </div>
-                                            <div>
+                                            <div className="min-w-0">
                                                 <span className="font-bold text-white block leading-tight group-hover:text-terra-400 transition-colors">
                                                     {displayName}
                                                 </span>
-                                                <span className="font-mono text-[10px] text-nature-400">{pub}</span>
+                                                <span className="font-mono text-[10px] text-nature-400 break-all">{pub}</span>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -299,7 +301,7 @@ export function ThreatReviewModal({
                 )}
 
                 {/* Remediation Action Controls */}
-                <div className="flex items-center justify-between gap-3 border-t border-nature-800/80 pt-4 text-xs">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-t border-nature-800/80 pt-4 text-xs">
                     <button
                         onClick={handleCopyEvidence}
                         className="px-3 py-2 rounded-xl bg-nature-900 hover:bg-nature-800 text-nature-300 font-bold border border-nature-800 transition-all flex items-center gap-1.5 shrink-0"
@@ -307,7 +309,7 @@ export function ThreatReviewModal({
                         <span>{copiedLog ? '📋 Copied!' : '📄 Export Evidence'}</span>
                     </button>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                         <button
                             onClick={() => handleAction('dismiss')}
                             disabled={dismissing}
@@ -325,6 +327,6 @@ export function ThreatReviewModal({
                 </div>
 
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { normalizeNodeUrl } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface AddNodeModalProps {
     onClose: () => void;
@@ -19,18 +20,19 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                    <div className="flex items-center gap-2.5">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl">
+                <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div className="w-8 h-8 rounded-xl bg-terra-500/20 text-terra-400 flex items-center justify-center text-lg font-bold">
                             🌐
                         </div>
                         <h3 className="text-base font-bold text-white m-0">Connect Sovereign Node</h3>
                     </div>
                     <button
+                        aria-label="Close"
                         onClick={onClose}
-                        className="text-nature-500 hover:text-white transition-colors text-lg"
+                        className="shrink-0 text-nature-500 hover:text-white transition-colors text-lg"
                     >
                         ✕
                     </button>
@@ -98,6 +100,6 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                     </div>
                 </form>
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

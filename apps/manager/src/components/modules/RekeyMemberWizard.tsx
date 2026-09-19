@@ -6,6 +6,7 @@ import {
     type RekeyStatusResponse,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface RekeyMemberWizardProps {
     member: {
@@ -125,28 +126,29 @@ export function RekeyMemberWizard({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className="bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
+        <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
+            <div className="m-auto bg-nature-950 border border-nature-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl overflow-hidden relative">
                 
                 {/* Header */}
-                <div className="flex items-start justify-between border-b border-nature-800 pb-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-amber-950/60 border border-amber-800/80 flex items-center justify-center text-xl">
+                <div className="flex items-start justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-4">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 shrink-0 rounded-2xl bg-amber-950/60 border border-amber-800/80 flex items-center justify-center text-xl">
                             🔑
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-white leading-tight">
+                        <div className="min-w-0 flex-1">
+                            <h3 className="text-lg font-bold text-white leading-tight break-words">
                                 Re-Key Member (Lost Phone)
                             </h3>
-                            <p className="text-xs text-nature-400 font-mono mt-0.5">
+                            <p className="text-xs text-nature-400 font-mono mt-0.5 break-all">
                                 @{member.callsign} · {member.publicKey.slice(0, 10)}...
                             </p>
                         </div>
                     </div>
                     <button
+                        aria-label="Close"
                         type="button"
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
+                        className="shrink-0 text-nature-400 hover:text-white p-1 rounded-lg transition-colors text-sm"
                     >
                         ✕
                     </button>
@@ -192,7 +194,7 @@ export function RekeyMemberWizard({
                                     onChange={(e) => setCheckPhysical(e.target.checked)}
                                     className="mt-0.5 rounded bg-nature-950 border-nature-700 text-amber-500 focus:ring-0"
                                 />
-                                <span className="text-nature-200">
+                                <span className="text-nature-200 min-w-0 break-words">
                                     <strong>In-person identity confirmed:</strong> I have personally verified @{member.callsign} is the real account holder.
                                 </span>
                             </label>
@@ -204,7 +206,7 @@ export function RekeyMemberWizard({
                                     onChange={(e) => setCheckLost(e.target.checked)}
                                     className="mt-0.5 rounded bg-nature-950 border-nature-700 text-amber-500 focus:ring-0"
                                 />
-                                <span className="text-nature-200">
+                                <span className="text-nature-200 min-w-0 break-words">
                                     <strong>Device lost or replaced:</strong> Confirmed the previous device is lost, damaged, or decommissioned without seed phrase access.
                                 </span>
                             </label>
@@ -216,7 +218,7 @@ export function RekeyMemberWizard({
                                     onChange={(e) => setCheckInvalidateNotice(e.target.checked)}
                                     className="mt-0.5 rounded bg-nature-950 border-nature-700 text-amber-500 focus:ring-0"
                                 />
-                                <span className="text-nature-200">
+                                <span className="text-nature-200 min-w-0 break-words">
                                     <strong>Immediate invalidation:</strong> The old device key will be permanently invalidated and all existing web sessions revoked.
                                 </span>
                             </label>
@@ -226,7 +228,7 @@ export function RekeyMemberWizard({
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
+                                className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
                             >
                                 Cancel
                             </button>
@@ -308,7 +310,7 @@ export function RekeyMemberWizard({
                             </p>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 pt-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -324,7 +326,7 @@ export function RekeyMemberWizard({
                                 <button
                                     type="button"
                                     onClick={onClose}
-                                    className="px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
+                                    className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
                                 >
                                     Close
                                 </button>
@@ -354,7 +356,7 @@ export function RekeyMemberWizard({
                         <div className="space-y-1">
                             <h4 className="text-base font-bold text-white">Re-Keying Complete!</h4>
                             <p className="text-nature-300 text-xs">
-                                All balance, trade history, roles, and keeperships for <strong className="text-white">@{member.callsign}</strong> have been atomically transferred to the new device key.
+                                All balance, trade history, roles, and keeperships for <strong className="text-white break-all">@{member.callsign}</strong> have been atomically transferred to the new device key.
                             </p>
                         </div>
 
@@ -369,7 +371,7 @@ export function RekeyMemberWizard({
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-nature-400">Audit Status:</span>
-                                <span className="text-nature-200">Recorded in rekey_audit_log & system_logs</span>
+                                <span className="text-nature-200 min-w-0 break-words">Recorded in rekey_audit_log & system_logs</span>
                             </div>
                         </div>
 
@@ -384,6 +386,6 @@ export function RekeyMemberWizard({
                 )}
 
             </div>
-        </div>
+        </ModalBackdrop>
     );
 }

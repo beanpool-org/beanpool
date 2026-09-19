@@ -6,6 +6,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
 import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, type NodeTreasury } from '../../lib/node-client';
+import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface MemberItem {
     publicKey?: string;
@@ -527,8 +528,8 @@ export function MembersModule({
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
-            <div className="flex items-center justify-between">
-                <div>
+            <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                <div className="min-w-0">
                     <h3 className="text-lg font-bold text-white m-0 flex items-center gap-2">
                         <span>👥 Sovereign Trust Engine Inspector & Moderation Radar</span>
                     </h3>
@@ -548,9 +549,9 @@ export function MembersModule({
 
             {/* 🏛️ Community Treasuries & Enterprise Management Card */}
             <div className="bg-nature-950/80 border border-nature-800 p-5 rounded-2xl space-y-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h4 className="text-sm font-bold text-white m-0 flex items-center gap-2">
+                <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-white m-0 flex flex-wrap lg:flex-nowrap items-center gap-2">
                             <span>🏛️ Community Treasuries & Enterprises</span>
                             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                                 {treasuries.length} Active
@@ -575,8 +576,8 @@ export function MembersModule({
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {treasuries.map((t) => (
-                            <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                            <div key={t.publicKey} className="bg-nature-900/90 border border-nature-800 p-3.5 rounded-xl flex flex-wrap lg:flex-nowrap items-center justify-between gap-y-2">
+                                <div className="flex items-center gap-3 min-w-0 lg:min-w-[auto]">
                                     <Avatar
                                         src={t.avatar}
                                         alt={t.name}
@@ -611,7 +612,7 @@ export function MembersModule({
             {/* 🚨 Active Security & Abuse Detection Radar */}
             {(flags.length > 0 || reports.length > 0) && (
                 <div className="bg-red-950/30 border border-red-800/80 p-5 rounded-2xl space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
                             <span>🚨 Active Security Alerts & Abuse Radar ({flags.length + reports.length})</span>
                         </div>
@@ -623,7 +624,7 @@ export function MembersModule({
                     <div className="space-y-2 text-xs">
                         {flags.map((flag: SecurityFlagItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex items-start justify-between gap-3">
-                                <div className="space-y-1">
+                                <div className="space-y-1 min-w-0 break-words">
                                     <div className="flex items-center gap-2">
                                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono ${
                                             flag.severity === 'critical' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'
@@ -645,8 +646,8 @@ export function MembersModule({
 
                         {reports.map((report: UserReportItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-amber-900/60 rounded-xl flex items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
+                                <div className="space-y-1 min-w-0 break-words">
+                                    <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                                         <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold uppercase font-mono">
                                             USER REPORT
                                         </span>
@@ -722,7 +723,7 @@ export function MembersModule({
 
                     {/* Member Roster Table */}
                     <div className="space-y-3">
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-x-4 gap-y-2">
                             <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">
                                 Node Member Roster & Trust Inspector ({filteredMembers.length})
                             </h4>
@@ -731,13 +732,13 @@ export function MembersModule({
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 placeholder="Filter members by name or pubkey..."
-                                className="bg-nature-950 border border-nature-800 px-3 py-1.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-terra-500 w-64 shadow-inner"
+                                className="bg-nature-950 border border-nature-800 px-3 py-1.5 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-terra-500 w-full min-h-[48px] sm:w-64 sm:min-h-0 shadow-inner"
                             />
                         </div>
 
                         {filteredMembers.length > 0 ? (
                             <div className="bg-nature-950/80 border border-nature-800 rounded-xl overflow-hidden text-xs">
-                                <div className="grid grid-cols-12 bg-nature-900/90 p-3 text-nature-400 font-bold border-b border-nature-800">
+                                <div className="hidden md:grid grid-cols-12 bg-nature-900/90 p-3 text-nature-400 font-bold border-b border-nature-800">
                                     <div className="col-span-4">Member Identity</div>
                                     <div className="col-span-3">Standing / Tier</div>
                                     <div className="col-span-2">Can Vouch</div>
@@ -769,13 +770,13 @@ export function MembersModule({
                                             <div
                                                 key={idx}
                                                 onClick={() => setSelectedMember(m)}
-                                                className={`grid grid-cols-12 p-3 items-center text-nature-200 transition-all cursor-pointer group ${
+                                                className={`flex flex-wrap gap-2 md:gap-0 md:grid md:grid-cols-12 p-3 items-center text-nature-200 transition-all cursor-pointer group ${
                                                     isMemberFrozen
                                                         ? 'bg-red-950/20 hover:bg-red-950/40 border-l-2 border-red-600'
                                                         : 'hover:bg-nature-900/60'
                                                 }`}
                                             >
-                                                <div className="col-span-4 flex items-center gap-2.5">
+                                                <div className="w-full md:w-auto min-w-0 col-span-4 flex items-center gap-2.5">
                                                     <Avatar
                                                         src={getMemberRawAvatar(m, profilesMap)}
                                                         alt={displayName}
@@ -905,7 +906,7 @@ export function MembersModule({
                                                         </button>
                                                     )}
                                                 </div>
-                                                <div className="col-span-2 text-right flex items-center justify-end gap-1.5">
+                                                <div className="ml-auto md:ml-0 col-span-2 text-right flex items-center justify-end gap-1.5">
                                                     {isMemberFrozen && (
                                                         <button
                                                             onClick={(e) => {
@@ -1034,18 +1035,19 @@ export function MembersModule({
 
             {/* Member Standing & Tier Upgrade Modal */}
             {tierEditMember && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <div>
+                <ModalBackdrop onClose={() => setTierEditMember(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
+                        <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <div className="min-w-0 flex-1">
                                 <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
+                                    Assign tier badge & granted credit floor for <code className="text-terra-400 font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
                                 </p>
                             </div>
                             <button
+                                aria-label="Close"
                                 onClick={() => setTierEditMember(null)}
-                                className="text-nature-500 hover:text-white text-lg"
+                                className="shrink-0 text-nature-500 hover:text-white text-lg"
                             >
                                 ✕
                             </button>
@@ -1104,16 +1106,16 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Create Treasury Modal */}
             {showCreateTreasuryModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h3 className="text-base font-bold text-white m-0">🏛️ Create Community Treasury</h3>
-                            <button onClick={() => setShowCreateTreasuryModal(false)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                <ModalBackdrop onClose={() => setShowCreateTreasuryModal(false)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                        <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <h3 className="text-base font-bold text-white m-0 min-w-0 flex-1">🏛️ Create Community Treasury</h3>
+                            <button aria-label="Close" onClick={() => setShowCreateTreasuryModal(false)} className="shrink-0 text-nature-500 hover:text-white text-lg">✕</button>
                         </div>
 
                         <div className="space-y-3 text-xs">
@@ -1160,16 +1162,16 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
 
             {/* Seed Offer Modal */}
             {offerTreasury && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
-                    <div className="bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
-                        <div className="flex items-center justify-between border-b border-nature-800 pb-3">
-                            <h3 className="text-base font-bold text-white m-0">🥚 Seed Offer for {offerTreasury.name}</h3>
-                            <button onClick={() => setOfferTreasury(null)} className="text-nature-500 hover:text-white text-lg">✕</button>
+                <ModalBackdrop onClose={() => setOfferTreasury(null)} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 font-sans animate-fade-in">
+                    <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-left shadow-2xl">
+                        <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
+                            <h3 className="text-base font-bold text-white m-0 min-w-0 flex-1">🥚 Seed Offer for {offerTreasury.name}</h3>
+                            <button aria-label="Close" onClick={() => setOfferTreasury(null)} className="shrink-0 text-nature-500 hover:text-white text-lg">✕</button>
                         </div>
 
                         <div className="space-y-3 text-xs">
@@ -1231,7 +1233,7 @@ export function MembersModule({
                             </button>
                         </div>
                     </div>
-                </div>
+                </ModalBackdrop>
             )}
         </div>
     );

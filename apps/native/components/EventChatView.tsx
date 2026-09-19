@@ -18,6 +18,7 @@ import {
     View, Text, StyleSheet, Pressable, FlatList, TextInput, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -35,7 +36,7 @@ interface Props {
 
 export function EventChatView({ eventId }: Props) {
     const insets = useSafeAreaInsets();
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
 
@@ -107,6 +108,8 @@ export function EventChatView({ eventId }: Props) {
     // The one chat header (groups decision 9): "📅 Working bee · event"; tapping it opens the event, which is the
     // way back to it after it has left the feed (events round 2, A4).
     const header = (
+        <>
+        <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         <ChatOwnerHeader
             kind="event"
             name={view?.title || 'Event chat'}
@@ -114,6 +117,7 @@ export function EventChatView({ eventId }: Props) {
             onBack={goBack}
             onOpenOwner={() => router.push(`/post/${eventId}`)}
         />
+        </>
     );
 
     if (error && !view) {

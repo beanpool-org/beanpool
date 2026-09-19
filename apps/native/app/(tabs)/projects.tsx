@@ -10,7 +10,7 @@ import { DecideSection } from '../../components/DecideSection';
 import { ProposeDecisionModal } from '../../components/ProposeDecisionModal';
 import { YourGroupsRows, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { fetchYourGroups } from '../../utils/db';
-import { groupsYouCouldJoin, type YourChat } from '../../utils/your-groups';
+import { groupsYouCouldJoin, chatEmoji, type YourChat } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -450,20 +450,28 @@ export default function ProjectsScreen() {
         const isMember = item.viewerRole === 'member';
         const isObserver = item.viewerRole === 'observer';
         const isPending = item.viewerStatus === 'pending_approval';
+        // An open invitation is not a membership yet: say so, and open the invite landing rather than the detail.
+        const isInvited = item.viewerStatus === 'invited';
 
         return (
             <Pressable
                 accessibilityRole="button"
                 style={styles.card}
-                onPress={() => setSelectedGroupForDetail(item)}
+                onPress={() => isInvited ? router.push(`/group/${item.id}`) : setSelectedGroupForDetail(item)}
             >
                 <View style={styles.cardHeader}>
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={{ fontSize: 20 }}>👥</Text>
+                        <Text style={{ fontSize: 20 }}>{chatEmoji('group', item.category)}</Text>
                     </View>
                     <View style={styles.cardTitleCol}>
                         <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-                        {item.viewerRole ? (
+                        {isInvited ? (
+                            <View style={styles.badgeRow}>
+                                <View style={[styles.badge, { backgroundColor: colors.brand.primary }]}>
+                                    <Text style={styles.badgeFundedText} numberOfLines={1}>INVITED</Text>
+                                </View>
+                            </View>
+                        ) : item.viewerRole ? (
                             <View style={styles.badgeRow}>
                                 <View style={[styles.badge, isConvenor ? styles.badgeFunded : styles.badgeOngoing]}>
                                     <Text style={[styles.badgeFundedText, !isConvenor && styles.badgeOngoingText]} numberOfLines={1}>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { IS_FLEET_MODE } from '../../lib/mode';
+import { useManual } from '../manual/Manual';
 
 export type TabId =
     | 'home'
@@ -90,6 +91,8 @@ export function FleetSidebar({
         { id: 'logs', label: 'System Streamer', icon: '📜' },
         { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
+
+    const manual = useManual();
 
     const renderNavItem = (item: { id: TabId; label: string; icon: string; badge?: string }) => {
         const isActive = activeTab === item.id;
@@ -199,6 +202,16 @@ export function FleetSidebar({
                         Navigation
                     </div>
                     {singleNodeNavItems.map(renderNavItem)}
+                    {manual && (
+                        <button
+                            type="button"
+                            onClick={() => manual.openManual()}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 min-h-[44px] rounded-xl text-xs font-semibold text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent transition-all"
+                        >
+                            <span className="text-sm shrink-0">📖</span>
+                            <span className="truncate">Manual: running your community</span>
+                        </button>
+                    )}
                 </div>
             )}
 

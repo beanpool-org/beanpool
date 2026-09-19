@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
@@ -144,6 +145,7 @@ export function HomeScreen({
                             <h1 className="text-2xl font-black text-white m-0 tracking-tight">
                                 {communityName || 'Sovereign Community'}
                             </h1>
+                            <HelpLink screen="home" />
                             <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold">
                                 {publicDomain || 'local'}
                             </span>

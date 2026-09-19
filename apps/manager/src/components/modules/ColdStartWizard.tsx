@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { HelpLink } from '../manual/Manual';
 import QRCode from 'qrcode';
 import type { NodeProfile } from '../../lib/profiles';
 import { Avatar } from '../common/Avatar';
@@ -366,8 +367,9 @@ TOTP Secret:    ${totpSecret}
                         <span className="text-xs font-bold uppercase tracking-wider text-terra-400">
                             First Run Cold-Start Wizard
                         </span>
-                        <h2 className="text-xl font-black text-white m-0 tracking-tight">
-                            Bootstrap Your Sovereign Community Node
+                        <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2">
+                            <span>Bootstrap Your Sovereign Community Node</span>
+                            <HelpLink screen="cold-start" />
                         </h2>
                     </div>
                     {onCancel && (

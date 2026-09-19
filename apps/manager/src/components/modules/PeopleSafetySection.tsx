@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { HelpLink } from '../manual/Manual';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
@@ -117,6 +118,7 @@ export function PeopleSafetySection({
                     <h2 className="text-xl font-black text-white m-0 tracking-tight flex items-center gap-2.5">
                         <span>👥</span>
                         <span>People &amp; Safety</span>
+                        <HelpLink screen={`people/${subTab}`} />
                     </h2>
                     <p className="text-xs text-nature-400 m-0 mt-1">
                         Member directory, trust tiers, invites, QR cards, and report triage

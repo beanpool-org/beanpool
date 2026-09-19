@@ -15,7 +15,8 @@
     "jsx": "react-jsx",
     "paths": {
       "@beanpool/engine": ["../../packages/beanpool-engine/src/index.ts"],
-      "@beanpool/core": ["../../packages/beanpool-core/src/index.ts"]
+      "@beanpool/core": ["../../packages/beanpool-core/src/index.ts"],
+      "@beanpool/guide/*": ["../../packages/beanpool-guide/*"]
     },
 
     /* Linting */

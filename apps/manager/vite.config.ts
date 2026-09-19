@@ -28,6 +28,8 @@ export default defineConfig({
     resolve: {
         alias: {
             '@beanpool/core': path.resolve(__dirname, '../../packages/beanpool-core/src/index.ts'),
+            // The operator manual's generated JSON (lib/manual.ts). An alias, not a dependency, like core above.
+            '@beanpool/guide': path.resolve(__dirname, '../../packages/beanpool-guide'),
         },
         dedupe: ['react', 'react-dom'],
     },

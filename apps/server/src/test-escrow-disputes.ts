@@ -393,6 +393,10 @@ async function main() {
         await next();
     });
 
+    // The session's member holds an admin role, as the real checkAdminAuth requires of every key session.
+    db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, status) VALUES ('pk_guardian_admin_99', 'Guardian99', 'active')").run();
+    db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role) VALUES ('pk_guardian_admin_99', 'admin')").run();
+
     const mockCheckAdminAuth = async (ctx: any): Promise<boolean> => {
         const headerPw = ctx.headers['x-admin-password'] || ctx.headers['x-admin-secret'];
         const sessionToken = ctx.headers['x-admin-session'];

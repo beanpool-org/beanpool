@@ -1212,7 +1212,7 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!signedActor) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
-        ctx.status = 400;
+        ctx.status = result.status || 400;
         ctx.body = { error: result.error };
         return;
     }
@@ -1540,8 +1540,8 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
 
     // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).
     // If ctx.state.actor is absent under password auth, treat caller as owner ('owner:password').
-    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
-    const effectiveActor = signedActor || 'owner:password';
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
 
     try {
         const tx = resolveEscrowDispute(id, action, effectiveActor, { reason });
@@ -1554,7 +1554,7 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
         };
     } catch (e: any) {
         const msg = e?.message || 'Failed to resolve escrow dispute';
-        ctx.status = msg.includes('not found') ? 404 : 400;
+        ctx.status = e?.status || (msg.includes('not found') ? 404 : 400);
         ctx.body = { error: msg };
     }
 });
@@ -1576,8 +1576,8 @@ router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
 router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey } = ctx.params;
-    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
-    const effectiveActor = signedActor || 'owner:password';
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
 
     try {
         const result = issueRekeyCode(pubkey, effectiveActor);
@@ -1609,8 +1609,8 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
         return;
     }
 
-    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
-    const effectiveActor = signedActor || 'owner:password';
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
 
     try {
         const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
@@ -1630,8 +1630,9 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
         // Security / Privacy: Only return active members roster to key-authenticated sessions.
         // Password-only sessions cannot execute gift_to_member, so withholding the list
         // prevents leaking the member roster.
-        const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
-        if (!signedActor || signedActor === 'owner:password') {
+        const actor = resolveAdminActor(ctx);
+        if (!actor) return;
+        if (actor === 'owner:password') {
             preview.activeMembers = [];
         }
 
@@ -1655,8 +1656,9 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         return;
     }
 
-    const signedActor = (ctx.state as any)?.auth_signer || (ctx.state as any)?.actor;
-    if (resolution === 'gift_to_member' && (!signedActor || signedActor === 'owner:password')) {
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (resolution === 'gift_to_member' && effectiveActor === 'owner:password') {
         ctx.status = 403;
         ctx.body = {
             error: 'Two-person rule requires signed key-based admin authentication to gift offboarding funds to a member.',
@@ -1664,7 +1666,6 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         };
         return;
     }
-    const effectiveActor = signedActor || 'owner:password';
 
     try {
         const result = executeOffboard(

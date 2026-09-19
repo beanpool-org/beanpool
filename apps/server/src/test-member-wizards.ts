@@ -699,10 +699,8 @@ async function main() {
             return true;
         }
 
+        // Password auth sets no actor, as the real checkAdminAuth: routes read it as 'owner:password'.
         if (headerPw === 'test-admin-secret' || bodyPw === 'test-admin-secret') {
-            if (!ctx.state) ctx.state = {};
-            ctx.state.actor = 'owner:password';
-            ctx.state.auth_signer = 'owner:password';
             return true;
         }
 

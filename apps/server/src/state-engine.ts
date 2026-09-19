@@ -6051,6 +6051,17 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     }
     walk(rootPublicKey);
     for (const pubkey of branch) assertMayPrune(pubkey, actor);
+    // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
+    // co-owners in one branch are each not the sole owner until the first is pruned.
+    // Same terms as isSoleOwner: an active owner in the branch, and none left outside it.
+    const inBranch = new Set(branch);
+    const activeOwners = (db.prepare(
+        `SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON nr.member_pubkey = m.public_key
+         WHERE nr.role = 'owner' AND m.status = 'active'`
+    ).all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
+    if (activeOwners.some(pk => inBranch.has(pk)) && !activeOwners.some(pk => !inBranch.has(pk))) {
+        throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");
+    }
     for (const pubkey of branch) adminPruneUser(pubkey, actor);
 }
 

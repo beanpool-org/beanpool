@@ -122,32 +122,9 @@ import { createAvatarRoutes } from './routes/avatar.js';
 import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
+import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
+import { pruneChatLines } from './chat-rate-limit.js';
 
-
-// Rate limiter for auth endpoints (15 attempts per minute per IP)
-const authAttempts = new Map<string, { count: number; resetAt: number }>();
-function rateLimit(ctx: Koa.Context): boolean {
-    const ip = ctx.ip || 'unknown';
-    const now = Date.now();
-    if (authAttempts.size > 200) {
-        for (const [k, v] of authAttempts) {
-            if (now >= v.resetAt) authAttempts.delete(k);
-        }
-    }
-    const entry = authAttempts.get(ip);
-    if (entry && now < entry.resetAt) {
-        if (entry.count >= 15) {
-            const waitSec = Math.ceil((entry.resetAt - now) / 1000);
-            ctx.status = 429;
-            ctx.body = { error: `Too many attempts. Try again in ${waitSec}s` };
-            return false;
-        }
-        entry.count++;
-    } else {
-        authAttempts.set(ip, { count: 1, resetAt: now + 60_000 });
-    }
-    return true;
-}
 
 // X-1: replay protection for signed requests.
 // A signed request is valid for SIGNATURE_FRESHNESS_MS around its timestamp, and
@@ -887,9 +864,8 @@ export async function startHttpsServer(port: number): Promise<void> {
             if (valid.length === 0) adminRateLimits.delete(ip);
             else adminRateLimits.set(ip, valid);
         }
-        for (const [ip, entry] of authAttempts) {
-            if (now >= entry.resetAt) authAttempts.delete(ip);
-        }
+        pruneAuthAttempts(now);
+        pruneChatLines(now);
         for (const [nonce, exp] of seenNonces) {
             if (exp <= now) seenNonces.delete(nonce);
         }

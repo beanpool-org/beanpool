@@ -222,11 +222,11 @@ export async function buildSignedHeaders(
 }
 
 /**
- * Forward-compatible WebSocket connect auth (SRV-4). Produces signed query
- * params for the `/ws` handshake, mirroring the HTTP replay-proof scheme
- * (method=`WS`, path, timestamp, nonce, empty body). The node ignores these
- * until WS auth is enforced server-side; signing now lets that be turned on
- * later without another app-store release. Returns a `&`-joinable query fragment.
+ * WebSocket connect auth (SRV-4). Produces signed query params for the `/ws`
+ * handshake, mirroring the HTTP replay-proof scheme (method=`WS`, path,
+ * timestamp, nonce, empty body). The node gives the full live feed only to a
+ * member-signed socket; an unsigned one gets public doorbells only. Returns a
+ * `&`-joinable query fragment.
  */
 export async function buildSignedWsParams(
     path: string,

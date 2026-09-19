@@ -90,10 +90,11 @@ async function signEd25519(privateKeyHex: string, message: string): Promise<stri
 }
 
 /**
- * Forward-compatible WebSocket connect auth (SRV-4). Signed query params for the
- * `/ws` handshake, mirroring the replay-proof scheme (method=WS, empty body):
- * signs `WS\n${path}\n${ts}\n${nonce}\n`. The node ignores these until
- * ENFORCE_WS_AUTH is on. Returns a `&`-joinable fragment, or '' if no identity.
+ * WebSocket connect auth (SRV-4). Signed query params for the `/ws` handshake,
+ * mirroring the replay-proof scheme (method=WS, empty body): signs
+ * `WS\n${path}\n${ts}\n${nonce}\n`. The node gives the full live feed only to a
+ * socket signed by a member; without this, only public doorbells arrive.
+ * Returns a `&`-joinable fragment, or '' if no identity.
  */
 export async function buildSignedWsParams(path: string): Promise<string> {
     const identity = await loadIdentity();

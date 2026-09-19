@@ -159,32 +159,50 @@ function consumeNonce(nonce: string, now: number): boolean {
 // that predate signed reads get 401 on gated reads until they update.
 const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 
-// SRV-4 (WebSocket feed): the /ws live-state feed was unauthenticated — anyone
-// reaching it could stream every state change. When ENFORCE_WS_AUTH is on, the
-// upgrade requires a fresh, single-use, member-signed connect token (the same
-// replay-proof scheme as HTTP, with method=WS and an empty body). OFF by default
-// so it can land ahead of client adoption; the native app already sends the token.
-const ENFORCE_WS_AUTH = process.env.ENFORCE_WS_AUTH === 'true';
+// SRV-4 (WebSocket feed): the /ws live-state feed used to stream every state change — message
+// notices, trades and amounts, private threads — to anyone who could reach the node. A connect
+// token is a fresh, single-use member signature (the replay-proof scheme of HTTP, with method=WS
+// and an empty body), and every app version ever shipped sends one whenever it has an identity
+// (native since v1.1.56, the PWA since the first public release). Three modes:
+//   - default (unset, empty or any other value): a member-signed socket gets the full feed, as
+//     before. An unsigned socket, or one signed by a key that is not (yet) a member, is accepted
+//     but gets only a bare doorbell for public changes (PUBLIC_WS_EVENTS in state-engine.ts) — the
+//     same things anyone can already read without signing. A signature that is forged, stale or
+//     replayed is refused with 401.
+//   - ENFORCE_WS_AUTH=true: only member-signed sockets are accepted; everything else gets 401.
+//   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
+//     An escape hatch, not a recommendation.
+// Safe by default, so a freshly downloaded node never streams member activity to strangers.
+export type WsAuthMode = 'members' | 'strict' | 'open';
+const WS_AUTH_MODE: WsAuthMode =
+    process.env.ENFORCE_WS_AUTH === 'true' ? 'strict'
+        : process.env.ENFORCE_WS_AUTH === 'false' ? 'open'
+            : 'members';
+
+type WsConnectResult =
+    | { kind: 'unsigned' }
+    | { kind: 'invalid' }
+    | { kind: 'member'; pubkey: string }
+    | { kind: 'non_member'; pubkey: string };
 
 /**
  * SRV-4: verify the signed connect token on a /ws upgrade. The client signs
  * `WS\n<path>\n<ts>\n<nonce>\n` (replay-proof scheme, method=WS, empty body) and
- * passes pubkey/ts/nonce/sig as query params. Returns true only for a fresh,
- * single-use, valid signature from a known member.
+ * passes pubkey/ts/nonce/sig as query params. `unsigned` when none of them is
+ * present; `invalid` for a partial, stale, replayed or forged token; otherwise
+ * whether the proven key belongs to a known member.
  */
-function verifyWsConnect(pathname: string, params: URLSearchParams): boolean {
+function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectResult {
+    const pubKeyHex = params.get('pubkey');
+    const sigB64 = params.get('sig');
+    const ts = params.get('ts');
+    const nonce = params.get('nonce');
+    if (!pubKeyHex && !sigB64 && !ts && !nonce) return { kind: 'unsigned' };
+    if (!pubKeyHex || !sigB64 || !ts || !nonce) return { kind: 'invalid' };
     try {
-        const pubKeyHex = params.get('pubkey');
-        const sigB64 = params.get('sig');
-        const ts = params.get('ts');
-        const nonce = params.get('nonce');
-        if (!pubKeyHex || !sigB64 || !ts || !nonce) return false;
-
         const tsNum = Number(ts);
         const now = Date.now();
-        if (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > SIGNATURE_FRESHNESS_MS) return false;
-        // Atomic check-and-consume — a replayed connect nonce is rejected.
-        if (!consumeNonce(nonce, now)) return false;
+        if (!Number.isFinite(tsNum) || Math.abs(now - tsNum) > SIGNATURE_FRESHNESS_MS) return { kind: 'invalid' };
 
         const signedMessage = `WS\n${pathname}\n${ts}\n${nonce}\n`;
         const spkiHeader = Buffer.from('302a300506032b6570032100', 'hex');
@@ -193,13 +211,17 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): boolean {
         const isValid = crypto.verify(
             undefined, Buffer.from(signedMessage), publicKeyObject, Buffer.from(sigB64, 'base64'),
         );
-        if (!isValid) return false;
+        if (!isValid) return { kind: 'invalid' };
+        // Atomic check-and-consume — a replayed connect nonce is rejected. Only after the signature
+        // checks out, so a forged token cannot burn (or fill the cache with) nonces it does not own.
+        if (!consumeNonce(nonce, now)) return { kind: 'invalid' };
 
-        // A valid signature only proves key possession — require a known member so
-        // an anonymous keypair can't subscribe to the live feed.
-        return !!getMember(pubKeyHex);
+        // A valid signature only proves key possession — only a known member gets the
+        // member feed, so an anonymous keypair can't subscribe to it.
+        const member = getMember(pubKeyHex);
+        return member ? { kind: 'member', pubkey: member.publicKey } : { kind: 'non_member', pubkey: pubKeyHex.toLowerCase() };
     } catch {
-        return false;
+        return { kind: 'invalid' };
     }
 }
 
@@ -539,8 +561,12 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
         const pathname = parsedUrl.pathname;
 
         if (pathname === '/ws') {
-            // SRV-4: require a member-signed connect token when enforcement is on.
-            if (ENFORCE_WS_AUTH && !verifyWsConnect(pathname, parsedUrl.searchParams)) {
+            // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
+            const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
+            const refuse = WS_AUTH_MODE === 'strict'
+                ? connect.kind !== 'member'
+                : WS_AUTH_MODE === 'members' && connect.kind === 'invalid';
+            if (refuse) {
                 socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                 socket.destroy();
                 return;
@@ -548,10 +574,14 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             wss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
-                // A2-20: tag the socket with its authenticated member (present only
-                // under ENFORCE_WS_AUTH, where verifyWsConnect validated this pubkey's
-                // signature) so broadcast() can scope sensitive events to the parties.
-                ws._memberPubkey = ENFORCE_WS_AUTH ? (parsedUrl.searchParams.get('pubkey') || null) : null;
+                // A2-20: tag the socket with its verified member so broadcast() can scope
+                // sensitive events to the parties. A socket without one gets only the public
+                // doorbell, unless the operator chose the open feed. A valid signature from a
+                // key that is not a member yet (someone mid-join) is remembered, so the socket
+                // is promoted when that key's member_joined goes out.
+                ws._memberPubkey = connect.kind === 'member' ? connect.pubkey : null;
+                ws._pendingMemberPubkey = connect.kind === 'non_member' ? connect.pubkey : null;
+                ws._openFeed = WS_AUTH_MODE === 'open';
 
                 addWsClient(ws);
                 trackConnection(ws, 'sync', req);

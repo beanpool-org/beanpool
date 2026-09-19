@@ -6,7 +6,8 @@
  * this browser, and /settings accepts only its own admin session (the node password, plus the node's 2FA if
  * on) or the app's one-time key link. The web app deliberately does NOT mint that key link itself — the phone
  * gates it behind its own unlock, and a browser has no equivalent, so doing it here would turn anyone with
- * this browser profile into an admin. The link says so, and points to the app for password-free sign-in.
+ * this browser profile into an admin. Instead /settings offers "Sign in with your phone": a QR the BeanPool app
+ * scans and approves after the phone's unlock (apps/server/src/settings-signin-pairing.ts). The row says so.
  *
  * `#from=pwa` (a fragment, so no server sees it) tells Settings to offer "← Back to BeanPool" to this web app.
  */
@@ -49,8 +50,8 @@ export function NodeAdminLink() {
                         <span className="min-w-0">
                             <span className="block font-bold text-[15px] break-words">Manage {name}</span>
                             <span className="block text-xs text-nature-500 dark:text-nature-400 mt-0.5 leading-relaxed">
-                                {role === 'owner' ? "You're an owner." : "You're an admin."} Opens the node's settings, where you
-                                sign in with the admin password. To sign in with your key instead, use Manage in the BeanPool app.
+                                {role === 'owner' ? "You're an owner." : "You're an admin."} Open Settings on this computer, then
+                                scan its code with the BeanPool app (Settings → Sign in on a computer). Or use the admin password.
                             </span>
                         </span>
                     </span>

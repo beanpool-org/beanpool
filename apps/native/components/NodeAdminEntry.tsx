@@ -6,10 +6,12 @@
  * phone's own unlock, gets a one-time sign-in link, and opens the node's /settings in an in-app browser tab
  * (Custom Tabs / SFSafariViewController). /settings is not an app link, so the tab keeps it. The press itself
  * is useManageNode, shared with the header's 🛡️ icon.
+ *
+ * Beside it, "Sign in on a computer" (app/settings-signin.tsx): scan the QR on /settings in a computer's browser.
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
@@ -55,7 +57,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
             <Text style={styles.sectionHeader}>COMMUNITY ADMIN</Text>
             <View style={styles.menuGroup}>
                 <Pressable
-                    style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
+                    style={[styles.menuBtn, { minHeight: 48 }]}
                     onPress={() => start(name)}
                     disabled={busy}
                     accessibilityRole="button"
@@ -71,6 +73,21 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                         </Text>
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
+                </Pressable>
+                <Pressable
+                    style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
+                    onPress={() => router.push({ pathname: '/settings-signin', params: { community: name } })}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign in on a computer"
+                    accessibilityHint={`Scan the code on ${name}'s Settings page in a computer's browser to sign it in as you`}
+                >
+                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.menuText}>Sign in on a computer</Text>
+                        <Text style={styles.menuSub}>Scan the code on the Settings page in a browser · no password</Text>
+                    </View>
+                    <Text style={styles.menuChevron}>›</Text>
                 </Pressable>
             </View>
 

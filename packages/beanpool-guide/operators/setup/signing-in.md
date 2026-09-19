@@ -1,11 +1,11 @@
 ---
 slug: signing-in
 title: Signing in to Settings
-summary: The two ways in, with the admin password or from the app's Manage button, and how long a sign-in lasts.
+summary: The three ways in: the admin password, the app's Manage button, or a computer signed in by scanning a code with the app. How long a sign-in lasts.
 related: access-and-security, roles, first-time-setup, rate-limits
 ---
 
-There are two ways into Settings. The password is one shared secret for the whole server. The app's Manage button signs in a named person with their own key.
+There are three ways into Settings. The password is one shared secret for the whole server. The app's Manage button, and a computer you sign in by scanning a code with the app, sign in a named person with their own key.
 
 ## With the admin password
 
@@ -28,13 +28,32 @@ Owners and admins see **Manage** followed by the community's name in the phone a
 
 When you are done, **← App** at the top right (in full, **← Back to the BeanPool app**, at the top of the **☰** menu) takes you back to the app, and **View my profile** opens your own profile there.
 
-This sign-in belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button, and cannot sign in to Settings at all.
+## On a computer, with your phone
 
-A sign-in from the app ends after **2 hours** without use, and after **12 hours** at most. It also ends when an owner changes or removes your role, and when the server restarts.
+To use Settings on a computer's bigger screen without the password:
 
-The web app shows a plain link to Settings, but it cannot sign you in with your key. Use the phone app, or the password. Settings opened from the web app offers **← Back to BeanPool**, which returns you to the web app.
+- First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown.
+- Then, in the phone app, open **Settings** and tap **Sign in on a computer** (under Community admin, next to Manage; owners and admins only). Point the camera at the QR code.
+- The phone shows the 6-character code, your community and which browser asked (for example "Firefox on Windows"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.
+- Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you.
+
+Good to know:
+
+- A code lasts **2 minutes** and works once. The computer shows a new one by itself when it runs out, a few times, then waits for you to press **New code**.
+- The code only signs in the browser that showed it. A photo of the QR code is no use on another computer.
+- The app only accepts a code from its own community. A code from another server is refused, and the phone says which one it was.
+- Five refused tries on one code (wrong key, not an owner or admin, wrong 6-digit code) use it up.
+- Each approval is written to the server's log, with who approved it and which browser signed in.
+
+## Whose sign-in it is
+
+A sign-in from the app, or from a computer you signed in with the app, belongs to a person. Everything you do is recorded against your name. Moderators do not get the Manage button or Sign in on a computer, and cannot sign in to Settings at all.
+
+A sign-in from the app (on the phone or on a computer) ends after **2 hours** without use, and after **12 hours** at most. It also ends when an owner changes or removes your role, and when the server restarts.
+
+The web app shows a plain link to Settings, but it cannot sign you in with your key: a browser has no unlock of its own. Open Settings on the computer and sign in with your phone, as above, or use the password. Settings opened from the web app offers **← Back to BeanPool**, which returns you to the web app.
 
 ## If you are locked out
 
-- Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once, and signing in from the app's Manage button is never slowed down. See Rate limits.
-- Forgot the password: owners and admins can still sign in from the app, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD, then set those things again. Members, posts and beans are not touched: they are in data/state.db.
+- Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once, and signing in from the app (Manage, or Sign in on a computer) is not slowed down by wrong passwords. See Rate limits.
+- Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD, then set those things again. Members, posts and beans are not touched: they are in data/state.db.

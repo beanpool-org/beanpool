@@ -24,6 +24,15 @@ describe('NodeAdminLink', () => {
         expect(request).toHaveBeenCalledWith('GET', '/api/node-admin/me');
     });
 
+    it('points to signing in by phone: open Settings here, scan with the BeanPool app (the web app is not a scanner)', async () => {
+        vi.mocked(request).mockResolvedValue({ role: 'owner', communityName: 'Mullum' });
+        render(<NodeAdminLink />);
+        const link = await screen.findByRole('link', { name: /Manage Mullum/ });
+        expect(link.textContent).toMatch(/Open Settings on this computer, then\s+scan its code with the BeanPool app/);
+        expect(link.textContent).toMatch(/Sign in on a computer/);
+        expect(link.textContent).toMatch(/admin password/);
+    });
+
     it('shows it to an admin', async () => {
         vi.mocked(request).mockResolvedValue({ role: 'admin', communityName: null });
         render(<NodeAdminLink />);

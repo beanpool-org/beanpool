@@ -154,6 +154,27 @@ try {
         {
             const { context, page } = await openSettings(browser, origin, { width: WIDTH, textScale, signedIn: false });
             record(`sign-in ${at}`, await horizontalOverflow(page));
+            // "Sign in with your phone": the QR card fits, its QR stays inside the card, every button is a 48px target.
+            await page.getByRole('button', { name: /Sign in with your phone/ }).click();
+            await page.getByTestId('phone-signin-qr').waitFor();
+            await settle(page);
+            record(`phone sign-in ${at}`, await horizontalOverflow(page));
+            checks++;
+            const card = await page.getByTestId('phone-signin').evaluate((el) => {
+                const box = el.getBoundingClientRect();
+                const qr = el.querySelector('[data-testid="phone-signin-qr"]').getBoundingClientRect();
+                const short = [...el.querySelectorAll('button')]
+                    .map((b) => ({ r: b.getBoundingClientRect(), t: (b.textContent || '').trim() }))
+                    .filter(({ r }) => r.height < 47.5 || r.right > box.right + 0.5)
+                    .map(({ r, t }) => `"${t}" ${Math.round(r.width)}×${Math.round(r.height)}`);
+                return { qrInside: qr.left >= box.left - 0.5 && qr.right <= box.right + 0.5, qrWidth: Math.round(qr.width), short };
+            });
+            if (!card.qrInside || card.qrWidth < 160 || card.short.length) {
+                failures.push(`phone sign-in ${at}: QR ${card.qrWidth}px${card.qrInside ? '' : ' (outside the card)'}; buttons: ${card.short.join(', ') || 'ok'}`);
+                console.log(`  ✗ phone sign-in card ${at}`);
+            } else {
+                console.log(`  ✓ phone sign-in card ${at} (QR ${card.qrWidth}px)`);
+            }
             await context.close();
         }
 

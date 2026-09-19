@@ -28,3 +28,4 @@ export * from './geo.js';
 export * from './address-lookup.js';
 export * from './feedback.js';
 export * from './member-guide.js';
+export * from './settings-signin-qr.js';

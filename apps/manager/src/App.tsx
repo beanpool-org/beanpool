@@ -1024,6 +1024,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     }
                     setRefreshToken((n) => n + 1);
                 }}
+                onKeySession={(session, csrfToken) => {
+                    // Signed in by the phone (QR): the same key session the app's one-time link gives.
+                    setKeySessionNotice(null);
+                    setKeySessionCsrfToken(csrfToken);
+                    setKeySessionCsrf(csrfToken);
+                    setKeySession(session);
+                    authBlockedRef.current = {};
+                    setRefreshToken((n) => n + 1);
+                }}
             />
             </div>
         );

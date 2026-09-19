@@ -1767,6 +1767,35 @@ export async function clearReplicationToken(
     return res.json();
 }
 
+// ======================== OWNERS' "12 WORDS CHECKED" ========================
+// sealed-keys.md §7 (slice 7). Each owner's own signed statement that they checked their 12 words on their device.
+// The server cannot verify a words check; this list shows only what each owner said, and when.
+
+export interface OwnerWordsCheck {
+    pubkey: string;
+    callsign: string;
+    /** ms since epoch, or null: not checked yet. */
+    wordsCheckedAt: number | null;
+}
+
+export async function getOwnerWordsChecks(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<{ owners: OwnerWordsCheck[] }> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/takeover/words-checks');
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
 export async function getReplicationAccess(
     nodeUrl: string,
     adminPassword?: string,

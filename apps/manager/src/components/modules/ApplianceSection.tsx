@@ -24,6 +24,7 @@ import { PublicAddressPanel } from './PublicAddressPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
+import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
@@ -943,6 +944,11 @@ export function ApplianceSection({
             {/* Subtab: Backups & Restore */}
             {subTab === 'backups' && (
                 <div className="space-y-6">
+                    {/* Owners' "12 words checked" (sealed-keys.md §7). Sits where "Who can unlock this community"
+                        (#979) goes; fold into that card's owner rows once both are in. */}
+                    <SectionErrorBoundary sectionName="Owners' 12 words" resetKey={activeNode.id}>
+                        <OwnerWordsChecksPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
                     {/* Database Download and Restore Wizard */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Download Database Backup */}

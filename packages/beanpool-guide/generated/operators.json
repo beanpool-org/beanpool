@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 22,
-  "hash": "8c186b888bd838866d72253e4deb406279c11c63ad05b0f69e8101af85b265be",
+  "version": 23,
+  "hash": "6fa9e992306019a7482174e4cb0ea02cfe7587bdc155eda6b6c2aad1811efa95",
   "sections": [
     {
       "id": "setup",
@@ -725,7 +725,7 @@
           "items": [
             "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
             "take down the reported post while its report is still open, with a reason the author reads;",
-            "take a reported Pulse item off the Pulse;",
+            "take a reported Pulse item off the Pulse, again while its report is still open;",
             "dismiss a report, or mark it handled."
           ]
         },
@@ -1044,7 +1044,7 @@
         },
         {
           "type": "p",
-          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post while a report on it is still open: once its reports are dismissed or handled, only an owner or admin can remove it."
+          "text": "The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that."
         },
         {
           "type": "h2",

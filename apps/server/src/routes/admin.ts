@@ -1095,6 +1095,17 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
+        // A moderator removes a post or Pulse item only through a report that is still open, as on
+        // posts/:id/delete: once dismissed ('reviewed') or actioned, only an owner or admin can take it down.
+        // Marking a report handled with no removal is not gated.
+        if ((deletePost || removePulseItem) && (ctx.state as any)?.adminRole === 'moderator') {
+            const report = db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(ctx.params.id) as any;
+            if (report && report.status !== 'pending' && report.status != null) {
+                ctx.status = 403;
+                ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
+                return;
+            }
+        }
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, { reasonCategory });
         if (!ok) {
             ctx.status = 404;

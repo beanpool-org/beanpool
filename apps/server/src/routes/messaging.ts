@@ -1,5 +1,6 @@
 /**
- * Messaging routes — Conversations, DMs, Groups, Attachments, Reactions.
+ * Messaging routes — Conversations, DMs, Attachments, Reactions, mutes. A Commons group's chat is served by
+ * routes/groups.ts; the reads and writes here re-check group membership for it.
  */
 
 import Router from '@koa/router';
@@ -10,24 +11,43 @@ import {
     markConversationRead, getUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError } from '../engine/messaging.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, canReadGroupThread, syncGroupThreadMembership } from '../engine/group-thread.js';
+import { isKeeperOfEnterprise } from '../engine/enterprise-thread.js';
+import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
+import { db } from '../db/db.js';
 import type { RouteDeps } from './types.js';
+
+/** A keeper's read cursor on their enterprise's thread: a participant row, read up to now. */
+function ensureThreadReadCursor(conversationId: string, pubkey: string): void {
+    db.prepare(
+        'INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key, last_read_at) VALUES (?, ?, ?)'
+    ).run(conversationId, pubkey, new Date().toISOString());
+}
+
+/** May this member open (and so mute) this chat? The same rules as reading it. */
+function canOpenChat(conv: { id: string; type: string; participants: string[] }, actor: string): boolean {
+    if (conv.type === GROUP_THREAD_TYPE) return canReadGroupThread(conv.id, actor);
+    if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id) || conv.participants.includes(actor);
+    if (conv.type === 'event_thread') {
+        try {
+            const row = loadEventForThread(conv.id);
+            return !isEventThreadExpired(row) && canReadEventThread(row, actor);
+        } catch { return false; }
+    }
+    return conv.participants.includes(actor);
+}
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
 
 // ===================== MESSAGING API (PUBLIC) =====================
-
-/** Upper bound on people in one group conversation. Each one is a synchronous INSERT
- *  inside the creation transaction, so this is what stops a single request holding the
- *  SQLite write lock against the whole node. */
-const MAX_CONVERSATION_PARTICIPANTS = 50;
 
 /** Ed25519 public keys are 64 hex characters; 128 leaves room without allowing a
  *  megabyte of text to reach the members lookup. */
@@ -50,20 +70,24 @@ function respondToMessagingError(ctx: any, e: unknown, what: string): void {
 }
 
 router.post('/api/messages/conversation', async (ctx) => {
-    const { type, participants, createdBy, name, postId } = (ctx as any).requestBody || {};
+    const { type, participants, createdBy, name } = (ctx as any).requestBody || {};
     if (!type || !participants || !createdBy) {
         ctx.status = 400;
         ctx.body = { error: 'type, participants, and createdBy are required' };
         return;
     }
-    // The engine types `type` as 'dm' | 'group', but TypeScript is not present at
-    // runtime and conversations.type has no CHECK constraint, so any other string
-    // sailed past both length rules below and re-opened the very hole the group cap
-    // closes: type "bulk" with 5,000 participants took the exclusive write lock for
-    // 5,000 INSERTs. Whitelist first, then the caps mean something.
-    if (type !== 'dm' && type !== 'group') {
+    // The old chat group was removed (groups decision 2, 2026-09-19). An app still offering it gets a plain
+    // 410 saying where group chats live now, not a crash. conversations.type has no CHECK constraint, so any
+    // other string is refused here before the length rules below: type "bulk" with 5,000 participants once
+    // took the exclusive write lock for 5,000 INSERTs.
+    if (type === 'group') {
+        ctx.status = 410;
+        ctx.body = { error: CHAT_GROUP_REMOVED_ERROR };
+        return;
+    }
+    if (type !== 'dm') {
         ctx.status = 400;
-        ctx.body = { error: 'type must be either "dm" or "group"' };
+        ctx.body = { error: 'type must be "dm"' };
         return;
     }
     if (!Array.isArray(participants)) {
@@ -80,19 +104,14 @@ router.post('/api/messages/conversation', async (ctx) => {
     // participant made the INSERT loop throw UNIQUE constraint failed and surfaced the raw
     // SQLite error to the caller. De-duplicate and count distinct people.
     const uniqueParticipants: string[] = Array.from(new Set<string>(participants));
-    if (type === 'dm' && uniqueParticipants.length !== 2) {
+    if (uniqueParticipants.length !== 2) {
         ctx.status = 400;
         ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
         return;
     }
-    if (type === 'group' && uniqueParticipants.length > MAX_CONVERSATION_PARTICIPANTS) {
-        ctx.status = 400;
-        ctx.body = { error: `Group conversations can have at most ${MAX_CONVERSATION_PARTICIPANTS} participants` };
-        return;
-    }
     // A2-15: the creator (bound to the verified signer by the spoof check) must
     // be one of the participants. Otherwise a member could fabricate a thread
-    // between OTHER people (a DM "between B and C", or a group they aren't in)
+    // between OTHER people (a DM "between B and C")
     // and inject it into victims' inboxes with an arbitrary name. Enforced at
     // this public route only — internal/system conversation creation
     // (ensureTransactionConversation, injectSystemMessage) calls
@@ -103,7 +122,7 @@ router.post('/api/messages/conversation', async (ctx) => {
         return;
     }
     try {
-        const conv = createConversation(type, uniqueParticipants, createdBy, name, postId);
+        const conv = createConversation('dm', uniqueParticipants, createdBy, name);
         if (!conv) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
@@ -235,8 +254,9 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     }
     const convs = getConversationsByMember(publicKey);
     const unreadCounts = getUnreadCounts(publicKey);
+    const mutes = getChatMutesFor(publicKey);
     ctx.body = {
-        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0 })),
+        conversations: convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })),
         totalUnread: Object.values(unreadCounts).reduce((a, b) => a + b, 0),
     };
 });
@@ -260,13 +280,65 @@ router.post('/api/messages/mark-read', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
-    if (!conv.participants.includes(actor)) {
+    // A group chat's read cursor lives on the member's participant row, which follows the group; a keeper's
+    // lives on one made the first time they read their enterprise's thread ("Your groups" counts from it).
+    if (conv.type === GROUP_THREAD_TYPE) {
+        if (!canReadGroupThread(conversationId, actor)) {
+            ctx.status = 403;
+            ctx.body = { error: GROUP_CHAT_FORBIDDEN };
+            return;
+        }
+        syncGroupThreadMembership(conversationId, actor);
+    } else if (conv.type === 'enterprise_thread' && isKeeperOfEnterprise(actor, conversationId)) {
+        ensureThreadReadCursor(conversationId, actor);
+    } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;
     }
     markConversationRead(actor, conversationId);
     ctx.body = { success: true };
+});
+
+/**
+ * Mute one chat for 8 hours, a week or always, or unmute it (groups decision 12). Only pushes are silenced;
+ * an @mention still gets through. Anyone who can read the chat may mute it for themselves.
+ */
+router.post('/api/messages/mute', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const { conversationId, duration } = (ctx as any).requestBody || {};
+    if (!conversationId || typeof conversationId !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'conversationId is required' };
+        return;
+    }
+    if (duration !== 'off' && !isChatMuteDuration(duration)) {
+        ctx.status = 400;
+        ctx.body = { error: "duration must be '8h', '1w', 'always' or 'off'" };
+        return;
+    }
+    const conv = getConversation(conversationId);
+    if (!conv) {
+        ctx.status = 404;
+        ctx.body = { error: 'Conversation not found' };
+        return;
+    }
+    if (!canOpenChat(conv, actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'You are not in this conversation' };
+        return;
+    }
+    if (duration === 'off') {
+        clearChatMute(conversationId, actor);
+        ctx.body = { success: true, mute: null };
+        return;
+    }
+    ctx.body = { success: true, mute: setChatMute(conversationId, actor, duration) };
 });
 
 router.get('/api/messages/:conversationId', async (ctx) => {
@@ -277,12 +349,22 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ctx.body = { error: 'Conversation not found' };
         return;
     }
+    // A group's chat is its current active members, re-checked against the group rather than the participants
+    // mirror, and private whether or not this node enforces read auth. A removed member, someone who left, a
+    // pending request, an open invitation and an outsider are all refused; node admins get no exception.
+    if (conv.type === GROUP_THREAD_TYPE) {
+        if (!canReadGroupThread(conversationId, ctx.state.actor as string | undefined)) {
+            ctx.status = 403;
+            ctx.body = { error: GROUP_CHAT_FORBIDDEN };
+            return;
+        }
+    }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Under read-auth the signer is a verified member (ctx.state.actor); require
     // it to be in this conversation. Without this, any member could read any
-    // thread by id (group/system messages are still plaintext-v1, and
+    // thread by id (system messages are plaintext, and
     // participants/reactions/post-linkage/read-cursors leak for every thread).
-    if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
+    else if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not a participant in this conversation' };
         return;

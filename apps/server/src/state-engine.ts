@@ -134,7 +134,8 @@ import {
     registerVisitor,
     updateProfile as updateProfileEngine,
     isCallsignAvailable,
-    findRecoveryCandidates
+    findRecoveryCandidates,
+    setMemberActivityHook
 } from './engine/members.js';
 import {
     generateInvite,
@@ -267,8 +268,31 @@ import {
     markConversationRead as markConversationReadEngine,
     ensureTransactionConversation as ensureTransactionConversationEngine,
     migrateConsolidateConversations as migrateConsolidateConversationsEngine,
-    repairConsolidatedMessagesMetadata as repairConsolidatedMessagesMetadataEngine
+    repairConsolidatedMessagesMetadata as repairConsolidatedMessagesMetadataEngine,
+    removeOldChatGroups
 } from './engine/messaging.js';
+import {
+    ensureGroupThread,
+    backfillGroupThreads,
+    syncGroupThreadMembership,
+    postGroupSystemLine,
+    callsignOf,
+    getGroupThread as getGroupThreadEngine,
+    postGroupThreadMessage as postGroupThreadMessageEngine,
+    removeGroupThreadMessage as removeGroupThreadMessageEngine,
+    GroupSystemType,
+    type GroupThreadView,
+} from './engine/group-thread.js';
+export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
+import {
+    proposeGroupConvenor as proposeGroupConvenorEngine,
+    voteGroupConvenor as voteGroupConvenorEngine,
+    getGroupSuccession as getGroupSuccessionEngine,
+    tickGroupSuccession as tickGroupSuccessionEngine,
+    cancelGroupSuccessionIfConvenorActive,
+} from './engine/group-succession.js';
+export { GROUP_CONVENOR_SILENCE_MS, GROUP_SUCCESSION_WINDOW_MS } from './engine/group-succession.js';
+import { listYourChats as listYourChatsEngine } from './engine/your-groups.js';
 import {
     ensureEnterpriseThread as ensureEnterpriseThreadEngine,
     getEnterpriseThreadMessages as getEnterpriseThreadMessagesEngine,
@@ -570,7 +594,21 @@ export function initStateEngine(): void {
         // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
         migrateConsolidateConversations();
         repairConsolidatedMessagesMetadata();
+
+        // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
+        // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
+        try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
+        try {
+            const made = backfillGroupThreads();
+            if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
+        } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
     }
+
+    // A convenor who comes back cancels any vote to replace them, with a line in the group's chat.
+    setMemberActivityHook((pk) => {
+        try { if (cancelGroupSuccessionIfConvenorActive(getMessagingCb(), pk) > 0) bumpGroupsVersion(); }
+        catch (e) { console.warn('[Groups] Could not close a convenor vote:', e); }
+    });
 
     // FTS5: Backfill search keywords for existing posts that don't have them
     backfillSearchKeywords();
@@ -601,6 +639,8 @@ export function initStateEngine(): void {
             try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
             // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
             try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
+            // Group convenor votes past their 14-day deadline.
+            try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
         }, 60 * 1000);
     }
 
@@ -3647,7 +3687,19 @@ export function createPost(
         eventPrivateNote?: unknown;
     }
 ): MarketplacePost | null {
-    return createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
+    const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
+    // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
+    // acting member is named — the keeper or convenor, not an enterprise's own key.
+    if (post && options?.audienceScope === 'group' && options.targetGroupId && (type === 'event' || type === 'poll')) {
+        try {
+            const actor = options.createdBy || authorPublicKey;
+            postGroupSystemLine(getMessagingCb(), options.targetGroupId,
+                type === 'event' ? GroupSystemType.EVENT_POSTED : GroupSystemType.POLL_POSTED,
+                `${callsignOf(actor)} posted ${type === 'event' ? 'an event' : 'a poll'}: ${title}`,
+                { postId: post.id, postType: type, actorPubkey: actor });
+        } catch (e) { console.warn('[Groups] Could not write the group chat line for a new post:', e); }
+    }
+    return post;
 }
 
 export function getPosts(filter?: PostFilter): MarketplacePost[] {
@@ -4712,8 +4764,8 @@ function getMessagingCb() {
     };
 }
 
-export function createConversation(type: 'dm' | 'group', participants: string[], createdBy: string, name?: string, postId?: string): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, postId);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name);
 }
 
 export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
@@ -5886,6 +5938,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // 6. Purge private device tokens, communication links, and recovery metadata
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
+        try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
         // Channels are tombstoned rather than deleted, and their links are cleared with them: the
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
@@ -6712,6 +6765,8 @@ function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] 
 
 export function createGroup(params: CreateGroupParams): Group {
     const res = createGroupEngine(db, params);
+    // Every group owns its chat from the start, with its convenor in it (decision 3).
+    ensureGroupThread(res.id);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
         broadcast({ type: 'group_created', group: res });
@@ -6750,8 +6805,28 @@ export function getMemberGroupIds(memberPubkey: string): string[] {
     return getMemberGroupIdsEngine(db, memberPubkey);
 }
 
+const ROLE_WORDS: Record<GroupRole, string> = { convenor: 'a convenor', member: 'a member', observer: 'an observer' };
+
+/**
+ * After any membership change: the chat's participant mirror follows the group, and a person who has just
+ * become an active member gets a "joined" line (decision 12). A pending request or an invitation writes
+ * nothing — they are not in the group yet.
+ */
+function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasActive: boolean, meta: Record<string, unknown> = {}): void {
+    try {
+        syncGroupThreadMembership(groupId, targetPubkey);
+        const nowActive = isGroupMemberEngine(db, groupId, targetPubkey);
+        if (!wasActive && nowActive) {
+            postGroupSystemLine(getMessagingCb(), groupId, GroupSystemType.MEMBER_JOINED,
+                `${callsignOf(targetPubkey)} joined`, { targetPubkey, ...meta });
+        }
+    } catch (e) { console.warn('[Groups] Could not update the group chat after a membership change:', e); }
+}
+
 export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+    const wasActive = isGroupMemberEngine(db, groupId, memberPubkey);
     const res = joinGroupEngine(db, groupId, memberPubkey);
+    afterGroupMembershipChange(groupId, memberPubkey, wasActive);
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
@@ -6759,7 +6834,18 @@ export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
 }
 
 export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
+    const before = getGroupMemberEngine(db, groupId, targetPubkey);
     const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
+    try {
+        syncGroupThreadMembership(groupId, targetPubkey);
+        if (before && before.status === 'active' && before.role !== res.role) {
+            const text = convenorPubkey === targetPubkey
+                ? `${callsignOf(targetPubkey)} is now ${ROLE_WORDS[res.role]}`
+                : `${callsignOf(convenorPubkey)} made ${callsignOf(targetPubkey)} ${ROLE_WORDS[res.role]}`;
+            postGroupSystemLine(getMessagingCb(), groupId, GroupSystemType.ROLE_CHANGED, text,
+                { actorPubkey: convenorPubkey, targetPubkey, role: res.role, previousRole: before.role });
+        }
+    } catch (e) { console.warn('[Groups] Could not write the role-change line:', e); }
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
@@ -6767,8 +6853,22 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
 }
 
 export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+    const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
     if (res) {
+        try {
+            // Out of the chat at once (and out of its live updates and pushes).
+            syncGroupThreadMembership(groupId, targetPubkey);
+            if (wasActive) {
+                const self = actorPubkey === targetPubkey;
+                postGroupSystemLine(getMessagingCb(), groupId,
+                    self ? GroupSystemType.MEMBER_LEFT : GroupSystemType.MEMBER_REMOVED,
+                    self ? `${callsignOf(targetPubkey)} left` : `${callsignOf(actorPubkey)} removed ${callsignOf(targetPubkey)}`,
+                    { actorPubkey, targetPubkey },
+                    // The person removed gets the line that explains why the chat just closed on them.
+                    self ? [] : [targetPubkey]);
+            }
+        } catch (e) { console.warn('[Groups] Could not update the group chat after a removal:', e); }
         bumpGroupsVersion();
         const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
         broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, recipients);
@@ -6790,6 +6890,9 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
 
 export function updateGroup(groupId: string, convenorPubkey: string, updates: UpdateGroupParams): Group {
     const res = updateGroupEngine(db, groupId, convenorPubkey, updates);
+    // The chat is titled by the group's name; a rename carries over (and replicates: the conversations import
+    // updates name on conflict).
+    db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
         broadcast({ type: 'group_updated', group: res });
@@ -6801,7 +6904,9 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
 }
 
 export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+    const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
@@ -6809,12 +6914,55 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
 }
 
 export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+    const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
     const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    // Inviting someone who had asked to join admits them at once.
+    afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
     const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
     const recipients = Array.from(new Set([...convenors.map(r => r.member_pubkey), targetPubkey]));
     broadcast({ type: 'group_member_invited', groupId, member: res }, recipients);
     return res;
+}
+
+// ===================== A GROUP'S CHAT, CONVENOR SUCCESSION, "YOUR GROUPS" =====================
+
+export function getGroupThread(groupId: string, viewerPubkey: string | undefined, limit = 50, offset = 0): GroupThreadView {
+    return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
+}
+
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string): EventThreadMessage {
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId);
+}
+
+export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {
+    return removeGroupThreadMessageEngine(getMessagingCb(), groupId, messageId, actorPubkey);
+}
+
+export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
+    const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
+    bumpGroupsVersion();
+    return res;
+}
+
+export function voteGroupConvenor(proposalId: string, voterPubkey: string, choice: 'yes' | 'no') {
+    const res = voteGroupConvenorEngine(getMessagingCb(), proposalId, voterPubkey, choice);
+    bumpGroupsVersion();
+    return res;
+}
+
+export function getGroupSuccession(groupId: string, viewerPubkey?: string) {
+    return getGroupSuccessionEngine(getMessagingCb(), groupId, viewerPubkey);
+}
+
+export function tickGroupSuccession(asOfMs?: number): { passed: number; closed: number } {
+    const res = tickGroupSuccessionEngine(getMessagingCb(), asOfMs);
+    if (res.passed + res.closed > 0) bumpGroupsVersion();
+    return res;
+}
+
+export function listYourChats(pubkey: string) {
+    return listYourChatsEngine(pubkey);
 }
 
 export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {

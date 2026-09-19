@@ -22,13 +22,28 @@ export const JOIN_POLICIES: readonly JoinPolicy[] = ['open', 'request_to_join', 
 
 export type GroupCategory = 'working_group' | 'social' | 'guild' | 'project' | 'general';
 
+/**
+ * In the order every create form lists them (groups decision 11, 2026-09-19): Social Circle first and
+ * pre-selected, then General, Working Group, Project Team, Guild. The stored keys stay as they are — 'project'
+ * is shown as "Project Team" — so no group row has to change.
+ */
 export const GROUP_CATEGORIES: readonly GroupCategory[] = [
-    'working_group',
     'social',
-    'guild',
+    'general',
+    'working_group',
     'project',
-    'general'
+    'guild'
 ] as const;
+
+export const DEFAULT_GROUP_CATEGORY: GroupCategory = 'social';
+
+export const GROUP_CATEGORY_LABELS: Readonly<Record<GroupCategory, string>> = {
+    social: 'Social Circle',
+    general: 'General',
+    working_group: 'Working Group',
+    project: 'Project Team',
+    guild: 'Guild',
+};
 
 export type AudienceScope = 'public' | 'group' | 'direct';
 

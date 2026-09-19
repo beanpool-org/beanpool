@@ -336,6 +336,15 @@ export function completeRekey(
 
         // (o) member_preferences
         db.prepare('UPDATE member_preferences SET public_key = ? WHERE public_key = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE chat_mutes SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+
+        // (o2) Commons groups: membership (and so the group's chat), and convenor votes
+        db.prepare('UPDATE group_members SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE group_members SET invited_by = ? WHERE invited_by = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE group_convenor_proposals SET convenor_pubkey = ? WHERE convenor_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE group_convenor_proposals SET candidate_pubkey = ? WHERE candidate_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE group_convenor_proposals SET proposer_pubkey = ? WHERE proposer_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE group_convenor_votes SET voter_pubkey = ? WHERE voter_pubkey = ?').run(cleanNew, cleanOld);
 
         // (p) recovery shares / collections / releases
         db.prepare('UPDATE recovery_shares SET owner_pubkey = ? WHERE owner_pubkey = ?').run(cleanNew, cleanOld);

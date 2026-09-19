@@ -357,9 +357,12 @@ async function main(): Promise<void> {
     assert(previewLongUrl.body.error === 'url_too_long', 'Error code is url_too_long');
 
     console.log('\n--- 7. Sibling Batch Endpoints Bounds ---');
-    // Group conversation with > 50 participants is rejected with 400
+    // The old chat group (type 'group') was removed on 2026-09-19 — a group chat is now the chat every Commons
+    // group owns. A request for one is refused before any row is written, however many people it lists, with a
+    // 410 saying where group chats live now; the conversations table is untouched.
     const tooManyParticipants = Array.from({ length: 51 }, (_, i) => makeMember(`Member_${i}`));
     tooManyParticipants[0] = alice; // Alice is creator
+    const convCountBefore = (db.prepare('SELECT COUNT(*) AS c FROM conversations').get() as any).c;
     const bigGroupRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
         actor: alice,
         body: {
@@ -369,21 +372,20 @@ async function main(): Promise<void> {
             name: 'Over-limit group',
         },
     });
-    assert(bigGroupRes.status === 400, 'Group conversation > 50 participants rejected with HTTP 400');
-    assert(bigGroupRes.body.error.includes('50 participants'), 'Error message cites 50 participants');
-
-    // Group conversation with normal participant count (3) succeeds
+    assert(bigGroupRes.status === 410, 'A 51-person old-style group conversation is refused with 410 Gone');
+    assert(String(bigGroupRes.body.error).includes('Commons'), 'The error points to Commons groups');
     const legitGroupRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
         actor: alice,
         body: {
             type: 'group',
             createdBy: alice,
             participants: [alice, bob, tooManyParticipants[1]],
-            name: 'Legit small group',
+            name: 'Small old-style group',
         },
     });
-    assert(legitGroupRes.status === 200, 'Legit 3-person group conversation returns 200 OK');
-    assert(legitGroupRes.body.success === true, 'Group created successfully');
+    assert(legitGroupRes.status === 410, 'A 3-person old-style group conversation is refused with 410 too');
+    assert((db.prepare('SELECT COUNT(*) AS c FROM conversations').get() as any).c === convCountBefore,
+        'No conversation row was written for either');
 
     // An unrecognised `type` used to slip past both length rules, because the dm rule only
     // fires on 'dm' and the group cap only on 'group' — so type "bulk" with 5,000
@@ -397,7 +399,7 @@ async function main(): Promise<void> {
             name: 'Cap bypass attempt',
         },
     });
-    assert(bogusTypeRes.status === 400, 'A conversation type other than dm/group is rejected');
+    assert(bogusTypeRes.status === 400, 'A conversation type other than dm is rejected');
     assert(String(bogusTypeRes.body.error).includes('dm'), 'The error names the allowed types');
 
     // conversation_participants is keyed on (conversation_id, public_key), so a repeated
@@ -409,17 +411,18 @@ async function main(): Promise<void> {
     assert(dupDmRes.status === 400, 'A DM with the same person twice is rejected');
     assert(String(dupDmRes.body.error).includes('distinct'), 'The error explains it needs 2 distinct people');
 
-    const dupGroupRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
+    // A DM that names more than two distinct people is refused before any INSERT.
+    const threeDmRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
         actor: alice,
-        body: {
-            type: 'group',
-            createdBy: alice,
-            participants: [alice, bob, bob, tooManyParticipants[2]],
-            name: 'Group with a duplicate',
-        },
+        body: { type: 'dm', createdBy: alice, participants: [alice, bob, bob, tooManyParticipants[2]] },
     });
-    assert(dupGroupRes.status === 200, 'A group with a repeated participant is de-duplicated, not an error');
-    assert(dupGroupRes.body.success === true, 'The de-duplicated group was created');
+    assert(threeDmRes.status === 400, 'A DM with three distinct people is rejected');
+    // A repeated participant is still de-duplicated rather than an error.
+    const dedupDmRes = await callRouter(messagingRouter, 'POST', '/api/messages/conversation', {
+        actor: alice,
+        body: { type: 'dm', createdBy: alice, participants: [alice, bob, bob] },
+    });
+    assert(dedupDmRes.status === 200 && dedupDmRes.body.success === true, 'A DM with a repeated participant is de-duplicated, not an error');
 
     // Crowdfund project with > 10 photos is rejected with 400
     const excessPhotos = Array.from({ length: 11 }, (_, i) => `photo_${i}`);

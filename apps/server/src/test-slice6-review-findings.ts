@@ -341,7 +341,8 @@ async function main() {
             assert(e.status === 500, `edit: a database fault is 500 (got ${e.status})`);
             const r = await send('POST', '/api/messages/react', { messageId: existing.id, emoji: '👍' }, a);
             assert(r.status === 500, `react: a database fault is 500 (got ${r.status})`);
-            const c = await send('POST', '/api/messages/conversation', { type: 'group', participants: [a.pub, b.pub], createdBy: a.pub, name: 'g' }, a);
+            // A new pair, so the route really inserts (a and b already share a DM, which it would just return).
+            const c = await send('POST', '/api/messages/conversation', { type: 'dm', participants: [a.pub, disabled.pub], createdBy: a.pub }, a);
             assert(c.status === 500, `conversation: a database fault is 500 (got ${c.status})`);
         } finally {
             db.exec('DROP TRIGGER IF EXISTS temp.fault_msg_insert; DROP TRIGGER IF EXISTS temp.fault_msg_update; DROP TRIGGER IF EXISTS temp.fault_conv_insert;');

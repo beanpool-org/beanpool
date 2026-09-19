@@ -14,6 +14,11 @@ import {
     type SystemMessageTypeVal,
     type TypedMessagePayload
 } from '@beanpool/engine';
+import {
+    GROUP_THREAD_TYPE, GROUP_CHAT_EDIT_ERROR, GROUP_CHAT_REACT_ERROR, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER,
+    GROUP_NOT_FOUND, postGroupThreadMessageFromSendRoute,
+} from './group-thread.js';
+import { unmutedRecipients } from './chat-mutes.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
@@ -49,14 +54,23 @@ function assertMemberActive(publicKey: string): void {
     if (member.status === 'pruned') throw new MessagingError('Account has been pruned');
 }
 
+/**
+ * The old chat group ("👥 Group" in the web app's Talk screen) was removed on 2026-09-19 (groups decision 2):
+ * a group chat is now the chat every Commons group owns (engine/group-thread.ts). The create route answers
+ * any other type with this, as a 410.
+ */
+export const CHAT_GROUP_REMOVED_ERROR =
+    'Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.';
+
 export function createConversation(
     cb: MessagingCallbacks,
-    type: 'dm' | 'group',
+    type: 'dm',
     participants: string[],
     createdBy: string,
-    name?: string,
-    postId?: string
+    name?: string
 ): Conversation | null {
+    if (type !== 'dm') throw new MessagingError(CHAT_GROUP_REMOVED_ERROR, 410);
+    if (participants.length !== 2) throw new MessagingError('DM conversations must have exactly 2 distinct participants');
     assertMemberActive(createdBy);
     if (cb.registerVisitor) {
         for (const p of participants) {
@@ -64,41 +78,35 @@ export function createConversation(
         }
     }
 
-    const effectivePostId = type === 'dm' ? undefined : postId;
-
-    if (type === 'dm' && participants.length === 2) {
-        const existingQuery = `
-            SELECT c.* FROM conversations c
-            JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
-            JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
-            WHERE c.type = 'dm' AND c.post_id IS NULL
-        `;
-        const existingParams = [participants[0], participants[1]];
-        const existing = db.prepare(existingQuery).get(...existingParams) as any;
-
-        if (existing) {
-            const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(existing.id) as any[];
-            return {
-                id: existing.id,
-                type: existing.type,
-                postId: existing.post_id,
-                name: existing.name,
-                createdBy: existing.created_by,
-                createdAt: existing.created_at,
-                participants: parts.map(p => p.public_key)
-            };
-        }
+    // One DM per pair, never keyed to a post (chat consolidation).
+    const existing = db.prepare(`
+        SELECT c.* FROM conversations c
+        JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
+        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        WHERE c.type = 'dm' AND c.post_id IS NULL
+    `).get(participants[0], participants[1]) as any;
+    if (existing) {
+        const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(existing.id) as any[];
+        return {
+            id: existing.id,
+            type: existing.type,
+            postId: existing.post_id,
+            name: existing.name,
+            createdBy: existing.created_by,
+            createdAt: existing.created_at,
+            participants: parts.map(p => p.public_key)
+        };
     }
 
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     db.transaction(() => {
-        db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, type, effectivePostId || null, name || null, createdBy, createdAt);
+        db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, type, null, name || null, createdBy, createdAt);
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(id, p);
     })();
 
-    const conv: Conversation = { id, type, postId, name: name || null, createdBy, createdAt, participants };
+    const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
     cb.broadcast({ type: 'conversation_created', conversation: conv });
     return conv;
 }
@@ -115,6 +123,18 @@ export function sendMessage(
     clientId?: string
 ): Message | null {
     assertMemberActive(authorPubkey);
+    // A group's chat has one rule book (engine/group-thread.ts): membership re-checked against the group, not
+    // the participants mirror; observers read only; 2000 characters; plaintext-v1. Every app already in the
+    // stores sends a group chat line through this route, so it is accepted here under exactly those rules.
+    const directConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(conversationId) as any;
+    if (directConv?.type === GROUP_THREAD_TYPE) {
+        try {
+            const m = postGroupThreadMessageFromSendRoute(cb, conversationId, authorPubkey, ciphertext, nonce, type, !!attachment?.data, clientId);
+            return { id: m.id, conversationId: m.conversationId, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp };
+        } catch (e: any) {
+            throw toGroupChatMessagingError(e);
+        }
+    }
     let effectiveConvId = conversationId;
     let participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
     
@@ -201,12 +221,12 @@ export function sendMessage(
 
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) });
 
-    // Node-readable threads never push per message; a DM does.
+    // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
     if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
         const senderMember = getMember(db, authorPubkey) as any;
         const senderName = senderMember?.callsign || authorPubkey.slice(0, 8);
         cb.dispatchPushNotification(
-            participants.map(p => p.public_key),
+            unmutedRecipients(effectiveConvId, participants.map(p => p.public_key)),
             authorPubkey,
             '💬 New Message',
             `${senderName} sent you a message`,
@@ -236,6 +256,8 @@ export function toggleMessageReaction(
     // ends — a reaction would be a write this route cannot rule on.
     const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (convType?.type === 'event_thread') throw new MessagingError(EVENT_THREAD_REACT_ERROR, 403);
+    // A group chat carries text and system lines only in this slice; reactions come with the chat features.
+    if (convType?.type === GROUP_THREAD_TYPE) throw new MessagingError(GROUP_CHAT_REACT_ERROR, 403);
 
     let metadata: any = {};
     if (row.metadata) {
@@ -309,6 +331,8 @@ export function editMessage(
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
     // neither, so it refuses (docs/events-on-the-map.md §2.2).
     if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    // A group chat is moderated by its convenors; this route has no size bound and no membership re-check.
+    if (conv.type === GROUP_THREAD_TYPE) throw new MessagingError(GROUP_CHAT_EDIT_ERROR, 403);
 
     const sentAtMs = new Date(row.timestamp).getTime();
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
@@ -398,6 +422,42 @@ export function injectSystemMessage(
 
         cb.broadcast({ type: 'new_message', conversationId, message: msg, participants: participants.map(p => p.public_key) });
     }
+}
+
+/** Map a group-chat refusal onto the status the ordinary messaging routes answer with. */
+function toGroupChatMessagingError(e: any): Error {
+    if (e instanceof MessagingError) return e;
+    const msg: string = e?.message || 'Could not send the message';
+    if (e?.code === 'ID_CONFLICT') return new MessagingError(msg, 409, 'ID_CONFLICT');
+    if (msg === GROUP_NOT_FOUND) return new MessagingError(msg, 404);
+    if (msg === GROUP_CHAT_FORBIDDEN || msg === GROUP_CHAT_OBSERVER
+        || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
+    if (/empty|too long|plain text|Only text/.test(msg)) return new MessagingError(msg, 400);
+    return e;
+}
+
+/**
+ * Delete every conversation left from the removed chat-group feature (type 'group', decision 2), with its
+ * messages, participants and attachments. Day zero: nothing is migrated and nothing stays readable. Tombstones
+ * carry the delete to backups. Primary only, at boot; idempotent.
+ */
+export function removeOldChatGroups(): number {
+    const doomed = db.prepare("SELECT id FROM conversations WHERE type = 'group'").all() as { id: string }[];
+    if (doomed.length === 0) return 0;
+    db.transaction(() => {
+        for (const { id } of doomed) {
+            const parts = db.prepare('SELECT public_key FROM conversation_participants WHERE conversation_id = ?').all(id) as any[];
+            db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)').run(id);
+            db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
+            db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
+            db.prepare('DELETE FROM chat_mutes WHERE conversation_id = ?').run(id);
+            db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+            for (const p of parts) writeTombstone('conversation_participants', `${id}|${p.public_key}`);
+            writeTombstone('conversations', id);
+        }
+    })();
+    console.log(`[Messaging] Removed ${doomed.length} old chat group(s) — the feature was retired (groups decision 2).`);
+    return doomed.length;
 }
 
 export function markConversationRead(pubkey: string, conversationId: string): void {

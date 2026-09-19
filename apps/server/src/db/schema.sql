@@ -1242,7 +1242,7 @@ CREATE TABLE IF NOT EXISTS groups (
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
     avatar_url TEXT,
-    category TEXT DEFAULT 'general' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
+    category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
     created_by TEXT NOT NULL REFERENCES members(public_key),
     join_policy TEXT NOT NULL DEFAULT 'open' CHECK (join_policy IN ('open', 'request_to_join', 'invite_only')),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -1293,6 +1293,52 @@ BEGIN
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     WHERE target_group_id = OLD.id;
 END;
+
+-- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
+-- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
+-- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk
+-- list and unread counts; every read and post re-checks group_members, never the mirror.
+
+-- Per-member, per-chat mute (decision 12): 8 hours, a week, or always (muted_until NULL). An @mention of the
+-- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise.
+CREATE TABLE IF NOT EXISTS chat_mutes (
+    conversation_id TEXT NOT NULL,
+    member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    muted_until     DATETIME,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (conversation_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_mutes_member ON chat_mutes(member_pubkey);
+
+-- Convenor succession (answer B): when a group's only convenor has shown no node activity for 30 days, any
+-- member may propose a member as convenor. Members vote yes or no for 14 days; more than half of those who
+-- answer must say yes. Cancelled if the convenor comes back. One open proposal per group.
+CREATE TABLE IF NOT EXISTS group_convenor_proposals (
+    id               TEXT PRIMARY KEY,
+    group_id         TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    convenor_pubkey  TEXT NOT NULL,
+    candidate_pubkey TEXT NOT NULL,
+    proposer_pubkey  TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'passed', 'cancelled')),
+    created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    deadline_at      DATETIME NOT NULL,
+    executed_at      DATETIME,
+    -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'no_longer_needed'.
+    closed_reason    TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_convenor_proposals_active_unique
+ON group_convenor_proposals(group_id) WHERE status = 'active';
+-- recordActivity looks up a convenor's open proposals on every signed write.
+CREATE INDEX IF NOT EXISTS idx_group_convenor_proposals_convenor_active
+ON group_convenor_proposals(convenor_pubkey) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS group_convenor_votes (
+    proposal_id  TEXT NOT NULL REFERENCES group_convenor_proposals(id) ON DELETE CASCADE,
+    voter_pubkey TEXT NOT NULL,
+    choice       TEXT NOT NULL CHECK (choice IN ('yes', 'no')),
+    voted_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (proposal_id, voter_pubkey)
+);
 
 -- 26. Member Re-Keying & Key Invalidation (docs/settings-ia.md §5 item 1, Item 9b)
 -- Operator-assisted flow to bind an existing member's balance, history, roles and keeperships

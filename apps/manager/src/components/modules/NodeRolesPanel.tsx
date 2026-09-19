@@ -65,6 +65,36 @@ function looksLikeKey(text: string): boolean {
     return text.length >= 32 && !/\s/.test(text);
 }
 
+/** Day-precision ISO date, or 0 when the node sent none (never active, or an older node). */
+function lastActiveMs(m: MemberItem): number {
+    const t = typeof m.lastActiveAt === 'string' ? Date.parse(m.lastActiveAt) : NaN;
+    return Number.isNaN(t) ? 0 : t;
+}
+
+/**
+ * Every member the search matches, none left out: callsigns that start with the text first, then callsigns that
+ * contain it, then a key that starts with it (6+ characters). Within each group, the most recently active first,
+ * then by callsign. Treasuries and SYSTEM are never candidates.
+ */
+export function matchMembers(members: MemberItem[], query: string): MemberItem[] {
+    const q = query.trim().toLowerCase();
+    if (!q || looksLikeKey(query.trim())) return [];
+    const ranked: { m: MemberItem; rank: number }[] = [];
+    for (const m of members) {
+        if (m.isTreasury || (m.callsign || '').toUpperCase() === 'SYSTEM') continue;
+        const name = (m.callsign || '').toLowerCase();
+        const k = (m.publicKey || m.pubkey || '').toLowerCase();
+        const rank = name.startsWith(q) ? 0 : name.includes(q) ? 1 : q.length >= 6 && k.startsWith(q) ? 2 : -1;
+        if (rank >= 0) ranked.push({ m, rank });
+    }
+    return ranked
+        .sort((a, b) =>
+            a.rank - b.rank
+            || lastActiveMs(b.m) - lastActiveMs(a.m)
+            || (a.m.callsign || '').localeCompare(b.m.callsign || ''))
+        .map((r) => r.m);
+}
+
 function formatWhen(iso: string): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
@@ -138,17 +168,8 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     // With no owner yet the node lets any signed-in admin make the first one, so the form is offered to everyone.
     const showAdd = roles !== null && (canManage || noOwner);
 
-    const suggestions = useMemo(() => {
-        const q = query.trim().toLowerCase();
-        if (!q || looksLikeKey(query.trim())) return [];
-        return members
-            .filter((m) => !m.isTreasury && (m.callsign || '').toUpperCase() !== 'SYSTEM')
-            .filter((m) => {
-                const k = (m.publicKey || m.pubkey || '').toLowerCase();
-                return (m.callsign || '').toLowerCase().includes(q) || (q.length >= 6 && k.startsWith(q));
-            })
-            .slice(0, 8);
-    }, [members, query]);
+    // Every match, never capped: the list scrolls inside itself, and the count says how many there are.
+    const suggestions = useMemo(() => matchMembers(members, query), [members, query]);
 
     const pick = (pubkey: string, role: MemberNodeRole | null = null) => {
         setTarget({ pubkey, name: nameOf(pubkey), currentRole: roleByKey.get(pubkey) || null });
@@ -372,34 +393,46 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                 </button>
                             )}
                             {suggestions.length > 0 && (
-                                <ul className="m-0 p-0 list-none space-y-1" aria-label="Matching members">
-                                    {suggestions.map((m) => {
-                                        const k = (m.publicKey || m.pubkey) as string;
-                                        const held = roleByKey.get(k);
-                                        const status = typeof m.status === 'string' && m.status !== 'active' ? m.status : null;
-                                        return (
-                                            <li key={k}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => pick(k)}
-                                                    className={`${btn} w-full flex items-center justify-between gap-2 bg-nature-950 text-nature-100 border-nature-800 hover:border-terra-500/50`}
-                                                >
-                                                    <span className="truncate">
-                                                        {m.callsign || shortKey(k)}
-                                                        {k === myKey && <span className="text-nature-400 font-normal"> (you)</span>}
-                                                        {status && <span className="text-amber-300 font-normal"> ({status})</span>}
-                                                    </span>
-                                                    <span className="text-xs text-nature-400 font-mono shrink-0">
-                                                        {held ? `${ROLE_ICON[held]} ${ROLE_LABEL[held]}` : shortKey(k)}
-                                                    </span>
-                                                </button>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
+                                <>
+                                    <p className="text-sm text-nature-300 m-0" data-testid="match-count" aria-live="polite">
+                                        {suggestions.length === 1
+                                            ? '1 member matches.'
+                                            : `${suggestions.length} members match${suggestions.length > 4 ? ': scroll the list to see them all' : ''}.`}
+                                    </p>
+                                    <ul
+                                        className="m-0 p-1 list-none space-y-1 max-h-[22rem] overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-nature-800"
+                                        aria-label="Matching members"
+                                        data-testid="match-list"
+                                    >
+                                        {suggestions.map((m) => {
+                                            const k = (m.publicKey || m.pubkey) as string;
+                                            const held = roleByKey.get(k);
+                                            const status = typeof m.status === 'string' && m.status !== 'active' ? m.status : null;
+                                            return (
+                                                <li key={k}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => pick(k)}
+                                                        className={`${btn} w-full text-left flex flex-col items-start gap-0.5 bg-nature-950 text-nature-100 border-nature-800 hover:border-terra-500/50`}
+                                                    >
+                                                        <span className="break-words min-w-0 max-w-full">
+                                                            {m.callsign || shortKey(k)}
+                                                            {k === myKey && <span className="text-nature-400 font-normal"> (you)</span>}
+                                                            {status && <span className="text-amber-300 font-normal"> ({status})</span>}
+                                                        </span>
+                                                        <span className="text-xs text-nature-400 font-normal flex flex-wrap gap-x-2">
+                                                            <span className="font-mono">{shortKey(k)}</span>
+                                                            {held && <span>{ROLE_ICON[held]} {ROLE_LABEL[held]}</span>}
+                                                        </span>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
                             )}
                             {query.trim() && !looksLikeKey(query.trim()) && suggestions.length === 0 && (
-                                <p className="text-sm text-nature-400 m-0">No member called “{query.trim()}”. You can paste their full public key instead.</p>
+                                <p className="text-sm text-nature-400 m-0" data-testid="no-match">No one matches “{query.trim()}”. You can paste their full public key instead.</p>
                             )}
                         </div>
                     ) : (

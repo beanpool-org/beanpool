@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 5,
-  "hash": "8133c99ca9dc0dab4f5f560e7ccbe1b48e62511103e68aef27944a5d8b5a5da9",
+  "version": 6,
+  "hash": "6f8696fa1b10e74861088d0f38379a2c21a191cc066b6d8f15b8bfe984c2ffce",
   "sections": [
     {
       "id": "setup",
@@ -486,7 +486,8 @@
         {
           "type": "ul",
           "items": [
-            "Under **Add someone**, type part of their callsign, or paste their full public key.",
+            "Under **Add someone**, type part of their callsign, or paste their full public key. Typing the first six or more characters of a key also finds them.",
+            "Every member who matches is listed, with a count above the list. A long list scrolls inside its own box. Callsigns that start with what you typed come first, then ones that contain it; among those, the most recently active come first. Each row shows the short form of the member's key, so two people with the same name can be told apart. If nobody matches, it says \"No one matches\".",
             "Pick them, then choose **Owner**, **Admin** or **Moderator**.",
             "**Continue** shows what they will be able to do, in plain words. Nothing changes until you press the **Yes, make …** button."
           ]

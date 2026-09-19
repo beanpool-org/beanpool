@@ -229,6 +229,29 @@ describe('TakeoverLockPanel — the code, once', () => {
         expect(document.body.textContent).not.toContain(FAKE_GROUP);
     });
 
+    it('a code made for one node never shows under another: the node changes while the make is in flight', async () => {
+        let release: () => void = () => {};
+        const held = new Promise<void>((r) => { release = r; });
+        const fetchMock = vi.fn(async (url: string) => {
+            if (url.endsWith(makeRoute)) {
+                await held;
+                return { ok: true, status: 200, statusText: '', json: async () => ({ success: true, code: FAKE_CODE, codeId: 3, createdAt: '2026-09-20T01:00:00.000Z', replacedCodeId: null, status: SEALED }) } as Response;
+            }
+            const json = url.endsWith(statusRoute) ? NO_CODE : url.endsWith(backupRoute) ? { backupLock: NOT_LOCKED } : { error: 'Not found' };
+            return { ok: true, status: 200, statusText: '', json: async () => json } as Response;
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const { rerender } = render(<TakeoverLockPanel activeNode={node} communityName="Riverbend Commons" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Make a recovery code' }));
+        await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith(makeRoute))).toBe(true));
+        const other: NodeProfile = { id: 'n2', name: 'Hilltop node', url: 'https://hilltop.example.org', adminPassword: 'pw-fixture-2' };
+        rerender(<TakeoverLockPanel activeNode={other} communityName="Hilltop" />);
+        release();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Make a recovery code' })).toBeEnabled());
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(document.body.textContent).not.toContain(FAKE_GROUP);
+    });
+
     it('the print view: the code, the community, the date and the instructions; Print prints', async () => {
         const print = vi.fn();
         vi.stubGlobal('print', print);
@@ -246,7 +269,10 @@ describe('TakeoverLockPanel — the code, once', () => {
         expect(within(sheet).getByTestId('recovery-code')).toHaveTextContent(/BPRC-3.*FAKE-C0DE-0000-1111-2222-3333-4444/);
         const madeOn = within(sheet).getByText(/^Made /).textContent!.replace(/^Made /, '');
         for (const line of printInstructions(3, madeOn)) expect(sheet).toHaveTextContent(line);
-        expect(sheet).toHaveTextContent(/what the code is for|only if every owner has lost their phone/);
+        // The paper is the only way to open a locked backup at this release, so it must not read as a last resort (#979).
+        expect(sheet).toHaveTextContent(/Keep it even while every owner still has their phone/);
+        expect(sheet).toHaveTextContent(/the only way to open a locked backup/);
+        expect(sheet).not.toHaveTextContent(/only if every owner has lost/);
         expect(sheet).toHaveTextContent(/Type it where the server asks/);
         fireEvent.click(within(sheet).getByRole('button', { name: /Print this page/ }));
         expect(print).toHaveBeenCalledTimes(1);

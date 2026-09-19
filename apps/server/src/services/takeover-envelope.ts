@@ -325,6 +325,9 @@ function sealedStatus(s: StoredEnvelope, skipped: SkippedOwner[]): TakeoverStatu
 
 // ── Re-seal ────────────────────────────────────────────────────────────────────────────────
 
+// Read once, at boot (index.ts, from getNodeRole()). Nothing changes a node's role while it runs today; if a standby is
+// ever promoted without a restart, this must be updated too, or the promoted node goes on refusing to make a code
+// (RecoveryCodeOnStandbyError, 409) and sealing nothing.
 let standby = false;
 let queue: Promise<unknown> = Promise.resolve();
 const pendingReasons = new Set<string>();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import {
     fetchTakeoverStatus,
@@ -72,16 +72,20 @@ function CodeBlock({ code, light = false }: { code: string; light?: boolean }) {
 /** What the printed page says (design §2.6: community, code number, date, what it is for, where to type it). */
 export function printInstructions(codeId: number, madeOn: string): string[] {
     return [
-        `This is recovery code #${codeId} for your community's BeanPool server. Any one of the community's owners, or this paper, can unlock the server's take-over keys and its locked backups.`,
-        'You need it only if every owner has lost their phone and their 12 words.',
+        `This is recovery code #${codeId} for your community's BeanPool server. This paper unlocks the server's take-over keys and its locked backups. They are locked to the community's owners too.`,
+        "Keep it even while every owner still has their phone. When this code was made, this paper was the only way to open a locked backup; opening one with an owner's phone comes in a later update.",
         'Type it where the server asks for "the recovery code". Capitals or small letters both work, and the dashes are optional.',
         'To check this paper later: Settings → Appliance & Data → Backups & Restore → Check a code.',
         `Keep it somewhere safe that is not next to the server. Anyone holding it can open your backups. If a new code is made, keep this one until every backup made before then is destroyed: those still open with code #${codeId}, made ${madeOn}.`,
     ];
 }
 
+// `visibility: hidden` keeps the rest of Settings' height, and Chromium prints a `position: fixed` element (the modal
+// overlay) on every page, so the page is held to one sheet of paper: a tall page printed the code three times (#979).
+// Clipping html and body works wherever the modal sits in the page (it is not portalled; it lives inside <main>).
 const PRINT_CSS = `
 @media print {
+  html, body { height: 100% !important; overflow: hidden !important; background: #fff !important; }
   body * { visibility: hidden !important; }
   [data-print-sheet], [data-print-sheet] * { visibility: visible !important; }
   [data-print-sheet] { position: absolute !important; left: 0; top: 0; width: 100%; box-shadow: none !important; border: none !important; }
@@ -152,11 +156,17 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         void load();
     }, [load, closeCode, closeCheck]);
 
+    // The node on screen now. A code made for one node must never show under another's card, or print with its name.
+    const nodeIdRef = useRef(activeNode.id);
+    nodeIdRef.current = activeNode.id;
+
     const make = async (replace: boolean) => {
+        const forNode = activeNode.id;
         setMaking(true);
         setActionError(null);
         try {
             const made = await makeRecoveryCode(activeNode.url, replace, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            if (nodeIdRef.current !== forNode) return;
             setConfirmReplace(false);
             setShown(made);
             setWrittenDown(false);
@@ -166,6 +176,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                 .then((l) => setBackupLock(l ?? 'unknown'))
                 .catch(() => setBackupLock('unknown'));
         } catch (e) {
+            if (nodeIdRef.current !== forNode) return;
             setConfirmReplace(false);
             setActionError(e instanceof Error ? e.message : 'The recovery code could not be made.');
             void load();
@@ -226,7 +237,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                         <span>Who can unlock this community</span>
                     </h3>
                     <p className="text-xs text-nature-400 m-0 mt-0.5">
-                        This server&apos;s keys and admin sign-in, locked so that any one owner, or the printed recovery code, can bring the community up on another server.
+                        This server&apos;s keys and admin sign-in, locked to its owners and to the printed recovery code, for bringing the community up on another server. Today only the recovery code opens a locked backup.
                     </p>
                 </div>
                 <button

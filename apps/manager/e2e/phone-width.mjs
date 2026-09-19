@@ -21,6 +21,8 @@
  *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
+/* global console, process, document, window, getComputedStyle, NodeFilter -- Node, plus page.evaluate callbacks run in the browser */
+import { FAKE_RECOVERY_CODE } from './fixtures.mjs';
 import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT, ALL_MODALS, openModal, topModal, closeControl } from './harness.mjs';
 
 const WIDTH = 320;
@@ -406,6 +408,40 @@ try {
                     await context.close().catch(() => {});
                 }
             }
+        }
+    }
+
+    // The printed recovery code: exactly one A4 page, with the code on it once. Chromium repeats a `position: fixed`
+    // element on every printed page, and the modal is one, so a page that is still tall behind it printed three
+    // copies of the secret (Fable, PR #979). The page count is read from the PDF itself; "once" is read from the
+    // print-media render (the code blocks left visible), since the repo has no PDF text parser.
+    const PRINT = ALL_MODALS.find((m) => m.name === 'recovery-code-print');
+    for (const width of [360, 800, 1280]) {
+        const at = `@${width}`;
+        const { context, page, errors } = await openSettings(browser, origin, { width, screen: PRINT.screen, overrides: PRINT.overrides });
+        try {
+            await openModal(page, PRINT);
+            await page.emulateMedia({ media: 'print' });
+            const pdf = await page.pdf({ format: 'A4', printBackground: true });
+            const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-zA-Z])/g) || []).length;
+            const painted = await page.locator('[data-testid="recovery-code"]').evaluateAll((els) => els.filter((el) => {
+                const s = getComputedStyle(el);
+                const r = el.getBoundingClientRect();
+                return s.visibility === 'visible' && r.width > 0 && r.height > 0;
+            }).map((el) => el.textContent.replace(/\s+/g, '')));
+            const code = FAKE_RECOVERY_CODE.replace(/\s+/g, '');
+            checks++;
+            if (pages !== 1 || painted.length !== 1 || painted[0] !== code) {
+                failures.push(`print recovery code ${at}: ${pages} A4 page(s) and ${painted.length} painted code block(s) [${painted.join(' | ')}], expected 1 page with ${code} once`);
+                console.log(`  ✗ print recovery code ${at}: ${pages} page(s), ${painted.length} code(s)`);
+            } else {
+                console.log(`  ✓ print recovery code ${at}: 1 page, the code once`);
+            }
+        } catch (e) {
+            failures.push(`print recovery code ${at}: error: ${String(e.message || e).split('\n')[0]}`);
+        } finally {
+            if (errors.length) failures.push(`print recovery code ${at}: page errors: ${errors.join(' | ')}`);
+            await context.close().catch(() => {});
         }
     }
 

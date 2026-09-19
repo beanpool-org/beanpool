@@ -54,7 +54,7 @@ function dropClosedModalEntries() {
     }, 0);
 }
 
-export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDown, onClick, ...rest }: ModalBackdropProps) {
+export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDown, onClick, style, ...rest }: ModalBackdropProps) {
     const onCloseRef = useRef(onClose);
     onCloseRef.current = onClose;
     const dismissableRef = useRef(dismissable);
@@ -97,6 +97,8 @@ export function ModalBackdrop({ onClose, dismissable = true, children, onMouseDo
         <div
             {...rest}
             ref={overlayRef}
+            // Most modals sit in a `space-y-*` stack, whose margin would push a fixed overlay down off the top bar.
+            style={{ margin: 0, ...style }}
             data-bp-modal=""
             onMouseDown={(e) => {
                 pressedInCard.current = e.target !== e.currentTarget;

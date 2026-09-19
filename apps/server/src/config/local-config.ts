@@ -16,6 +16,8 @@ import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt } from 'nod
 import fs from 'node:fs';
 import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
+import type { RecoveryCodeRecord } from '@beanpool/core';
+import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -78,6 +80,12 @@ export interface LocalConfig {
     // All normal admin routes require a cryptographic key session.
     // Default false during migration rollout.
     breakGlassMode?: boolean;
+    // --- Sealed keys (scratch/overnight/design/sealed-keys.md §2.6) ---
+    // The PUBLIC record of the printed recovery code: codeId, the X25519 public key scrypt(code) derives, the
+    // salt and cost. It seals, it never opens. The code itself is shown once and never stored anywhere.
+    recoveryCode?: RecoveryCodeRecord | null;
+    // The highest code number ever issued, so a new code never reuses a number printed on older paper.
+    recoveryCodeLastId?: number | null;
 }
 
 export interface Thresholds {
@@ -146,6 +154,9 @@ export function saveLocalConfig(config: LocalConfig): void {
     } catch (e) {
         console.error('[Config] Failed to save local config:', e);
     }
+    // The admin/2FA fields and the recovery-code record are in the take-over envelope. Most saves change
+    // neither; the check compares a fingerprint and re-seals only when they did.
+    noteTakeoverInputsChanged('local config saved');
 }
 
 export function updateLocalConfig(updates: Partial<LocalConfig>): LocalConfig {

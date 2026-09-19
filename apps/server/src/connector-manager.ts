@@ -19,6 +19,7 @@ import type { Libp2p } from 'libp2p';
 import { sendHandshake } from './handshake.js';
 import { db } from './db/db.js';
 import { logger } from './logger.js';
+import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 // Experimental peer‑connector toggle – defaults to off for production safety
@@ -239,6 +240,7 @@ function saveConnectors(): void {
     } catch (e) {
         console.error('[Connectors] Failed to save connectors:', e);
     }
+    noteTakeoverInputsChanged('connectors saved');
 }
 
 function newStatus(): StatusEntry {

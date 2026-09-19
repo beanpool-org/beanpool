@@ -100,6 +100,7 @@ import { createSettingsRoutes } from './routes/settings.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
+import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createFederationPurchaseRoutes } from './routes/federation-purchase.js';
@@ -1161,6 +1162,7 @@ export async function startHttpsServer(port: number): Promise<void> {
         createCommunityRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
+        createTakeoverEnvelopeRoutes(deps),
         createMarketplaceRoutes(deps),
         createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps),

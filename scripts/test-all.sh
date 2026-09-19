@@ -334,6 +334,7 @@ run_federation_suites() {
       test-groups-isolation
       test-groups-routes
       test-groups-invite-only-hidden
+      test-group-existence-leaks
       test-groups-patch-http
       test-groups-sync-and-removal
       test-groups-chat

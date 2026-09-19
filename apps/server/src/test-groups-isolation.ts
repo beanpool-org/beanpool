@@ -559,23 +559,24 @@ async function runTests() {
         assert(!nodeRolesRow, '10r. HARD RULE §9: Creating group or being convenor confers NO node role (node_roles remains separate)');
 
         // 6. Escrow requestPost audience isolation:
-        // Carol (non-member of Gardeners) cannot request or accept a group post in Gardeners
+        // Carol (non-member of Gardeners) cannot request or accept a group post in Gardeners — and is told exactly what
+        // an unknown post id gets, never a membership refusal that would confirm it is a group post.
         const gardenOffer = createPost('offer', 'tools', 'Special Rake', 'For gardeners only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: gardenGroup.id });
         let nonMemberReqFailed = false;
         try {
             requestPost(gardenOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonMemberReqFailed = e.message.includes('UNAUTHORIZED');
+            nonMemberReqFailed = e.message === 'Post not found';
         }
-        assert(nonMemberReqFailed, '10s. Non-member Carol CANNOT request a group-scoped post');
+        assert(nonMemberReqFailed, '10s. Non-member Carol CANNOT request a group-scoped post (told "Post not found")');
 
         let nonMemberAcceptFailed = false;
         try {
             acceptPost(gardenOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonMemberAcceptFailed = e.message.includes('UNAUTHORIZED');
+            nonMemberAcceptFailed = e.message === 'Post not found or not active';
         }
-        assert(nonMemberAcceptFailed, '10s-accept. Non-member Carol CANNOT accept a group-scoped post');
+        assert(nonMemberAcceptFailed, '10s-accept. Non-member Carol CANNOT accept a group-scoped post (told "Post not found or not active")');
 
         // Regression test for Defect 3: Observer in group CANNOT request or accept group post
         db.prepare("INSERT OR REPLACE INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'observer', 'active', 'now', 'now')")

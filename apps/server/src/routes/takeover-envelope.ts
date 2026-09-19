@@ -22,7 +22,7 @@ import { recordReplicationAccess } from '../state-engine.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import {
     getTakeoverStatus, getSealedTakeoverEnvelope, makeRecoveryCode, checkCurrentRecoveryCode, parseRecoveryCode,
-    RecoveryCodeExistsError,
+    RecoveryCodeExistsError, RecoveryCodeOnStandbyError,
 } from '../services/takeover-envelope.js';
 import type { RouteDeps } from './types.js';
 
@@ -64,6 +64,11 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
                 status: made.status,
             };
         } catch (e: any) {
+            if (e instanceof RecoveryCodeOnStandbyError) {
+                ctx.status = 409;
+                ctx.body = { error: e.message, standby: true };
+                return;
+            }
             if (e instanceof RecoveryCodeExistsError) {
                 ctx.status = 409;
                 ctx.body = { error: e.message, codeId: e.codeId, needsReplace: true };

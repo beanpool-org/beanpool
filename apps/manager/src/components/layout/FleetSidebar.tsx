@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { IS_FLEET_MODE } from '../../lib/mode';
 import { useManual } from '../manual/Manual';
 import { SECTION_SUB_TABS, isSettingsSection } from '../../lib/sections';
+import type { SidebarMode } from '../../lib/sidebar-mode';
+import { ReturnLinks, type ReturnLinksValue } from './ReturnLinks';
 
 export type TabId =
     | 'home'
@@ -67,6 +69,14 @@ interface FleetSidebarProps {
     onClose?: () => void;
     /** The drawer steps aside for the manual (without a history step: the manual adds its own). */
     onBeforeManual?: () => void;
+    /** Single-node Settings: back to where the member came from, and their profile (lib/came-from.ts). */
+    returnLinks?: ReturnLinksValue;
+    /**
+     * Single-node Settings, `rail` only (lg and wider): full, an icon strip, or hidden (lib/sidebar-mode.ts).
+     * `onCollapse` is the collapse button: full → icons → hidden. The ☰ that brings it back lives in App.
+     */
+    mode?: SidebarMode;
+    onCollapse?: () => void;
 }
 
 export function FleetSidebar({
@@ -89,6 +99,9 @@ export function FleetSidebar({
     onSelectSubTab,
     onClose,
     onBeforeManual,
+    returnLinks,
+    mode = 'full',
+    onCollapse,
 }: FleetSidebarProps) {
     const inDrawer = variant === 'drawer';
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -111,20 +124,11 @@ export function FleetSidebar({
     ];
 
     const manual = useManual();
+    const collapsible = !inDrawer && !isFleetMode && !!onCollapse;
 
     const renderNavItem = (item: { id: TabId; label: string; icon: string; badge?: string }) => {
         const isActive = activeTab === item.id;
-        let counts = tabAlertCounts[item.id] || { critical: 0, warning: 0 };
-        if (!isFleetMode) {
-            if (item.id === 'people') {
-                const members = tabAlertCounts.members || { critical: 0, warning: 0 };
-                counts = { critical: counts.critical + members.critical, warning: counts.warning + members.warning };
-            } else if (item.id === 'appliance') {
-                const gw = tabAlertCounts.gateway || { critical: 0, warning: 0 };
-                const logs = tabAlertCounts.logs || { critical: 0, warning: 0 };
-                counts = { critical: counts.critical + gw.critical + logs.critical, warning: counts.warning + gw.warning + logs.warning };
-            }
-        }
+        const counts = alertCountsFor(item.id, tabAlertCounts, isFleetMode);
         const hasCounts = counts.critical > 0 || counts.warning > 0;
 
         const subTabs = inDrawer && isActive && isSettingsSection(item.id) ? SECTION_SUB_TABS[item.id] : [];
@@ -196,9 +200,24 @@ export function FleetSidebar({
         );
     };
 
+    if (collapsible && mode === 'hidden') return null;
+    if (collapsible && mode === 'icons') {
+        return (
+            <IconRail
+                items={singleNodeNavItems}
+                activeTab={activeTab}
+                onSelectTab={onSelectTab}
+                countsFor={(id) => alertCountsFor(id, tabAlertCounts, isFleetMode)}
+                returnLinks={returnLinks}
+                onOpenManual={manual ? () => manual.openManual() : undefined}
+                onCollapse={onCollapse!}
+            />
+        );
+    }
+
     return (
         <aside
-            id={inDrawer ? 'settings-menu' : undefined}
+            id={inDrawer ? 'settings-menu' : collapsible ? 'settings-sidebar' : undefined}
             className={inDrawer
                 ? 'w-full min-h-full bg-nature-900 flex flex-col font-sans select-none'
                 : `w-72 bg-nature-900 border-r border-nature-800 ${isFleetMode ? 'flex' : 'hidden lg:flex'} flex-col shrink-0 h-screen sticky top-0 font-sans z-30 select-none`}
@@ -221,6 +240,9 @@ export function FleetSidebar({
                         </p>
                     </div>
                 </div>
+                {collapsible && (
+                    <CollapseButton mode="full" onCollapse={onCollapse!} />
+                )}
                 {inDrawer && onClose && (
                     <button
                         type="button"
@@ -233,6 +255,8 @@ export function FleetSidebar({
                     </button>
                 )}
             </div>
+
+            {!isFleetMode && returnLinks && <ReturnLinks links={returnLinks} large={inDrawer} />}
 
             {/* Navigation Tabs */}
             {isFleetMode ? (
@@ -511,6 +535,150 @@ export function FleetSidebar({
                 </div>
                 <span className="font-mono text-[10px] text-nature-500">{isFleetMode ? 'Fleet API' : 'Single Node'}</span>
             </div>
+        </aside>
+    );
+}
+
+/** A section's alert counts; in single-node Settings a section also carries the old tabs folded into it. */
+function alertCountsFor(id: TabId, tabAlertCounts: Partial<Record<TabId, AlertCounts>>, isFleetMode: boolean): AlertCounts {
+    const zero = { critical: 0, warning: 0 };
+    const own = tabAlertCounts[id] || zero;
+    if (isFleetMode) return own;
+    const folded: TabId[] = id === 'people' ? ['members'] : id === 'appliance' ? ['gateway', 'logs'] : [];
+    return folded.reduce((acc, t) => {
+        const c = tabAlertCounts[t] || zero;
+        return { critical: acc.critical + c.critical, warning: acc.warning + c.warning };
+    }, own);
+}
+
+type TooltipBind = (label: string) => {
+    onMouseEnter: (e: React.SyntheticEvent<HTMLElement>) => void;
+    onFocus: (e: React.SyntheticEvent<HTMLElement>) => void;
+    onMouseLeave: () => void;
+    onBlur: () => void;
+};
+
+/** The desktop sidebar's collapse button: full → icon strip → hidden. */
+function CollapseButton({ mode, onCollapse, tip }: {
+    mode: 'full' | 'icons';
+    onCollapse: () => void;
+    tip?: TooltipBind;
+}) {
+    const label = mode === 'full' ? 'Collapse menu to icons' : 'Hide menu';
+    return (
+        <button
+            type="button"
+            onClick={onCollapse}
+            aria-label={label}
+            aria-expanded={mode === 'full'}
+            aria-controls="settings-sidebar"
+            title={tip ? undefined : label}
+            {...tip?.(label)}
+            className="hidden lg:flex shrink-0 w-10 h-10 rounded-xl items-center justify-center text-lg text-nature-300 hover:text-white hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
+        >
+            <span aria-hidden="true">«</span>
+        </button>
+    );
+}
+
+/**
+ * The icon strip's names, on hover and on keyboard focus. Positioned `fixed` beside the icon, so the strip's
+ * own scrolling cannot clip it; Escape dismisses it. Each icon keeps its name as its accessible name, so a
+ * screen reader never depends on the tooltip.
+ */
+function useRailTooltip(): { tip: { label: string; top: number; left: number } | null; bind: TooltipBind; hide: () => void } {
+    const [tip, setTip] = useState<{ label: string; top: number; left: number } | null>(null);
+    const hide = () => setTip(null);
+    const show = (label: string) => (e: React.SyntheticEvent<HTMLElement>) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setTip({ label, top: r.top + r.height / 2, left: r.right + 8 });
+    };
+    return { tip, hide, bind: (label) => ({ onMouseEnter: show(label), onFocus: show(label), onMouseLeave: hide, onBlur: hide }) };
+}
+
+function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpenManual, onCollapse }: {
+    items: typeof singleNodeNavItems;
+    activeTab: TabId;
+    onSelectTab: (tab: TabId) => void;
+    countsFor: (id: TabId) => AlertCounts;
+    returnLinks?: ReturnLinksValue;
+    onOpenManual?: () => void;
+    onCollapse: () => void;
+}) {
+    const { tip, bind, hide } = useRailTooltip();
+    const cell = 'relative w-12 h-12 rounded-xl flex items-center justify-center text-lg no-underline transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400';
+    return (
+        <aside
+            id="settings-sidebar"
+            aria-label="Settings menu"
+            onKeyDown={(e) => { if (e.key === 'Escape') hide(); }}
+            className="hidden lg:flex w-[72px] bg-nature-900 border-r border-nature-800 flex-col items-center shrink-0 h-screen sticky top-0 font-sans z-30 select-none"
+        >
+            <div className="py-4 flex flex-col items-center gap-2 border-b border-nature-800/80 w-full">
+                <div
+                    className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-terra-600 to-terra-400 flex items-center justify-center text-xl shadow-lg shadow-terra-950/40 border border-terra-300/20"
+                    aria-hidden="true"
+                >
+                    🌱
+                </div>
+                <CollapseButton mode="icons" onCollapse={() => { hide(); onCollapse(); }} tip={bind} />
+            </div>
+            <div className="flex-1 w-full overflow-y-auto overflow-x-hidden custom-scrollbar py-3 flex flex-col items-center gap-1">
+                {returnLinks && (
+                    <nav aria-label="Leave Settings" className="flex flex-col items-center gap-1 pb-2 mb-1 border-b border-nature-800/80">
+                        <a href={returnLinks.back.href} aria-label={returnLinks.back.label} {...bind(returnLinks.back.label)} className={`${cell} text-terra-200 bg-terra-500/10 border border-terra-500/30 hover:bg-terra-500/20`}>
+                            <span aria-hidden="true">{returnLinks.back.glyph}</span>
+                        </a>
+                        {returnLinks.profile && (
+                            <a href={returnLinks.profile.href} aria-label={returnLinks.profile.label} {...bind(returnLinks.profile.label)} className={`${cell} text-nature-200 hover:bg-nature-800/50`}>
+                                <span aria-hidden="true">{returnLinks.profile.glyph}</span>
+                            </a>
+                        )}
+                    </nav>
+                )}
+                {items.map((item) => {
+                    const isActive = activeTab === item.id;
+                    const counts = countsFor(item.id);
+                    const alerts = counts.critical + counts.warning;
+                    const name = alerts > 0 ? `${item.label} (${alerts} ${alerts === 1 ? 'alert' : 'alerts'})` : item.label;
+                    return (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => onSelectTab(item.id)}
+                            aria-label={name}
+                            aria-current={isActive ? 'page' : undefined}
+                            {...bind(name)}
+                            className={`${cell} ${isActive ? 'bg-terra-500/15 border border-terra-500/40' : 'border border-transparent hover:bg-nature-800/50'}`}
+                        >
+                            <span aria-hidden="true">{item.icon}</span>
+                            {alerts > 0 && (
+                                <span aria-hidden="true" className={`absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full ${counts.critical > 0 ? 'bg-red-500' : 'bg-amber-500'}`} />
+                            )}
+                        </button>
+                    );
+                })}
+                {onOpenManual && (
+                    <button
+                        type="button"
+                        onClick={() => { hide(); onOpenManual(); }}
+                        aria-label="Manual: running your community"
+                        {...bind('Manual: running your community')}
+                        className={`${cell} border border-transparent hover:bg-nature-800/50`}
+                    >
+                        <span aria-hidden="true">📖</span>
+                    </button>
+                )}
+            </div>
+            {tip && (
+                <div
+                    role="tooltip"
+                    style={{ position: 'fixed', top: tip.top, left: tip.left, transform: 'translateY(-50%)' }}
+                    className="z-50 px-2.5 py-1.5 rounded-lg bg-nature-800 border border-nature-700 text-xs font-semibold text-white shadow-xl whitespace-nowrap pointer-events-none"
+                >
+                    {tip.label}
+                </div>
+            )}
         </aside>
     );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ManualProvider } from './components/manual/Manual';
 import {
     loadNodeProfiles,
@@ -68,6 +68,8 @@ import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
 import { startKeySession, endKeySession, sectionTarget, type KeySession } from './lib/key-session';
+import { readCameFrom, backLink, profileLink } from './lib/came-from';
+import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
 import { defaultSubTab } from './lib/sections';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 
@@ -151,6 +153,29 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [keySessionCsrf, setKeySessionCsrf] = useState<string | null>(null);
     const [keySessionChecked, setKeySessionChecked] = useState<boolean>(isFleetMode);
     const [keySessionNotice, setKeySessionNotice] = useState<string | null>(null);
+
+    // Where the member came from (the app, the web app or neither), read from the fragment before
+    // startKeySession strips it, and the way back there (lib/came-from.ts). Single-node Settings only.
+    const [cameFrom] = useState(() => (isFleetMode || typeof window === 'undefined' ? 'unknown' : readCameFrom()));
+    const returnLinks = useMemo(
+        () => (isFleetMode ? undefined : { back: backLink(cameFrom), profile: profileLink(cameFrom, keySession?.memberPubkey) }),
+        [isFleetMode, cameFrom, keySession?.memberPubkey],
+    );
+    const [sidebarMode, setSidebarModeRaw] = useSidebarMode();
+    // The button pressed disappears with the layout it belonged to, so focus follows to the control that
+    // takes its place (the strip's collapse button, or the ☰), rather than dropping to the page.
+    const sidebarFocusPending = useRef(false);
+    const setSidebarMode = (next: typeof sidebarMode) => {
+        sidebarFocusPending.current = true;
+        setSidebarModeRaw(next);
+    };
+    useEffect(() => {
+        if (!sidebarFocusPending.current) return;
+        sidebarFocusPending.current = false;
+        document.querySelector<HTMLElement>(
+            sidebarMode === 'hidden' ? '[data-sidebar-show]' : '#settings-sidebar [aria-controls="settings-sidebar"]',
+        )?.focus();
+    }, [sidebarMode]);
 
     const singleNodeOrigin = typeof window !== 'undefined' && window.location
         ? normalizeNodeUrl(window.location.port === '3001' ? 'https://localhost:8443' : window.location.origin)
@@ -1024,6 +1049,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 isFleetMode={isFleetMode}
                 communityName={effectiveCommunityName}
                 onLogout={handleLogout}
+                returnLinks={returnLinks}
+                mode={sidebarMode}
+                onCollapse={isFleetMode ? undefined : () => setSidebarMode(nextSidebarMode(sidebarMode))}
             />
 
             {!isFleetMode && menuOpen && (
@@ -1055,6 +1083,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         isFleetMode={false}
                         communityName={effectiveCommunityName}
                         onLogout={handleLogout}
+                        returnLinks={returnLinks}
                     />
                 </PhoneMenu>
             )}
@@ -1071,7 +1100,24 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                             pushMenuEntry(activeTab, currentSubTab);
                             setMenuOpen(true);
                         }}
+                        back={returnLinks?.back}
                     />
+                )}
+                {!isFleetMode && sidebarMode === 'hidden' && (
+                    // lg and wider, sidebar hidden: one ☰ at the top-left brings it back in full.
+                    <div className="hidden lg:flex items-center gap-2 px-3 min-h-[56px] border-b border-nature-800 bg-nature-900/95 sticky top-0 z-30">
+                        <button
+                            type="button"
+                            onClick={() => setSidebarMode('full')}
+                            data-sidebar-show
+                            aria-label="Show menu"
+                            aria-expanded={false}
+                            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl leading-none text-nature-100 hover:bg-nature-800/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terra-400"
+                        >
+                            <span aria-hidden="true">☰</span>
+                        </button>
+                        <p className="text-sm font-semibold text-terra-400 m-0 truncate">{`${effectiveCommunityName || 'BeanPool'} · Settings`}</p>
+                    </div>
                 )}
                 {/* Active Target Banner for Control Subsystems */}
                 {isFleetMode && activeTab !== 'overview' && activeTab !== 'analytics' && (

@@ -140,12 +140,52 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
   never capped or queued. So from a network you haven't been guessing from today, the right password always works,
   whatever else is happening to the node.
 - **A node-wide cap for everyone else.** Sources with a failure on record share **12 checks a minute** across the
-  node. Sources already in backoff may use only the first **6** of those, so an owner who mistyped once isn't
-  queued behind an attacker's backed-off addresses. An attempt over the cap gets 429 with `Retry-After` (a minute
-  at most) and is not counted as a failure.
+  node. An attempt over the cap gets 429 with `Retry-After` (a minute at most) and is not counted as a failure.
+  The cap is shared in three ranks, so an owner who mistyped isn't queued behind an attacker:
+  - **Typo**: 1 or 2 failures, in a /48 or /24 with at most 3 failures today (so nearly clean). When one of
+    these is refused, a free check is **held for it** for 5 minutes, and the ranks below can't take it. So the
+    owner is checked on the first retry after a check frees. That is **not** always within a minute. Typo-rank
+    sources don't wait for each other, so an attacker can fill 11 checks a minute from a dirty block and spend
+    one typo-rank check on the 12th, which keeps the owner out for that minute. Each clean /48 or /24 gives it at
+    most 2 of those a day. Measured (`test-password-brake-fairness.ts` part 1b; the owner mistyped once and
+    honours `Retry-After`):
+
+    | Attacker: one dirty /48, plus | Owner let in after | Before #948's review round 1 (typo rank up to 20 failures) |
+    |---|---|---|
+    | nothing more (a single /48) | 59 s | 59 s |
+    | 1 clean /48 | 3 min | 14 min |
+    | 2 clean /48s | 5 min | 27 min |
+    | 5 clean /48s | 11 min | 66 min |
+    | 28 clean /48s | 57 min | 365 min |
+
+    So against N clean /48s or /24s the owner waits about 1 + 2N minutes, once per day of the attacker's
+    supply. On main before #948 the same owner never got in. A network with no failures today is never held up
+    at all, so the quick way in is still another network or key sign-in.
+  - **After 3 or more mistypes** a source ranks as "few", and nothing is held for it. An attacker with a dirty
+    block can keep it out for as long as it keeps guessing (as on main). Holding a claim costs the attacker
+    nothing: twelve once-failed addresses keep their claims by retrying when they lapse, which shuts out the few
+    and backoff ranks for about 144 filler checks an hour (Fable's measure at 9d0b061f: 0 of 2,159 tries over
+    6 h for a 3-mistype owner). That owner was already shut out on main; it is cheaper for the attacker now. Either way,
+    after 3 mistypes sign in from another network or with your key from the app.
+  - **Few**: up to 5 failures and not typo (so also a fresh source in a dirty block). Gets the cap, minus the
+    held checks.
+  - **Backoff**: sources already backing off get only the first **6** checks, minus the held checks.
 - **Clean sources can't be minted.** One IPv6 customer can hold a /48, which is 65,536 /64s. So failures are also
-  counted per IPv6 /48 and per IPv4 /24. After 20 failures in a day, that block's fresh sources are no longer
-  clean. They get the top tier of the shared cap instead.
+  counted per IPv6 /48 and per IPv4 /24. After 20 failures in a day, the block is dirty: its fresh sources are
+  no longer clean and rank as "few". Fable's review of #944 simulated one /48 rotating fresh /64s, six guesses
+  each. Before the typo rank, those /64s took every freed check, and an owner who had mistyped once was refused
+  on all 1,078 retries over 6 hours. With the typo rank, the same attack lets the owner in after 59 s and one
+  refusal (`test-password-brake-fairness.ts`).
+- **One address for everyone (a proxy the node doesn't trust).** Behind a reverse proxy on another host that isn't
+  in `TRUSTED_PROXIES`, every member arrives from the proxy's address. The brake then treats the whole community
+  as one source, so a few wrong passwords from anyone make everyone wait. `client-ip.ts` notices this case: the
+  proxy sends forwarding headers (`X-Forwarded-For` and similar) that the node doesn't believe. When it does,
+  it logs a warning naming `TRUSTED_PROXIES`, and that source's wait is **capped at 10 minutes** instead of an
+  hour. The fix is to add the proxy's address to `TRUSTED_PROXIES` in `.env` and restart. The restart also
+  clears the brake. A lone guesser can send such a header to get the lower cap too, but that only gains it six
+  checks an hour instead of one. Our own nodes aren't affected, because they resolve `CF-Connecting-IP` (#935).
+- Memory is bounded: at most 100,000 sources and 100,000 blocks. When full, the one that failed longest ago is
+  dropped, and that costs about a microsecond, not a rescan.
 - Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
   one fails. A dashboard sending several right passwords at once is served in turn, not refused.
 - Every password check goes through it: `checkAdminAuth`, every route that calls `checkAdminPassword`, and
@@ -171,13 +211,39 @@ in any useful time. A weak human-chosen one isn't, so the pre-launch password ro
 **Locked out with no key enrolled.** In order of what to try:
 
 1. **Use another network**, such as mobile data instead of home Wi-Fi. A source with no failures is always checked.
-2. **Wait.** A source's wait is never more than an hour, and the node-wide cap frees within a minute. The 429 says
-   how long.
+2. **Wait.** A source's wait is never more than an hour (10 minutes behind an untrusted proxy). The node-wide cap
+   frees within a minute, and after one or two mistypes a check is held for you. Under a determined attack that
+   can still take several minutes (§2.6 above), and after three or more mistypes it may not come at all; then use
+   another network or your key. The 429 says how long each wait is.
 3. **Restart the node.** The brake is kept in memory, so a restart clears it completely. This needs shell access
    to the server, not the password.
 4. **Reset the password from the server.** Set `ADMIN_PASSWORD` in the node's `.env` and recreate the container.
    `scripts/rotate-node-env.sh` clears the `isLocked` flag for you. Also needs shell access, not the old password.
    See `docs/secrets-rotation-runbook.md`.
+
+**Operator manual: to carry over.** The node manual (#945, `feat/node-manual`) hadn't merged when this was
+written. Its "The admin password brake" section in `packages/beanpool-guide/operators/server/rate-limits.md`
+still describes #937's brake: node-wide, 10 free, up to 10 minutes, for everyone. Its lockout lines in
+`help/troubleshooting.md` and `setup/signing-in.md` say "for everyone" too. Once it merges, replace that section
+with the text below. Then change those lockout lines to "from your network; try another network, or sign in
+from the app", and regenerate.
+
+> **The admin password brake.** Wrong admin passwords are counted per internet address. Each address gets 5
+> free. After that it waits 2 seconds, then 4, 8 and so on, up to an hour. Only that address waits. A right
+> password, or a day with no wrong ones, clears it. From a network you haven't mistyped from today, the right
+> password is always checked straight away, whatever anyone else is doing. If you mistyped once or twice and the
+> server is busy with someone else's guesses, a check is kept for you: you usually get in on your next try, within
+> a minute, but someone attacking from many networks can stretch that to several minutes or more. After three or
+> more mistypes, or if you are still waiting, sign in from another network (mobile data instead of Wi-Fi) or from
+> the app's Manage button, which is never affected.
+>
+> If it keeps closing, someone is guessing your password. Sign in from the app meanwhile, and make sure the
+> password is long and not used anywhere else.
+>
+> **Behind a proxy on another machine.** If you haven't listed that proxy in `TRUSTED_PROXIES` in `.env`, your
+> server sees every member as the proxy's address. Then a few wrong passwords from anyone make everyone wait,
+> for up to 10 minutes. The log says so and names `TRUSTED_PROXIES`. Add the proxy's address there and restart
+> the server. The restart also clears the brake.
 
 Once a key owner exists, key sign-in skips the brake entirely. A break-glass code (§2.2) is still checked even from a
 braked source, because it is 64 random bits and can't be guessed online.

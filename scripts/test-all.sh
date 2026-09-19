@@ -257,6 +257,8 @@ run_federation_suites() {
       test-backup-topology
       test-standby-token-only
       test-standby-envelopes
+      test-takeover-by-code
+      test-takeover-crash-resume
       test-cash-also-needed
       test-posts-ignore-archetypes
       test-crowdfund-ledger-sync

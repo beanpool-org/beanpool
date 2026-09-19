@@ -180,7 +180,86 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(handleComplete).toHaveBeenCalledTimes(1);
         expect(localStorage.getItem('bp_cold_start_completed')).toBe('true');
-        expect(localStorage.getItem('bp_founding_invites_status')).toBe('1/3 founding invites claimed · node ready for trade');
+        // This used to assert a '1/3 founding invites claimed' status that nothing on the node backed (no one had
+        // claimed anything). The wizard no longer writes a made-up status for the home screen.
+        expect(localStorage.getItem('bp_founding_invites_status')).toBeNull();
+    });
+
+    /** Walks steps 1–4 with the default mocks and lands on step 5. */
+    async function goToStep5(onComplete = vi.fn()) {
+        await act(async () => {
+            render(
+                <ColdStartWizard
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    nodeData={{ members: [] }}
+                    onComplete={onComplete}
+                />
+            );
+        });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next: Enrol Owner Key/i })); });
+        await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next: Create First Enterprise/i })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next: Seed the Commons/i })); });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next: Founding Invites/i })); });
+        expect(screen.getByText(/Step 5: Three Founding Invites/i)).toBeInTheDocument();
+        return onComplete;
+    }
+
+    it("step 5: when the node refuses, shows its reason and no code, QR or print button — and setup can still finish", async () => {
+        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('Invalid password'));
+        const onComplete = await goToStep5();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Generate 3 Founding Invites/i }));
+        });
+
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent('No founding invites were made');
+        expect(alert).toHaveTextContent('Invalid password');
+        // Stopped at the first refusal.
+        expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(1);
+
+        expect(screen.queryByText(/Founding Invite #/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/FOUNDING-/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('img', { name: /Founding QR/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Print Founding Cards/i })).not.toBeInTheDocument();
+        expect(screen.queryByText(/setup complete/i)).not.toBeInTheDocument();
+
+        // No hard gate: the owner can finish setup and make invites later.
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Finish setup without invites/i }));
+        });
+        expect(onComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it('step 5: retry after a refusal part-way asks only for the missing invites and shows only real codes', async () => {
+        vi.mocked(nodeClient.generateNodeInvite)
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-A', type: 'trusted' })
+            .mockRejectedValueOnce(new Error('Only an owner or admin of this node can issue invites'))
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-B', type: 'trusted' })
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-C', type: 'trusted' });
+        await goToStep5();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Generate 3 Founding Invites/i }));
+        });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Only 1 of 3 founding invites were made');
+        expect(screen.getByRole('alert')).toHaveTextContent('Only an owner or admin of this node can issue invites');
+        expect(screen.getByText('INV-REAL-A')).toBeInTheDocument();
+        expect(screen.queryByText('Founding Invite #2')).not.toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Try again for the other 2' }));
+        });
+
+        expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(4);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.getByText('INV-REAL-A')).toBeInTheDocument();
+        expect(screen.getByText('INV-REAL-B')).toBeInTheDocument();
+        expect(screen.getByText('INV-REAL-C')).toBeInTheDocument();
+        expect(screen.getByText('Founding Invite #3')).toBeInTheDocument();
     });
 
     it('sets reachabilityStatus to error and displays warning when reachability check fails', async () => {

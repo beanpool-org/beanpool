@@ -26,11 +26,13 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [previewQrItem, setPreviewQrItem] = useState<GeneratedInviteItem | null>(null);
     const [showPrintSheet, setShowPrintSheet] = useState(false);
+    const [generateError, setGenerateError] = useState<{ reason: string; issued: number; requested: number } | null>(null);
 
     useEffect(() => {
         setGeneratedTokens([]);
         setPreviewQrItem(null);
         setShowPrintSheet(false);
+        setGenerateError(null);
     }, [activeNode?.id]);
 
     const buildFullUrl = (code: string) => {
@@ -38,12 +40,15 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
         return `${cleanNodeUrl}/?invite=${encodeURIComponent(code)}`;
     };
 
-    const handleGenerate = async () => {
+    // Every code shown here was issued by the node. When the node refuses, we stop and say why: a code the node
+    // never issued would be printed on a card and fail at the door.
+    const issueInvites = async (count: number, keep: GeneratedInviteItem[]) => {
         setIsGenerating(true);
-        const items: GeneratedInviteItem[] = [];
+        setGenerateError(null);
+        const items: GeneratedInviteItem[] = [...keep];
         try {
-            for (let i = 0; i < inviteCount; i++) {
-                let code = '';
+            for (let i = 0; i < count; i++) {
+                let code: string;
                 try {
                     const res = await generateNodeInvite(
                         activeNode.url,
@@ -51,16 +56,14 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         inviteTier,
                         activeNode ? getTfaSessionToken(activeNode.id) : undefined
                     );
-                    if (res?.code) {
-                        code = res.code;
-                    }
-                } catch {}
-
-                if (!code) {
-                    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-                    const rand1 = Array.from(crypto.getRandomValues(new Uint8Array(4))).map((b) => chars[b % chars.length]).join('');
-                    const rand2 = Array.from(crypto.getRandomValues(new Uint8Array(4))).map((b) => chars[b % chars.length]).join('');
-                    code = `INV-${rand1}-${rand2}`;
+                    code = res.code;
+                } catch (err: unknown) {
+                    setGenerateError({
+                        reason: err instanceof Error && err.message ? err.message : 'The node could not be reached',
+                        issued: i,
+                        requested: count,
+                    });
+                    break;
                 }
 
                 const fullUrl = buildFullUrl(code);
@@ -77,6 +80,14 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
         } finally {
             setIsGenerating(false);
         }
+    };
+
+    const handleGenerate = () => issueInvites(inviteCount, []);
+
+    // Retry asks only for the passes the node has not issued yet, and keeps the real ones already shown.
+    const handleRetry = () => {
+        if (!generateError) return;
+        issueInvites(generateError.requested - generateError.issued, generatedTokens);
     };
 
     const handleCopy = (text: string, key: string | number) => {
@@ -308,8 +319,36 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 </div>
             </div>
 
+            {/* The node refused: its reason, and a retry. No code, QR or print for what it didn't issue. */}
+            {generateError && !isGenerating && (
+                <div role="alert" className="bg-red-950/60 border border-red-800 rounded-2xl p-5 space-y-3 animate-fade-in">
+                    <h4 className="text-sm font-bold text-red-200 m-0 break-words">
+                        {generateError.issued === 0
+                            ? 'No invites were made'
+                            : `Only ${generateError.issued} of ${generateError.requested} invites were made`}
+                    </h4>
+                    <p className="text-xs text-red-100 m-0 break-words">
+                        The node said: <strong>{generateError.reason}</strong>
+                    </p>
+                    <p className="text-xs text-red-200/80 m-0 break-words">
+                        {generateError.issued === 0
+                            ? 'Nothing here is safe to print. Check you are signed in as an owner or admin of this node, then try again.'
+                            : 'The passes below are real. The rest were not made — try again for them.'}
+                    </p>
+                    <button
+                        type="button"
+                        onClick={handleRetry}
+                        className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-white text-xs font-bold transition-all active:scale-95"
+                    >
+                        {generateError.issued === 0
+                            ? 'Try again'
+                            : `Try again for the other ${generateError.requested - generateError.issued}`}
+                    </button>
+                </div>
+            )}
+
             {/* Empty State */}
-            {generatedTokens.length === 0 && (
+            {generatedTokens.length === 0 && !(generateError && !isGenerating) && (
                 <div className="bg-nature-950/50 border-2 border-dashed border-nature-800/80 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-3 animate-fade-in">
                     {isGenerating ? (
                         <>

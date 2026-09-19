@@ -72,8 +72,10 @@ describe('InvitesModule', () => {
         expect(screen.getAllByText('INV-API-PASS-1').length).toBeGreaterThan(0);
     });
 
-    it('falls back to local invite code generation when API fails or returns no code', async () => {
-        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('Network error'));
+    // This used to assert that a made-up INV-XXXX-XXXX code appeared when the node refused. Owners printed those
+    // codes on cards and they never worked. A refusal must show the node's reason and no code at all.
+    it('shows the node\'s reason and no code, QR or print button when the node refuses', async () => {
+        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('Invalid password'));
 
         render(<InvitesModule activeNode={mockNode} />);
 
@@ -83,12 +85,65 @@ describe('InvitesModule', () => {
         const generateBtn = screen.getByRole('button', { name: /Generate 1 Pass/i });
         await userEvent.click(generateBtn);
 
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('No invites were made');
+        expect(alert).toHaveTextContent('Invalid password');
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+
+        expect(screen.queryByText(/Generated Passes/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/INV-/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('img', { name: /QR Code/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Print/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
+    });
+
+    it('retry after a refusal shows only the codes the node issued', async () => {
+        vi.mocked(nodeClient.generateNodeInvite)
+            .mockRejectedValueOnce(new Error('Only an owner or admin of this node can issue invites'))
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-RETRY', type: 'standard' });
+
+        render(<InvitesModule activeNode={mockNode} />);
+
+        await userEvent.click(screen.getByRole('button', { name: '1' }));
+        await userEvent.click(screen.getByRole('button', { name: /Generate 1 Pass/i }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Only an owner or admin of this node can issue invites');
+
+        await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
         await waitFor(() => {
             expect(screen.getByText('Generated Passes (1)')).toBeInTheDocument();
         });
+        expect(screen.getAllByText('INV-REAL-RETRY').length).toBeGreaterThan(0);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
 
-        const codeElement = screen.getByText(/^INV-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-        expect(codeElement).toBeInTheDocument();
+    it('a refusal part-way keeps the real passes, says how many were made, and retries only the rest', async () => {
+        vi.mocked(nodeClient.generateNodeInvite)
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-1', type: 'standard' })
+            .mockResolvedValueOnce({ success: true, code: 'INV-REAL-2', type: 'standard' })
+            .mockRejectedValueOnce(new Error('Too many requests'))
+            .mockResolvedValue({ success: true, code: 'INV-REAL-LATER', type: 'standard' });
+
+        render(<InvitesModule activeNode={mockNode} />);
+
+        await userEvent.click(screen.getByRole('button', { name: /Generate 5 Passes/i }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('Only 2 of 5 invites were made');
+        expect(alert).toHaveTextContent('Too many requests');
+        expect(screen.getByText('Generated Passes (2)')).toBeInTheDocument();
+        // Stopped at the refusal: no further calls, nothing invented for the other three.
+        expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(3);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Try again for the other 3' }));
+
+        await waitFor(() => {
+            expect(screen.getByText('Generated Passes (5)')).toBeInTheDocument();
+        });
+        expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(6);
+        expect(screen.getAllByText('INV-REAL-1').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('INV-REAL-LATER').length).toBe(3);
     });
 
     it('allows changing quantity and tier options', async () => {

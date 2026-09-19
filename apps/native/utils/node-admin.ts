@@ -19,15 +19,9 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { buildSignedHeaders, signData, encodeUtf8, hexToBytes, encodeBase64 } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 
-export type ManageRole = 'owner' | 'admin';
+import { canManageNode, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem } from './node-role';
 
-/** /settings sections the node's admin queue links to — mirrors ADMIN_SETTINGS_SECTIONS on the server. */
-export const SETTINGS_SECTIONS = ['home', 'moderation', 'disputes', 'decisions'] as const;
-export type SettingsSection = typeof SETTINGS_SECTIONS[number];
-
-export function canManageNode(role: unknown): role is ManageRole {
-    return role === 'owner' || role === 'admin';
-}
+export { canManageNode, SETTINGS_SECTIONS, type ManageRole, type SettingsSection, type AdminQueueItem };
 
 function base(nodeUrl: string): string {
     return nodeUrl.replace(/\/+$/, '');
@@ -43,29 +37,64 @@ export interface MyNodeRole {
  * without the endpoint, a refusal — answers "no role", so the button is simply not offered.
  */
 export async function fetchMyNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole> {
-    const none: MyNodeRole = { role: null, communityName: null };
+    return (await askNodeRole(nodeUrl, identity)) ?? NO_ROLE;
+}
+
+const NO_ROLE: MyNodeRole = { role: null, communityName: null };
+
+/** As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". */
+async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
     try {
         const path = '/api/node-admin/me';
         const headers = await buildSignedHeaders('GET', path, '', identity.privateKey, identity.publicKey);
         delete headers['Content-Type'];
         const res = await fetch(`${base(nodeUrl)}${path}`, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
-        if (!res.ok) return none;
+        if (!res.ok) return res.status < 500 ? NO_ROLE : null;
         const body = await res.json() as { role?: unknown; communityName?: unknown };
         return {
             role: canManageNode(body.role) ? body.role : null,
             communityName: typeof body.communityName === 'string' && body.communityName.trim() ? body.communityName.trim() : null,
         };
     } catch {
-        return none;
+        return null;
     }
 }
 
-export interface AdminQueueItem {
-    kind: string;
-    count: number;
-    label: string;
-    section: SettingsSection;
-    settingsPath: string;
+/**
+ * The role for the header's 🛡️ icon, which asks on every refresh: remembered in memory (never on disk) for
+ * ROLE_CACHE_MS per node and key, shared by every header instance, so a member who is not an admin costs
+ * one small request per ten minutes and never a queue request. No answer (offline) is not remembered.
+ * Only decides whether to ASK for the queue; the node checks the live role on the queue itself and again
+ * on every sign-in link.
+ */
+export const ROLE_CACHE_MS = 10 * 60_000;
+const roleCache = new Map<string, { at: number; value: Promise<MyNodeRole> }>();
+const roleKey = (nodeUrl: string, publicKey: string) => `${base(nodeUrl)} ${publicKey}`;
+
+export function cachedNodeRole(nodeUrl: string, identity: BeanPoolIdentity, now = Date.now()): Promise<MyNodeRole> {
+    const key = roleKey(nodeUrl, identity.publicKey);
+    const hit = roleCache.get(key);
+    if (hit && now - hit.at < ROLE_CACHE_MS) return hit.value;
+    const entry = {
+        at: now,
+        value: askNodeRole(nodeUrl, identity).then(r => {
+            if (r) return r;
+            if (roleCache.get(key) === entry) roleCache.delete(key);
+            return NO_ROLE;
+        }),
+    };
+    roleCache.set(key, entry);
+    return entry.value;
+}
+
+/** A fresher answer (Settings asks on every focus) replaces the remembered one. */
+export function rememberNodeRole(nodeUrl: string, publicKey: string, value: MyNodeRole, now = Date.now()): void {
+    roleCache.set(roleKey(nodeUrl, publicKey), { at: now, value: Promise.resolve(value) });
+}
+
+/** Ask again next time: the queue was refused or failed, which is what a demotion looks like. */
+export function forgetNodeRole(nodeUrl: string, publicKey: string): void {
+    roleCache.delete(roleKey(nodeUrl, publicKey));
 }
 
 /** Pending admin work on this node (for the header badge). Null when unavailable or not an admin. */

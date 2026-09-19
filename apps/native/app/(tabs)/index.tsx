@@ -22,6 +22,7 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { composeTargetFor } from '../../utils/compose-options';
 import { EVENT_TYPES_QUERY, type EventWindow } from '../../utils/events';
 import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
@@ -465,6 +466,10 @@ export default function MarketScreen() {
     // Fresh listings banner dismissal and scroll tracking states
     const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
     const [showFreshBannerOnScroll, setShowFreshBannerOnScroll] = useState(true);
+    // Large "Market" title above the pinned search/filters; folds away once the feed scrolls.
+    const pageTitle = useCollapsingTitle();
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef);
 
     const [refreshing, setRefreshing] = useState(false);
 
@@ -532,7 +537,9 @@ export default function MarketScreen() {
     const [screenH, setScreenH] = useState(0);
     const [filterBlockY, setFilterBlockY] = useState(0);
     const [filterRowsBottom, setFilterRowsBottom] = useState(0);
-    const rowsBottom = HEADER_PAD_TOP + filterBlockY + filterRowsBottom;
+    // The large title brings its own top gap, so the block's padding applies only while it is folded away.
+    const headerPadTop = pageTitle.collapsed ? HEADER_PAD_TOP : 0;
+    const rowsBottom = headerPadTop + filterBlockY + filterRowsBottom;
     const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
     const [groupFilter, setGroupFilter] = useState('all');
     const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
@@ -864,6 +871,7 @@ export default function MarketScreen() {
     };
 
     const onScrollHandler = (event: any) => {
+        pageTitle.onScroll(event);
         const offsetY = event.nativeEvent.contentOffset.y;
         if (offsetY > 15) {
             if (showFreshBannerOnScroll) {
@@ -882,6 +890,8 @@ export default function MarketScreen() {
 
     const HeaderComponent = (
         <View>
+            {/* Inside this block, not above it, so the filter rows' measured offsets (panelMaxHeight) include it. */}
+            <PageTitle title="Market" collapsed={pageTitle.collapsed} />
             {/* Top row: Search + My Deals + View Toggle */}
             <View style={[styles.searchRow, { paddingHorizontal: 16 }]}>
                 <View style={styles.searchWrap}>
@@ -1454,7 +1464,7 @@ export default function MarketScreen() {
 
     return (
         <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
-            <View style={{ paddingTop: HEADER_PAD_TOP, paddingBottom: 0 }}>
+            <View style={{ paddingTop: headerPadTop, paddingBottom: 0 }}>
                 {HeaderComponent}
             </View>
             {showFirstOfferQuest && !categoryPanel.open && (
@@ -1481,6 +1491,7 @@ export default function MarketScreen() {
             )}
             <View style={{ flex: 1 }}>
             <FlatList
+                ref={listRef}
                 key={viewMode}
                 numColumns={viewMode === 'grid' ? 2 : 1}
                 data={listData}

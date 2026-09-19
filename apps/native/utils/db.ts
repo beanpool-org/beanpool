@@ -1209,6 +1209,35 @@ export async function getGlobalUnreadCount(myPubkey: string): Promise<number> {
     return result?.count || 0;
 }
 
+/**
+ * Unread lines per conversation, for the header's "needs you" icons: only conversations with something
+ * unread, counted the way getGlobalUnreadCount counts them. Nothing is decrypted and no preview is built;
+ * `peer` is the stored conversation name or the other participant's callsign, as the inbox shows it.
+ */
+export async function getUnreadByConversation(myPubkey: string): Promise<{ id: string; type: string; unread: number; peer: string }[]> {
+    const database = await getDb();
+    const rows = await database.getAllAsync<any>(`
+        SELECT c.id, c.type, c.name, COUNT(m.id) as unread,
+               (SELECT memb.callsign FROM conversation_participants other
+                LEFT JOIN members memb ON memb.public_key = other.public_key
+                WHERE other.conversation_id = c.id AND other.public_key != ? LIMIT 1) as otherCallsign
+        FROM conversation_participants cp
+        JOIN conversations c ON c.id = cp.conversation_id
+        JOIN messages m ON m.conversation_id = c.id
+        WHERE cp.public_key = ?
+        AND (c.type IS NULL OR c.type != 'enterprise_thread')
+        AND m.author_pubkey != ?
+        AND (m.timestamp > IFNULL(cp.last_read_at, '2000-01-01'))
+        GROUP BY c.id
+    `, [myPubkey, myPubkey, myPubkey]);
+    return rows.map(r => ({
+        id: r.id,
+        type: r.type || 'dm',
+        unread: r.unread || 0,
+        peer: r.name || r.otherCallsign || String(r.id).slice(0, 8),
+    }));
+}
+
 export async function refreshBalanceFromServer(pubkey: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) return;

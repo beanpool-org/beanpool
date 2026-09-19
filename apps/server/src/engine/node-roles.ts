@@ -1,5 +1,6 @@
 import { db } from '../db/db.js';
 import { getMember } from '@beanpool/engine';
+import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
@@ -173,6 +174,7 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)`
         ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass);
     })();
+    noteTakeoverInputsChanged(`${role} role granted`);
 }
 
 /**
@@ -215,6 +217,7 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
 
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
     })();
+    noteTakeoverInputsChanged(`${role} role revoked`);
 }
 
 /**
@@ -234,6 +237,7 @@ export function getNodeRoleSessionEpoch(pubkey: string): number {
 export function bumpNodeRoleSessionEpoch(pubkey: string): number {
     if (!pubkey) return 0;
     db.prepare("UPDATE node_roles SET session_epoch = session_epoch + 1 WHERE member_pubkey = ?").run(pubkey);
+    noteTakeoverInputsChanged('owner sessions reset');
     return getNodeRoleSessionEpoch(pubkey);
 }
 
@@ -243,6 +247,7 @@ export function bumpNodeRoleSessionEpoch(pubkey: string): number {
 export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null): void {
     if (!pubkey) return;
     db.prepare("UPDATE node_roles SET break_glass_hash = ? WHERE member_pubkey = ?").run(hash, pubkey);
+    noteTakeoverInputsChanged('break-glass code changed');
 }
 
 /**

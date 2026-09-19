@@ -933,6 +933,7 @@ export function removeWsClient(ws: any): void {
 // low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
 import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
+import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
@@ -5242,6 +5243,7 @@ export function actionReport(reportId: string, deletePost: boolean = false, susp
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
             try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
+            noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
             bumpMembersVersion();
@@ -5688,6 +5690,8 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     if (status !== 'active') {
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     }
+    // Either way the owner set may have changed: an owner disabled or pruned, or one made active again.
+    noteTakeoverInputsChanged(`member ${status === 'active' ? 'reactivated' : status}`);
     clearEnterpriseFloorCache();
 }
 
@@ -6165,6 +6169,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try { db.prepare("DELETE FROM treasury_operators WHERE member_pubkey = ? OR treasury_pubkey = ?").run(publicKey, publicKey); } catch { }
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
     });
+    noteTakeoverInputsChanged('member purged their account');
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
@@ -6277,6 +6282,8 @@ export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     const current = getNodeConfig();
     const next = { ...current, ...update };
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('node_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
+    // The public address (with its tunnel token) is in the take-over envelope.
+    if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     return next;
 }
 

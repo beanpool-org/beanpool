@@ -40,6 +40,7 @@ import * as engine from '@beanpool/engine';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import {
     conservingTransaction,
     getCommonsBalanceExact,
@@ -1255,6 +1256,7 @@ function restoreSuspendedNodeRole(decisionId: string): void {
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(member_pubkey) DO NOTHING
     `).run(held.member_pubkey, held.role, held.granted_at, held.granted_by, held.session_epoch + 1, held.break_glass_hash);
+    noteTakeoverInputsChanged(`${held.role} role given back`);
 }
 
 /**

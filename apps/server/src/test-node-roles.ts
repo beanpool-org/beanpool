@@ -492,7 +492,7 @@ async function main() {
         seedMember('pruned_target', 'PrunedMember');
         grantNodeRole('pruned_target', 'admin', 'gen_alice');
         assert(nodeRoleOf('pruned_target') === 'admin', 'Target is admin before prune');
-        adminPruneUser('pruned_target');
+        adminPruneUser('pruned_target', 'owner:password');
         assert(nodeRoleOf('pruned_target') === null, 'Pruned member has nodeRoleOf = null');
         assert(isNodeAdmin('pruned_target') === false, 'Pruned member has isNodeAdmin = false');
         assert(isNodeOwner('pruned_target') === false, 'Pruned member has isNodeOwner = false');
@@ -518,7 +518,7 @@ async function main() {
         assert(!roleRow, 'node_roles row was deleted when status changed to disabled');
 
         // Sole owner cannot be pruned or self-purged
-        throws(() => adminPruneUser('gen_alice'), 'Cannot prune the sole node owner; appoint another owner first', 'Cannot prune the sole node owner');
+        throws(() => adminPruneUser('gen_alice', 'owner:password'), 'Cannot prune the sole node owner; appoint another owner first', 'Cannot prune the sole node owner');
         throws(() => purgeMemberSelf('gen_alice'), 'Cannot purge the sole node owner; appoint another owner first', 'Cannot self-purge the sole node owner');
 
     } finally {

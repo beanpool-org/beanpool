@@ -29,6 +29,7 @@ import {
     transfer,
     getMember,
     adminPruneUser,
+    assertMayPrune,
     isSoleOwner,
     broadcast,
     getBalance,
@@ -179,8 +180,10 @@ export function issueRekeyCode(
             ON CONFLICT(public_key) DO UPDATE SET reason = 'rekey_pending', invalidated_at = excluded.invalidated_at
         `).run(cleanOld, nowIso);
 
-        // Suspend member row so assertMemberActive rejects operations from old device
-        db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanOld);
+        // Suspend member row so assertMemberActive rejects operations from old device. A member already
+        // suspended by an admin or the community (status 'disabled') stays 'disabled': the invalidated key
+        // already stops the old device, and overwriting it would let a rekey end the suspension.
+        db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ? AND status != 'disabled'").run(nowIso, cleanOld);
 
         // Insert new pending rekey request
         db.prepare(`
@@ -277,8 +280,9 @@ export function completeRekey(
         `).run(cleanOld, nowIso, cleanNew);
 
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key:
-        // (a) members row itself - update primary key and restore active status
-        db.prepare("UPDATE members SET public_key = ?, status = 'active', updated_at = ? WHERE public_key = ?").run(cleanNew, nowIso, cleanOld);
+        // (a) members row itself - update primary key and restore active status, unless the member is
+        // suspended ('disabled'): a new key does not lift a suspension
+        db.prepare("UPDATE members SET public_key = ?, status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END, updated_at = ? WHERE public_key = ?").run(cleanNew, nowIso, cleanOld);
 
         // (b) members foreign keys (referrals & vouches)
         db.prepare('UPDATE members SET invited_by = ? WHERE invited_by = ?').run(cleanNew, cleanOld);
@@ -351,6 +355,10 @@ export function completeRekey(
         // (r) node_roles (Governance: Owner, Admin, Moderator)
         db.prepare('UPDATE node_roles SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
         db.prepare('UPDATE node_roles SET granted_by = ? WHERE granted_by = ?').run(cleanNew, cleanOld);
+        // A role held aside while the member is suspended moves with the key, or lifting the suspension
+        // would restore it to a key nobody holds.
+        db.prepare('UPDATE suspended_node_roles SET member_pubkey = ? WHERE member_pubkey = ?').run(cleanNew, cleanOld);
+        db.prepare('UPDATE suspended_node_roles SET granted_by = ? WHERE granted_by = ?').run(cleanNew, cleanOld);
 
         // (s) deferred_wage_claims
         db.prepare('UPDATE deferred_wage_claims SET keeper_pubkey = ? WHERE keeper_pubkey = ?').run(cleanNew, cleanOld);
@@ -599,6 +607,8 @@ export function executeOffboard(
     if (isSoleOwner(cleanPub)) {
         throw new Error('Cannot offboard the sole node owner; appoint another owner first');
     }
+    // Before any money moves: only an owner may offboard an owner or admin (403 otherwise).
+    assertMayPrune(cleanPub, cleanOperator);
 
     // Guard against pending escrows or open trade requests before pruning
     const openTrades = countOpenTrades(cleanPub);
@@ -684,7 +694,7 @@ export function executeOffboard(
         }
 
         // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned)
-        adminPruneUser(cleanPub);
+        adminPruneUser(cleanPub, cleanOperator);
 
         // Purge device push tokens to prevent leaked notifications
         try {

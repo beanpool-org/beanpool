@@ -5740,10 +5740,53 @@ export function isSoleOwner(publicKey: string): boolean {
     return ownerCount === 0;
 }
 
-export function adminPruneUser(publicKey: string) {
+/**
+ * The actor a community Decision acts as when it prunes (grace expiry, an admin speeding up a passed removal).
+ * The community's vote is what authorises it, so it counts as owner level for the prune gate below.
+ */
+export const COMMUNITY_DECISION_ACTOR = 'system:community-decision';
+
+/** Owner level: an owner's key, or the password (only owners hold it). */
+export function isOwnerLevelActor(actor: string | null | undefined): boolean {
+    if (!actor) return false;
+    return actor === 'owner:password' || isNodeOwner(actor);
+}
+
+/**
+ * The owner or admin role a member holds, counting one held aside while they are suspended — a suspended
+ * co-owner is still an owner for the purpose of who may prune them.
+ */
+export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null {
+    const rows = db.prepare(`
+        SELECT role FROM node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+        UNION ALL
+        SELECT role FROM suspended_node_roles WHERE member_pubkey = ? AND role IN ('owner', 'admin')
+    `).all(publicKey, publicKey) as { role: 'owner' | 'admin' }[];
+    if (rows.some(r => r.role === 'owner')) return 'owner';
+    return rows.length ? 'admin' : null;
+}
+
+/**
+ * node_roles: only an owner may grant (so only an owner may take away) an owner or admin role, and pruning
+ * takes it away for good. A plain admin gets a 403. Leaving yourself and a community Decision are allowed.
+ */
+export function assertMayPrune(publicKey: string, actor: string): void {
+    const role = heldPrivilegedRole(publicKey);
+    if (!role || actor === publicKey || actor === COMMUNITY_DECISION_ACTOR || isOwnerLevelActor(actor)) return;
+    const err: any = new Error(`Only an owner can remove ${role === 'owner' ? 'an owner' : 'an admin'}. Propose a Decision to remove them instead`);
+    err.status = 403;
+    throw err;
+}
+
+/**
+ * `actor` is the authenticated admin actor (a pubkey or 'owner:password'), the member themselves, or
+ * COMMUNITY_DECISION_ACTOR — never one read from a request body.
+ */
+export function adminPruneUser(publicKey: string, actor: string) {
     if (isSoleOwner(publicKey)) {
         throw new Error('Cannot prune the sole node owner; appoint another owner first');
     }
+    assertMayPrune(publicKey, actor);
 
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
     // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
@@ -5792,6 +5835,7 @@ export function adminPruneUser(publicKey: string) {
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
         try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
     });
     // Both announcements happen only once the transaction has committed.
@@ -5939,16 +5983,21 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     return { ok: true, message: 'Account successfully purged from node.' };
 }
 
-export function adminPruneBranch(rootPublicKey: string) {
-    const prunings = new Set<string>();
-    function pruneRec(pubkey: string) {
-        if (prunings.has(pubkey)) return;
-        prunings.add(pubkey);
-        adminPruneUser(pubkey);
+export function adminPruneBranch(rootPublicKey: string, actor: string) {
+    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
+    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+    const branch: string[] = [];
+    const seen = new Set<string>();
+    function walk(pubkey: string) {
+        if (seen.has(pubkey)) return;
+        seen.add(pubkey);
+        branch.push(pubkey);
         const children = db.prepare("SELECT public_key FROM members WHERE invited_by=?").all(pubkey) as any[];
-        children.forEach(c => pruneRec(c.public_key));
+        children.forEach(c => walk(c.public_key));
     }
-    pruneRec(rootPublicKey);
+    walk(rootPublicKey);
+    for (const pubkey of branch) assertMayPrune(pubkey, actor);
+    for (const pubkey of branch) adminPruneUser(pubkey, actor);
 }
 
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {

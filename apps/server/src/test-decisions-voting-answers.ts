@@ -473,6 +473,90 @@ async function run() {
     const byKey = await callRouter(admin, 'POST', `/api/local/admin/users/${voters[1]}/suspend`, { actor: keyAdmin, body: { reason: 'Signed admin session suspension' } });
     assert(byKey.status === 200 && byKey.body.decision.params.suspendedBy === keyAdmin, 'a signed admin session is attributed to its key');
 
+    // Giving back an owner or admin role takes an owner (node_roles: only an owner grants them). These use a
+    // KEY-authenticated plain admin — the password acts as owner, which is how the halt test above missed it.
+    const coAdmin = makeMember('CoAdmin');
+    grantNodeRole(coAdmin, 'admin', owner);
+    const coAdminRole = roleRow(coAdmin);
+    const coAdminSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${coAdmin}/suspend`, { actor: keyAdmin, body: { reason: 'Suspending a fellow admin at once' } });
+    assert(coAdminSuspend.status === 200 && statusOf(coAdmin) === 'disabled' && !roleRow(coAdmin), 'a plain admin may emergency-suspend another admin');
+    const coAdminKeepId = coAdminSuspend.body.decision.id;
+    const liftByPlain = await callRouter(admin, 'POST', `/api/local/admin/users/${coAdmin}/status`, { actor: keyAdmin, body: { status: 'active' } });
+    assert(liftByPlain.status === 403 && statusOf(coAdmin) === 'disabled' && !roleRow(coAdmin),
+        `a key-authenticated plain admin cannot lift it — that would hand back an admin role (got ${liftByPlain.status} ${JSON.stringify(liftByPlain.body)})`);
+    assert(/only an owner/i.test(liftByPlain.body?.error || ''), `and is told why (got "${liftByPlain.body?.error}")`);
+    const haltKeepByPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${coAdminKeepId}/halt`, { actor: keyAdmin, body: { reason: 'Halting to give the admin role back' } });
+    assert(haltKeepByPlain.status === 403 && getDecision(coAdminKeepId)!.status === 'open' && statusOf(coAdmin) === 'disabled' && !roleRow(coAdmin),
+        `nor halt its "Keep?" vote (got ${haltKeepByPlain.status} ${JSON.stringify(haltKeepByPlain.body)})`);
+    const liftByOwnerKey = await callRouter(admin, 'POST', `/api/local/admin/users/${coAdmin}/status`, { actor: owner, body: { status: 'active' } });
+    assert(liftByOwnerKey.status === 200 && statusOf(coAdmin) === 'active' && sameRole(coAdminRole, roleRow(coAdmin)),
+        `an owner's key lifts it and the admin role comes back exactly (got ${liftByOwnerKey.status}, ${JSON.stringify(roleRow(coAdmin))})`);
+    // Held owner role, halted by a plain admin: refused too.
+    const thirdOwner = makeMember('ThirdOwner');
+    grantNodeRole(thirdOwner, 'owner', owner);
+    const thirdOwnerSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${thirdOwner}/suspend`, { actor: owner, body: { reason: 'An owner suspends a co-owner' } });
+    const haltOwnerKeepByPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${thirdOwnerSuspend.body.decision.id}/halt`, { actor: keyAdmin, body: { reason: 'Halting to give the owner role back' } });
+    assert(haltOwnerKeepByPlain.status === 403 && statusOf(thirdOwner) === 'disabled' && !roleRow(thirdOwner), 'a plain admin cannot halt the vote on a suspended owner either');
+    const haltOwnerKeepByOwner = await callRouter(admin, 'POST', `/api/local/admin/decisions/${thirdOwnerSuspend.body.decision.id}/halt`, { actor: owner, body: { reason: 'Owner halts it, role comes back' } });
+    assert(haltOwnerKeepByOwner.status === 200 && statusOf(thirdOwner) === 'active' && roleRow(thirdOwner)?.role === 'owner', 'an owner can, and the owner role comes back');
+    db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(thirdOwner); // the sole-owner check below needs Owner alone
+    // A member who held no role: a plain admin still lifts it.
+    const roleless = makeMember('Roleless');
+    await callRouter(admin, 'POST', `/api/local/admin/users/${roleless}/suspend`, { actor: keyAdmin, body: { reason: 'Suspending a member with no role' } });
+    const liftRoleless = await callRouter(admin, 'POST', `/api/local/admin/users/${roleless}/status`, { actor: keyAdmin, body: { status: 'active' } });
+    assert(liftRoleless.status === 200 && statusOf(roleless) === 'active' && !roleRow(roleless), 'a plain admin may lift the suspension of a member who held no role');
+
+    // A passed removal holds the role aside through its grace window; halting it gives the role back (owner only).
+    const graceAdmin = makeMember('GraceAdmin');
+    grantNodeRole(graceAdmin, 'admin', owner);
+    const graceRole = roleRow(graceAdmin);
+    const removeAdmin = createDecision({ authorPubkey: owner, title: 'Remove GraceAdmin', description: 'Grace-window role test', touches: 'member', effect: 'remove_member', subject: graceAdmin });
+    const graceExec = decisionsEngine.executeDecision(removeAdmin.id);
+    assert(graceExec.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled' && !roleRow(graceAdmin),
+        `a passed removal suspends them for the grace window and takes the role (got ${graceExec.status})`);
+    const graceHaltPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeAdmin.id}/halt`, { actor: keyAdmin, body: { reason: 'Halting the removal of an admin' } });
+    assert(graceHaltPlain.status === 403 && getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled',
+        `a plain admin cannot halt it — it would hand back an admin role (got ${graceHaltPlain.status} ${JSON.stringify(graceHaltPlain.body)})`);
+    const graceHaltOwner = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeAdmin.id}/halt`, { actor: owner, body: { reason: 'Owner halts the removal in grace' } });
+    assert(graceHaltOwner.status === 200 && statusOf(graceAdmin) === 'active' && sameRole(graceRole, roleRow(graceAdmin)),
+        `an owner halts it: reactivated WITH the admin role, exactly (got ${JSON.stringify(roleRow(graceAdmin))})`);
+    // A community reinstatement cancelling the grace window gives the role back too.
+    const reinstated = makeMember('Reinstated');
+    grantNodeRole(reinstated, 'moderator', owner);
+    const reinstatedRole = roleRow(reinstated);
+    const removeMod = createDecision({ authorPubkey: owner, title: 'Remove Reinstated', description: 'Reinstatement role test', touches: 'member', effect: 'remove_member', subject: reinstated });
+    decisionsEngine.executeDecision(removeMod.id);
+    const reinstate = createDecision({ authorPubkey: owner, title: 'Reinstate', description: 'Community changes its mind', touches: 'member', effect: 'reinstate_member', subject: reinstated });
+    decisionsEngine.executeDecision(reinstate.id);
+    assert(getDecision(removeMod.id)!.status === 'failed' && statusOf(reinstated) === 'active' && sameRole(reinstatedRole, roleRow(reinstated)),
+        `reinstatement cancels the removal and gives the role back (got ${getDecision(removeMod.id)!.status}, ${JSON.stringify(roleRow(reinstated))})`);
+
+    // Pruning: only an owner may prune an owner or admin (a suspended one's held role counts).
+    const pruneCoOwner = makeMember('PruneCoOwner');
+    grantNodeRole(pruneCoOwner, 'owner', owner);
+    const prunePlain = await callRouter(admin, 'POST', `/api/local/admin/users/${pruneCoOwner}/prune`, { actor: keyAdmin });
+    assert(prunePlain.status === 403 && statusOf(pruneCoOwner) === 'active' && roleRow(pruneCoOwner)?.role === 'owner',
+        `a plain admin cannot prune a co-owner (got ${prunePlain.status} ${JSON.stringify(prunePlain.body)})`);
+    const branchRoot = makeMember('BranchRoot');
+    db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(branchRoot, pruneCoOwner);
+    const branchPlain = await callRouter(admin, 'POST', `/api/local/admin/branches/${branchRoot}/prune`, { actor: keyAdmin });
+    assert(branchPlain.status === 403 && statusOf(branchRoot) === 'active' && statusOf(pruneCoOwner) === 'active',
+        `nor a branch holding one — and nobody in it is pruned (got ${branchPlain.status})`);
+    const heldAdmin = makeMember('HeldAdmin');
+    grantNodeRole(heldAdmin, 'admin', owner);
+    await callRouter(admin, 'POST', `/api/local/admin/users/${heldAdmin}/suspend`, { actor: owner, body: { reason: 'Suspended admin, role held aside' } });
+    const pruneHeldPlain = await callRouter(admin, 'POST', `/api/local/admin/users/${heldAdmin}/prune`, { actor: keyAdmin });
+    assert(pruneHeldPlain.status === 403 && statusOf(heldAdmin) === 'disabled', 'nor a suspended admin whose role is held aside');
+    const pruneRoleless = makeMember('PruneRoleless');
+    const prunePlainMember = await callRouter(admin, 'POST', `/api/local/admin/users/${pruneRoleless}/prune`, { actor: keyAdmin });
+    assert(prunePlainMember.status === 200 && statusOf(pruneRoleless) === 'pruned', 'a plain admin may still prune a member with no role');
+    const pruneByOwner = await callRouter(admin, 'POST', `/api/local/admin/users/${pruneCoOwner}/prune`, { actor: owner });
+    assert(pruneByOwner.status === 200 && statusOf(pruneCoOwner) === 'pruned' && !roleRow(pruneCoOwner), 'an owner may prune a co-owner');
+    const pruneHeldOwner = await callRouter(admin, 'POST', `/api/local/admin/users/${heldAdmin}/prune`, { actor: owner });
+    assert(pruneHeldOwner.status === 200 && statusOf(heldAdmin) === 'pruned'
+        && !(db.prepare('SELECT 1 FROM suspended_node_roles WHERE member_pubkey = ?').get(heldAdmin)),
+        'an owner may prune the suspended admin, and the held role goes with them');
+
     // The only owner cannot be suspended.
     db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").run(secondOwner);
     const soleOwner = await callRouter(admin, 'POST', `/api/local/admin/users/${owner}/suspend`, { body: { reason: 'Trying to suspend the only owner' } });

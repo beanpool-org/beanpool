@@ -823,7 +823,9 @@ CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 -- 22b. A node role held aside during an admin's emergency suspension (answer L).
 -- Suspending removes the member's node role; if the "Keep this suspension?" vote does not keep it
 -- (fails, misses quorum, is halted, or an admin lifts the suspension) the exact row comes back.
--- If the community keeps the suspension the row is dropped. Never served by any route.
+-- If the community keeps the suspension the row is dropped. A passed remove_member Decision holds the role
+-- the same way through its 7-day grace window: halted or cancelled by reinstatement, it comes back; pruned,
+-- it is dropped. Giving back an owner or admin role needs an owner actor. Never served by any route.
 CREATE TABLE IF NOT EXISTS suspended_node_roles (
     decision_id      TEXT NOT NULL PRIMARY KEY,
     member_pubkey    TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,

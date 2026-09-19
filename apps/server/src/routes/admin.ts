@@ -995,22 +995,26 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
 
 router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
     try {
-        adminPruneUser(ctx.params.pubkey);
+        adminPruneUser(ctx.params.pubkey, actor);
         ctx.body = { success: true };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to prune user' };
     }
 });
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
     try {
-        adminPruneBranch(ctx.params.pubkey);
+        adminPruneBranch(ctx.params.pubkey, actor);
         ctx.body = { success: true };
     } catch (e: any) {
-        ctx.status = 400;
+        ctx.status = e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to prune branch' };
     }
 });
@@ -1194,7 +1198,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
     }
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
-        ctx.status = 400;
+        ctx.status = result.status || 400;
         ctx.body = { error: result.error || 'Failed to halt decision' };
         return;
     }

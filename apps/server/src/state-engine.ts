@@ -6974,7 +6974,18 @@ export function voteGroupConvenor(proposalId: string, voterPubkey: string, choic
 }
 
 export function getGroupSuccession(groupId: string, viewerPubkey?: string) {
-    return getGroupSuccessionEngine(getMessagingCb(), groupId, viewerPubkey);
+    const res = getGroupSuccessionEngine(getMessagingCb(), groupId, viewerPubkey);
+    // The convenor's last activity to the UTC day and whole days, as everywhere else it is served (#923,
+    // answer I): an exact time would let members time a vote to its voter. The convenor sees their own.
+    const s = res.silence;
+    return {
+        ...res,
+        silence: {
+            ...s,
+            lastActiveAt: s.convenorPubkey ? lastActiveForViewer(s.lastActiveAt, s.convenorPubkey, viewerPubkey) : null,
+            daysInactive: Math.floor(s.daysInactive),
+        },
+    };
 }
 
 export function tickGroupSuccession(asOfMs?: number): { passed: number; closed: number } {

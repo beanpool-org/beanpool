@@ -229,6 +229,11 @@ async function main(): Promise<void> {
     silence(ga);
     const view = await dispatch(router, 'GET', `/api/groups/${g9}/succession`, gb);
     assert(view.status === undefined && view.body.canPropose === true && view.body.silence.convenorPubkey === ga, 'a member reads the succession state');
+    assert(/T00:00:00\.000Z$/.test(view.body.silence.lastActiveAt) && Number.isInteger(view.body.silence.daysInactive),
+        "the convenor's last activity is served to the day, in whole days (no timing a vote to its voter, #923)");
+    const own = await dispatch(router, 'GET', `/api/groups/${g9}/succession`, ga);
+    assert(own.body.silence.lastActiveAt === (db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(ga) as any).last_active_at,
+        'the convenor sees their own exact time');
     assert((await dispatch(router, 'GET', `/api/groups/${g9}/succession`, out)).status === 403, 'an outsider is refused');
     assert((await dispatch(router, 'GET', `/api/groups/${g9}/succession`, undefined)).status === 401, 'unsigned: 401');
     assert((await dispatch(router, 'POST', `/api/groups/${g9}/succession/propose`, gb, {})).status === 400, 'a proposal needs a candidate');

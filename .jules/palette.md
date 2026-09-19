@@ -161,3 +161,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-18 - CategoryPickerModal Touch Target Sizing, Focus Ring & Emoji Hiding
 **Learning:** `CategoryPickerModal.tsx` close button lacked minimum touch target sizing (< 44px), custom focus rings lacked explicit `focus-visible:outline-none` styling, and decorative category emojis were exposed to screen readers without `aria-hidden="true"`.
 **Action:** Added `w-11 h-11 min-w-[44px] min-h-[44px]` touch target sizing and `focus-visible:outline-none` to the modal close button, wrapped category emojis with `<span aria-hidden="true">`, and added unit tests in `CategoryPickerModal.test.tsx`.
+
+## 2026-09-19 - ProposeDecisionModal Touch Target Sizing, Focus Rings, and Emoji Hiding
+**Learning:** `ProposeDecisionModal.tsx` close button lacked explicit `type="button"`, minimum touch target sizing (< 44px), and visible focus ring indicators; touch option selector buttons lacked state communication via `aria-pressed` and minimum touch target height (`min-h-[44px]`); and decorative emojis (`🌱`, `👤`, `🏛️`, `🛡️`) were read by screen readers.
+**Action:** Added `type="button"`, `min-w-[44px] min-h-[44px]`, `focus-visible:ring-2` to close button, `aria-pressed` and `min-h-[44px]` to touch option triggers, wrapped decorative emojis with `<span aria-hidden="true">`, and added unit tests in `ProposeDecisionModal.test.tsx`.

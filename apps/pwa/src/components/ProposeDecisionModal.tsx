@@ -234,11 +234,12 @@ export function ProposeDecisionModal({
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-nature-800 pb-3">
                     <h2 id="propose-modal-title" className="text-lg font-bold flex items-center gap-2">
-                        <span>🌱</span> Propose a Community Decision
+                        <span aria-hidden="true">🌱</span> Propose a Community Decision
                     </h2>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="text-nature-400 hover:text-white p-1 text-lg rounded-lg transition-colors"
+                        className="text-nature-400 hover:text-white p-1 text-lg rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         aria-label="Close modal"
                     >
                         ✕
@@ -262,14 +263,15 @@ export function ProposeDecisionModal({
                                 <button
                                     key={opt.id}
                                     type="button"
+                                    aria-pressed={touches === opt.id}
                                     onClick={() => setTouches(opt.id)}
-                                    className={`py-2 px-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                                    className={`py-2 px-3 min-h-[44px] rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                         touches === opt.id
                                             ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                                             : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:border-nature-600'
                                     }`}
                                 >
-                                    <span>{opt.icon}</span>
+                                    <span aria-hidden="true">{opt.icon}</span>
                                     <span>{opt.label}</span>
                                 </button>
                             ))}
@@ -455,7 +457,7 @@ export function ProposeDecisionModal({
 
                     {/* No Bond Info Banner */}
                     <div className="bg-nature-800/40 border border-nature-700/60 rounded-xl p-3 flex items-start gap-2 text-xs text-nature-300">
-                        <span className="text-emerald-400 text-sm">🛡️</span>
+                        <span className="text-emerald-400 text-sm" aria-hidden="true">🛡️</span>
                         <div>
                             <span className="font-bold text-white">No bond required.</span> Open to members with a completed trade or earned standing, and to node admins. Open for 7 days, executing automatically on pass.
                         </div>
@@ -466,14 +468,14 @@ export function ProposeDecisionModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 py-2.5 px-4 rounded-xl border border-nature-700 text-nature-300 hover:bg-nature-800 font-semibold text-sm transition-colors"
+                            className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl border border-nature-700 text-nature-300 hover:bg-nature-800 font-semibold text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="flex-1 py-2.5 px-4 rounded-xl bg-accent hover:bg-emerald-500 text-white font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50"
+                            className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl bg-accent hover:bg-emerald-500 text-white font-bold text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {submitting ? 'Submitting...' : 'Submit Decision'}
                         </button>

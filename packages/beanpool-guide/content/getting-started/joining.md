@@ -40,7 +40,7 @@ If you close the app halfway, it carries on from the same step next time.
 
 Any member can invite people. Your trust badge does not matter.
 
-- Tap **Invite** at the top left of the screen. This opens **Invites**.
+- Tap the invite icon (a person with a plus) at the top right of the screen. This opens **Invites**.
 - If you like, write who the invite is for, just for your own records.
 - Tap **Generate Ticket**. Without a connection, the button says **Generate Offline Ticket**, and that works too.
 - Show them the QR code, or tap **Share Invite** to send the link and the code.

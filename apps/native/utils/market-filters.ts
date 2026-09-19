@@ -2,8 +2,8 @@
  * The Market feed's filter rows — the same shape as the map's (utils/map-filters.ts), plus the feed's own
  * extra filters. No React Native imports, so vitest can hold it to the design.
  *
- * Type row: All / ★ For You / Offers / Needs / Events / Polls. It wraps onto a second line when the phone
- * is narrow or the text is large, so every type stays on screen; it never scrolls sideways.
+ * Type row: All / ★ For You / Offers / Needs / Events / Polls. One line; when the phone is narrow or the
+ * text is large it scrolls sideways with a › hint (wrapping cost a second line at 320dp + 1.3x).
  *
  * Second row, always in the same place, changes with the type:
  * - All, For You, Offers, Needs: the map's category chip (one chip naming the current category, opening a

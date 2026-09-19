@@ -13,7 +13,7 @@ interface FilterChipBarProps {
     fill?: boolean;
     /**
      * Wrap onto more lines instead of scrolling sideways, so every chip is always on screen. For a short
-     * row whose every option must be seen (the Market feed's type pills); a line of chips costs about 38dp.
+     * row whose every option must be seen; a line of chips costs about 38dp.
      */
     wrap?: boolean;
     /**

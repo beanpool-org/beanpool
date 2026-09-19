@@ -21,6 +21,7 @@ import {
     FlatList,
     ActivityIndicator,
     RefreshControl,
+    Animated,
     ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,22 +39,23 @@ import {
 } from '../../utils/pulse';
 import { PulseFeedCard } from '../../components/PulseFeedCard';
 import { anchorUrl } from '../../utils/node-post';
-import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { useQuickReturn, QuickReturnBlock } from '../../components/QuickReturn';
 
 export default function PulseScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const styles = useStyles(makeStyles);
-    // Large "Pulse" title above the pinned lane/category controls; folds away once the feed scrolls.
-    const pageTitle = useCollapsingTitle();
-    const listRef = useRef<FlatList>(null);
-    useTabRetapScrollTop(listRef);
-
     const [lane, setLane] = useState<'neighbours' | 'local' | 'learn'>('neighbours');
     const [items, setItems] = useState<PulseFeedItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<ChannelCategory | 'all'>('all');
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    // The "Pulse" title and the lane/category controls ride away as the feed scrolls down and come back on
+    // any scroll up (components/QuickReturn). The loader swaps the list out, so a fresh list starts at the top.
+    const qr = useQuickReturn({ resetKey: loading });
+    const listRef = useRef<FlatList>(null);
+    useTabRetapScrollTop(listRef, qr.show);
     const [refreshing, setRefreshing] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -272,53 +274,112 @@ export default function PulseScreen() {
         );
     };
 
+    // Error Message Box — the list's first row, under the controls.
+    const errorBox = error ? (
+        <View style={styles.errorBox} accessibilityRole="alert">
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable
+                onPress={() => loadFeed(false, lane, selectedCategory)}
+                style={styles.retryBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading feed"
+            >
+                <Text style={styles.retryBtnText}>Retry</Text>
+            </Pressable>
+        </View>
+    ) : null;
+
     // No 'top' edge: Pulse is a tab now, and GlobalHeader above it already consumes the top
     // safe-area inset. Keeping it here applied the status-bar/notch inset a SECOND time,
     // leaving a dead gap under the tab bar — worst on the small screens we support, where
     // the header, tab bar and gap stack up before any content gets a chance.
     return (
         <SafeAreaView style={styles.screen} edges={['left', 'right']}>
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+            {/* Feed List */}
+            {loading && !refreshing ? (
+                <View style={[styles.centerLoader, { paddingTop: qr.blockHeight }]}>
+                    <ActivityIndicator size="large" color={colors.brand.primary} />
+                    <Text style={styles.loaderText}>Loading community feed…</Text>
+                </View>
+            ) : (
+                <Animated.FlatList
+                    ref={listRef}
+                    {...qr.listProps}
+                    data={visibleItems}
+                    keyExtractor={(item: any) => item.id}
+                    renderItem={({ item }: { item: PulseFeedItem }) => (
+                        <PulseFeedCard
+                            item={item}
+                            currentPubkey={identity?.publicKey}
+                            onMute={handleMute}
+                            onReport={handleReport}
+                            nodeUrl={nodeUrl}
+                        />
+                    )}
+                    contentContainerStyle={[styles.listContent, { paddingTop: styles.listContent.padding + qr.blockHeight }]}
+                    ListHeaderComponent={errorBox}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={colors.brand.primary}
+                            colors={[colors.brand.primary]}
+                            progressViewOffset={qr.blockHeight}
+                        />
+                    }
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.3}
+                    ListEmptyComponent={renderEmptyState}
+                    ListFooterComponent={renderFooter}
+                />
+            )}
             {/* + Channels rides on the title's line rather than costing a row of its own. */}
-            <PageTitle title="Pulse" collapsed={pageTitle.collapsed} right={
-                <Pressable
-                    onPress={() => router.push('/channels')}
-                    style={styles.channelsBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Manage your channels"
-                >
-                    <Text style={styles.channelsBtnText}>+ Channels</Text>
-                </Pressable>
-            } />
+            <QuickReturnBlock qr={qr} title={<>
+                <PageTitle title="Pulse" right={
+                    <Pressable
+                        onPress={() => router.push('/channels')}
+                        style={styles.channelsBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Manage your channels"
+                    >
+                        <Text style={styles.channelsBtnText}>+ Channels</Text>
+                    </Pressable>
+                } />
+                {/* Back and the subtitle belong to the title: they go with it and do not come back with the
+                    pinned lane and category controls. */}
+                <View style={{ paddingBottom: 2 }}>
+                    {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
+                        fallback while the app-review instructions reference that path), so
+                        Back only makes sense when we actually arrived on a stack. */}
+                    {router.canGoBack() && (
+                    <View style={styles.headerTop}>
+                            <Pressable
+                                onPress={() => router.back()}
+                                style={styles.backBtn}
+                                accessibilityRole="button"
+                                accessibilityLabel="Go back"
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                                <Text style={styles.backText}>‹ Back</Text>
+                            </Pressable>
+                    </View>
+                    )}
+
+                    {/* The page's one title is the large "Pulse" above; this is only its subtitle. */}
+                    <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
+                        <Text style={styles.subtitle}>
+                            {activeLane === 'learn'
+                                ? 'How BeanPool works and daily reflections'
+                                : activeLane === 'local'
+                                ? 'News and notices from around the shire'
+                                : 'What your neighbours are creating and sharing'}
+                        </Text>
+                    </View>
+                </View>
+            </>}>
             {/* Header */}
-            <View style={[styles.header, !pageTitle.collapsed && { paddingTop: 0 }]}>
-                {/* Pulse is a tab now, but settings still pushes to /pulse (kept as a
-                    fallback while the app-review instructions reference that path), so
-                    Back only makes sense when we actually arrived on a stack. */}
-                {router.canGoBack() && (
-                <View style={styles.headerTop}>
-                        <Pressable
-                            onPress={() => router.back()}
-                            style={styles.backBtn}
-                            accessibilityRole="button"
-                            accessibilityLabel="Go back"
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                            <Text style={styles.backText}>‹ Back</Text>
-                        </Pressable>
-                </View>
-                )}
-
-                {/* The page's one title is the large "Pulse" above; this is only its subtitle. */}
-                <View style={[styles.titleRow, !router.canGoBack() && { marginTop: 0 }]}>
-                    <Text style={styles.subtitle}>
-                        {activeLane === 'learn'
-                            ? 'How BeanPool works and daily reflections'
-                            : activeLane === 'local'
-                            ? 'News and notices from around the shire'
-                            : 'What your neighbours are creating and sharing'}
-                    </Text>
-                </View>
-
+            <View style={[styles.header, { paddingTop: 4 }]}>
                 {/* Lane switch */}
                 <View style={styles.laneBar}>
                     {([
@@ -414,59 +475,8 @@ export default function PulseScreen() {
                 </ScrollView>
                 )}
             </View>
-
-            {/* Error Message Box */}
-            {error && (
-                <View style={styles.errorBox} accessibilityRole="alert">
-                    <Text style={styles.errorText}>{error}</Text>
-                    <Pressable
-                        onPress={() => loadFeed(false, lane, selectedCategory)}
-                        style={styles.retryBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel="Retry loading feed"
-                    >
-                        <Text style={styles.retryBtnText}>Retry</Text>
-                    </Pressable>
-                </View>
-            )}
-
-            {/* Feed List */}
-            {loading && !refreshing ? (
-                <View style={styles.centerLoader}>
-                    <ActivityIndicator size="large" color={colors.brand.primary} />
-                    <Text style={styles.loaderText}>Loading community feed…</Text>
-                </View>
-            ) : (
-                <FlatList
-                    ref={listRef}
-                    onScroll={pageTitle.onScroll}
-                    scrollEventThrottle={16}
-                    data={visibleItems}
-                    keyExtractor={item => item.id}
-                    renderItem={({ item }) => (
-                        <PulseFeedCard
-                            item={item}
-                            currentPubkey={identity?.publicKey}
-                            onMute={handleMute}
-                            onReport={handleReport}
-                            nodeUrl={nodeUrl}
-                        />
-                    )}
-                    contentContainerStyle={styles.listContent}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={handleRefresh}
-                            tintColor={colors.brand.primary}
-                            colors={[colors.brand.primary]}
-                        />
-                    }
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.3}
-                    ListEmptyComponent={renderEmptyState}
-                    ListFooterComponent={renderFooter}
-                />
-            )}
+            </QuickReturnBlock>
+            </View>
         </SafeAreaView>
     );
 }

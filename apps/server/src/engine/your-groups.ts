@@ -101,7 +101,7 @@ function unreadCountOf(conversationId: string, pubkey: string, lastReadAt: strin
         WHERE m.conversation_id = ? AND m.author_pubkey != ?
           AND (? IS NULL OR m.timestamp > ?)
           AND ${COUNTS_AS_UNREAD_SQL}
-    `).get(conversationId, pubkey, lastReadAt, lastReadAt) as any;
+    `).get(conversationId, pubkey, lastReadAt, lastReadAt, pubkey) as any;
     return Number(r?.c || 0);
 }
 
@@ -114,7 +114,10 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     const mutes = getChatMutesFor(pubkey);
     const items: YourChat[] = [];
 
-    const finish = (base: Omit<YourChat, 'lastMessage' | 'unreadCount' | 'mute' | 'lastActivityAt'>, removedText: string) => {
+    // `since`: when a chat with no messages yet should sort — the member's joining or RSVP for a group or an
+    // event, the enterprise's creation for its thread (the keeper's read cursor is made lazily and would float
+    // every quiet enterprise to the top).
+    const finish = (base: Omit<YourChat, 'lastMessage' | 'unreadCount' | 'mute' | 'lastActivityAt'>, removedText: string, since?: string | null) => {
         const cursor = readCursor(base.conversationId, pubkey);
         const lastMessage = lastMessageOf(base.conversationId, removedText);
         items.push({
@@ -122,7 +125,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
             lastMessage,
             unreadCount: unreadCountOf(base.conversationId, pubkey, cursor?.lastReadAt ?? null),
             mute: mutes.get(base.conversationId) ?? null,
-            lastActivityAt: lastMessage?.timestamp || cursor?.since || new Date(0).toISOString(),
+            lastActivityAt: lastMessage?.timestamp || since || cursor?.since || new Date(0).toISOString(),
         });
     };
 
@@ -143,7 +146,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Enterprises the member keeps (a keeper whose operator capability is live), not hidden ones.
     const enterprises = db.prepare(`
-        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_url, e.status
+        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_url, e.status, e.joined_at
         FROM treasury_operators o JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND COALESCE(e.is_treasury, 0) = 1
     `).all(pubkey) as any[];
@@ -158,7 +161,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
             kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
             avatarUrl: avatarFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',
             readOnly: isEnterpriseThreadReadOnly(e.status),
-        }, 'removed by a keeper');
+        }, 'removed by a keeper', e.joined_at);
     }
 
     // Events the member hosts or is Going to, while their chat is still readable (30 days after the end).

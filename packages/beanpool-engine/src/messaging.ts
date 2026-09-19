@@ -261,8 +261,15 @@ export const QUIET_SYSTEM_TYPES: readonly string[] = [
 ];
 const QUIET_SQL = QUIET_SYSTEM_TYPES.map(t => `'${t}'`).join(', ');
 
-/** SQL predicate on a `messages m` row: true when it counts toward an unread badge. */
-export const COUNTS_AS_UNREAD_SQL = `NOT (m.type = 'system' AND COALESCE(m.system_type, '') IN (${QUIET_SQL}))`;
+/**
+ * SQL predicate on a `messages m` row: true when it counts toward the viewer's unread badge. Not a membership
+ * line, and not a system line about something the viewer did themselves (their own event or poll landing in a
+ * group chat). Takes ONE bound parameter: the viewer's pubkey.
+ */
+export const COUNTS_AS_UNREAD_SQL = `NOT (m.type = 'system' AND (
+    COALESCE(m.system_type, '') IN (${QUIET_SQL})
+    OR COALESCE(CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.actorPubkey') END, '') = ?
+))`;
 
 export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> {
     const rows = db.prepare(`
@@ -276,7 +283,7 @@ export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> 
         FROM conversation_participants cp
         JOIN conversations c ON cp.conversation_id = c.id
         WHERE cp.public_key = ? AND c.type != 'enterprise_thread'
-    `).all(pubkey, pubkey) as any[];
+    `).all(pubkey, pubkey, pubkey) as any[];
 
     const counts: Record<string, number> = {};
     for (const r of rows) if (r.unread_count > 0) counts[r.conversation_id] = r.unread_count;

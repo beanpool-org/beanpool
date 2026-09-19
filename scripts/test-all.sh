@@ -306,6 +306,9 @@ run_federation_suites() {
       test-groups-routes
       test-groups-patch-http
       test-groups-sync-and-removal
+      test-groups-chat
+      test-groups-chat-sync
+      test-groups-succession
       test-member-wizards
       test-enterprise-pause
       test-enterprise-season-lifecycle

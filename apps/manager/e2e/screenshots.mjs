@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
  * Pictures of every Settings screen, for review: `node e2e/screenshots.mjs <out-dir> [widths] [textScale]`.
- * Widths default to 360,1280. Each picture is the top of the page, at most 1500px tall.
+ * Widths default to 360,1280. Each picture is the top of the page, at most 1500px tall. Below 1024px wide, every modal
+ * in ALL_MODALS is pictured open too (modal-<name>-<width>.png), in a window tall enough for its card (at most 1500px).
+ * ONLY_MODALS=1 takes just those.
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { startServer, launch, openSettings, selectSubTab, settle, SCREENS, screenName } from './harness.mjs';
+import { startServer, launch, openSettings, selectSubTab, settle, SCREENS, screenName, ALL_MODALS, openModal, topModal } from './harness.mjs';
 
 const out = process.argv[2];
 if (!out) {
@@ -30,6 +32,20 @@ const browser = await launch();
 try {
     for (const width of widths) {
         const suffix = `${width}${textScale !== 1 ? `-x${textScale}` : ''}`;
+        if (width < 1024) {
+            for (const modal of ALL_MODALS) {
+                const { context, page } = await openSettings(browser, origin, { width, height: 780, textScale, screen: modal.screen, overrides: modal.overrides });
+                await openModal(page, modal);
+                const cardHeight = await topModal(page).card.evaluate((el) => el.getBoundingClientRect().height);
+                await page.setViewportSize({ width, height: Math.min(MAX_H, Math.max(780, Math.ceil(cardHeight) + 64)) });
+                await page.waitForTimeout(250);
+                const file = path.join(out, `modal-${modal.name}-${suffix}.png`);
+                await page.screenshot({ path: file, animations: 'disabled' });
+                console.log(file);
+                await context.close();
+            }
+        }
+        if (process.env.ONLY_MODALS) continue;
         const tabs = [...new Set(SCREENS.map(s => s.tab))];
         for (const tab of tabs) {
             const { context, page } = await openSettings(browser, origin, { width, height: width < 600 ? 780 : 900, textScale, screen: { tab } });

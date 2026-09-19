@@ -9,8 +9,8 @@
  *
  *   pnpm --filter @beanpool/manager test:phone-width
  *
- * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: every button, link and
- * field in it lies inside its card (the cards clip, so the page check above cannot see a button pushed off the edge),
+ * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: its overlay covers the
+ * whole screen, top bar included; every button, link and field in it lies inside its card (the cards clip, so the page check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
  * each close it too, and Back does not leave Settings.
  *
@@ -177,7 +177,16 @@ try {
                     const opened = await openModal(page, modal);
                     checks++;
                     if (opened <= before) { fail('did not open'); continue; }
-                    const { card } = topModal(page);
+                    const { overlay, card } = topModal(page);
+                    // The dimmed overlay covers the whole screen, top bar included.
+                    checks++;
+                    const cover = await overlay.evaluate((o) => {
+                        const r = o.getBoundingClientRect();
+                        return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: window.innerHeight };
+                    });
+                    if (cover.top > 0 || cover.bottom < cover.h) fail(`the overlay covers ${cover.top}–${cover.bottom} of a ${cover.h}px screen, leaving the top bar live`);
+                    else console.log(`  ✓ ${modal.name} ${at}: the overlay covers the screen`);
+                    checks++;
                     const box = await boxOverflow(card, CONTROLS, { skipScrollers: true });
                     if (box.outside.length) fail(`${box.outside.length} controls outside the card\n      ${box.outside.join('\n      ')}`);
                     else console.log(`  ✓ ${modal.name} ${at}: every control inside the card`);

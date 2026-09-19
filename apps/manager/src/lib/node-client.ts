@@ -1776,13 +1776,18 @@ export interface OwnerWordsCheck {
     callsign: string;
     /** ms since epoch, or null: not checked yet. */
     wordsCheckedAt: number | null;
+    /**
+     * The owner's device's silent open check (slice 6): did it open a lock, which, and when. null: no report yet.
+     * Absent (undefined) from servers before slice 6, which cannot say either way.
+     */
+    lockOpen?: { envelopeId: string; opened: boolean; checkedAt: number; current: boolean } | null;
 }
 
 export async function getOwnerWordsChecks(
     nodeUrl: string,
     adminPassword?: string,
     tfaToken?: string
-): Promise<{ owners: OwnerWordsCheck[] }> {
+): Promise<{ owners: OwnerWordsCheck[]; lock?: { envelopeId: string | null; sealedAt: string | null } }> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/takeover/words-checks');
     const res = await fetch(endpoint, {
         method: 'POST',

@@ -836,6 +836,18 @@ CREATE TABLE IF NOT EXISTS owner_words_checks (
     signed_payload TEXT NOT NULL
 );
 
+-- 22d. The silent open check (sealed-keys.md §7, slice 6): an owner's app, on seeing a new take-over lock, opens its own
+-- stanza, throws the key away, and reports whether it could. One row per member, the latest report. Self-attested and
+-- signed, like 22c: the server cannot verify it and nothing claims it did. Read only by the list of who can unlock.
+CREATE TABLE IF NOT EXISTS owner_lock_opens (
+    member_pubkey  TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
+    envelope_id    TEXT NOT NULL,
+    opened         INTEGER NOT NULL,
+    checked_at     INTEGER NOT NULL,
+    signature      TEXT NOT NULL,
+    signed_payload TEXT NOT NULL
+);
+
 -- 22b. A node role held aside during an admin's emergency suspension (answer L).
 -- Suspending removes the member's node role; if the "Keep this suspension?" vote does not keep it
 -- (fails, misses quorum, is halted, or an admin lifts the suspension) the exact row comes back.

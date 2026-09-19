@@ -4,13 +4,19 @@
  *
  * Asked of the node on every focus of Settings (GET /api/node/owner/words-check, signed), like NodeAdminEntry. No
  * answer (offline, an older node) shows nothing. It never gates anything; it is a row that opens a screen.
+ *
+ * Beside it, "Take over or restore with this phone" (app/unlock-keys.tsx, slice 6). That one matters most when the main
+ * server is gone, so it also shows when the node does not answer but this phone remembers being an owner (the silent
+ * open check remembers it, utils/takeover-unlock.ts). Each focus also runs that check; it throttles itself.
  */
 import React, { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { OWNER_WORDS_COPY as COPY, fetchOwnerWordsStatus, type OwnerWordsStatus } from '../utils/owner-words';
+import { readLockPin, runLockOpenCheck } from '../utils/takeover-unlock';
 
 /** The Settings screen's own menu styles, so the row looks like every other row. */
 interface MenuStyles {
@@ -21,38 +27,61 @@ interface MenuStyles {
 export function OwnerWordsCard({ styles }: { styles: MenuStyles }) {
     const { identity } = useIdentity();
     const [status, setStatus] = useState<OwnerWordsStatus | null>(null);
+    const [rememberedOwner, setRememberedOwner] = useState(false);
 
     useFocusEffect(
         React.useCallback(() => {
             let cancelled = false;
             (async () => {
+                if (!identity?.privateKey) { if (!cancelled) setStatus(null); return; }
+                const pin = await readLockPin(AsyncStorage, identity.publicKey);
+                if (!cancelled) setRememberedOwner(!!pin?.owner);
                 const url = await getAnchorUrl();
-                if (!url || !identity?.privateKey) { if (!cancelled) setStatus(null); return; }
+                if (!url) { if (!cancelled) setStatus(null); return; }
                 const got = await fetchOwnerWordsStatus(url, identity);
                 if (!cancelled) setStatus(got);
+                if (got?.owner) void runLockOpenCheck(url, identity, AsyncStorage);
             })().catch(() => { if (!cancelled) setStatus(null); });
             return () => { cancelled = true; };
         }, [identity])
     );
 
-    if (!status?.owner) return null;
-    const sub = status.wordsCheckedAt ? COPY.checked(status.wordsCheckedAt) : COPY.notChecked;
+    // The node's answer decides; with no answer at all, what this phone remembers does (the main server may be gone).
+    const owner = status ? status.owner : rememberedOwner;
+    if (!owner) return null;
+    const sub = status?.wordsCheckedAt ? COPY.checked(status.wordsCheckedAt) : COPY.notChecked;
 
     return (
         <>
             <Text style={styles.sectionHeader}>COMMUNITY KEYS</Text>
             <View style={styles.menuGroup}>
+                {status?.owner && (
+                    <Pressable
+                        style={[styles.menuBtn, { minHeight: 48 }]}
+                        onPress={() => router.push('/owner-words-check')}
+                        accessibilityRole="button"
+                        accessibilityLabel={COPY.title}
+                        accessibilityHint={sub}
+                    >
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>{COPY.title}</Text>
+                            <Text style={styles.menuSub}>{sub}</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                )}
                 <Pressable
                     style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
-                    onPress={() => router.push('/owner-words-check')}
+                    onPress={() => router.push('/unlock-keys')}
                     accessibilityRole="button"
-                    accessibilityLabel={COPY.title}
-                    accessibilityHint={sub}
+                    accessibilityLabel={COPY.unlockTitle}
+                    accessibilityHint={COPY.unlockSub}
                 >
-                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔑</Text></View>
+                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.menuText}>{COPY.title}</Text>
-                        <Text style={styles.menuSub}>{sub}</Text>
+                        <Text style={styles.menuText}>{COPY.unlockTitle}</Text>
+                        <Text style={styles.menuSub}>{COPY.unlockSub}</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

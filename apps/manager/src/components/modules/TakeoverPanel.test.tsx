@@ -201,3 +201,79 @@ describe('TakeoverPanel', () => {
         expect(screen.getByText('Decisions and their votes')).toBeInTheDocument();
     });
 });
+
+describe("TakeoverPanel — with an owner's phone (sealed keys slice 6)", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        sessionStorage.clear();
+    });
+
+    const PHONE = {
+        success: true, sessionId: 'p'.repeat(64), expiresAt: Date.now() + 600_000,
+        qr: 'beanpool-unlock:v1?u=https%3A%2F%2Fstandby.example.org&s=' + 'p'.repeat(64),
+        link: 'beanpool://unlock-keys?u=https%3A%2F%2Fstandby.example.org&s=' + 'p'.repeat(64),
+        owners: ['@Anna'], envelope: { envelopeId: 'e'.repeat(32), sealedAt: '2026-09-19T10:00:00.000Z' },
+    };
+
+    it('shows the QR, waits for the phone, then the same preview and confirm as the code', async () => {
+        let unlocked = false;
+        const calls = stubFetch({
+            '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('none') }),
+            '/api/local/admin/takeover/phone/start': () => ({ status: 200, body: PHONE }),
+            '/api/local/admin/takeover/phone/wait': () => unlocked
+                ? { status: 200, body: { state: 'unlocked', unlockedBy: '@Anna', preview: { ...PREVIEW, openedBy: "@Anna's phone", envelope: { ...PREVIEW.envelope, codeId: null } } } }
+                : { status: 200, body: { state: 'waiting', expiresAt: PHONE.expiresAt } },
+            '/api/local/admin/takeover/confirm': () => ({ status: 200, body: { success: true, progressToken: 'd'.repeat(64), progress: progress('restarting', 8) } }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={20} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+        expect(screen.getByText(/or with any one owner's phone/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: "I understand: use an owner's phone" }));
+
+        const qr = await screen.findByTestId('owner-phone-unlock');
+        expect(within(qr).getByAltText("Code for an owner's phone")).toBeInTheDocument();
+        expect(within(qr).getByText('@Anna')).toBeInTheDocument();
+        expect(within(qr).getByText(PHONE.link)).toBeInTheDocument();
+        const start = calls.find((c) => c.path.endsWith('/phone/start'))!;
+        expect(start.body).toMatchObject({ serverUrl: 'https://standby.example.org' });
+        await waitFor(() => expect(calls.filter((c) => c.path.endsWith('/phone/wait')).length).toBeGreaterThan(1));
+        expect(calls.find((c) => c.path.endsWith('/phone/wait'))!.body).toMatchObject({ sessionId: PHONE.sessionId });
+
+        unlocked = true;
+        expect(await screen.findByText(/opened by @Anna's phone/)).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText(/The main server is gone, and nobody will start it again/));
+        fireEvent.click(screen.getByRole('button', { name: 'Take over now' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        expect(calls.find((c) => c.path.endsWith('/confirm'))!.body).toMatchObject({ sessionId: PREVIEW.sessionId, confirm: true });
+    });
+
+    it('says when the code ran out, offers a new one, and cancels the session on close', async () => {
+        const calls = stubFetch({
+            '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('none') }),
+            '/api/local/admin/takeover/phone/start': () => ({ status: 200, body: PHONE }),
+            '/api/local/admin/takeover/phone/wait': () => ({ status: 200, body: { state: 'expired' } }),
+            '/api/local/admin/unlock/cancel': () => ({ status: 200, body: { success: true } }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={20} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+        fireEvent.click(screen.getByRole('button', { name: "I understand: use an owner's phone" }));
+        expect(await screen.findByText(/The code ran out before a phone used it/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Make a new code' })).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Make a new code' }));
+        await screen.findByTestId('owner-phone-unlock');
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        await waitFor(() => expect(calls.some((c) => c.path.endsWith('/unlock/cancel'))).toBe(true));
+    });
+
+    it('a standby whose keys are locked to the code only says so', async () => {
+        stubFetch({
+            '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('none') }),
+            '/api/local/admin/takeover/phone/start': () => ({ status: 409, body: { error: 'The take-over keys this standby holds are locked to the recovery code only.', noOwnerStanza: true } }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={20} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+        fireEvent.click(screen.getByRole('button', { name: "I understand: use an owner's phone" }));
+        expect(await screen.findByText(/locked to the recovery code only/)).toBeInTheDocument();
+    });
+});

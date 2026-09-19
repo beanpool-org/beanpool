@@ -6,6 +6,10 @@
  * they did (POST /api/node/owner/words-check). The server cannot see or verify the words, so this list says what each
  * owner reported and when, never that the server checked anything. It gates nothing.
  *
+ * Slice 6 adds each owner's silent open check: their app, on seeing a new lock, opens its own part of it and reports
+ * whether it could — "phone opened the current lock <date>", or an older lock, or "could NOT open". Also self-reported.
+ * A server before slice 6 sends no such field, and the rows show only the words.
+ *
  * SEAM: this belongs in the "Who can unlock this community" card (TakeoverLockPanel, sealed keys 2b, PR #979), next to
  * each owner in its recipient list. #979 was not on main when this was built, so it stands alone just above where that
  * card goes. Once both are in, fold these rows into that card's owner rows and delete this panel.
@@ -13,6 +17,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { getOwnerWordsChecks, getTfaSessionToken, type OwnerWordsCheck } from '../../lib/node-client';
+
+/** The owner's device's last silent open check, in words; null when the server does not say (before slice 6). */
+export function lockOpenLine(o: OwnerWordsCheck): { text: string; good: boolean } | null {
+    if (o.lockOpen === undefined) return null;
+    if (o.lockOpen === null) return { text: 'their phone has not reported on the lock yet', good: false };
+    const on = formatWordsChecked(o.lockOpen.checkedAt);
+    if (!o.lockOpen.opened) return { text: `their phone could NOT open ${o.lockOpen.current ? 'the current' : 'an older'} lock (${on})`, good: false };
+    return o.lockOpen.current
+        ? { text: `their phone opened the current lock ${on}`, good: true }
+        : { text: `their phone last opened an older lock ${on}, before the last change`, good: false };
+}
 
 export function formatWordsChecked(ms: number | null): string {
     if (!ms) return 'not yet';
@@ -76,6 +91,14 @@ export function OwnerWordsChecksPanel({ activeNode, now = Date.now() }: { active
                                         {formatWordsChecked(o.wordsCheckedAt)}
                                     </strong>
                                     {stale && <span className="text-amber-300"> (over a year ago)</span>}
+                                    {(() => {
+                                        const line = lockOpenLine(o);
+                                        return line && (
+                                            <span className={`block text-xs ${line.good ? 'text-emerald-300' : 'text-amber-300'}`} data-testid="lock-open-line">
+                                                {line.text}
+                                            </span>
+                                        );
+                                    })()}
                                 </li>
                             );
                         })}

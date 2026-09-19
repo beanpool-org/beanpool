@@ -737,6 +737,7 @@ export function App() {
                                     <RecoveryAlertBanner identity={identity} />
                                     <OwnerWordsPrompt
                                         publicKey={identity?.publicKey}
+                                        identity={identity}
                                         onCheckNow={() => { setSettingsInitialMode('menu'); setOwnerWordsOpen(true); setShowSettings(true); }}
                                     />
                                 </div>

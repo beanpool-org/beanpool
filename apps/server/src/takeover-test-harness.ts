@@ -1,5 +1,5 @@
 /**
- * Shared by test-takeover-by-code.ts and test-takeover-crash-resume.ts (not a suite itself).
+ * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
  * genesis, admin password, database, the take-over resume at boot (which may finish steps and run the audit),
@@ -123,6 +123,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { startTakeoverEnvelopeService } = await import('./services/takeover-envelope.js');
     const { createBackupRoutes } = await import('./routes/backup.js');
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
+    const { createOwnerUnlockRoutes } = await import('./routes/owner-unlock.js');
     const { checkAdminAuth } = await import('./admin-auth.js');
     const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
 
@@ -167,6 +168,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     });
     app.use(createBackupRoutes(deps).routes());
     app.use(createTakeoverEnvelopeRoutes(deps).routes());
+    app.use(createOwnerUnlockRoutes(deps).routes());
     const server = http.createServer(app.callback());
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
 

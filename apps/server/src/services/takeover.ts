@@ -1,11 +1,12 @@
 /**
  * Take over as the main server, on a standby, with the printed recovery code (sealed-keys.md §5.3, §5.4, §5.5;
- * slice 5). The standby keeps the community's identity: the same node key (so the same PeerId), its owners and
+ * slice 5) or an owner's phone (§5.2; slice 6, services/owner-unlock.ts). The standby keeps the community's identity: the same node key (so the same PeerId), its owners and
  * admins, its links with other communities, its admin password and two-factor sign-in, and its web address.
  *
  * ## Two steps, then a journal
  *
- * 1. `openTakeoverSession(code)`: the standby picks the newest take-over envelope it holds that is still signed by
+ * 1. `openTakeoverSession(code)` — or `openTakeoverSessionWithDataKey`, after an owner's phone re-wrapped the data key
+ *    to this standby (the phone never sees the keys) — : the standby picks the newest take-over envelope it holds that is still signed by
  *    its pinned main server (re-checked now, 966 follow-up #2), is for THIS community, and is locked to the code's
  *    number. The route has already put the code through the password brake. The envelope is opened in memory and
  *    its bundle checked (same community, the node key that locked it). Nothing is written. The answer is a preview:
@@ -41,7 +42,8 @@
  * main server then saved (and sealed) a public address with no token until the next good answer. So the newest
  * envelope may carry none. When the web address is a tunnel with no token, the take-over looks in the older held
  * envelopes the same code opens, for the same name, and uses the newest token found, saying so. None found: the
- * result says the tunnel did not come back and what brings it back. public-address-agent.ts now keeps the last
+ * result says the tunnel did not come back and what brings it back. An owner's phone opens one envelope only (it
+ * re-wraps that one data key), so after a take-over by phone there is no older copy to look in. public-address-agent.ts now keeps the last
  * token when the registrar leaves it out, so new envelopes stop losing it.
  */
 
@@ -50,7 +52,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {
     parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
-    type CodeStanza, type SealedEnvelopeHeader,
+    type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -110,7 +112,7 @@ export const AFTER_A_TAKEOVER: readonly string[] = [
 // ── Steps ──────────────────────────────────────────────────────────────────────────────────
 
 export const TAKEOVER_STEPS = [
-    ['opened', 'Opened the locked keys with the recovery code'],
+    ['opened', 'Opened the locked keys'],
     ['undo-copy', "Kept a copy of this standby's own keys and settings"],
     ['identity-files', "Wrote the community's node key, genesis and links with other communities"],
     ['admin-settings', "Installed the community's admin password and two-factor sign-in"],
@@ -156,7 +158,7 @@ interface Journal {
     completedAt: string | null;
     envelopeId: string;
     sealedAt: string;
-    authorisedBy: { type: 'code'; codeId: number };
+    authorisedBy: TakeoverAuthority;
     communityId: string;
     peerId: string;
     /** sha256 of the progress token, which lets the Settings screen follow the take-over across the restart. */
@@ -183,6 +185,14 @@ interface Plan {
     /** The web address to install: the bundle's, with a tunnel token from an older envelope when it had none. */
     publicAddress: unknown;
     tunnel: TunnelOutcome;
+}
+
+/** Who opened the keys: the printed code, or one owner's phone. */
+export type TakeoverAuthority = { type: 'code'; codeId: number } | { type: 'owner'; pubkey: string; callsign: string };
+
+/** "recovery code #1" / "@Anna's phone", for the journal, the log and Settings. */
+export function describeAuthority(a: TakeoverAuthority): string {
+    return a.type === 'code' ? `recovery code #${a.codeId}` : `@${a.callsign}'s phone`;
 }
 
 function readJson<T>(name: string): T | null {
@@ -245,16 +255,19 @@ export function takeoverPreconditions(): void {
 interface Candidate {
     header: SealedEnvelopeHeader;
     bytes: Uint8Array;
-    stanza: CodeStanza;
+    /** The code stanza this candidate was picked for; null when picked for an owner's phone. */
+    stanza: CodeStanza | null;
     receivedAt: number;
 }
 
+/** A candidate picked for the recovery code: it has a code stanza. */
+export type CodeCandidate = Candidate & { stanza: CodeStanza };
+
 /**
- * The envelope a code of this number opens: the newest one held that is signed by the pinned main server (checked
- * again now, not only on arrival), is for this community, and has a stanza for that code. Throws TakeoverError
- * saying why when there is none. Reads headers only; needs no secret.
+ * The held envelopes that are signed by the pinned main server (checked again now, not only on arrival) and are for
+ * this community, newest first. Throws TakeoverError saying why when there are none. Reads headers only.
  */
-export function pickEnvelope(codeId: number | undefined): Candidate & { newerSkipped: number; all: Candidate[] } {
+function verifiedHeld(): Candidate[] {
     const mine = ownCommunityId();
     if (!mine) throw new TakeoverError(500, "This standby has no readable genesis.json, so it can't tell which community it copies.");
     const held = listHeldEnvelopes().reverse(); // newest first
@@ -278,16 +291,7 @@ export function pickEnvelope(codeId: number | undefined): Candidate & { newerSki
             logger.security('SYS', `[Takeover] Skipped a held take-over envelope for community ${check.header.communityId}; this standby copies ${mine}`);
             continue;
         }
-        for (const r of check.header.recipients) {
-            if (r.type === 'code') {
-                verified.push({ header: check.header, bytes, stanza: r, receivedAt: h.receivedAt });
-                break;
-            }
-        }
-        if (!check.header.recipients.some((r) => r.type === 'code')) {
-            // Locked to owners only: an owner's phone opens it (a later update); the code can't.
-            continue;
-        }
+        verified.push({ header: check.header, bytes, stanza: null, receivedAt: h.receivedAt });
     }
     if (!verified.length) {
         if (otherCommunity && !unverified) {
@@ -296,10 +300,24 @@ export function pickEnvelope(codeId: number | undefined): Candidate & { newerSki
         if (unverified && !otherCommunity) {
             throw new TakeoverError(409, "None of the take-over keys this standby holds are signed by the main server it copies from, so none can be trusted.", { unverified: true });
         }
-        if (otherCommunity || unverified) {
-            throw new TakeoverError(409, "None of the take-over keys this standby holds are both for this community and signed by its main server.", { wrongCommunity: otherCommunity > 0, unverified: unverified > 0 });
-        }
-        throw new TakeoverError(409, 'The take-over keys this standby holds are locked to the owners only, with no recovery code. Opening them with an owner\'s phone comes in a later update.', { noCodeStanza: true });
+        throw new TakeoverError(409, "None of the take-over keys this standby holds are both for this community and signed by its main server.", { wrongCommunity: otherCommunity > 0, unverified: unverified > 0 });
+    }
+    return verified;
+}
+
+/**
+ * The envelope a code of this number opens: the newest verified one (see verifiedHeld) with a stanza for that code.
+ * Throws TakeoverError saying why when there is none. Reads headers only; needs no secret.
+ */
+export function pickEnvelope(codeId: number | undefined): CodeCandidate & { newerSkipped: number; all: CodeCandidate[] } {
+    const verified: CodeCandidate[] = [];
+    for (const c of verifiedHeld()) {
+        const stanza = c.header.recipients.find((r): r is CodeStanza => r.type === 'code');
+        // Locked to owners only: an owner's phone opens it (pickEnvelopeForOwners); the code can't.
+        if (stanza) verified.push({ ...c, stanza });
+    }
+    if (!verified.length) {
+        throw new TakeoverError(409, "The take-over keys this standby holds are locked to the owners only, with no recovery code. Take over with an owner's phone instead.", { noCodeStanza: true });
     }
     const matching = codeId === undefined ? verified : verified.filter((c) => c.stanza.codeId === codeId);
     if (!matching.length) {
@@ -308,6 +326,24 @@ export function pickEnvelope(codeId: number | undefined): Candidate & { newerSki
     }
     const newest = matching[0];
     return { ...newest, newerSkipped: verified.indexOf(newest), all: matching };
+}
+
+/**
+ * The envelope an owner's phone is asked to open (§5.2): the newest verified one locked to at least one owner. Its
+ * header's owners are who can open it; the phone shows the owner whether they are one.
+ */
+export function pickEnvelopeForOwners(): Candidate & { newerSkipped: number; owners: string[] } {
+    const verified = verifiedHeld();
+    const withOwners = verified.filter((c) => c.header.recipients.some((r) => r.type === 'owner'));
+    if (!withOwners.length) {
+        throw new TakeoverError(409, "The take-over keys this standby holds are locked to the recovery code only: the main server had no owner when it locked them. Take over with the recovery code.", { noOwnerStanza: true });
+    }
+    const newest = withOwners[0];
+    return {
+        ...newest,
+        newerSkipped: verified.indexOf(newest),
+        owners: newest.header.recipients.filter((r): r is OwnerStanza => r.type === 'owner').map((r) => '@' + r.callsign),
+    };
 }
 
 /** Is it a recovery code at all? A typo costs nothing and is answered before the brake. */
@@ -330,10 +366,10 @@ export async function codeMatches(code: string, stanza: CodeStanza): Promise<boo
     }
 }
 
-async function openBundle(c: Candidate, code: string): Promise<TakeoverBundle> {
+async function openBundle(c: Candidate, key: SealedEnvelopeKey): Promise<TakeoverBundle> {
     let payload: Uint8Array;
     try {
-        ({ payload } = await openEnvelope(c.bytes, { type: 'code', code }, { kind: 'takeover' }));
+        ({ payload } = await openEnvelope(c.bytes, key, { kind: 'takeover' }));
     } catch {
         throw new TakeoverError(400, 'The take-over keys did not open: the copy this standby holds is damaged.', { damaged: true });
     }
@@ -362,16 +398,19 @@ function tunnelTokenOf(pa: any): string | null {
     return pa && typeof pa.tunnelToken === 'string' && pa.tunnelToken.trim() ? pa.tunnelToken : null;
 }
 
-/** The web address to install, with a tunnel token from an older envelope if the chosen one lost it. */
-async function resolvePublicAddress(chosen: Candidate, bundle: TakeoverBundle, code: string, all: Candidate[]): Promise<{ publicAddress: unknown; tunnel: TunnelOutcome }> {
+/**
+ * The web address to install, with a tunnel token from an older envelope if the chosen one lost it. `code` is null
+ * after an owner's phone opened the chosen envelope: it re-wrapped that one data key, which opens no older copy.
+ */
+async function resolvePublicAddress(chosen: Candidate, bundle: TakeoverBundle, code: string | null, all: Candidate[]): Promise<{ publicAddress: unknown; tunnel: TunnelOutcome }> {
     const pa: any = bundle.publicAddress && typeof bundle.publicAddress === 'object' ? { ...(bundle.publicAddress as any) } : null;
     if (!pa) return { publicAddress: null, tunnel: { source: 'none', message: 'The main server had no web address from the BeanPool registrar, so there is no tunnel to bring back.' } };
     if (pa.mode === 'direct') return { publicAddress: pa, tunnel: { source: 'none', message: 'The web address points straight at a server (no tunnel), so there is no tunnel token to bring back.' } };
     if (tunnelTokenOf(pa)) return { publicAddress: pa, tunnel: { source: 'envelope', message: 'The tunnel token came with the keys.' } };
     // 967 follow-up #2: the newest lock may have been sealed while the registrar's answer lacked the token.
-    for (const older of all.filter((c) => c.header.envelopeId !== chosen.header.envelopeId && c.receivedAt < chosen.receivedAt)) {
+    for (const older of code === null ? [] : all.filter((c) => c.header.envelopeId !== chosen.header.envelopeId && c.receivedAt < chosen.receivedAt)) {
         try {
-            const b = await openBundle(older, code);
+            const b = await openBundle(older, { type: 'code', code: code! });
             const opa: any = b.publicAddress;
             const token = tunnelTokenOf(opa);
             if (token && opa?.name === pa.name) {
@@ -388,6 +427,7 @@ async function resolvePublicAddress(chosen: Candidate, bundle: TakeoverBundle, c
         tunnel: {
             source: 'missing',
             message: 'No tunnel token came with the keys, so the tunnel for the web address did not come back by itself. '
+                + (code === null ? "(An owner's phone opens only the newest copy; the recovery code can also look in older ones.) " : '')
                 + 'With PUBLIC_ADDRESS_NAME set this server asks the registrar again within a few minutes (it has the same key, so the name is still its own). Otherwise re-claim the address under Public Address.',
         },
     };
@@ -402,7 +442,7 @@ interface Session {
     bundle: TakeoverBundle;
     publicAddress: unknown;
     tunnel: TunnelOutcome;
-    codeId: number;
+    authorisedBy: TakeoverAuthority;
 }
 
 let session: Session | null = null;
@@ -436,7 +476,9 @@ async function mainServerAnswers(): Promise<{ url: string | null; answers: boole
 export interface TakeoverPreview {
     sessionId: string;
     expiresAt: number;
-    envelope: { envelopeId: string; sealedAt: string; codeId: number; newerCopiesSkipped: number };
+    /** `codeId` is null when an owner's phone opened the keys; `openedBy` says who, either way. */
+    envelope: { envelopeId: string; sealedAt: string; codeId: number | null; newerCopiesSkipped: number };
+    openedBy: string;
     communityId: string;
     /** The PeerId this server will have: the main server's own. */
     peerId: string;
@@ -456,23 +498,46 @@ export interface TakeoverPreview {
  */
 export async function openTakeoverSession(code: string, candidate: ReturnType<typeof pickEnvelope>): Promise<TakeoverPreview> {
     takeoverPreconditions();
-    const bundle = await openBundle(candidate, code);
+    const bundle = await openBundle(candidate, { type: 'code', code });
     const { publicAddress, tunnel } = await resolvePublicAddress(candidate, bundle, code, candidate.all);
+    return startSession(candidate, bundle, publicAddress, tunnel, { type: 'code', codeId: candidate.stanza.codeId });
+}
+
+/**
+ * Open a take-over session with the data key an owner's phone re-wrapped to this standby (services/owner-unlock.ts
+ * has checked the owner's signature and that they are a recipient). The data key must open the body of THIS
+ * envelope: a key that does not is refused here like a damaged copy. Writes nothing; the confirm is the same step
+ * as for the code.
+ */
+export async function openTakeoverSessionWithDataKey(
+    candidate: Candidate & { newerSkipped: number }, dataKey: Uint8Array, owner: { pubkey: string; callsign: string },
+): Promise<TakeoverPreview> {
+    takeoverPreconditions();
+    const bundle = await openBundle(candidate, { type: 'dataKey', dataKey });
+    const { publicAddress, tunnel } = await resolvePublicAddress(candidate, bundle, null, []);
+    return startSession(candidate, bundle, publicAddress, tunnel, { type: 'owner', pubkey: owner.pubkey, callsign: owner.callsign });
+}
+
+async function startSession(
+    candidate: Candidate & { newerSkipped: number }, bundle: TakeoverBundle, publicAddress: unknown, tunnel: TunnelOutcome,
+    authorisedBy: TakeoverAuthority,
+): Promise<TakeoverPreview> {
     const id = crypto.randomBytes(32).toString('hex');
-    session = { id, expiresAt: Date.now() + SESSION_TTL_MS, candidate, bundle, publicAddress, tunnel, codeId: candidate.stanza.codeId };
+    session = { id, expiresAt: Date.now() + SESSION_TTL_MS, candidate, bundle, publicAddress, tunnel, authorisedBy };
 
     const connectors = connectorsFrom(bundle);
     const main = await mainServerAnswers();
     const lastCopyAt = getBackupStatus().lastSuccessAt;
     const pa: any = publicAddress;
-    logger.warn('SYS', `[Takeover] Recovery code #${candidate.stanza.codeId} opened the take-over keys sealed ${candidate.header.createdAt}; waiting for the confirm`);
+    logger.warn('SYS', `[Takeover] ${describeAuthority(authorisedBy)} opened the take-over keys sealed ${candidate.header.createdAt}; waiting for the confirm`);
     return {
         sessionId: id,
         expiresAt: session.expiresAt,
         envelope: {
             envelopeId: candidate.header.envelopeId, sealedAt: candidate.header.createdAt,
-            codeId: candidate.stanza.codeId, newerCopiesSkipped: candidate.newerSkipped,
+            codeId: authorisedBy.type === 'code' ? authorisedBy.codeId : null, newerCopiesSkipped: candidate.newerSkipped,
         },
+        openedBy: describeAuthority(authorisedBy),
         communityId: candidate.header.communityId,
         peerId: candidate.header.nodePeerId,
         owners: bundle.nodeRoles.filter((r) => r.role === 'owner').map((r) => callsignOf(r.member_pubkey)),
@@ -491,6 +556,12 @@ export async function openTakeoverSession(code: string, candidate: ReturnType<ty
         missing: WHAT_WILL_BE_MISSING,
         afterwards: AFTER_A_TAKEOVER,
     };
+}
+
+/** Does the main server answer? For the page an owner's phone reads before it unlocks (§5.2 step 3). */
+export async function mainServerStatus(): Promise<{ answers: boolean | null; lastCopyAt: number | null }> {
+    const main = await mainServerAnswers();
+    return { answers: main.answers, lastCopyAt: getBackupStatus().lastSuccessAt };
 }
 
 export function discardTakeoverSession(): void {
@@ -560,8 +631,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 updates.recoveryCode = bundle.recoveryCode;
                 updates.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
             }
-            // A used code is a spent code (§5.3): Settings says so until a new one is made.
-            updates.recoveryCodeUsed = { codeId: j.authorisedBy.codeId, at: j.startedAt };
+            // A used code is a spent code (§5.3): Settings says so until a new one is made. An owner's phone spends
+            // nothing: their key is still theirs, and the new server locks to them again.
+            if (j.authorisedBy.type === 'code') updates.recoveryCodeUsed = { codeId: j.authorisedBy.codeId, at: j.startedAt };
             updateLocalConfig(updates as any);
             return 'admin password, two-factor sign-in and the recovery code record';
         }
@@ -668,7 +740,7 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
         completedAt: null,
         envelopeId: s.candidate.header.envelopeId,
         sealedAt: s.candidate.header.createdAt,
-        authorisedBy: { type: 'code', codeId: s.codeId },
+        authorisedBy: s.authorisedBy,
         communityId: s.candidate.header.communityId,
         peerId: s.candidate.header.nodePeerId,
         progressTokenHash: crypto.createHash('sha256').update(progressToken).digest('hex'),
@@ -681,8 +753,8 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
     // The plan first, then the journal naming it: a crash between the two leaves no journal, so nothing resumes
     // and the plan is swept at the next boot.
     writeAtomic(dataPath(TAKEOVER_BUNDLE_FILE), JSON.stringify(plan), 0o600);
-    logger.warn('SYS', `[Takeover] Taking over as the main server, authorised by recovery code #${s.codeId} (keys sealed ${j.sealedAt})`);
-    mark(j, 'opened', `recovery code #${s.codeId}; keys sealed ${j.sealedAt}; envelope ${j.envelopeId.slice(0, 8)}`);
+    logger.warn('SYS', `[Takeover] Taking over as the main server, authorised by ${describeAuthority(s.authorisedBy)} (keys sealed ${j.sealedAt})`);
+    mark(j, 'opened', `${describeAuthority(s.authorisedBy)}; keys sealed ${j.sealedAt}; envelope ${j.envelopeId.slice(0, 8)}`);
 
     runPreRestartSteps(j, plan);
     j.state = 'restarting';
@@ -775,7 +847,8 @@ export async function finishTakeoverAfterBoot(): Promise<void> {
             let detail: string | undefined;
             if (step === 'announcement') {
                 const date = new Date(j.startedAt).toUTCString().replace(/ \d\d:\d\d:\d\d GMT$/, '');
-                const body = `This community moved to a new server on ${date}, authorised by the recovery code (#${j.authorisedBy.codeId}). `
+                const by = j.authorisedBy.type === 'code' ? `the recovery code (#${j.authorisedBy.codeId})` : `@${j.authorisedBy.callsign}`;
+                const body = `This community moved to a new server on ${date}, authorised by ${by}. `
                     + 'Nothing changes for you: same community, same address.';
                 adminBroadcastAnnouncement('This community moved to a new server', body, 'warning');
                 j.result.announcement = body;
@@ -783,7 +856,7 @@ export async function finishTakeoverAfterBoot(): Promise<void> {
             } else if (step === 'reseal') {
                 // The standby's copies are from the old main server; this server seals its own from now on.
                 fs.rmSync(dataPath(HELD_ENVELOPES_DIR), { recursive: true, force: true });
-                const status = await ensureTakeoverEnvelope(`take-over by recovery code #${j.authorisedBy.codeId}`);
+                const status = await ensureTakeoverEnvelope(`take-over by ${describeAuthority(j.authorisedBy)}`);
                 j.result.reseal = status.message;
                 detail = status.state === 'sealed' ? `envelope ${status.envelopeId?.slice(0, 8)}` : status.message;
             } else if (step === 'tunnel') {
@@ -853,7 +926,7 @@ export function getTakeoverProgress(): TakeoverProgress {
         state: j ? j.state : 'none',
         startedAt: j?.startedAt ?? null,
         completedAt: j?.completedAt ?? null,
-        authorisedBy: j ? `recovery code #${j.authorisedBy.codeId}` : null,
+        authorisedBy: j ? describeAuthority(j.authorisedBy) : null,
         peerId: j?.peerId ?? null,
         sealedAt: j?.sealedAt ?? null,
         steps: TAKEOVER_STEPS.map(([step, label]) => ({

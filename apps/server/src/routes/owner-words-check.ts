@@ -3,7 +3,8 @@
  *
  *   POST /api/node/owner/words-check              owner, signed   record "I checked my words" (the fact and the date)
  *   GET  /api/node/owner/words-check              owner, signed   my last check, so the app knows whether to ask
- *   POST /api/local/admin/takeover/words-checks   admin            every owner's "12 words checked: <date> / not yet"
+ *   POST /api/local/admin/takeover/words-checks   admin            every owner's "12 words checked: <date> / not yet",
+ *                                                                  and their device's silent open check (slice 6)
  *
  * The words are checked on the device and never sent. The statement is the signed request itself: the actor is the
  * signing key and nothing else (no body field names anyone), the date is the signed X-Timestamp the signature
@@ -21,6 +22,7 @@ import { isNodeOwner } from '../engine/node-roles.js';
 import {
     OWNER_WORDS_ATTESTATION, getOwnerWordsCheckedAt, listOwnerWordsStatus, recordOwnerWordsCheck,
 } from '../engine/owner-words-checks.js';
+import { getTakeoverStatus } from '../services/takeover-envelope.js';
 import type { RouteDeps } from './types.js';
 
 const NOT_OWNER = "Only this community's owners are asked to check their 12 words.";
@@ -81,12 +83,22 @@ export function createOwnerWordsCheckRoutes(deps: RouteDeps): Router {
         ctx.body = { owner: true, wordsCheckedAt: getOwnerWordsCheckedAt(signer) };
     });
 
-    // Settings → Who can unlock this community: each owner's "12 words checked: <date> / not yet". Owners and
-    // admins; a moderator's session never reaches an admin route that is not on its list (admin-auth.ts).
+    // Settings → Who can unlock this community: each owner's "12 words checked: <date> / not yet", and whether their
+    // device opened the CURRENT lock (the silent open check, §7). Owners and admins; a moderator's session never
+    // reaches an admin route that is not on its list (admin-auth.ts).
     router.post('/api/local/admin/takeover/words-checks', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = { owners: listOwnerWordsStatus() };
+        let current: { envelopeId: string | null; sealedAt: string | null } = { envelopeId: null, sealedAt: null };
+        try {
+            const st = await getTakeoverStatus();
+            current = { envelopeId: st.envelopeId, sealedAt: st.sealedAt };
+        } catch { /* no lock to compare with: every report reads as not current */ }
+        const owners = listOwnerWordsStatus().map((o) => ({
+            ...o,
+            lockOpen: o.lockOpen ? { ...o.lockOpen, current: !!current.envelopeId && o.lockOpen.envelopeId === current.envelopeId } : null,
+        }));
+        ctx.body = { owners, lock: current };
     });
 
     return router;

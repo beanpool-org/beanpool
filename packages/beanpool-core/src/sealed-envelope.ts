@@ -788,6 +788,22 @@ export function readSealedHeader(bytes: Uint8Array): SealedEnvelopeHeader {
 }
 
 /**
+ * Validate a header that arrived as a parsed JSON object (an owner's phone reads one from a server): the same checks
+ * {@link readSealedHeader} makes on bytes. Throws {@link SealedEnvelopeError}. Not authenticated either.
+ */
+export function validateSealedHeader(value: unknown): SealedEnvelopeHeader {
+    return parseHeaderJson(utf8ToBytes(canonicalJson(value)));
+}
+
+/**
+ * SHA-256 of the header's exact bytes, signature included, lowercase hex — the same bytes the body's AAD hashes. A
+ * take-over QR carries it so an owner's phone knows the header it fetched is the one the screen in front of it holds.
+ */
+export function sealedHeaderHash(header: SealedEnvelopeHeader): string {
+    return bytesToHex(sha256(utf8ToBytes(canonicalJson(header))));
+}
+
+/**
  * Check the header's signature against the signer's Ed25519 public key — for a standby, its pinned
  * primary. Strict RFC 8032 verification (not ZIP-215).
  */
@@ -832,20 +848,41 @@ function preflightKey(key: SealedEnvelopeKey): void {
     else throw new SealedEnvelopeError("The key must be { type: 'owner' }, { type: 'code' } or { type: 'dataKey' }.");
 }
 
+/** Open one stanza with the recipient's X25519 secret. The AAD binds it to this envelope and this recipient. */
+function openStanza(header: SealedEnvelopeHeader, stanza: RecipientStanza, mySecret: Uint8Array, myPub: Uint8Array): Uint8Array {
+    const ephX = unb64(stanza.eph, 'eph', KEY_LEN);
+    const k = agreeKey(mySecret, ephX, 'The key that opens this envelope');
+    try {
+        return xchacha20poly1305(k, unb64(stanza.nonce, 'nonce', XNONCE_LEN), stanzaAad(header.kind, hexToBytes(header.envelopeId), myPub))
+            .decrypt(unb64(stanza.wrappedDek, 'wrappedDek', KEY_LEN + TAG_LEN));
+    } catch {
+        throw new SealedEnvelopeError('The envelope did not open: the key is wrong, or the envelope has been altered.');
+    }
+}
+
+/**
+ * Unwrap an owner's own stanza from a header and return the data key, touching nothing else — no body, no other
+ * stanza. For an owner's phone (slice 6): it re-wraps the data key to a take-over or restore session without ever
+ * seeing the payload, and the silent open check proves it still could. The caller zeroes the result when done.
+ * The private key goes through {@link toEd25519Seed} like every other opener (§2.5): raw seed or PKCS8, hex or bytes.
+ */
+export function openOwnerStanza(header: SealedEnvelopeHeader, privateKey: string | Uint8Array): Uint8Array {
+    const seed = privateSeed(privateKey, 'privateKey');
+    const myPub = ed25519.getPublicKey(seed);
+    const hex = bytesToHex(myPub);
+    const stanza = header.recipients.find((r) => r.type === 'owner' && r.pubkey === hex);
+    if (!stanza) throw new SealedEnvelopeError('This key is not one of the owners this envelope is locked to.');
+    return openStanza(header, stanza, ed25519.utils.toMontgomerySecret(seed), myPub);
+}
+
 async function unwrapDek(header: SealedEnvelopeHeader, key: SealedEnvelopeKey): Promise<Uint8Array> {
     // No stanza to open: the body's AEAD tags are what prove it is the right key.
     if (key.type === 'dataKey') return key.dataKey.slice();
-    const envelopeId = hexToBytes(header.envelopeId);
     let stanza: RecipientStanza | undefined;
     let mySecret: Uint8Array;
     let myPub: Uint8Array;
     if (key.type === 'owner') {
-        const seed = privateSeed(key.privateKey, 'privateKey');
-        myPub = ed25519.getPublicKey(seed);
-        const hex = bytesToHex(myPub);
-        stanza = header.recipients.find((r) => r.type === 'owner' && r.pubkey === hex);
-        if (!stanza) throw new SealedEnvelopeError('This key is not one of the owners this envelope is locked to.');
-        mySecret = ed25519.utils.toMontgomerySecret(seed);
+        return openOwnerStanza(header, key.privateKey);
     } else {
         const parsed = parseRecoveryCode(key.code);
         const codeStanzas = header.recipients.filter((r): r is CodeStanza => r.type === 'code');
@@ -865,14 +902,7 @@ async function unwrapDek(header: SealedEnvelopeHeader, key: SealedEnvelopeKey): 
         mySecret = await codeSecretFor(key.code, match);
         myPub = unb64(match.codePub, 'codePub', KEY_LEN);
     }
-    const ephX = unb64(stanza.eph, 'eph', KEY_LEN);
-    const k = agreeKey(mySecret, ephX, 'The key that opens this envelope');
-    try {
-        return xchacha20poly1305(k, unb64(stanza.nonce, 'nonce', XNONCE_LEN), stanzaAad(header.kind, envelopeId, myPub))
-            .decrypt(unb64(stanza.wrappedDek, 'wrappedDek', KEY_LEN + TAG_LEN));
-    } catch {
-        throw new SealedEnvelopeError('The envelope did not open: the key is wrong, or the envelope has been altered.');
-    }
+    return openStanza(header, stanza, mySecret, myPub);
 }
 
 function decryptChunk(

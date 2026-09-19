@@ -8,8 +8,14 @@ import {
     OWNER_WORDS_COPY as COPY, cachedOwnerWordsStatus, readLaterRound, rememberLater, shouldPromptOwner,
     type OwnerWordsStatus,
 } from '../lib/owner-words';
+import { runLockOpenCheck } from '../lib/takeover-unlock';
 
-export function OwnerWordsPrompt({ publicKey, onCheckNow }: { publicKey: string | null | undefined; onCheckNow: () => void }) {
+export function OwnerWordsPrompt({ publicKey, onCheckNow, identity }: {
+    publicKey: string | null | undefined;
+    onCheckNow: () => void;
+    /** For the silent open check (slice 6): an owner's app confirms, once in a while, that it still opens the lock. */
+    identity?: { publicKey: string; privateKey: string } | null;
+}) {
     const [status, setStatus] = useState<OwnerWordsStatus | null>(null);
     const [show, setShow] = useState(false);
 
@@ -17,6 +23,7 @@ export function OwnerWordsPrompt({ publicKey, onCheckNow }: { publicKey: string 
         if (!publicKey) return;
         let cancelled = false;
         cachedOwnerWordsStatus().then((s) => {
+            if (s?.owner && identity?.privateKey) void runLockOpenCheck(identity);
             if (cancelled) return;
             setStatus(s);
             setShow(shouldPromptOwner(s, readLaterRound(publicKey)));

@@ -5,6 +5,7 @@
 import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
     getNodeRole, exportSyncState,
     getConversationsByMember, getConversationMessages,
@@ -20,6 +21,7 @@ import { getP2PNode } from '../p2p.js';
 import { getBackupStatus, requestResync, getStandbyCredentialState } from '../services/backup-puller.js';
 import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
 import { getEnvelopeHolders } from '../services/takeover-envelope.js';
+import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js';
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath,
     getAutoSnapshotConfig, updateAutoSnapshotConfig,
@@ -42,6 +44,93 @@ import {
 let restartAfterRestore: () => void = () => process.exit(0);
 export function setRestoreRestartForTests(fn: (() => void) | null): void {
     restartAfterRestore = fn ?? (() => process.exit(0));
+}
+
+function restorePaths() {
+    const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+    return {
+        DATA_DIR,
+        tmpDir: path.join(DATA_DIR, '.restore-tmp'),
+        uploadPath: path.join(DATA_DIR, 'uploaded-backup.upload'),
+        openedTarPath: path.join(DATA_DIR, 'uploaded-backup.opened.tar.gz'),
+    };
+}
+
+/** Where a sealed upload waits for an owner's phone. One name per upload, so a new restore never hits an old one's file. */
+const PENDING_PREFIX = 'uploaded-backup.pending-';
+
+function cleanupRestoreTemp(): void {
+    const { tmpDir, uploadPath, openedTarPath } = restorePaths();
+    for (const p of [tmpDir, uploadPath, openedTarPath]) {
+        try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+}
+
+/**
+ * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
+ * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
+ * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
+ */
+async function restoreFromTar(
+    tarPath: string, sealedHeader: SealedEnvelopeHeader | null, signerAcceptedByName: boolean, restartAfterMs = 1000,
+): Promise<Record<string, unknown>> {
+    const { execFileSync } = await import('node:child_process');
+    const { DATA_DIR, tmpDir } = restorePaths();
+
+    // Extract the tar
+    if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    // SECURITY (SRV-9a): a restore archive is fully attacker-controlled input — and so is the archive inside a
+    // sealed file: opening it only proves someone holding a key locked it. checkBackupArchive refuses the WHOLE
+    // archive if any member would escape the extraction dir or is a link, BEFORE a byte is extracted.
+    // Legitimate backups are written with `tar -C <stage> .`, so members are plain `./`-prefixed paths.
+    checkBackupArchive(tarPath);
+
+    execFileSync('tar', ['-xzf', tarPath, '-C', tmpDir]);
+
+    // Validate that state.db exists and is a regular file
+    const restoredDb = path.join(tmpDir, 'state.db');
+    if (!fs.existsSync(restoredDb) || !fs.lstatSync(restoredDb).isFile()) {
+        throw new Error('Invalid backup archive: state.db missing');
+    }
+    // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a
+    // sealed file's bundle is used; a plain archive is anyone's to write, so keys in one are never installed.
+    // Nor are they from a file let through by X-Accept-Signer: anyone who has seen a header can make one
+    // (signerCheck), so naming its signer restores the database only. Harvester-sealed files carry none.
+    const bundle = sealedHeader && !signerAcceptedByName ? readBundleFrom(tmpDir, sealedHeader) : null;
+    if (sealedHeader && signerAcceptedByName && fs.existsSync(path.join(tmpDir, 'takeover-bundle.json'))) {
+        console.warn(`[Restore] Ignored the keys inside a backup signed by ${sealedHeader.nodePeerId}, accepted by name: database only.`);
+    }
+
+    // Close current DB connection safely before overwriting
+    const { db } = await import('../db/db.js');
+    try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
+
+    // Replace files
+    fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
+    const nodeConfig = path.join(tmpDir, 'node_config.json');
+    if (fs.existsSync(nodeConfig) && fs.lstatSync(nodeConfig).isFile()) {
+        fs.copyFileSync(nodeConfig, path.join(DATA_DIR, 'node_config.json'));
+    }
+    const restoredKeys = bundle ? applyBundle(bundle) : [];
+    if (bundle) console.log(`[Restore] Restored the community's keys from the sealed backup: ${restoredKeys.join(', ')}`);
+
+    cleanupRestoreTemp();
+
+    // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished.
+    setTimeout(() => {
+        console.log('Restore successful, rebooting node...');
+        restartAfterRestore();
+    }, restartAfterMs);
+
+    return {
+        success: true,
+        sealed: !!sealedHeader,
+        restoredKeys: restoredKeys.length > 0,
+        ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
+        ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
+    };
 }
 
 export function createBackupRoutes(deps: RouteDeps): Router {
@@ -581,8 +670,9 @@ router.get('/api/local/admin/sync-delta', async (ctx) => {
 });
 
 // Restore (sealed-keys.md §6.2). Takes either:
-//   - a `.bpsealed` backup, opened with the printed recovery code in the X-Recovery-Code header (an owner's phone
-//     is slice 6). Without a code the answer is 400 with who can open the file, which is the "inspect" step;
+//   - a `.bpsealed` backup, opened with the printed recovery code in the X-Recovery-Code header, or with an owner's
+//     phone (X-Unlock-With: phone → 202 with the QR; the phone's unlock finishes it, services/owner-unlock.ts).
+//     With neither, the answer is 400 with who can open the file, which is the "inspect" step;
 //   - a legacy plain `.tar.gz` backup, as before: reading a file someone already has, and refusing it would brick
 //     the only backup a self-hoster may own (§9).
 // Either way the archive then goes through the SAME hostile-archive checks (SRV-9a) before a byte is extracted.
@@ -596,16 +686,8 @@ router.post('/api/local/admin/restore', async (ctx) => {
     }
     if (!(await checkAdminAuth(ctx as any))) return;
 
-    const { execFileSync } = await import('node:child_process');
-    const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    const tmpDir = path.join(DATA_DIR, '.restore-tmp');
-    const uploadPath = path.join(DATA_DIR, 'uploaded-backup.upload');
-    const openedTarPath = path.join(DATA_DIR, 'uploaded-backup.opened.tar.gz');
-    const cleanupAll = () => {
-        for (const p of [tmpDir, uploadPath, openedTarPath]) {
-            try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ }
-        }
-    };
+    const { DATA_DIR, uploadPath, openedTarPath } = restorePaths();
+    const cleanupAll = cleanupRestoreTemp;
     /** Answer without restoring anything. */
     const refuse = (status: number, body: Record<string, unknown>) => {
         cleanupAll();
@@ -666,16 +748,69 @@ router.post('/api/local/admin/restore', async (ctx) => {
             if (!signer.ok) return refuse(signer.status, { ...signer.body, backup });
             signerAcceptedByName = signer.acceptedByName;
 
+            // Open with an owner's phone (§6.2 step 2): keep the file, start a session, answer with the QR. The
+            // phone's unlock finishes the restore (services/owner-unlock.ts), through restoreFromTar like the code.
+            const hasOwners = sealedHeader.recipients.some((r) => r.type === 'owner');
+            if (String(ctx.request.header['x-unlock-with'] || '').toLowerCase() === 'phone') {
+                if (!hasOwners) {
+                    return refuse(400, { error: "This backup is locked to the recovery code only: no owner's phone can open it. Type the code.", noOwnerStanza: true, backup });
+                }
+                for (const n of fs.readdirSync(DATA_DIR)) {
+                    if (n.startsWith(PENDING_PREFIX)) fs.rmSync(path.join(DATA_DIR, n), { force: true });
+                }
+                const pending = path.join(DATA_DIR, PENDING_PREFIX + crypto.randomBytes(8).toString('hex'));
+                fs.renameSync(uploadPath, pending);
+                const header = sealedHeader;
+                const databaseOnly = signerAcceptedByName;
+                let session: ReturnType<typeof startRestoreUnlock>;
+                try {
+                    session = startRestoreUnlock({
+                        serverUrl: unlockServerUrl(ctx.request.header['x-unlock-server-url'], ctx.origin),
+                        file: pending, header, describe: backup, databaseOnly,
+                        finish: async (dataKey) => {
+                            try {
+                                await openSealedFileTo(pending, { type: 'dataKey', dataKey }, openedTarPath);
+                            } catch (e: any) {
+                                cleanupRestoreTemp();
+                                if (e instanceof SealedEnvelopeError) {
+                                    return { ok: false, status: 400, body: { error: 'The backup file did not open: it has been altered or cut short.', backup } };
+                                }
+                                return { ok: false, status: 500, body: { error: 'Restore failed: ' + (e?.message || e) } };
+                            } finally {
+                                fs.rmSync(pending, { force: true });
+                            }
+                            try {
+                                return { ok: true, status: 200, body: await restoreFromTar(openedTarPath, header, databaseOnly, 6000) };
+                            } catch (e: any) {
+                                console.error('Restore failed:', e);
+                                cleanupRestoreTemp();
+                                return { ok: false, status: e?.httpStatus || 500, body: { error: 'Restore failed: ' + e.message } };
+                            }
+                        },
+                    });
+                } catch (e: any) {
+                    fs.rmSync(pending, { force: true });
+                    return refuse(e?.status || 400, { error: e?.message || 'Could not start the unlock.', backup });
+                }
+                cleanupAll();
+                ctx.status = 202;
+                ctx.set('Cache-Control', 'no-store');
+                ctx.body = { needsOwnerPhone: true, phone: session, backup, ...(databaseOnly ? { databaseOnly: true } : {}) };
+                return;
+            }
+
             const code = ctx.request.header['x-recovery-code'];
             const codeStanzas = sealedHeader.recipients.filter((r): r is CodeStanza => r.type === 'code');
             const needed = codeStanzas.map((c) => `#${c.codeId}`).join(' or ');
             if (typeof code !== 'string' || !code.trim()) {
+                const opensWith = [
+                    ...(codeStanzas.length ? [`type recovery code ${needed}`] : []),
+                    ...(hasOwners ? ["open it with an owner's phone"] : []),
+                ].join(', or ');
                 return refuse(400, {
-                    error: codeStanzas.length
-                        ? `This backup is locked. Type recovery code ${needed} to open it.`
-                        : "This backup is locked to its owners only, with no recovery code. Nothing in this version can open it: "
-                            + "opening with an owner's phone comes in a later update. This version never makes such a file.",
-                    needsRecoveryCode: true,
+                    error: `This backup is locked. To open it, ${opensWith}.`,
+                    needsRecoveryCode: codeStanzas.length > 0,
+                    ownerPhoneCanOpen: hasOwners,
                     backup,
                 });
             }
@@ -735,60 +870,7 @@ router.post('/api/local/admin/restore', async (ctx) => {
             tarPath = openedTarPath;
         }
 
-        // Extract the tar
-        if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-        fs.mkdirSync(tmpDir, { recursive: true });
-
-        // SECURITY (SRV-9a): a restore archive is fully attacker-controlled input — and so is the archive inside a
-        // sealed file: opening it only proves someone holding a key locked it. checkBackupArchive refuses the WHOLE
-        // archive if any member would escape the extraction dir or is a link, BEFORE a byte is extracted.
-        // Legitimate backups are written with `tar -C <stage> .`, so members are plain `./`-prefixed paths.
-        checkBackupArchive(tarPath);
-
-        execFileSync('tar', ['-xzf', tarPath, '-C', tmpDir]);
-
-        // Validate that state.db exists and is a regular file
-        const restoredDb = path.join(tmpDir, 'state.db');
-        if (!fs.existsSync(restoredDb) || !fs.lstatSync(restoredDb).isFile()) {
-            throw new Error('Invalid backup archive: state.db missing');
-        }
-        // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a
-        // sealed file's bundle is used; a plain archive is anyone's to write, so keys in one are never installed.
-        // Nor are they from a file let through by X-Accept-Signer: anyone who has seen a header can make one
-        // (signerCheck), so naming its signer restores the database only. Harvester-sealed files carry none.
-        const bundle = sealedHeader && !signerAcceptedByName ? readBundleFrom(tmpDir, sealedHeader) : null;
-        if (sealedHeader && signerAcceptedByName && fs.existsSync(path.join(tmpDir, 'takeover-bundle.json'))) {
-            console.warn(`[Restore] Ignored the keys inside a backup signed by ${sealedHeader.nodePeerId}, accepted by name: database only.`);
-        }
-
-        // Close current DB connection safely before overwriting
-        const { db } = await import('../db/db.js');
-        try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
-
-        // Replace files
-        fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
-        const nodeConfig = path.join(tmpDir, 'node_config.json');
-        if (fs.existsSync(nodeConfig) && fs.lstatSync(nodeConfig).isFile()) {
-            fs.copyFileSync(nodeConfig, path.join(DATA_DIR, 'node_config.json'));
-        }
-        const restoredKeys = bundle ? applyBundle(bundle) : [];
-        if (bundle) console.log(`[Restore] Restored the community's keys from the sealed backup: ${restoredKeys.join(', ')}`);
-
-        cleanupAll();
-
-        ctx.body = {
-            success: true,
-            sealed: !!sealedHeader,
-            restoredKeys: restoredKeys.length > 0,
-            ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
-            ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
-        };
-
-        // Wait 1 second then restart
-        setTimeout(() => {
-            console.log('Restore successful, rebooting node...');
-            restartAfterRestore();
-        }, 1000);
+        ctx.body = await restoreFromTar(tarPath, sealedHeader, signerAcceptedByName);
 
     } catch (e: any) {
         console.error('Restore failed:', e);

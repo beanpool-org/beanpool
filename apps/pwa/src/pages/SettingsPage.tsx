@@ -17,6 +17,7 @@ import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme'
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
+import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
@@ -494,6 +495,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
                         <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} />
+                        {/* Owners only, remembered: take over or restore with this browser (sealed keys slice 6). */}
+                        <OwnerUnlockCard identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">

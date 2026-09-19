@@ -20,6 +20,7 @@ import {
     OWNER_WORDS_COPY as COPY, cachedOwnerWordsStatus, readLaterRound, rememberLater, shouldPromptOwner,
     type OwnerWordsStatus,
 } from '../utils/owner-words';
+import { runLockOpenCheck } from '../utils/takeover-unlock';
 import { ownerWordsStyleSpec } from '../utils/owner-words-style';
 
 export function OwnerWordsPrompt() {
@@ -36,6 +37,8 @@ export function OwnerWordsPrompt() {
                 if (!url || !identity?.privateKey) { if (!cancelled) setShow(false); return; }
                 const role = await cachedNodeRole(url, identity);
                 if (role.role !== 'owner') { if (!cancelled) setShow(false); return; }
+                // The silent open check (slice 6): once in a while, confirm this phone still opens the current lock.
+                void runLockOpenCheck(url, identity, AsyncStorage);
                 const got = await cachedOwnerWordsStatus(url, identity);
                 const later = await readLaterRound(AsyncStorage, identity.publicKey);
                 if (cancelled) return;

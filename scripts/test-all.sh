@@ -254,6 +254,7 @@ run_federation_suites() {
       test-backup-identity-bundle
       test-sealed-backups
       test-takeover-envelope
+      test-owner-words-check
       test-backup-topology
       test-standby-token-only
       test-cash-also-needed

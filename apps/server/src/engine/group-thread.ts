@@ -20,7 +20,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { getMember, getConversation, type Conversation, type Message } from '@beanpool/engine';
-import type { GroupRole } from '@beanpool/core';
+import type { GroupRole, GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -104,11 +104,40 @@ export function canReadGroupThread(groupId: string, pubkey: string | undefined):
  */
 export function groupChatRefusal(groupId: string, pubkey: string | undefined): { status: 403 | 404; error: string } | null {
     if (canReadGroupThread(groupId, pubkey)) return null;
-    const g = db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string } | undefined;
-    const related = !!pubkey && !!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'")
-        .get(groupId, pubkey);
-    if (!g || (g.join_policy === 'invite_only' && !related)) return { status: 404, error: GROUP_NOT_FOUND };
+    if (!visibleGroup(groupId, pubkey, { byIdOnly: true })) return { status: 404, error: GROUP_NOT_FOUND };
     return { status: 403, error: GROUP_CHAT_FORBIDDEN };
+}
+
+/** A group as the visibility rule sees it: its id, its policy, and the caller's live relationship to it (if any). */
+export interface VisibleGroup {
+    id: string;
+    joinPolicy: string;
+    /** The caller's group_members status — active, pending_approval or invited — or null for no live row (none, or removed). */
+    relation: Exclude<GroupMemberStatus, 'removed'> | null;
+}
+
+/**
+ * The #828 rule, for every route that takes a group id: the group, or null when this caller must be told it does
+ * not exist. Null for an id nobody has, and null for an invite_only group the caller has no live row in — not a
+ * member, not invited, not asking — so the two answers are indistinguishable (routes send 404 for both, never
+ * 403). A removed row is a record, not a relationship. Signed-out callers have no relationship with anything.
+ * A node admin gets no exception: nothing in node moderation reaches a group, so neither does sight of one.
+ * `byIdOnly` for routes whose engine calls take the id and not the slug.
+ */
+export function visibleGroup(idOrSlug: string, pubkey: string | undefined, opts: { byIdOnly?: boolean } = {}): VisibleGroup | null {
+    if (!idOrSlug) return null;
+    const g = (opts.byIdOnly
+        ? db.prepare('SELECT id, join_policy FROM groups WHERE id = ?').get(idOrSlug)
+        : db.prepare('SELECT id, join_policy FROM groups WHERE id = ? OR slug = ? LIMIT 1').get(idOrSlug, idOrSlug)
+    ) as { id: string; join_policy: string } | undefined;
+    if (!g) return null;
+    const row = pubkey
+        ? db.prepare("SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status != 'removed'")
+            .get(g.id, pubkey) as { status: VisibleGroup['relation'] } | undefined
+        : undefined;
+    const relation = row?.status ?? null;
+    if (g.join_policy === 'invite_only' && !relation) return null;
+    return { id: g.id, joinPolicy: g.join_policy, relation };
 }
 
 function activeMemberKeys(groupId: string): string[] {

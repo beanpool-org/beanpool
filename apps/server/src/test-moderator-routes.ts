@@ -195,7 +195,7 @@ async function main() {
         const seen = new Set<string>();
         for (const m of modules) {
             for (const layer of (m as any).stack as any[]) {
-                const src = (layer.stack as Function[]).map(fn => fn.toString()).join('\n');
+                const src = (layer.stack as Array<(...args: unknown[]) => unknown>).map(fn => fn.toString()).join('\n');
                 if (!src.includes('checkAdminAuth')) continue;
                 const paths: string[] = Array.isArray(layer.path) ? layer.path : [layer.path];
                 for (const p of paths) {

@@ -1,12 +1,18 @@
 ---
 slug: mentions
 title: Mentions (@name)
-summary: Coming soon with group chat.
+summary: Alert someone in a group chat by writing @ and their name.
 related: groups, mute, messages, notifications
 ---
 
-## Coming soon
+## Mentioning someone
 
-@mentions come with group chat, which is being built. In a group chat, writing @ and someone's name will alert them, even if they have muted the chat.
+In a group's chat, write **@** followed by the person's name as it shows in the app, for example "@Ana, can you bring gloves?". They get an alert that you mentioned them, even if they have muted the chat.
 
-Group chat is not in the app yet, so @mentions do nothing today. Posts and chats between two people do not use them.
+- Capital letters do not matter.
+- The name must be written in full, and not run on into other letters: "@Anabel" does not alert Ana.
+- Only people in the group can be mentioned.
+
+## Where mentions work
+
+Only in group chats. Posts, event chats and chats between two people do not use them.

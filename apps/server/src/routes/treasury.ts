@@ -27,6 +27,7 @@ import {
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
 } from '../state-engine.js';
+import { getChatMute } from '../engine/chat-mutes.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
@@ -1488,10 +1489,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const conversation = ensureEnterpriseThread(treasury);
         const messages = getEnterpriseThreadMessages(treasury, limit, offset);
 
+        // The caller's own mute of this thread (groups decision 12), so the phone can show it and offer Unmute on the
+        // next visit. Additive: null for an unsigned read (read auth off) or a thread they never muted.
+        const actor = ctx.state?.actor as string | undefined;
         ctx.body = {
             conversation,
             messages,
             readOnly,
+            mute: actor ? getChatMute(treasury, actor) : null,
         };
     };
     router.get('/api/treasury/:treasury/thread', threadGetHandler);

@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 13,
   "sections": [
     {
       "id": "about",
@@ -28,8 +28,8 @@
     {
       "id": "talk",
       "title": "Talk",
-      "summary": "Messages, people and friends, groups, and event chats.",
-      "pages": ["messages", "people", "groups", "event-chat", "mute", "mentions"]
+      "summary": "Messages, groups and their chats, people and friends, event chats, muting and mentions.",
+      "pages": ["messages", "groups", "people", "event-chat", "mute", "mentions"]
     },
     {
       "id": "pulse",

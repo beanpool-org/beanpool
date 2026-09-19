@@ -33,6 +33,11 @@ Some of these changes live on your community's server. You get them when your co
 
 ### Groups
 
+- **Every group has a chat.** Talk now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.
+- **One way to start a group.** **New group** in Talk and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.
+- **Invitations.** Convenors can invite people from the chat's menu. An invitation shows who sent it, and **Join the group** takes you straight into the chat.
+- **Mute a chat** for 8 hours, a week or for good. @mentions still get through.
+- **One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.
 - The old group chats in Chats have been removed, with their messages.
 - If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update.
 

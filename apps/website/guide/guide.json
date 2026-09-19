@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 11,
-  "hash": "6e9631999b0e946aa9b6f1c75aa9f2ac5220d7a71490de3fcf8beb66519f794c",
+  "version": 13,
+  "hash": "5c799a00365cc66e30e00957cb3bfdba6f16fbc4a32f13c6a9f25f69bd0a90c8",
   "sections": [
     {
       "id": "about",
@@ -54,11 +54,11 @@
     {
       "id": "talk",
       "title": "Talk",
-      "summary": "Messages, people and friends, groups, and event chats.",
+      "summary": "Messages, groups and their chats, people and friends, event chats, muting and mentions.",
       "slugs": [
         "messages",
-        "people",
         "groups",
+        "people",
         "event-chat",
         "mute",
         "mentions"
@@ -749,6 +749,11 @@
         {
           "type": "ul",
           "items": [
+            "**Every group has a chat.** Talk now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.",
+            "**One way to start a group.** **New group** in Talk and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.",
+            "**Invitations.** Convenors can invite people from the chat's menu. An invitation shows who sent it, and **Join the group** takes you straight into the chat.",
+            "**Mute a chat** for 8 hours, a week or for good. @mentions still get through.",
+            "**One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.",
             "The old group chats in Chats have been removed, with their messages.",
             "If a group's only convenor goes quiet for 30 days, its members will be able to choose a new one. The screens for this come in a later update."
           ]
@@ -2174,7 +2179,15 @@
         },
         {
           "type": "p",
-          "text": "Tap **Talk** in the row of tabs, then **Messages**. Your chats are listed under **Inbox**. Deals that need you are at the top, under **Action Required**."
+          "text": "**Talk** has three buttons at the top: **Messages**, **Groups** and **People**."
+        },
+        {
+          "type": "p",
+          "text": "Tap **Talk** in the row of tabs, then **Messages**. Your chats with people are listed under **Inbox**. Deals that need you are at the top, under **Action Required**."
+        },
+        {
+          "type": "p",
+          "text": "Chats that belong to a group, an enterprise or an event are under **Groups**, not here. See \"Groups\"."
         },
         {
           "type": "ul",
@@ -2240,7 +2253,10 @@
           "type": "ul",
           "items": [
             "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. One exception: if the app cannot find the other person's key, or locking fails, it sends the message without the lock rather than not at all, and does not warn you. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too.",
-            "Chats about events are not encrypted. The people in them and the people who run your community's server can read them."
+            "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.",
+            "A group's chat can also be read by the group's members.",
+            "An event's chat can also be read by the host and everyone going.",
+            "An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers."
           ]
         },
         {
@@ -2250,6 +2266,184 @@
         {
           "type": "p",
           "text": "Tap their name at the top of the chat. Their profile opens. Tap **Block**, then **Block User**. See \"Blocking someone\"."
+        }
+      ]
+    },
+    {
+      "slug": "groups",
+      "title": "Groups",
+      "summary": "Your groups and their chats, starting a group, inviting people, and joining by invitation.",
+      "section": "talk",
+      "related": [
+        "messages",
+        "mute",
+        "mentions",
+        "enterprises",
+        "event-chat",
+        "posting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What a group is"
+        },
+        {
+          "type": "p",
+          "text": "A group is a place for some people rather than everyone: your street, a garden crew, a choir, a guild. Every group has its own chat. Groups do not hold beans. Being in one does not change your trust or your vote."
+        },
+        {
+          "type": "h2",
+          "text": "Your groups"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the enterprises you keep (🥖) and the events you are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See \"Messages\". Each shows its latest message and how many you have not read."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The number on **Groups** at the top adds up your unread messages, except in chats you have muted.",
+            "Tap a group to open its chat. That marks it read.",
+            "Pull the list down to refresh it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats."
+        },
+        {
+          "type": "h2",
+          "text": "Starting a group"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.",
+            "Give it a **Group Name** and, if you like, a **Purpose / Description**.",
+            "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.",
+            "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
+            "Tap **Create Group**. You become its **convenor**, and the app takes you straight into the new group's chat."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Running something together, with beans involved? Tap **Start an enterprise** at the bottom of the categories instead. See \"Enterprises\"."
+        },
+        {
+          "type": "h2",
+          "text": "Inviting people"
+        },
+        {
+          "type": "p",
+          "text": "A new group's chat asks **Who do you want to invite?**"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).",
+            "Or tap **Not now** to skip it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED**. When they join, the chat says so."
+        },
+        {
+          "type": "h2",
+          "text": "The group's chat"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**.",
+            "The **⋮** menu has **Invite people** (convenors), **Mute notifications** and **Group info**.",
+            "Joins, leaves and role changes show in the chat as small grey lines.",
+            "Write **@** and someone's name to alert them. See \"Mentions\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A group's chat is not end-to-end encrypted. Its members and the people who run your community's server can read it. The chat says so above the message box. Private things belong in a chat between two people."
+        },
+        {
+          "type": "h2",
+          "text": "Joining a group"
+        },
+        {
+          "type": "p",
+          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Open a group, then:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Join Group** if it is open to anyone;",
+            "**Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "An **Invite Only** group is hidden from everyone who is not in it or invited to it."
+        },
+        {
+          "type": "p",
+          "text": "If a convenor removed you from a group, you cannot join it again by yourself."
+        },
+        {
+          "type": "h2",
+          "text": "Joining by invitation"
+        },
+        {
+          "type": "p",
+          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Join the group**. You land in its chat.",
+            "Tap **Not now** to decide later. The invitation stays.",
+            "If it says **This invitation is no longer open**, it was withdrawn. Ask whoever invited you to invite you again.",
+            "If it says **Couldn't open this group**, your phone could not reach your community's server. Tap **Try again**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Posting to a group"
+        },
+        {
+          "type": "p",
+          "text": "Tap the group's name at the top of its chat, then **Post to** and its name. Only the group's members see the post. It shows in the Market with a lock and the group's name."
+        },
+        {
+          "type": "h2",
+          "text": "Convenors"
+        },
+        {
+          "type": "p",
+          "text": "A convenor looks after the group. Under **Convenor Tools** they can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "change the join policy;",
+            "**Approve** or **Decline** requests to join;",
+            "change a member's role to convenor, member or observer;",
+            "remove a member."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The last convenor cannot step down or leave while anyone else is still in the group."
+        },
+        {
+          "type": "h2",
+          "text": "Coming soon"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Choosing a new convenor when the old one has gone quiet. The rules for it are in \"Rules and how decisions work\".",
+            "Groups in the web app. Today the new Groups list, chats and invitations are in the phone app."
+          ]
         }
       ]
     },
@@ -2315,119 +2509,6 @@
       ]
     },
     {
-      "slug": "groups",
-      "title": "Groups",
-      "summary": "Create or join a group, post to it, and look after it as a convenor.",
-      "section": "talk",
-      "related": [
-        "posting",
-        "rules",
-        "mentions",
-        "people"
-      ],
-      "blocks": [
-        {
-          "type": "h2",
-          "text": "What a group is"
-        },
-        {
-          "type": "p",
-          "text": "A group is a place for some people rather than everyone: a working group, a project team, a guild or a social circle. Groups do not hold beans. Being in one does not change your trust or your vote."
-        },
-        {
-          "type": "p",
-          "text": "Groups are in **Commons**, under **Groups**. Choose **My Groups** to see yours, or a kind of group to browse."
-        },
-        {
-          "type": "h2",
-          "text": "Joining"
-        },
-        {
-          "type": "p",
-          "text": "Open a group, then:"
-        },
-        {
-          "type": "ul",
-          "items": [
-            "**Join Group** if it is open to anyone;",
-            "**Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do;",
-            "an **Invite Only** group is hidden from everyone who is not in it, and takes new members only by invitation. The screen for invitations is coming soon."
-          ]
-        },
-        {
-          "type": "p",
-          "text": "If a convenor removed you from a group, you cannot join it again by yourself."
-        },
-        {
-          "type": "p",
-          "text": "To leave, open the group and tap **Leave Group**."
-        },
-        {
-          "type": "h2",
-          "text": "Posting to a group"
-        },
-        {
-          "type": "p",
-          "text": "Open the group and tap **Post to** and its name. Only the group's members see the post. It shows in the Market with a lock and the group's name. On the Market, the group buttons show only that group's posts."
-        },
-        {
-          "type": "h2",
-          "text": "Starting a group"
-        },
-        {
-          "type": "ul",
-          "items": [
-            "In **Groups**, tap the round **+** button (or **+ Create a Group** if there are no groups yet).",
-            "Give it a **Group Name** and a **Purpose / Description**.",
-            "Choose a **Category**.",
-            "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
-            "Tap **Create Group**. You become its **convenor**."
-          ]
-        },
-        {
-          "type": "h2",
-          "text": "Convenors"
-        },
-        {
-          "type": "p",
-          "text": "A convenor looks after the group. Under **Convenor Tools** they can:"
-        },
-        {
-          "type": "ul",
-          "items": [
-            "change the join policy;",
-            "**Approve** or **Decline** requests to join;",
-            "change a member's role to convenor, member or observer;",
-            "remove a member."
-          ]
-        },
-        {
-          "type": "p",
-          "text": "The last convenor cannot step down or leave while anyone else is still in the group."
-        },
-        {
-          "type": "h2",
-          "text": "Coming soon"
-        },
-        {
-          "type": "p",
-          "text": "These are being built. The screens for them are not in the app yet:"
-        },
-        {
-          "type": "ul",
-          "items": [
-            "**Group chat**, with @mentions.",
-            "Inviting someone to an Invite Only group.",
-            "Choosing a new convenor when the old one has gone quiet. The rules for it are in \"Rules and how decisions work\"."
-          ]
-        },
-        {
-          "type": "p",
-          "text": "The old group chats in Talk were removed in version 1.2.38."
-        }
-      ]
-    },
-    {
       "slug": "event-chat",
       "title": "Event chat",
       "summary": "Talk with the host and everyone going to an event.",
@@ -2455,12 +2536,12 @@
           "type": "ul",
           "items": [
             "Open the event and tap **Open event chat**.",
-            "Or find it in **Talk**, under **Messages**, with your other chats."
+            "Or find it in **Talk**, under **Groups**, marked 📅 **Event**."
           ]
         },
         {
           "type": "p",
-          "text": "At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap **View event** to go back to the event."
+          "text": "At the top, a pinned box shows the host's **Note for people who are going**, such as the exact address. Tap the event's name at the very top to go back to the event."
         },
         {
           "type": "h2",
@@ -2488,36 +2569,62 @@
     {
       "slug": "mute",
       "title": "Muting a chat",
-      "summary": "Coming soon. What you can do today to get fewer alerts.",
+      "summary": "Silence one group's or enterprise's chat for 8 hours, a week, or for good.",
       "section": "talk",
       "related": [
         "notifications",
         "blocking",
-        "messages",
+        "groups",
         "mentions"
       ],
       "blocks": [
         {
           "type": "h2",
-          "text": "Coming soon"
+          "text": "Muting a chat"
         },
         {
           "type": "p",
-          "text": "Muting a single chat is being built. When it arrives, you will be able to silence a chat's alerts for 8 hours, a week, or for good. Muting will only stop the alerts: the chat will still show new messages, and someone who @mentions you will still reach you."
-        },
-        {
-          "type": "p",
-          "text": "There is no mute button in the app yet."
-        },
-        {
-          "type": "h2",
-          "text": "What you can do today"
+          "text": "In a group's or an enterprise's chat:"
         },
         {
           "type": "ul",
           "items": [
-            "Turn off whole kinds of alerts in **Settings**, under **Notification Preferences**. See \"Notifications\".",
-            "If one person is bothering you, block them. See \"Blocking someone\"."
+            "Tap **⋮** at the top right, then **Mute notifications**.",
+            "Choose **For 8 hours**, **For a week** or **Always**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "To undo it, tap **⋮**, then **Unmute**."
+        },
+        {
+          "type": "h2",
+          "text": "What muting does"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In a group's chat, it stops that chat's alerts. Someone who @mentions you still reaches you. See \"Mentions\".",
+            "An enterprise's chat sends no alerts, so there are none to stop. Muting it keeps it out of the numbers below.",
+            "The chat still shows new messages.",
+            "In **Talk**, under **Groups**, a muted chat shows a bell with a line through it. Its unread number is grey, and it is not added to the number on **Groups**.",
+            "The top bar stays quiet about it too.",
+            "The mute stays when you leave the chat. When you open it again, the top says **muted**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Other chats"
+        },
+        {
+          "type": "p",
+          "text": "Chats between two people and event chats cannot be muted yet. You can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "turn off whole kinds of alerts in **Settings**, under **Notification Preferences**. See \"Notifications\";",
+            "block someone who is bothering you. See \"Blocking someone\"."
           ]
         }
       ]
@@ -2525,7 +2632,7 @@
     {
       "slug": "mentions",
       "title": "Mentions (@name)",
-      "summary": "Coming soon with group chat.",
+      "summary": "Alert someone in a group chat by writing @ and their name.",
       "section": "talk",
       "related": [
         "groups",
@@ -2536,15 +2643,27 @@
       "blocks": [
         {
           "type": "h2",
-          "text": "Coming soon"
+          "text": "Mentioning someone"
         },
         {
           "type": "p",
-          "text": "@mentions come with group chat, which is being built. In a group chat, writing @ and someone's name will alert them, even if they have muted the chat."
+          "text": "In a group's chat, write **@** followed by the person's name as it shows in the app, for example \"@Ana, can you bring gloves?\". They get an alert that you mentioned them, even if they have muted the chat."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Capital letters do not matter.",
+            "The name must be written in full, and not run on into other letters: \"@Anabel\" does not alert Ana.",
+            "Only people in the group can be mentioned."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Where mentions work"
         },
         {
           "type": "p",
-          "text": "Group chat is not in the app yet, so @mentions do nothing today. Posts and chats between two people do not use them."
+          "text": "Only in group chats. Posts, event chats and chats between two people do not use them."
         }
       ]
     },
@@ -3965,7 +4084,7 @@
         },
         {
           "type": "p",
-          "text": "Muting a single chat is coming soon. See \"Muting a chat\"."
+          "text": "You can mute one group's or enterprise's chat for 8 hours, a week or for good. See \"Muting a chat\"."
         }
       ]
     },

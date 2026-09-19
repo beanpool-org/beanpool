@@ -32,7 +32,11 @@ interface ThreatReviewModalProps {
     onDismiss?: (threat: ThreatItem) => void;
     /** Tells the node a member report was reviewed. Awaited before the modal dismisses; a throw keeps it open. */
     onDismissReport?: (threat: ThreatItem) => Promise<unknown>;
-    onFreezePubkeys?: (pubkeys: string[]) => void;
+    /**
+     * Freezes the involved members. Awaited: a throw keeps the modal open with the error. Freezing
+     * does not settle a member report, so after it the modal closes (onClose) rather than dismissing.
+     */
+    onFreezePubkeys?: (pubkeys: string[]) => void | Promise<unknown>;
     onInspectMember?: (member: MemberItem) => void;
 }
 
@@ -50,6 +54,7 @@ export function ThreatReviewModal({
     const [actionState, setActionState] = useState<string | null>(null);
     const [dismissing, setDismissing] = useState(false);
     const [dismissError, setDismissError] = useState<string | null>(null);
+    const [freezing, setFreezing] = useState(false);
     const [copiedLog, setCopiedLog] = useState(false);
     const copiedLogTimer = useTimeout();
 
@@ -145,12 +150,24 @@ export function ThreatReviewModal({
                 setDismissing(false);
             }
         }
-        setActionState(action);
         if (action === 'freeze' && onFreezePubkeys) {
-            onFreezePubkeys(involvedPubkeys);
+            setFreezing(true);
+            setDismissError(null);
+            try {
+                await onFreezePubkeys(involvedPubkeys);
+            } catch (e: any) {
+                setDismissError(e?.message || 'Failed to freeze the account');
+                return;
+            } finally {
+                setFreezing(false);
+            }
         }
+        setActionState(action);
         setTimeout(() => {
-            if ((action === 'dismiss' || action === 'freeze') && onDismiss) {
+            // A report stays open on the node after a freeze until an operator dismisses or actions it.
+            if (action === 'freeze' && isReport) {
+                onClose();
+            } else if ((action === 'dismiss' || action === 'freeze') && onDismiss) {
                 onDismiss(threat);
             }
         }, 1200);
@@ -319,9 +336,10 @@ export function ThreatReviewModal({
                         </button>
                         <button
                             onClick={() => handleAction('freeze')}
+                            disabled={freezing}
                             className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all border border-red-500 flex items-center gap-1 shadow-lg shadow-red-950/50"
                         >
-                            <span>🛑 Freeze Accounts</span>
+                            <span>{freezing ? 'Freezing...' : '🛑 Freeze Accounts'}</span>
                         </button>
                     </div>
                 </div>

@@ -369,4 +369,118 @@ describe('PeopleSafetySection Component', () => {
         vi.useRealTimers();
         vi.unstubAllGlobals();
     });
+
+    describe('Freeze Accounts on a report (review round 1, B2)', () => {
+        const report = { id: 'rep_freeze', targetPubkey: mockMembers[1].publicKey, reason: 'Scam offers', outcome: 'open', status: 'pending' };
+
+        function renderWithFreeze(onFreezeUser: (pk: string, freeze: boolean) => Promise<void>, onRefresh = vi.fn()) {
+            const props = {
+                activeNode: mockProfile,
+                nodeDataLoading: false,
+                onRefresh,
+                onFreezeUser,
+                onPruneUser: vi.fn(),
+                onUpdateTier: vi.fn(),
+                onToggleVoucher: vi.fn(),
+                onToggleOperator: vi.fn(),
+                initialSubTab: 'moderation' as const,
+            };
+            const utils = render(<PeopleSafetySection {...props} nodeData={{ reports: [report], members: mockMembers }} />);
+            return { ...utils, props };
+        }
+
+        it('a failed freeze leaves the report open, shows the error and sends nothing to /reports', async () => {
+            vi.useFakeTimers();
+            const fetchMock = vi.fn();
+            vi.stubGlobal('fetch', fetchMock);
+            try {
+                const onFreezeUser = vi.fn().mockRejectedValue(new Error('HTTP 500: Internal Server Error'));
+                renderWithFreeze(onFreezeUser);
+                const modTab = screen.getByRole('button', { name: /triage & moderation/i });
+                expect(modTab).toHaveTextContent('1');
+
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                expect(onFreezeUser).toHaveBeenCalledWith(mockMembers[1].publicKey, true);
+                expect(screen.getByRole('alert')).toHaveTextContent('HTTP 500');
+
+                await act(async () => {
+                    vi.advanceTimersByTime(5000);
+                });
+                // Still in the modal, still open in the list, badge unchanged, no report request.
+                expect(screen.getByText('USER REPORTED ABUSE')).toBeInTheDocument();
+                expect(modTab).toHaveTextContent('1');
+                expect(screen.getByRole('button', { name: /Inspect & Action/ })).toBeInTheDocument();
+                expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/reports/'))).toHaveLength(0);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
+        it('a successful freeze closes the modal but the report stays open until dismissed or actioned', async () => {
+            vi.useFakeTimers();
+            const fetchMock = vi.fn();
+            vi.stubGlobal('fetch', fetchMock);
+            try {
+                const onFreezeUser = vi.fn().mockResolvedValue(undefined);
+                const onRefresh = vi.fn();
+                renderWithFreeze(onFreezeUser, onRefresh);
+                const modTab = screen.getByRole('button', { name: /triage & moderation/i });
+
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                await act(async () => {
+                    vi.advanceTimersByTime(1200);
+                });
+                expect(screen.queryByText('USER REPORTED ABUSE')).not.toBeInTheDocument();
+                expect(onRefresh).toHaveBeenCalled();
+                expect(modTab).toHaveTextContent('1');
+                expect(screen.getByRole('button', { name: /Inspect & Action/ })).toBeInTheDocument();
+                expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/reports/'))).toHaveLength(0);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
+        it("after a refresh the server's outcome wins over what this browser marked", async () => {
+            vi.useFakeTimers();
+            const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+            vi.stubGlobal('fetch', fetchMock);
+            try {
+                const { rerender, props } = renderWithFreeze(vi.fn());
+                const modTab = screen.getByRole('button', { name: /triage & moderation/i });
+
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: 'Dismiss Flag' }));
+                });
+                await act(async () => {
+                    vi.advanceTimersByTime(1200);
+                });
+                expect(modTab).not.toHaveTextContent('1');
+                expect(screen.queryByRole('button', { name: /Inspect & Action/ })).not.toBeInTheDocument();
+
+                // The node's fresh list is the truth, whatever this browser marked.
+                await act(async () => {
+                    rerender(<PeopleSafetySection {...props} nodeData={{ reports: [{ ...report }], members: mockMembers }} />);
+                });
+                expect(modTab).toHaveTextContent('1');
+                expect(screen.getByRole('button', { name: /Inspect & Action/ })).toBeInTheDocument();
+
+                await act(async () => {
+                    rerender(<PeopleSafetySection {...props} nodeData={{ reports: [{ ...report, outcome: 'dismissed', status: 'reviewed' }], members: mockMembers }} />);
+                });
+                expect(modTab).not.toHaveTextContent('1');
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+    });
 });

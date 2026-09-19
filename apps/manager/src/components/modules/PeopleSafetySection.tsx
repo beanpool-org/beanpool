@@ -82,6 +82,19 @@ export function PeopleSafetySection({
         }
     };
 
+    // Reloads the node data and, when the reports came from /reports, that list and its open count too.
+    const refreshReports = () => {
+        onRefresh();
+        if (fetchedReports !== null) loadReports();
+    };
+
+    // The local handled-sets only bridge the gap until the server's list arrives; after that its
+    // `outcome` wins.
+    useEffect(() => {
+        setDismissedReportIds(new Set());
+        setActionedReportIds(new Set());
+    }, [nodeData?.reports, fetchedReports]);
+
     useEffect(() => {
         if (subTab === 'moderation' && nodeData?.reports === undefined) {
             loadReports();
@@ -104,7 +117,7 @@ export function PeopleSafetySection({
         try {
             await removeReportedPulseItem(activeNode.url, reportId, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
             setActionedReportIds((prev) => new Set(prev).add(String(reportId)));
-            onRefresh();
+            refreshReports();
         } catch (e: any) {
             setPulseRemoveError(e?.message || 'Failed to remove the item');
         } finally {
@@ -566,29 +579,26 @@ export function PeopleSafetySection({
                     members={nodeData?.members as any}
                     onClose={() => setSelectedThreat(null)}
                     onDismiss={() => {
-                        const threatId = selectedThreat?.id;
-                        if (threatId) {
-                            setDismissedReportIds((prev) => new Set(prev).add(String(threatId)));
-                        }
+                        // Only reached after onDismissReport succeeded; the server call marks it handled.
                         setSelectedThreat(null);
-                        onRefresh();
                     }}
                     onDismissReport={async (threat) => {
                         await dismissNodeReport(activeNode.url, String(threat.id), activeNode.adminPassword, getTfaSessionToken(activeNode.id));
                         if (threat?.id) {
                             setDismissedReportIds((prev) => new Set(prev).add(String(threat.id)));
                         }
+                        refreshReports();
                     }}
                     onFreezePubkeys={async (pks) => {
-                        const threatId = selectedThreat?.id;
-                        if (threatId) {
-                            setActionedReportIds((prev) => new Set(prev).add(String(threatId)));
+                        // Freezing is not an outcome for the report: it stays open until dismissed or actioned.
+                        // A failure throws back to the modal, which shows it and stays open.
+                        try {
+                            for (const pk of pks) {
+                                await onFreezeUser(pk, true);
+                            }
+                        } finally {
+                            refreshReports();
                         }
-                        for (const pk of pks) {
-                            await onFreezeUser(pk, true);
-                        }
-                        setSelectedThreat(null);
-                        onRefresh();
                     }}
                 />
             )}

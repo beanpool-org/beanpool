@@ -672,7 +672,7 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                 outcome: typeof r.outcome === 'string' ? r.outcome : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open'),
                 title: r.title ?? r.postTitle ?? null,
                 postTitle: r.postTitle ?? r.title ?? null,
-                postId: r.postId ?? r.targetPostId ?? null,
+                postId: typeof r.postId === 'string' ? r.postId : null,
                 postAuthorCallsign: r.postAuthorCallsign ?? null,
                 postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
             };
@@ -929,7 +929,7 @@ export async function fetchReports(
             outcome: typeof r.outcome === 'string' ? r.outcome : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open'),
             title: r.title ?? r.postTitle ?? null,
             postTitle: r.postTitle ?? r.title ?? null,
-            postId: r.postId ?? r.targetPostId ?? null,
+            postId: typeof r.postId === 'string' ? r.postId : null,
             postAuthorCallsign: r.postAuthorCallsign ?? null,
             postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
         };
